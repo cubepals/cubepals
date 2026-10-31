@@ -384,6 +384,7 @@ export class WorldImports {
         others: input.others.reads.map((other) => other.world),
         // Said where it is played, as the choice it is, from `playedWith` (`WorldImportView`).
         mods: [],
+        modsKept: input.mods !== null,
       }),
       ...accountNotes(accounts),
       ...peopleNotes(input.people),

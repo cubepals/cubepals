@@ -222,6 +222,17 @@ describe.skipIf(!hasDatabase)('a server’s folder', () => {
 })
 
 /** A server's folder with a second world beside the first, and its Nether, as a server with several keeps them. */
+describe.skipIf(!hasDatabase)('a server’s folder with mods no loader runs', () => {
+  test('says its mods were left out, as they don’t come', async () => {
+    const { owner, id } = await server('Quinn')
+    const files = await serverFolder('paper-1.21.11')
+    files['mods/a.jar'] = new TextEncoder().encode('not a mod')
+    const view = await bringWorld(h, owner, id, zipBytes(files), { fileName: 'server.zip' })
+    if (view.status !== 'ready') throw new Error(`The import is ${view.status}`)
+    expect(view.notes.find((note) => note.startsWith('Left out what isn’t the world'))).toContain('mods/')
+  }, 120_000)
+})
+
 function withSecondWorld(files: Record<string, Uint8Array>): Record<string, Uint8Array> {
   const copies = Object.entries(files).flatMap(([path, bytes]) =>
     path.startsWith('world/') || path.startsWith('world_nether/')

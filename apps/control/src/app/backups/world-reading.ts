@@ -557,6 +557,8 @@ export function notesOn(
     others?: readonly FoundWorld[]
     /** What its owner reads of its mods, where they were read (`world-mods.ts`), in place of what its level.dat says. */
     mods?: readonly string[]
+    /** Its mods were kept with it, so its `mods/` and the instance's files aren't left out. */
+    modsKept?: boolean
   },
 ): string[] {
   const notes: string[] = []
@@ -579,12 +581,12 @@ export function notesOn(
   // The server's other worlds are said of their own (`kept-worlds.ts`).
   const others = (how.others ?? []).flatMap((world) => [world.folder, ...world.beside])
   // Who could join and who is who are read from the server's files (`world-people.ts`), not left out.
-  // Its mods, where they were read, are said of their own too, with the instance's files they were read by.
+  // Its mods, where they were kept, are said of their own too, with the instance's files they were read by.
   const rest = leftOut.filter(
     (name) =>
       !others.some((folder) => folder === name || folder.endsWith(`/${name}`)) &&
       !READ_BESIDE.has(name.slice(name.lastIndexOf('/') + 1)) &&
-      !(how.mods !== undefined && (name === 'mods/' || INSTANCE_FILES.test(name))),
+      !(how.modsKept === true && (name === 'mods/' || INSTANCE_FILES.test(name))),
   )
   if (!how.asItCame && rest.length > 0) notes.push(`Left out what isn’t the world: ${rest.join(', ')}.`)
   const modded = moddedBrands(read.facts)
