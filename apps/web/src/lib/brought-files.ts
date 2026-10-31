@@ -28,7 +28,7 @@ export type Brought =
   | { kind: 'folder'; held: PickedFile[] }
   | { kind: 'instance'; held: PickedFile[]; instance: PickedInstance }
 
-/** Mods added beside a world's folder: their files at the paths they are sent at, and where they came from. */
+/** Mods added beside a world's folder or an instance's: their files at the paths they are sent at, and where they came from. */
 export interface AddedMods {
   held: PickedFile[]
   /** How many mods: the jars among them. */
@@ -37,7 +37,7 @@ export interface AddedMods {
   from: string | null
 }
 
-/** What goes up: what was handed over, the world chosen of an instance, and mods added beside a folder. */
+/** What goes up: what was handed over, the world chosen of an instance, and mods added beside it. */
 export interface Sending {
   brought: Brought
   /** Of an instance, the folder of the world chosen in it; null until one is. */
@@ -71,21 +71,28 @@ export const folderName = (folder: string): string => folder.slice(0, -1).split(
 const tarNamed = (name: string, files: readonly PickedFile[]): File =>
   new File([tarOf(files)], `${name || 'world'}.tar`, { type: 'application/x-tar' })
 
-/** The files of an instance sent with the world chosen: what it runs on and its mods first, then the world. */
-function instanceSent(brought: Extract<Brought, { kind: 'instance' }>, world: string): PickedFile[] {
+/**
+ * The files of an instance sent with the world chosen: what it runs on and its mods first, with
+ * those `added` beside them, then the world.
+ */
+function instanceSent(
+  brought: Extract<Brought, { kind: 'instance' }>,
+  world: string,
+  added: readonly PickedFile[],
+): PickedFile[] {
   const paths = brought.held.map((file) => file.path)
   const sent = new Set(sentWith(paths, brought.instance, world))
   const files = brought.held.filter((file) => sent.has(file.path))
   const inWorld = (file: PickedFile) => file.path.startsWith(world)
   // As an instance's folder lists them: the control plane reads its mods without reading the world twice.
-  return [...files.filter((file) => !inWorld(file)), ...files.filter(inWorld)]
+  return [...files.filter((file) => !inWorld(file)), ...added, ...files.filter(inWorld)]
 }
 
 /** The one file sent; null for an instance whose world isn't chosen yet. */
 export function uploadOf({ brought, world, mods }: Sending): File | null {
   if (brought.kind === 'file') return brought.file
   if (brought.kind === 'instance')
-    return world === null ? null : tarNamed(folderName(world), instanceSent(brought, world))
+    return world === null ? null : tarNamed(folderName(world), instanceSent(brought, world, mods?.held ?? []))
   const name = brought.held[0]?.path.split('/')[0] ?? ''
   return tarNamed(name, [...(mods?.held ?? []), ...brought.held])
 }
@@ -109,9 +116,9 @@ export function modsGoing({ brought, mods }: Sending, names: readonly string[] |
 }
 
 /**
- * What is sent once a folder is picked for the world's mods: its mods beside a world's folder, or,
- * for a world that came as a file, the world taken from the instance picked (`sendingOf`). Why not,
- * where the folder can't give them.
+ * What is sent once a folder is picked for the world's mods: of an instance, the world taken from
+ * it (`sendingOf`), which a world that came as a file needs; of a mods folder, its mods beside the
+ * world's folder or the instance's. Why not, where the folder can't give them.
  */
 export function withPicked(
   sending: Sending,
@@ -120,18 +127,22 @@ export function withPicked(
 ): Sending | { notAdded: NotAdded } {
   const paths = picked.map((file) => file.path)
   const { brought } = sending
-  if (brought.kind === 'instance') return sending
-  if (brought.kind === 'file') {
-    const instance = instanceIn(paths)
-    return instance === null
-      ? { notAdded: 'needs-instance' }
-      : sendingOf({ kind: 'instance', held: picked, instance }, levelName)
+  const instance = brought.kind === 'folder' ? null : instanceIn(paths)
+  if (instance !== null) {
+    // An instance without mods would send the same world again, for the same answer.
+    if (modsBeside(paths).length === 0) return { notAdded: 'no-mods' }
+    return sendingOf({ kind: 'instance', held: picked, instance }, levelName)
   }
+  if (brought.kind === 'file') return { notAdded: 'needs-instance' }
   const folder = modsIn(paths)
   if (folder === null) return { notAdded: 'no-mods' }
   const byPath = new Map(picked.map((file) => [file.path, file.file]))
   const beside = playedFrom(brought.held.map((file) => file.path))
-  const files = modsSent(paths, folder, beside).flatMap(({ path, at }) => {
+  // Beside an instance, only the mods: what it runs on is its own.
+  const sent = modsSent(paths, folder, beside).filter(
+    ({ at }) => brought.kind === 'folder' || at.startsWith(`${beside}mods/`),
+  )
+  const files = sent.flatMap(({ path, at }) => {
     const file = byPath.get(path)
     return file === undefined ? [] : [{ path: at, file }]
   })

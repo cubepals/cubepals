@@ -122,6 +122,26 @@ describe('the mods of a world that came without them', () => {
     expect(sending.world).toBe('Fabric 26.3/minecraft/saves/Life/')
   })
 
+  test('for an instance sent whole without them, come from a mods folder, and not from an instance without any', async () => {
+    const bare = PRISM.filter((file) => !file.path.includes('/mods/'))
+    const instance: Brought = {
+      ...(broughtFrom(PRISM) as Extract<Brought, { kind: 'instance' }>),
+      held: bare,
+    }
+    const sending = sendingOf(instance, 'Life')
+    expect(withPicked(sending, bare, 'Life')).toEqual({ notAdded: 'no-mods' })
+    const added = withPicked(sending, picked('mods/a.jar', 'instance.cfg'), 'Life')
+    if ('notAdded' in added) throw new Error(added.notAdded)
+    expect(modsGoing(added, null)).toBe(1)
+    expect(await namesIn(uploadOf(added))).toEqual([
+      'Fabric 26.3/instance.cfg',
+      'Fabric 26.3/mmc-pack.json',
+      'Fabric 26.3/minecraft/mods/a.jar',
+      'Fabric 26.3/minecraft/saves/Life/level.dat',
+      'Fabric 26.3/minecraft/saves/Life/region/r.0.0.mca',
+    ])
+  })
+
   test('are counted from a zip’s names where it can be read, and not at all where it can’t', () => {
     const zip = sendingOf({ kind: 'file', file: new File(['zip'], 'srv.zip') })
     expect(modsGoing(zip, ['srv/world/level.dat', 'srv/mods/a.jar'])).toBe(1)
