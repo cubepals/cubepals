@@ -294,20 +294,39 @@ export function startBedrock(options: BedrockOptions): Bedrock {
     return supervised
   }
 
+  // A name that didn't resolve at start is asked again until it does, then Geyser starts again
+  // telling NetherNet players where to go; RakNet players are served all the while.
+  const advertiseLater = async (address: string, name: string): Promise<void> => {
+    const found = await untilItHolds(
+      async () => (await lookup(name, { family: 4 })).address,
+      (error) => console.error(`[geyser] ${name} still doesn't resolve; trying again`, error),
+      () => stopped,
+    )
+    if (found === null || stopped) return
+    geyser?.stop()
+    geyser = startGeyser({ address, publicAddress: found })
+    console.error(`[geyser] NetherNet players play at ${found}:${options.webrtcPort}`)
+  }
+
+  // Geyser's first start, once the address it listens on is known.
+  const firstGeyser = async (address: string): Promise<void> => {
+    const publicAddress = await publicAddressOf(options.advertise)
+    // A stop while the lookups ran must not leave a Geyser that nothing holds.
+    if (stopped) return
+    geyser = startGeyser({ address, publicAddress })
+    if (publicAddress === null && options.advertise !== null) void advertiseLater(address, options.advertise)
+    console.error(
+      publicAddress === null
+        ? "[geyser] no public address to give: NetherNet players can't reach this edge"
+        : `[geyser] NetherNet players play at ${publicAddress}:${options.webrtcPort}`,
+    )
+  }
+
   void untilItHolds(
     async () => {
       const address = (await lookup(options.bind, { family: 4 })).address
-      if (geyser === null) {
-        const publicAddress = await publicAddressOf(options.advertise)
-        // A stop while the lookups ran must not leave a Geyser that nothing holds.
-        if (stopped) return
-        geyser = startGeyser({ address, publicAddress })
-        console.error(
-          publicAddress === null
-            ? "[geyser] no public address to give: NetherNet players can't reach this edge"
-            : `[geyser] NetherNet players play at ${publicAddress}:${options.webrtcPort}`,
-        )
-      }
+      if (geyser === null) await firstGeyser(address)
+      if (stopped) return
       if (relay === null) {
         relay = await bedrockRelay({
           bind: { hostname: address, port: options.port },
