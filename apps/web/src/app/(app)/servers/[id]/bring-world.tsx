@@ -9,7 +9,9 @@
  * sent straight to the store, read on a worker, a question asked where only the player knows the
  * answer, then the world shown by its name with what Cubepals did, and one press that plays it.
  * Playing it restores the backup the world waits in (`backups.restore`), which keeps the world the
- * server had; "Not now" leaves it waiting in Backups. The words are `bring-world-lines.ts`'s.
+ * server had; "Not now" leaves it waiting in Backups. A world played with mods brings them from the
+ * instance it was played in, and playing it moves the server to them (`bring-world-mods.tsx`). The
+ * words are `bring-world-lines.ts`'s; what is sent, `lib/brought-files.ts`'s.
  */
 import {
   type BroughtWorld,
@@ -24,25 +26,41 @@ import { compareVersions, isRelease } from '@blockly/contracts/release-order'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import Image from 'next/image'
 import Link from 'next/link'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { messageOf, useTRPC } from '../../../../lib/api'
-import { levelOf } from '../../../../lib/level-version'
+import {
+  type Brought,
+  modsGoing,
+  type NotAdded,
+  type Sending,
+  sendingOf,
+  uploadOf,
+  withPicked,
+  worldOf,
+} from '../../../../lib/brought-files'
+import { type LevelSays, levelOf } from '../../../../lib/level-version'
 import { bytes, iconSrc } from '../../../../lib/present'
 import { readingLeft } from '../../../../lib/reading-pace'
 import { useSentImport } from '../../../../lib/sent-import'
+import { namesInZip, type PickedFile } from '../../../../lib/world-folder'
 import { Button, Modal, Note, ProgressBar, TextField } from '../../../../ui'
 import { UploadProgress } from '../../upload-progress'
+import { MOST_BYTES, TOO_LARGE } from '../../world-drop'
 import { WorldPeopleChoice } from '../../world-people'
 import { BroughtNotes, WorldQuestions } from '../../world-questions'
 import {
   comingName,
   KEPT_LINE,
+  type ModsPlay,
+  modsPlayOf,
   movesLine,
+  movesUp,
   playLabel,
   type Stage,
   serverLine,
   titleOf,
 } from './bring-world-lines'
+import { InstancePicked, ModsOffer, PlayedWithMods } from './bring-world-mods'
 import { changeable, useChanged } from './settings/shared'
 import { requestId } from './use-server'
 
@@ -51,10 +69,19 @@ const READING_POLL_MS = 1500
 
 type Ready = Extract<WorldImportView, { status: 'ready' }>
 
-export function BringWorld({ view, file, onClose }: { view: ServerView; file: File; onClose: () => void }) {
+export function BringWorld({
+  view,
+  brought,
+  onClose,
+}: {
+  view: ServerView
+  brought: Brought
+  onClose: () => void
+}) {
   const [name, setName] = useState('')
-  const level = useLevel(file)
-  const { progress, importId, state, send, stop, ...sent } = useBringing(view, name)
+  const what = useSending(brought)
+  const { upload, level } = what
+  const { progress, importId, state, send, stop, reset, ...sent } = useBringing(view, name)
   const play = usePlay(view, onClose)
   const sending = progress !== null || importId !== null
   const reading = importId !== null && (state === null || state.status === 'reading')
@@ -64,6 +91,16 @@ export function BringWorld({ view, file, onClose }: { view: ServerView; file: Fi
   const close = () => {
     stop()
     onClose()
+  }
+  // Its mods picked once it is read, where they didn't come: the world goes up again with them, as
+  // one upload, at once; or, from an instance holding several worlds, once the player says which.
+  const again = (files: PickedFile[]): NotAdded | null => {
+    const next = what.pick(files)
+    if (typeof next === 'string') return next
+    const file = uploadOf(next)
+    if (file === null) reset()
+    else void send(file)
+    return null
   }
   return (
     <Modal
@@ -77,18 +114,30 @@ export function BringWorld({ view, file, onClose }: { view: ServerView; file: Fi
           sending={sending}
           uploading={progress !== null}
           playing={play.pending}
-          onSend={() => void send(file)}
+          upload={sendable(what)}
+          without={asksForMods(what) && what.sending.mods === null}
+          onSend={(file) => void send(file)}
           onClose={close}
           onPlay={play.play}
         />
       }
     >
       <div className="bk-stack" style={{ gap: 'var(--space-16)' }}>
-        {!sending && <Picked file={file} view={view} level={level} name={name} onName={setName} />}
-        {progress !== null && <UploadProgress name={file.name} sent={progress.sent} total={progress.total} />}
-        {reading && <ReadingWorld name={coming} sizeBytes={file.size} />}
+        {!sending && <Picked view={view} what={what} name={name} onName={setName} />}
+        {progress !== null && (
+          <UploadProgress name={progress.name} sent={progress.sent} total={progress.total} />
+        )}
+        {reading && <ReadingWorld name={coming} sizeBytes={upload?.size ?? 0} />}
         {state?.status === 'asking' && <Questions view={view} state={state} />}
-        {ready && <ReadyToPlay view={view} ready={ready} />}
+        {ready && (
+          <ReadyToPlay
+            view={view}
+            ready={ready}
+            playing={play.pending}
+            zip={what.sending.brought.kind === 'file'}
+            onMods={again}
+          />
+        )}
         {failuresOf(state, [sent.failure, sent.watching, play.failure]).map((failure) => (
           <Note key={failure} tone="danger">
             {failure}
@@ -133,27 +182,85 @@ function stageOf(sending: boolean, state: WorldImportView | null): Stage {
   return sending ? 'coming' : 'picked'
 }
 
-/** What the file's own `level.dat` says, read in the browser before anything is sent. */
-function useLevel(file: File): { gameVersion: string | null; name: string | null } {
-  const [level, setLevel] = useState<{ gameVersion: string | null; name: string | null }>({
-    gameVersion: null,
-    name: null,
-  })
+const UNREAD: LevelSays = { gameVersion: null, name: null, moddedWith: [] }
+
+/** What the world's own `level.dat` says, read in the browser before anything is sent. */
+function useLevel(world: Blob | null): LevelSays {
+  const [level, setLevel] = useState<LevelSays>(UNREAD)
   useEffect(() => {
+    if (world === null) return
     let current = true
-    void levelOf(file).then((read) => current && setLevel(read))
+    void levelOf(world).then((read) => current && setLevel(read))
     return () => {
       current = false
     }
-  }, [file])
+  }, [world])
   return level
 }
 
+/** The paths in a zip handed over, read from its directory; null for any other file, or one it can't read. */
+function useZipNames(brought: Brought): string[] | null {
+  const [names, setNames] = useState<string[] | null>(null)
+  const zip = brought.kind === 'file' && /\.zip$/i.test(brought.file.name) ? brought.file : null
+  useEffect(() => {
+    if (zip === null) return
+    let current = true
+    void namesInZip(zip).then((read) => current && setNames(read))
+    return () => {
+      current = false
+    }
+  }, [zip])
+  return names
+}
+
+/**
+ * What goes up, as the player shapes it before it is sent: the world chosen of an instance, and
+ * the mods of the instance it was played in added beside it (`withPicked`). With it, the file it
+ * makes, what its `level.dat` says, and how many mods go with it.
+ */
+function useSending(brought: Brought) {
+  const [sending, setSending] = useState<Sending>(() => sendingOf(brought))
+  const { brought: handed, world: chosen } = sending
+  const upload = useMemo(() => uploadOf(sending), [sending])
+  const world = useMemo(() => worldOf({ brought: handed, world: chosen, mods: null }), [handed, chosen])
+  const level = useLevel(world)
+  const going = modsGoing(sending, useZipNames(brought))
+  /** A folder picked for its mods, taken; or why it can't be. */
+  const pick = (files: PickedFile[]): Sending | NotAdded => {
+    const next = withPicked(sending, files, level.name)
+    if ('notAdded' in next) return next.notAdded
+    setSending(next)
+    return next
+  }
+  return {
+    sending,
+    upload,
+    level,
+    going,
+    pick,
+    choose: (folder: string) => setSending({ ...sending, world: folder }),
+    leaveOut: () => setSending({ ...sending, mods: null }),
+  }
+}
+
+type Shaping = ReturnType<typeof useSending>
+
+/** The file Upload sends, where there is one an upload takes. */
+const sendable = ({ upload }: Shaping): File | null =>
+  upload !== null && upload.size <= MOST_BYTES ? upload : null
+
+/**
+ * Whether the player is asked for the instance the world was played in before it is sent: its
+ * `level.dat` says mods opened it, and none go with it. An instance picked whole holds its own.
+ */
+const asksForMods = ({ sending, level, going }: Shaping): boolean =>
+  sending.brought.kind !== 'instance' && level.moddedWith.length > 0 && (going === 0 || sending.mods !== null)
+
 /**
  * Playing the world: the backup it waits in restored as the server's world, moving the server up
- * where the world is from a newer release, as its player read before pressing. One request id per
- * dialog, so a second press is the same request. The dialog closes on it, and the page's own
- * progress takes over.
+ * where the world is from a newer release, as its player read before pressing, and to the mods it
+ * was played with where they came. One request id per dialog, so a second press is the same
+ * request. The dialog closes on it, and the page's own progress takes over.
  */
 function usePlay(view: ServerView, onPlayed: () => void) {
   const trpc = useTRPC()
@@ -172,12 +279,14 @@ function usePlay(view: ServerView, onPlayed: () => void) {
   )
   const play = (ready: Ready) => {
     if (ready.world === null) return
+    const mods = modsPlayOf(ready.playedWith)
     restore.mutate({
       serverId: view.id,
       requestId: request,
       backupId: ready.backupId,
       withConfiguration: false,
-      ...(ready.world.newer?.movesServer ? { moveUp: true } : {}),
+      ...(movesUp(ready.world, mods) ? { moveUp: true } : {}),
+      ...(mods === 'with' ? { withMods: true } : {}),
     })
   }
   return { play, pending: restore.isPending, failure: restore.isError ? messageOf(restore.error) : null }
@@ -189,6 +298,8 @@ function Actions({
   sending,
   uploading,
   playing,
+  upload,
+  without,
   onSend,
   onClose,
   onPlay,
@@ -199,7 +310,11 @@ function Actions({
   /** The file is going up, and Cancel stops it. */
   uploading: boolean
   playing: boolean
-  onSend: () => void
+  /** What Upload sends; null while there is nothing an upload takes. */
+  upload: File | null
+  /** It goes up without the mods it was played with, which the player was asked for. */
+  without: boolean
+  onSend: (file: File) => void
   onClose: () => void
   onPlay: (ready: Ready) => void
 }) {
@@ -208,6 +323,7 @@ function Actions({
       <PlayActions
         view={view}
         world={state.world}
+        mods={modsPlayOf(state.playedWith)}
         playing={playing}
         onClose={onClose}
         onPlay={() => onPlay(state)}
@@ -232,8 +348,8 @@ function Actions({
       <Button variant="ghost" onClick={onClose}>
         Cancel
       </Button>
-      <Button variant="primary" onClick={onSend}>
-        Upload
+      <Button variant="primary" disabled={upload === null} onClick={() => upload && onSend(upload)}>
+        {without ? 'Upload without its mods' : 'Upload'}
       </Button>
     </>
   )
@@ -243,19 +359,21 @@ function Actions({
 function PlayActions({
   view,
   world,
+  mods,
   playing,
   onClose,
   onPlay,
 }: {
   view: ServerView
   world: BroughtWorld
+  mods: ModsPlay
   playing: boolean
   onClose: () => void
   onPlay: () => void
 }) {
   const allowed = changeable(view)
-  // A server with mods moves in its settings first, so there is nothing to press here yet.
-  const blocked = world.newer !== null && !world.newer.movesServer
+  // A server with mods moves in its settings first, unless the world's own come and move it with them.
+  const blocked = world.newer !== null && !movesUp(world, mods)
   return (
     <>
       <Button variant="ghost" disabled={playing} onClick={onClose}>
@@ -267,32 +385,46 @@ function PlayActions({
         busy={playing ? `Switching to ${world.name}` : undefined}
         onClick={onPlay}
       >
-        {playLabel(world)}
+        {playLabel(world, mods)}
       </Button>
     </>
   )
 }
 
-/** The file picked, before it is sent: what Cubepals does with it, and the name it can be given. */
+/**
+ * What was picked, before it is sent: what Cubepals does with it, which world of an instance, the
+ * name it can be given, and the mods it was played with where they aren't with it.
+ */
 function Picked({
-  file,
   view,
-  level,
+  what,
   name,
   onName,
 }: {
-  file: File
   view: ServerView
-  level: { gameVersion: string | null; name: string | null }
+  what: Shaping
   name: string
   onName: (name: string) => void
 }) {
+  const { sending, upload, level } = what
+  const { brought } = sending
   return (
     <>
-      <p>
-        {file.name} · {bytes(file.size)}. Cubepals finds the world in it, whether it’s a single-player save, a
-        server’s folder or a download, and gets it ready for this server. Then you play it.
-      </p>
+      {brought.kind === 'instance' ? (
+        <InstancePicked
+          instance={brought.instance}
+          mods={what.going ?? 0}
+          world={sending.world}
+          onWorld={what.choose}
+        />
+      ) : (
+        upload !== null && (
+          <p>
+            {upload.name} · {bytes(upload.size)}. Cubepals finds the world in it, whether it’s a single-player
+            save, a server’s folder or a download, and gets it ready for this server. Then you play it.
+          </p>
+        )
+      )}
       <TextField
         label="Name"
         optional
@@ -303,6 +435,19 @@ function Picked({
         help="What this server calls the world, if it never had it before."
       />
       <NewerWorld played={level.gameVersion} view={view} />
+      {asksForMods(what) && (
+        <ModsOffer
+          moddedWith={level.moddedWith}
+          added={sending.mods}
+          zip={brought.kind === 'file'}
+          onPicked={(files) => {
+            const next = what.pick(files)
+            return typeof next === 'string' ? next : null
+          }}
+          onLeaveOut={what.leaveOut}
+        />
+      )}
+      {upload !== null && sendable(what) === null && <Note tone="danger">{TOO_LARGE}</Note>}
     </>
   )
 }
@@ -379,14 +524,30 @@ function Questions({
 }
 
 /**
- * The world, read and ready: its name, the Minecraft it was played on and what Cubepals did, who
- * of its old server's players come along, and what playing it does to this server.
+ * The world, read and ready: its name, the Minecraft it was played on and what Cubepals did, the
+ * mods it was played with, who of its old server's players come along, and what playing it does
+ * to this server.
  */
-function ReadyToPlay({ view, ready }: { view: ServerView; ready: Ready }) {
+function ReadyToPlay({
+  view,
+  ready,
+  playing,
+  zip,
+  onMods,
+}: {
+  view: ServerView
+  ready: Ready
+  playing: boolean
+  /** It came as a file, which its mods can't be added to: its instance is asked for. */
+  zip: boolean
+  /** The instance its mods are in, picked where they didn't come: it goes up again with them. */
+  onMods: (files: PickedFile[]) => NotAdded | null
+}) {
   const { world } = ready
   if (world === null)
     return <Note tone="info">This world is no longer in Backups. Upload it again to play it.</Note>
-  const moves = movesLine(world, view.gameVersion)
+  const mods = modsPlayOf(ready.playedWith)
+  const moves = movesLine(world, view.gameVersion, mods)
   return (
     <>
       <WorldCard world={world} />
@@ -396,9 +557,17 @@ function ReadyToPlay({ view, ready }: { view: ServerView; ready: Ready }) {
           <BroughtNotes notes={ready.notes} />
         </div>
       )}
+      <PlayedWithMods
+        playedWith={ready.playedWith}
+        view={view}
+        name={world.name}
+        zip={zip}
+        busy={playing}
+        onPicked={onMods}
+      />
       {ready.people !== null && <LetIn view={view} importId={ready.importId} people={ready.people} />}
       {moves !== null && <Note tone="info">{moves}</Note>}
-      {world.newer !== null && !world.newer.movesServer && (
+      {world.newer !== null && !movesUp(world, mods) && (
         <Note tone="info">
           It was last played on Minecraft {world.newer.gameVersion}, newer than this server’s{' '}
           {view.gameVersion}. Change the server to {world.newer.gameVersion} in{' '}

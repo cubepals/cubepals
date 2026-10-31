@@ -9,7 +9,8 @@
  * picked, or its zip, with where their launcher keeps its saves on their computer (`saves-folder.tsx`). A folder is looked at
  * and laid out as one file here (`lib/world-folder.ts`), and the wrong thing is said before
  * anything is sent. What becomes of the file is the page's: the world page sends it to a server,
- * the create page to the server it makes.
+ * taking a folder as its files to send the part of an instance that is the world and its mods,
+ * and the create page sends it to the server it makes.
  */
 import { FolderOpen, Upload } from 'lucide-react'
 import { type DragEvent, useRef, useState } from 'react'
@@ -22,7 +23,7 @@ import { SavesFolder } from './saves-folder'
 export const WORLD_FILES = '.zip,.tar.gz,.tgz,.tar,application/zip,application/gzip,application/x-tar'
 
 /** The most a world upload can be, as the control plane takes one. */
-const MOST_BYTES = 4 * 1024 ** 3
+export const MOST_BYTES = 4 * 1024 ** 3
 
 const SAID = {
   nothing:
@@ -33,13 +34,23 @@ const SAID = {
   tooLarge: 'This world is larger than 4 GB, more than an upload takes.',
 }
 
+/** What is said of a world larger than an upload takes. */
+export const TOO_LARGE = SAID.tooLarge
+
 export function WorldDrop({
   disabled,
   onFile,
+  onFolder,
 }: {
   disabled?: boolean
   /** The world as one file, looked at as far as the browser can: its zip, or its folder laid out. */
   onFile: (file: File) => void
+  /**
+   * Where given, a folder holding a world is handed over as its files instead, for a page that
+   * sends only part of it, as a launcher's instance's world and its mods (`lib/brought-files.ts`):
+   * what it sends is the page's to lay out, and to size.
+   */
+  onFolder?: (files: PickedFile[]) => void
 }) {
   const [problem, setProblem] = useState<string | null>(null)
   const [over, setOver] = useState(false)
@@ -48,6 +59,7 @@ export function WorldDrop({
   const takeFolder = (files: PickedFile[]) => {
     const look = lookAt(files)
     if (look.kind !== 'world') return setProblem(SAID[look.kind])
+    if (onFolder) return onFolder(files)
     // What is sent is the tarball, its headers and padding included, known before anything is read.
     const tarball = tarOf(files)
     if (tarball.size > MOST_BYTES) return setProblem(SAID.tooLarge)

@@ -4,7 +4,16 @@
 
 /** A launcher's instance, picked so a world's mods come with it: where it is, and what of it is sent. */
 import { describe, expect, test } from 'bun:test'
-import { instanceIn, instancePickOn, sentWith } from './instance-folders.ts'
+import {
+  instanceIn,
+  instancePickOn,
+  modsBeside,
+  modsFolderOn,
+  modsIn,
+  modsSent,
+  playedFrom,
+  sentWith,
+} from './instance-folders.ts'
 import { LAUNCHERS } from './saves-folders.ts'
 
 const launcher = (id: string) => {
@@ -84,5 +93,63 @@ describe('an instance picked whole', () => {
       'Fabric 26.3/minecraft/saves/Life/level.dat',
       'Fabric 26.3/minecraft/saves/Life/region/r.0.0.mca',
     ])
+  })
+})
+
+describe('a folder picked for the mods of a world picked from somewhere else', () => {
+  test('the game’s own launcher keeps them beside its saves; one with instances, in each instance', () => {
+    expect(modsFolderOn(launcher('minecraft'), 'Windows')).toBe('%APPDATA%\\.minecraft\\mods')
+    expect(modsFolderOn(launcher('minecraft'), 'Linux')).toBe('~/.minecraft/mods')
+    expect(modsFolderOn(launcher('prism'), 'Windows')).toBeNull()
+  })
+
+  test('finds the mods of an instance, of its game folder, or a mods folder on its own', () => {
+    expect(modsIn(PRISM)).toEqual({ mods: 'Fabric 26.3/minecraft/mods/', root: 'Fabric 26.3/' })
+    // An instance with no world left in it, picked whole: its game folder's mods, its own files above.
+    expect(modsIn(['Inst/mmc-pack.json', 'Inst/minecraft/mods/a.jar'])).toEqual({
+      mods: 'Inst/minecraft/mods/',
+      root: 'Inst/',
+    })
+    expect(modsIn(['mods/a.jar', 'mods/.index/a.pw.toml'])).toEqual({ mods: 'mods/', root: '' })
+    // A folder of jars named otherwise is a mods folder all the same.
+    expect(modsIn(['My mods/a.jar'])).toEqual({ mods: 'My mods/', root: null })
+    expect(modsIn(['Life/level.dat', 'Life/datapacks/a.zip'])).toBeNull()
+    expect(modsIn(['mods/a.jar.disabled'])).toBeNull()
+  })
+
+  test('sends them in mods/ beside the world, with what the instance runs on', () => {
+    const folder = modsIn(PRISM)
+    if (folder === null) throw new Error('No mods')
+    expect(modsSent(PRISM, folder, '')).toEqual([
+      { path: 'Fabric 26.3/instance.cfg', at: 'instance.cfg' },
+      { path: 'Fabric 26.3/mmc-pack.json', at: 'mmc-pack.json' },
+      {
+        path: 'Fabric 26.3/minecraft/mods/treeharvester-26.3.0-10.4.jar',
+        at: 'mods/treeharvester-26.3.0-10.4.jar',
+      },
+      {
+        path: 'Fabric 26.3/minecraft/mods/collective-26.3.0-8.71.jar',
+        at: 'mods/collective-26.3.0-8.71.jar',
+      },
+      {
+        path: 'Fabric 26.3/minecraft/mods/.index/tree-harvester.pw.toml',
+        at: 'mods/.index/tree-harvester.pw.toml',
+      },
+    ])
+    expect(modsSent(['mods/a.jar'], { mods: 'mods/', root: '' }, 'srv/')).toEqual([
+      { path: 'mods/a.jar', at: 'srv/mods/a.jar' },
+    ])
+  })
+
+  test('a world is played from the folder above its saves, else the one it sits in, as the control plane reads it', () => {
+    expect(playedFrom(['Life/level.dat', 'Life/region/r.0.0.mca'])).toBe('')
+    expect(playedFrom(['srv/world/level.dat', 'srv/world/DIM-1/level.dat', 'srv/server.properties'])).toBe(
+      'srv/',
+    )
+    expect(playedFrom(['.minecraft/saves/Life/level.dat'])).toBe('.minecraft/')
+    expect(modsBeside(['srv/world/level.dat', 'srv/mods/a.jar', 'srv/mods/b.jar.disabled'])).toEqual([
+      'srv/mods/a.jar',
+    ])
+    expect(modsBeside(['Life/level.dat', 'Life/mods/a.jar'])).toEqual([])
   })
 })

@@ -11,6 +11,7 @@ import { Archive, Download, Upload } from 'lucide-react'
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { codeOf, messageOf, useTRPC } from '../../../../../lib/api'
+import type { Brought } from '../../../../../lib/brought-files'
 import { useNow } from '../../../../../lib/hooks'
 import { said, useOutcome } from '../../../../../lib/outcome'
 import { backupTitle, bytes, dayOf, loaderLabel, whenTaken } from '../../../../../lib/present'
@@ -32,6 +33,7 @@ import {
 import { PlusOffer } from '../../../plus-offer'
 import { WORLD_FILES } from '../../../world-drop'
 import { BringWorld } from '../bring-world'
+import { modsLine, modsPlayOf, movesUp } from '../bring-world-lines'
 import { ChangeState, ConfirmChange, useChanged } from '../settings/shared'
 import { requestId, useServer } from '../use-server'
 import { useWorldDownload } from './use-download'
@@ -110,7 +112,7 @@ function Backups({
   const now = useNow(MINUTE_MS)
   const [restoring, setRestoring] = useState<BackupView | null>(null)
   const [deleting, setDeleting] = useState<BackupView | null>(null)
-  const [bringing, setBringing] = useState<File | null>(null)
+  const [bringing, setBringing] = useState<Brought | null>(null)
   const refresh = () =>
     queries.invalidateQueries({ queryKey: trpc.backups.list.queryKey({ serverId: view.id }) })
   // "Backed up" once the backup this press asked for is there and ready; it starts no operation
@@ -193,7 +195,7 @@ function Backups({
                 accept={WORLD_FILES}
                 icon={<Upload {...ICON} aria-hidden />}
                 disabled={busy || !list.archives.restore.available}
-                onFile={setBringing}
+                onFile={(file) => setBringing({ kind: 'file', file })}
               >
                 Upload a world
               </FileButton>
@@ -319,7 +321,7 @@ function Backups({
           onClose={() => setRestoring(null)}
         />
       )}
-      {bringing && <BringWorld view={view} file={bringing} onClose={() => setBringing(null)} />}
+      {bringing && <BringWorld view={view} brought={bringing} onClose={() => setBringing(null)} />}
       <Modal
         open={deleting !== null}
         onClose={() => setDeleting(null)}
@@ -396,8 +398,12 @@ function Restore({
       },
     }),
   )
-  // A world from a newer release: the server moves up with it, or, with mods, in its settings first.
+  // A world from a newer release: the server moves up with it, or, with mods, in its settings first,
+  // unless the mods a brought world was played with come and move it up with them.
   const newer = backup.newerWorld
+  const mods = modsPlayOf(backup.playedWith)
+  const up = movesUp({ newer }, mods)
+  const withMods = modsLine(backup.playedWith, view.loader)
   const send = (requestId: string, acknowledgeRevoked: boolean) =>
     restore.mutateAsync({
       serverId: view.id,
@@ -405,7 +411,8 @@ function Restore({
       backupId: backup.id,
       withConfiguration,
       acknowledgeRevoked,
-      ...(newer?.movesServer ? { moveUp: true } : {}),
+      ...(up ? { moveUp: true } : {}),
+      ...(mods === 'with' ? { withMods: true } : {}),
     })
   return (
     <ConfirmChange
@@ -413,7 +420,7 @@ function Restore({
       onClose={onClose}
       title={restoreTitle(backup, now, zone)}
       confirmLabel={restoreLabel(backup, view)}
-      disabled={newer !== null && !newer.movesServer}
+      disabled={newer !== null && !up}
       working="Bringing the world back"
       error={restore.error}
       onConfirm={(requestId) => send(requestId, false)}
@@ -425,14 +432,15 @@ function Restore({
           : `${backup.world.name} goes back to how it was then.`}{' '}
         Who can join stays as it is now: bans, operators and the whitelist are put back after the restore.
       </p>
-      {newer?.movesServer && (
+      {withMods !== null && <Note tone="info">{withMods}</Note>}
+      {up && newer !== null && (
         <Note tone="info">
           It was last played on Minecraft {newer.gameVersion}, so the server moves up from {view.gameVersion}{' '}
           to {newer.gameVersion} to open it. A world can’t go back to an older Minecraft, so the server stays
           on {newer.gameVersion}.
         </Note>
       )}
-      {newer !== null && !newer.movesServer && (
+      {newer !== null && !up && (
         <Note tone="info">
           It was last played on Minecraft {newer.gameVersion}, newer than this server’s {view.gameVersion}.
           Change the server to {newer.gameVersion} in{' '}
