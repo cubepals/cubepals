@@ -2,11 +2,14 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-/** Validate every requested test file and distinguish assertion failures from invalid runner output. */
+/**
+ * Validate every requested test file and distinguish assertion failures from invalid runner output.
+ * Under `bail`, files after the first failure may be absent, but only when a test case failed.
+ */
 import { liveFleet } from './evidence-policy.mjs'
 import { XMLParser, XMLValidator } from './toolchain.mjs'
 
-export function readMutationJUnit(xml, expected) {
+export function readMutationJUnit(xml, expected, { bail = false } = {}) {
   if (XMLValidator.validate(xml) !== true) throw new Error('Malformed mutation JUnit evidence')
   const data = new XMLParser({
     ignoreAttributes: false,
@@ -40,9 +43,10 @@ export function readMutationJUnit(xml, expected) {
       else outcome.passed++
     }
   }
-  for (const file of expected)
-    if (!seen.has(file)) throw new Error(`Mutation test file did not report: ${file}`)
   if (outcome.passed + outcome.failed === 0) throw new Error('No mutation tests executed')
+  for (const file of expected)
+    if (!seen.has(file) && !(bail && outcome.failed > 0))
+      throw new Error(`Mutation test file did not report: ${file}`)
   outcome.skippedTests.sort()
   return outcome
 }
