@@ -9,6 +9,8 @@
  * newly added test files do not, by themselves, certify or mutate every unchanged legacy import.
  */
 import { createHash } from 'node:crypto'
+import { oracleTests } from './dependency-impact.mjs'
+import { inventory } from './inventory.mjs'
 import { dependencyGraph } from './mutation-dependencies.mjs'
 import { analyzeTestImpact } from './test-impact.mjs'
 
@@ -51,9 +53,16 @@ export function selectMutationScope({
     if (!sameFiles(productionFiles, impact.headSourceFiles) || !sameFiles(testFiles, impact.headTestFiles))
       throw new Error('Supplied mutation inventory differs from the inspected Git head')
     changedFiles = impact.verifiedChangedFiles
-    ignoredConfigFiles = new Set(impact.verifiedQualityOnlyConfigs)
+    ignoredConfigFiles = new Set([
+      ...impact.verifiedQualityOnlyConfigs,
+      ...(impact.dependencyOnly.eligible ? impact.dependencyOnly.files : []),
+    ])
   }
-  const addedTests = impact?.verifiedAddedTests ?? new Set()
+  // A test file that only gained cases is an addition too (test-appends.mjs).
+  const addedTests = new Set([
+    ...(impact?.verifiedAddedTests ?? []),
+    ...(impact?.verifiedAppendedTests ?? []),
+  ])
   const source = new Set(productionFiles)
   const tests = new Set(testFiles)
   const changed = new Set(changedFiles)
@@ -107,6 +116,15 @@ export function selectMutationScope({
       full = true
       reasons.push(`ambiguous dependency mapping: ${file}`)
     }
+  }
+  const dependencyOnly = impact?.dependencyOnly?.eligible && !full ? impact.dependencyOnly : null
+  let oracles = new Map()
+  if (dependencyOnly) {
+    oracles = oracleTests(root, inventory(root), dependencyOnly.affectedPackages)
+    for (const closure of oracles.values()) for (const file of closure) subjects.add(file)
+    reasons.push(
+      `dependency-only update (${dependencyOnly.changedPackages.length} lock records); ${oracles.size} tests load an updated package and are held to their base mutation scores`,
+    )
   }
   if (full) {
     if (source.size === 0) throw new Error('Full mutation inventory is empty')
@@ -179,6 +197,14 @@ export function selectMutationScope({
     }
     if (batch.length) additionalTestsByFile[file].push(batch)
   }
+  if (dependencyOnly) {
+    // Base and head run exactly the tests whose oracle may have changed, with no expansion,
+    // so the two scores measure the same tests against the same mutants.
+    for (const file of subjects) {
+      testsByFile[file] = [...oracles].filter(([, closure]) => closure.includes(file)).map(([test]) => test)
+      additionalTestsByFile[file] = []
+    }
+  }
   return {
     subjects: [...subjects].sort(),
     testsByFile,
@@ -187,11 +213,14 @@ export function selectMutationScope({
     reasons,
     changedFiles: [...changed],
     testImpact: impact?.evidence ?? null,
+    baseScore: dependencyOnly ? { subjects: [...subjects].sort(), oracleTests: [...oracles.keys()] } : null,
     noMutationReason: subjects.size
       ? null
-      : addedTests.size
-        ? 'Verified new test additions with no production or existing-test mutation obligations; standalone new test strength is not certified'
-        : 'No executable source or existing test changes require incremental mutation',
+      : dependencyOnly
+        ? 'Dependency-only update: source and tests are unchanged and no test loads an updated package; the complete suite and the coverage ratchet judge it'
+        : addedTests.size
+          ? 'Verified new test additions with no production or existing-test mutation obligations; standalone new test strength is not certified'
+          : 'No executable source or existing test changes require incremental mutation',
   }
 }
 
