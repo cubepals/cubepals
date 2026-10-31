@@ -23,9 +23,10 @@ on:
 permissions:
   contents: read
 
-# Required ruleset workflows must finish their evidence; newer revisions queue behind a running check.
+# Required ruleset workflows must finish their evidence. Each main commit gets its own group so
+# another push cannot replace a pending main run; PR revisions queue behind their running check.
 concurrency:
-  group: ci-${{ github.event_name }}-${{ github.event.pull_request.number || github.event.merge_group.head_sha || github.ref }}
+  group: ci-${{ github.event_name }}-${{ github.event.pull_request.number || github.event.merge_group.head_sha || (github.event_name == 'push' && github.sha) || github.ref }}
   cancel-in-progress: false
 
 jobs:
