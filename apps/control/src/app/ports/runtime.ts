@@ -163,6 +163,16 @@ export type RestoreSource =
       sha256?: string | null
     }
 
+/** What a restore waits on before it replaces anything (`MinecraftRuntime.restoresBeside`). */
+export interface RestoreOptions {
+  /**
+   * Settles once the world the restore replaces is kept elsewhere, its snapshot taken. Until then
+   * the server's storage stays as it is; if it rejects, the restore throws that, and the server
+   * is as it was.
+   */
+  kept?: Promise<unknown>
+}
+
 /** Presigned by the ArchiveStore; consumed inside one operation, never persisted. */
 export interface UploadTarget {
   url: string
@@ -219,6 +229,12 @@ export interface MinecraftRuntime {
    * to it (§19.12).
    */
   readonly serverCeiling: number | null
+  /**
+   * A restore fills new storage beside the server's own and replaces nothing until its `kept`
+   * has settled, so the world it replaces can be saved while the backup comes. Without it, a
+   * restore may overwrite the server's storage at once, and is asked only once `kept` is.
+   */
+  readonly restoresBeside?: boolean
 
   /** Pure: whether this runtime issued `handle`. Every handle it issues says so of itself. */
   owns(handle: RuntimeHandle): boolean
@@ -305,13 +321,14 @@ export interface MinecraftRuntime {
    * Replaces storage, and compute where the provider requires it. Returns the new handle. From an
    * archive it also works on a handle `release` returned: fresh storage filled from the archive,
    * fresh compute on it, left stopped. A handle that `release` only got partway through works the
-   * same way, and whatever the release left behind goes.
+   * same way, and whatever the release left behind goes. `options.kept`: `restoresBeside`.
    */
   restore(
     handle: RuntimeHandle,
     from: RestoreSource,
     spec: RuntimeSpec,
     progress: ProgressSink,
+    options?: RestoreOptions,
   ): Promise<RuntimeHandle>
   /**
    * Moves compute and storage to where `to` maps now. `from`: the host is lost, or can't run the

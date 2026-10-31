@@ -36,6 +36,7 @@ import type {
   Placement,
   ProgressSink,
   PutPart,
+  RestoreOptions,
   RestoreSource,
   RuntimeHandle,
   RuntimeKey,
@@ -158,6 +159,8 @@ export function serverCeilingOf(machineLimit: number, platformMachines: number):
 export class FlyRuntime implements MinecraftRuntime {
   readonly provider = 'fly'
   readonly stableEndpoints = true
+  /** A restore's world comes on a new volume, and the old one goes only in `#replace`. */
+  readonly restoresBeside = true
   /** Every machine counts against the organization's limit, stopped ones included. */
   readonly serverCeiling: number
   readonly #fly: FlyClient
@@ -407,6 +410,7 @@ export class FlyRuntime implements MinecraftRuntime {
     from: RestoreSource,
     spec: RuntimeSpec,
     progress: ProgressSink,
+    options: RestoreOptions = {},
   ): Promise<RuntimeHandle> {
     const ref = decodeHandle(handle)
     // A released server holds nothing but its app: before anything is made, the region must have
@@ -456,6 +460,11 @@ export class FlyRuntime implements MinecraftRuntime {
         },
       )
     }
+    // Nothing is replaced until the old world is kept; if it isn't, the new volume goes.
+    await options.kept?.catch(async (error: unknown) => {
+      await deleteVolume(this.#fly, ref.app, idOf(volume, 'a volume')).catch(() => undefined)
+      throw error
+    })
     const next = await this.#replace(ref, volume, ref.region, spec, progress)
     if (from.kind === 'archive') await clearEarlierWakes(this.#fly, ref.app, idOf(volume, 'a volume'))
     return next

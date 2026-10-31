@@ -916,8 +916,9 @@ through the wake flow, which starts it first (§12).
   - Leases with a nonce on update/stop, and `stop_config` from `spec.stop`.
 - Volumes: `auto_backup_enabled: false`, because the product owns backup scheduling.
   `snapshot_retention` is set to the longest entitlement.
-- Restore: new volume from `snapshot_id`, then a new machine on it, then destroy the old
-  machine; the old volume goes after the new one is `created`. Returns the new handle.
+- Restore: new volume from `snapshot_id` (or filled from an archive by a helper), then, once
+  the old world is kept, a new machine on it, then destroy the old machine; the old volume goes
+  after the new one is `created`. Returns the new handle.
 - Relocate: stop, fork the volume with `source_volume_id` + region, create a machine, wait
   until the fork is `created`, destroy the old one.
 - Export: restore the snapshot into a temporary volume, run a one-shot archiver machine
@@ -950,7 +951,7 @@ worker:
 | `relocate` | user region change, region deprecation, host failure | snapshot → `relocate` → **boot sequence** | `failed{relocating}`; original kept until success |
 | `backup` | schedule, manual, pre-apply | console `save-off`/`save-all flush` → `snapshot` → `save-on` | backup `failed`; server unaffected |
 | `archive` | manual, schedule (if entitled **and** capable) | `exportSnapshot` → `ArchiveStore` | backup `failed` |
-| `restore` | user | import access → pre-restore snapshot → `restore(source)` → `reseedRequired = true` → **boot sequence** → new handle | automatic return to the pre-restore snapshot |
+| `restore` | user | import access → `reseedRequired = true` → pre-restore snapshot, while `restore(source, { kept })` fills new storage beside the world and replaces nothing until the snapshot is kept (`restoresBeside`; an in-place runtime is asked only after) → **boot sequence** → new handle | automatic return to the pre-restore snapshot; a snapshot that fails leaves the server as it was |
 | `access_sync` | `AccessService` mutation, owner opens the access page | if running: reconcile access (§15.1); else no-op (pending waits for the next boot) | never fails the key: delivery errors are recorded on the entries and the op succeeds |
 | `prune_worlds` | world deletion | `exec` rm of level dirs (command built by `minecraft/`) | retry |
 | `decommission` | delete | stop → `decommission` (storage kept) | retry until converged |

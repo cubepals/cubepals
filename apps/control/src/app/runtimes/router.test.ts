@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
+import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -160,5 +160,38 @@ describe('the runtime router', () => {
     expect(await router.hasRoom('fake-fly', { regionKey: 'mars' }, { memoryMb: 3072, storageGb: 5 })).toBe(
       false,
     )
+  })
+})
+
+describe('the runtime router restoring', () => {
+  test('a runtime that restores in place is asked only once the world it replaces is kept', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'blockly-router-'))
+    const docker = new FakeRuntime({
+      provider: 'fake-docker',
+      deploymentId: 'test',
+      root,
+      regionMap: { local: 'here' },
+    })
+    // As Docker's and Boat's do, its restore overwrites the server's own storage.
+    Object.defineProperty(docker, 'restoresBeside', { value: false })
+    const routed = new RuntimeRouter([docker])
+    const handle = await routed.ensureProvisioned('fake-docker', runtimeKey('k'), place, spec, quiet)
+    const from = { kind: 'snapshot' as const, snapshot: (await routed.snapshot(handle)).snapshot }
+    const restore = spyOn(docker, 'restore')
+    let keep = () => {}
+    const kept = new Promise<void>((resolve) => (keep = resolve))
+    const restoring = routed.restore(handle, from, spec, quiet, { kept })
+    await Bun.sleep(20)
+    expect(restore).not.toHaveBeenCalled()
+    keep()
+    await restoring
+    expect(restore).toHaveBeenCalledTimes(1)
+
+    const lost = Promise.reject(new Error('the snapshot failed'))
+    await expect(routed.restore(handle, from, spec, quiet, { kept: lost })).rejects.toThrow(
+      'the snapshot failed',
+    )
+    expect(restore).toHaveBeenCalledTimes(1)
+    await rm(root, { recursive: true, force: true })
   })
 })

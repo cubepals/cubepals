@@ -3,13 +3,16 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Keeps each server's storage as directories under the fake's root: its volumes, and the copies
- * its snapshots are. It knows nothing of boxes, handles or power: which directory a server uses
- * now, and when one is made or let go, are the runtime's (`fake-runtime.ts`).
+ * Keeps each server's storage as directories under the fake's root: its volumes, the copies its
+ * snapshots are, and a restore's new volume, filled beside the old. It knows nothing of boxes,
+ * handles or power: which directory a server uses now, which snapshot a handle names, and when one
+ * is made or let go, are the runtime's (`fake-runtime.ts`).
  */
 
 import { cp, mkdir, mkdtemp, readdir, rm, stat } from 'node:fs/promises'
 import { join } from 'node:path'
+import type { RestoreSource, SnapshotHandle } from '../../../app/ports/runtime.ts'
+import { unpackArchive } from './archive.ts'
 
 /** The directories of one fake provider in one deployment. */
 export class Volumes {
@@ -38,6 +41,28 @@ export class Volumes {
     const dir = join(await this.#home(key), `snapshot-${id}`)
     await cp(from, dir, { recursive: true })
     return { dir, sizeBytes: await sizeOf(dir) }
+  }
+
+  /**
+   * A new volume filled from a snapshot's directory (`dirOf`) or an archive, beside the server's
+   * own, returned once `kept` resolves; if it rejects, the new volume goes and that is thrown.
+   */
+  async beside(
+    key: string,
+    from: RestoreSource,
+    kept: Promise<unknown> | undefined,
+    dirOf: (snapshot: SnapshotHandle) => string,
+  ): Promise<string> {
+    const dir = await this.create(key)
+    if (from.kind === 'snapshot') await this.copy(dirOf(from.snapshot), dir)
+    else await unpackArchive(from.download.url, dir)
+    try {
+      await kept
+    } catch (error) {
+      await this.remove(dir)
+      throw error
+    }
+    return dir
   }
 
   /** A volume or a snapshot gone; one already gone is fine. */
