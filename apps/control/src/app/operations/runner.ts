@@ -44,7 +44,8 @@ export type OperationStep =
  * server's own host couldn't serve; `no_room`, one its runtime had no room for, which went back to
  * sleep (both `handlers/host-refused.ts`). The rest say why a wake booted (`RuntimeMark`, and
  * `memory_lost` where its last sleep kept its memory and the provider stopped it since), how a
- * sleep went (`SleepMark`), and when a boot let its players in (`let_in`, `boot.ts`).
+ * sleep went (`SleepMark`), when a boot let its players in (`let_in`, `boot.ts`), and when a
+ * restore's snapshot of the world it replaces was kept, as the backup came meanwhile (`saved`).
  */
 type OperationMark =
   | 'resume_hung'
@@ -52,6 +53,7 @@ type OperationMark =
   | 'no_room'
   | 'memory_lost'
   | 'let_in'
+  | 'saved'
   | RuntimeMark
   | SleepMark
 

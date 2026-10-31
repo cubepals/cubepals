@@ -87,8 +87,9 @@ export function idleStops(deps: {
     const minutes = await idleMinutesFor(db, entitlementsOf(standing))
     // A run a connection woke that nobody joined is stopped early, whatever the plan allows an
     // idle server: waking something has to be worth its money, and nothing here can be forged.
-    // Otherwise the plan's idle time counts from this run's start or the last play in it, never
-    // from a play before the server last slept.
+    // Otherwise the plan's idle time counts from when it last became running (a change or a
+    // restore can take it down and back inside one run) or the last play since, never from a play
+    // before the server last slept.
     return { run, played, minutes, due: bedtime(run, played, minutes) }
   }
 

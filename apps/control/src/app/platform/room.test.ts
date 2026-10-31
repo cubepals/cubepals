@@ -16,9 +16,11 @@
  */
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { randomUUID } from 'node:crypto'
+import { MINUTE_MS } from '@blockly/contracts/durations'
 import { schema } from '@blockly/db'
 import { count, eq, sql } from 'drizzle-orm'
 import { FULL } from '../../domain/policy/policy.ts'
+import { backdateRun } from '../../testing/backdated-run.ts'
 import { hasDatabase, startHarness } from '../../testing/harness.ts'
 import type { UserActor } from '../actor.ts'
 import { IDLE_GRACE_MS } from '../operations/schedules.ts'
@@ -182,11 +184,7 @@ describe.skipIf(!hasDatabase)('the servers people already have, first', () => {
     // Two minutes empty, looked at once the restart grace is over: seven minutes in all.
     const empty = async (who: string) => {
       const { id } = p.of(who)
-      const longer = sql`now() - interval '2 minutes'`
-      await p.h.db
-        .update(schema.powerIntervals)
-        .set({ startedAt: longer })
-        .where(eq(schema.powerIntervals.serverId, id))
+      await backdateRun(p.h.db, id, 2 * MINUTE_MS)
       await p.h.db.delete(schema.serverActivity).where(eq(schema.serverActivity.serverId, id))
       return p.h.app.schedules.evaluateIdle(await p.h.server(id), new Date(Date.now() + IDLE_GRACE_MS))
     }

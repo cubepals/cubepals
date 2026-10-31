@@ -20,6 +20,7 @@ import {
   type MinecraftRuntime,
   type Placement,
   type ProgressSink,
+  type RestoreOptions,
   type RestoreSource,
   type RuntimeCapacity,
   type RuntimeHandle,
@@ -286,18 +287,22 @@ export class RuntimeRouter implements Runtimes {
     return member.deleteSnapshot(snapshot)
   }
 
-  /** A runtime restores its own snapshots and any archive; another's snapshot is never handed to it. */
-  restore(
+  /**
+   * A runtime restores its own snapshots and any archive; another's snapshot is never handed to it.
+   * One that restores in place is asked only once what it replaces is kept (`restoresBeside`).
+   */
+  async restore(
     handle: RuntimeHandle,
     from: RestoreSource,
     spec: RuntimeSpec,
     progress: ProgressSink,
+    options: RestoreOptions = {},
   ): Promise<RuntimeHandle> {
     const member = this.#of(handle)
     if (from.kind === 'snapshot' && !member.ownsSnapshot(from.snapshot))
-      return Promise.reject(
-        new RuntimeUnsupported(member.provider, 'restoring a snapshot another runtime took'),
-      )
+      throw new RuntimeUnsupported(member.provider, 'restoring a snapshot another runtime took')
+    if (member.restoresBeside === true) return member.restore(handle, from, spec, progress, options)
+    await options.kept
     return member.restore(handle, from, spec, progress)
   }
 

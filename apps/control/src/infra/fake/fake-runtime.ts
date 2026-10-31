@@ -43,7 +43,7 @@ import type {
   SnapshotHandle,
 } from '../../app/ports/runtime.ts'
 import { RuntimeFull, RuntimeUnsupported } from '../../app/ports/runtime.ts'
-import { exportArchive, unpackArchive } from './fake-runtime/archive.ts'
+import { exportArchive } from './fake-runtime/archive.ts'
 import { run } from './fake-runtime/command.ts'
 import { FakeHandles } from './fake-runtime/handle.ts'
 import { Hold } from './fake-runtime/hold.ts'
@@ -133,6 +133,7 @@ export class FakeRuntime implements MinecraftRuntime {
   readonly #fillsOnProvision = new Set<string>()
   readonly serverCeiling: number | null
   readonly snapshotLifetimeDays = null
+  readonly restoresBeside = true
   readonly #deployment: string
   readonly #root: string
   readonly #volumes: Volumes
@@ -335,21 +336,20 @@ export class FakeRuntime implements MinecraftRuntime {
     await this.#volumes.remove(found.dir)
   }
 
-  /** Fresh storage from a snapshot or an archive, then the power state it had. */
+  /** Fresh storage from a snapshot or an archive, used once the old is kept; then the power state it had. */
   async restore(
     handle: RuntimeHandle,
     from: RestoreSource,
     spec: RuntimeSpec,
     progress: ProgressSink,
+    { kept }: Parameters<MinecraftRuntime['restore']>[4] = {},
   ): Promise<RuntimeHandle> {
     const box = this.#require(handle)
+    await progress.step('storage')
+    const dir = await this.#volumes.beside(box.key, from, kept, (snapshot) => this.#snapshot(snapshot).dir)
+    if (this.#restoreFailure?.after === 'storage') throw new Error(this.#restoreFailure.reason)
     const running = box.state === 'running'
     if (holds(box)) await this.#stop(box)
-    await progress.step('storage')
-    const dir = await this.#volumes.create(box.key)
-    if (from.kind === 'snapshot') await this.#volumes.copy(this.#snapshot(from.snapshot).dir, dir)
-    else await unpackArchive(from.download.url, dir)
-    if (this.#restoreFailure?.after === 'storage') throw new Error(this.#restoreFailure.reason)
     await progress.step('compute')
     const old = box.dir
     box.dir = dir

@@ -4,11 +4,12 @@
 
 /**
  * Puts a backup's world in place of the server's (§9), with a way back: the current world is
- * snapshotted first, and the server returns to it if the backup doesn't come up. Who can join is
- * never rewound (§15.1), and the server's other worlds stay as they were (`other-worlds.ts`).
- * Taking backups is `backups.ts`; rebuilding a lost host from one is `moving.ts`.
+ * snapshotted while the backup comes, before anything replaces it, and the server returns to it
+ * if the backup doesn't come up. Who can join is never rewound (§15.1), and the server's other
+ * worlds stay as they were (`other-worlds.ts`). Taking backups is `backups.ts`; rebuilding a lost
+ * host from one is `moving.ts`.
  */
-import type { Db } from '@blockly/db'
+import type { AppliedConfigJson, Db } from '@blockly/db'
 import { diskForWorld, entitlementsOf } from '../../../domain/account/entitlements.ts'
 import type { MinecraftServer } from '../../../domain/server/server.ts'
 import { markReseed } from '../../access/persistence.ts'
@@ -84,13 +85,15 @@ function bringingBack(deps: RestoringDeps) {
   /**
    * A backup's world on the server's storage, booted while the server is `restoring`, where no
    * route reaches it, so the access record is back on the files before anyone can join (§9,
-   * §15.1). It is left running, for `leaveAsAsked`.
+   * §15.1). Nothing is replaced until `kept` settles (`RestoreOptions`). It is left running, for
+   * `leaveAsAsked`.
    */
   const bringBack = async (
     ctx: OperationContext,
     server: MinecraftServer,
     backup: BackupRecord,
     target: DesiredRuntime,
+    kept?: Promise<unknown>,
   ): Promise<RuntimeHandle> => {
     const { handle } = await bindingOf(server.id)
     if (handle === null) throw new Error('The server has no storage to restore into.')
@@ -99,6 +102,7 @@ function bringingBack(deps: RestoringDeps) {
       await sourceOf(backup),
       target.spec,
       progressSink(ctx, server),
+      { kept },
     )
     await saveHandle(db, server.id, restored)
     const started = await startCompute(server.id, restored)
@@ -126,13 +130,55 @@ function bringingBack(deps: RestoringDeps) {
     return { up: true, by: { requestedBy: who, idempotencyKey: op.idempotencyKey } }
   }
 
-  return { bringBack, leaveAsAsked, afterwards }
+  /**
+   * The server's world saved while the backup comes: the backup fills new storage while the world
+   * is snapshotted, and the runtime replaces nothing until that snapshot is kept, so the time the
+   * snapshot takes is spent while the backup downloads. A save that fails is thrown once the
+   * restore has let go of what it made, the server as it was; a kept one is what a backup that
+   * doesn't come up goes back to. `brought` is the rest: the backup booted, the other worlds copied
+   * back, the server left as asked; a failure there is for going back from.
+   */
+  const savedWhileBrought = async (ctx: OperationContext, now: Restore) => {
+    await ctx.step('saving')
+    const saving = deps.copies
+      .capture(now.server, now.handle, now.previous, 'pre_restore')
+      .then(async (kept) => {
+        // The access record is put back on the boot that follows, only once there is one: a save
+        // that fails leaves the server as it was, with nothing to put back.
+        await markReseed(db, now.server.id)
+        await ctx.mark('saved')
+        return kept
+      })
+    const brought = bringBack(ctx, now.server, now.chosen, now.desired, saving).then(async (started) => {
+      const left = await now.others.bringBack(started, await saving, now.besides)
+      const after = await afterwards(ctx.op, now.up)
+      await leaveAsAsked(now.server, started, after.up)
+      return { left, ...after }
+    })
+    const [saved] = await Promise.allSettled([saving, brought])
+    if (saved.status === 'rejected') throw saved.reason
+    return { before: saved.value, brought }
+  }
+
+  return { bringBack, leaveAsAsked, savedWhileBrought }
+}
+
+/** What a restore puts in place of what, as `savedWhileBrought` needs it. */
+interface Restore {
+  server: MinecraftServer
+  handle: RuntimeHandle
+  previous: AppliedConfigJson
+  chosen: BackupRecord
+  desired: DesiredRuntime
+  besides: WorldRecord[]
+  others: Pick<ReturnType<typeof otherWorlds>, 'bringBack'>
+  up: boolean
 }
 
 export function restoring(deps: RestoringDeps) {
   const { db, runtime, transitions, specs, bindingOf, booted, stopWhatFailed, mayBoot, preflight, putBack } =
     deps
-  const { bringBack, leaveAsAsked, afterwards } = bringingBack(deps)
+  const { bringBack, leaveAsAsked, savedWhileBrought } = bringingBack(deps)
   const others = otherWorlds({ ...deps, pack: deps.copies.pack })
 
   /**
@@ -185,17 +231,13 @@ export function restoring(deps: RestoringDeps) {
         await deps.access.reconcile(server, binding.handle, 'import').catch(() => undefined)
       // Every other world the server lists stays as it is now, whatever the backup holds.
       const besides = await others.besides(server.id, chosen)
-      await ctx.step('saving')
-      const before = await deps.copies.capture(server, binding.handle, previous, 'pre_restore')
-      await markReseed(db, server.id)
+      const restore = { server, handle: binding.handle, previous, chosen, desired, besides, others, up }
+      const { before, brought } = await savedWhileBrought(ctx, restore)
       let left: WorldRecord[]
       /** Whose run it is, where someone asked meanwhile to play a server it would stop. */
       let by: { requestedBy: string; idempotencyKey: string } | undefined
       try {
-        const started = await bringBack(ctx, server, chosen, desired)
-        left = await others.bringBack(started, before, besides)
-        ;({ up, by } = await afterwards(ctx.op, up))
-        await leaveAsAsked(server, started, up)
+        ;({ left, up, by } = await brought)
       } catch (error) {
         if (nothingToGoBackFrom(error)) throw error
         await ctx.step('rolling_back')
@@ -228,8 +270,7 @@ export function restoring(deps: RestoringDeps) {
         // The backup brought back every world directory it held, deleted ones included.
         await reopenWorlds(tx, server.id, desired.world.id)
         await others.settle(tx, chosen, left, before)
-        // Running again counts again; one that ran all along keeps the interval it has. One a join
-        // kept up is a woken run, as if the join had woken it.
+        // Running again counts again; one that ran all along keeps the interval it has.
         if (up) await openInterval(tx, server.id, locked.memoryTier, new Date(), by)
         const restored = await transitions.outcome(tx, locked, {
           type: 'restored',

@@ -3,9 +3,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
-import { MINUTE_MS } from '@blockly/contracts/durations'
+import { HOUR_MS, MINUTE_MS } from '@blockly/contracts/durations'
 import { schema } from '@blockly/db'
 import { eq, sql } from 'drizzle-orm'
+import { backdateRun } from '../../testing/backdated-run.ts'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
 import { setMoveTo } from '../runtimes/persistence.ts'
 import { loadRuntime } from '../servers/persistence.ts'
@@ -110,10 +111,7 @@ describe.skipIf(!hasDatabase)('an idle evaluation that stops', () => {
     const { id } = await h.create(await h.user())
     await h.until(id, 'running')
     await h.settled(id)
-    await h.db
-      .update(schema.powerIntervals)
-      .set({ startedAt: sql`now() - interval '2 hours'` })
-      .where(eq(schema.powerIntervals.serverId, id))
+    await backdateRun(h.db, id, 2 * HOUR_MS)
     await h.db.delete(schema.serverActivity).where(eq(schema.serverActivity.serverId, id))
     expect(
       await h.app.schedules.evaluateIdle(
@@ -129,10 +127,7 @@ describe.skipIf(!hasDatabase)('an idle evaluation that stops', () => {
     const { id } = await h.create(owner)
     await h.until(id, 'running')
     await h.settled(id)
-    await h.db
-      .update(schema.powerIntervals)
-      .set({ startedAt: sql`now() - interval '2 minutes'` })
-      .where(eq(schema.powerIntervals.serverId, id))
+    await backdateRun(h.db, id, 2 * MINUTE_MS)
     await h.db.delete(schema.serverActivity).where(eq(schema.serverActivity.serverId, id))
     const later = new Date(Date.now() + IDLE_GRACE_MS)
     // Two minutes empty is well inside Free's ten.
@@ -168,11 +163,11 @@ describe.skipIf(!hasDatabase)('an idle evaluation that stops', () => {
     await h.settled(id)
     const view = await h.app.queries.get(owner, id)
     const [run] = await h.db
-      .select({ startedAt: schema.powerIntervals.startedAt })
-      .from(schema.powerIntervals)
-      .where(sql`${schema.powerIntervals.serverId} = ${id} and ${schema.powerIntervals.stoppedAt} is null`)
-    if (run === undefined) throw new Error('no open run')
-    const sleeps = run.startedAt.getTime() + 10 * MINUTE_MS
+      .select({ readyAt: schema.minecraftServers.readyAt })
+      .from(schema.minecraftServers)
+      .where(eq(schema.minecraftServers.id, id))
+    if (run?.readyAt == null) throw new Error('not running')
+    const sleeps = run.readyAt.getTime() + 10 * MINUTE_MS
     expect(view.sleepsAt).toBe(new Date(sleeps).toISOString())
 
     // A moment before then it stays up (it was stopped at the first check before this rule)...

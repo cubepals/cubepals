@@ -424,7 +424,7 @@ describe('exec', () => {
 })
 
 describe('restores that fail', () => {
-  test('after the storage: the old handle still names the stopped machine on its old storage', async () => {
+  test('after the storage: the old handle still names the machine, as it was, on its old storage', async () => {
     const { runtime } = await fresh()
     const { handle, key, dir } = await provision(runtime)
     const { snapshot } = await runtime.snapshot(handle)
@@ -436,8 +436,9 @@ describe('restores that fail', () => {
     )
     await new Promise((resolve) => setTimeout(resolve, 50))
     expect(handed).toEqual([])
-    expect(runtime.machine(key)).toMatchObject({ state: 'stopped', dir })
-    expect((await runtime.observe(handle)).state).toBe('stopped')
+    // The new storage is filled beside the old, which nothing touched: it runs on as it was.
+    expect(runtime.machine(key)).toMatchObject({ state: 'running', dir })
+    expect((await runtime.observe(handle)).state).toBe('running')
   })
 
   test('after the compute: the new handle names it, stopped, and the old storage stays', async () => {
