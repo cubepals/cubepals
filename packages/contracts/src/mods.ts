@@ -6,6 +6,7 @@ import { z } from 'zod'
 import type { Availability } from './errors.ts'
 import type { PackUpdateView } from './packs.ts'
 import { oneLine } from './plain-text.ts'
+import { RestartWhen } from './restart-when.ts'
 import { Loader, type PackView, ServerId } from './server.ts'
 
 const SHA512 = /^[0-9a-f]{128}$/
@@ -38,6 +39,7 @@ export const ApplyModChangeInput = ModChangeInput.extend({
   /** The plan's `expected`: the jars the owner was shown. */
   expected: z.array(z.string().regex(SHA512)).max(400),
   acknowledgeRevoked: z.boolean().optional(),
+  when: RestartWhen.optional(),
 })
 
 export const ModSearchInput = z.object({

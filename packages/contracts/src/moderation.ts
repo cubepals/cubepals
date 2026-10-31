@@ -10,6 +10,7 @@
 
 import { z } from 'zod'
 import { DAY_MS, HOUR_MS, MINUTE_MS } from './durations.ts'
+import { RestartWhen } from './restart-when.ts'
 import { ServerId } from './server.ts'
 
 export const MODERATION_KINDS = ['warn', 'mute', 'ban'] as const
@@ -63,6 +64,7 @@ export const SetModerationInput = z.object({
   /** The chat filter, which needs the tools. */
   chatFilter: z.boolean(),
   requestId: z.uuid(),
+  when: RestartWhen.optional(),
 })
 
 export const PunishInput = z
