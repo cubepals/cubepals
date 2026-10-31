@@ -185,6 +185,8 @@ describe.skipIf(!hasDatabase)('Free’s 20 hours', () => {
     expect(await h.app.accounts.warnAboutPlay(actor.userId)).toBe(100)
     expect(h.mail.sent.at(-1)?.subject).toBe('Your Cubepals free trial is over')
     expect(h.mail.sent.at(-1)?.text).toContain('Your worlds are kept, and you can still download them.')
+    // Its one step is the plan on sale's checkout, by the month.
+    expect(h.mail.sent.at(-1)?.text).toContain('/checkout?plan=core&reason=trial_over&next=%2Fservers')
     expect(await h.app.accounts.warnAboutPlay(actor.userId)).toBeNull()
   }, 60_000)
 })

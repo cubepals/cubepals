@@ -1439,10 +1439,14 @@ the control plane's **internal listener**: 6PN on Fly, loopback or the compose n
     "Sleeping · join to wake it up" in grey under it, with its own picture, which the agent
     fetches once per link (`apps/edge/asleep.ts`). A server whose route carries neither is
     answered "Sleeping · join to wake it up" alone, with the list's default picture. Where the
-    route carries `trialOver`, the message is "Resting for now" under the server's own
-    (`apps/edge/resting.ts`). It never calls the wake webhook and is never reported as a session,
-    so it never wakes a server or keeps one up. A join refused with `trialOver` is told whose
-    server it reached, by the name on the refusal, and that its owner's free trial is used up. The
+    route carries `trialOver`, the message is "Free trial over · open its address in a browser"
+    under the server's own (`apps/edge/resting.ts`). It never calls the wake webhook and is never
+    reported as a session, so it never wakes a server or keeps one up. A join refused with
+    `trialOver` is told which server it reached, by the name on the refusal, that its free trial is
+    used up, and to open the address it joined with in a browser: that opens the server's page
+    (`apps/edge/browser-redirect.ts`), which says it rests even while the server is private
+    (`sharing.resting`) and, to its owner signed in, offers the plan that starts it again. Everyone
+    in the game reads the same words, since nothing links an account to a Minecraft name. The
     control plane says so whenever the trial's hours are all played, whatever last stopped the
     server (its idle time can come first), and keeps the player for the owner to see
     (`app/edge/turned-away.ts`).

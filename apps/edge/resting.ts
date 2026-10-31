@@ -4,8 +4,11 @@
 
 /**
  * What a player is told of a server resting because its owner's free trial's hours are all played.
- * Usually the player is a friend of the owner's, so it says whose server it is and that nothing is
- * wrong with them. It names no time: nothing brings the server back by itself.
+ * Everyone hears the same words, the owner included: nothing links an account to a Minecraft name,
+ * so nothing here guesses who is joining. It says which server it is, why it rests, and where to
+ * go next: the address they joined with, which in a browser opens the server's page
+ * (`browser-redirect.ts`), where Cubepals knows who is signed in and offers each what fits. It
+ * names no time: nothing brings the server back by itself.
  *
  * Not for deciding whether a server rests (the control plane's), or for other refusals (`agent.ts`).
  */
@@ -28,16 +31,17 @@ function named(name: string | undefined, rest: string): string {
   return plain && width(line) <= REFUSAL_WIDTH ? line : `This server ${rest}`
 }
 
-/** What a join is told: whose server it is, why it rests, and that they'll know. */
+/** What a join is told: which server it is, why it rests, and where to go to keep playing. */
 export function restingJoin(name: string | undefined): string {
   return [
     named(name, 'is resting for now'),
-    'Its owner’s free trial is used up.',
-    'They’ll see on Cubepals that you came by.',
+    'Its free trial is used up.',
+    'To keep playing, open the address',
+    'you joined with in a browser.',
   ].join('\n')
 }
 
-/** What the server list shows: the server's own message, if any, then that it rests. */
+/** What the server list shows: the server's own message, if any, then why it rests and where to go. */
 export function restingStatus(motd: string | undefined): string {
-  return asleepMessage(motd, 'Resting for now')
+  return asleepMessage(motd, 'Free trial over · open its address in a browser')
 }

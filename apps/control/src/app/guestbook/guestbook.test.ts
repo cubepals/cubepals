@@ -23,6 +23,12 @@ describe.skipIf(!hasDatabase)('guestbook', () => {
   let adminUser: UserActor
   let admin: Actor
 
+  /** The stars and notes on the page people open, as `viewer`; undefined where it shows none. */
+  const openedReactions = async (at: string, viewer: Actor | null) => {
+    const page = await h.app.sharingQueries.page(at, viewer, { reactions: true })
+    return page === null || 'kind' in page ? undefined : page.reactions
+  }
+
   // Booting is the slow part, so one public server serves every test.
   beforeAll(async () => {
     h = await startHarness()
@@ -89,18 +95,18 @@ describe.skipIf(!hasDatabase)('guestbook', () => {
     expect((await h.app.listingQueries.detail(id)).reactions.starred).toBe(false)
 
     // The page people open counts them; the status bots fetch and an invitation don't.
-    expect((await h.app.sharingQueries.page(slug, alex, { reactions: true }))?.reactions).toEqual({
+    expect(await openedReactions(slug, alex)).toEqual({
       serverId: id,
       stars: 2,
       starred: true,
       notes: 0,
       yours: false,
     })
-    expect((await h.app.sharingQueries.page(slug, null, { reactions: true }))?.reactions).toMatchObject({
+    expect(await openedReactions(slug, null)).toMatchObject({
       stars: 2,
       starred: false,
     })
-    expect((await h.app.sharingQueries.page(slug, owner, { reactions: true }))?.reactions).toMatchObject({
+    expect(await openedReactions(slug, owner)).toMatchObject({
       yours: true,
     })
     expect((await h.app.sharingQueries.page(slug, alex))?.reactions).toBeNull()
@@ -125,7 +131,7 @@ describe.skipIf(!hasDatabase)('guestbook', () => {
     expect(await refusal(h.app.guestbook.notes(alex, id))).toBe('NotFound')
     expect(await refusal(h.app.guestbook.addNote(alex, id, 'Hello'))).toBe('NotFound')
     // Its owner's preview has nothing to count either.
-    expect((await h.app.sharingQueries.page(slug, owner, { reactions: true }))?.reactions).toBeNull()
+    expect(await openedReactions(slug, owner)).toBeNull()
     await h.app.listings.setPublic(owner, id, true)
 
     // Nor while the directory is paused: the page is gone then too.
@@ -173,7 +179,7 @@ describe.skipIf(!hasDatabase)('guestbook', () => {
       canDelete: false,
     })
     expect(await card(reader)).toMatchObject({ notes: 11 })
-    expect((await h.app.sharingQueries.page(slug, null, { reactions: true }))?.reactions?.notes).toBe(11)
+    expect((await openedReactions(slug, null))?.notes).toBe(11)
   }, 30_000)
 
   test('one person leaves a few notes here, each once, at a writing pace', async () => {
