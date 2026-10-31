@@ -191,9 +191,13 @@ export function imageFor(
 
 /**
  * The image's variable for each setting, which writes it into `server.properties` at every start;
- * which other versions join and whether Bedrock players do are Cubepals' own, and no property.
+ * which other versions join and whether Bedrock players do are Cubepals' own, and no property, and
+ * keeping items on death is a game rule the world keeps, set by command (`bootCommands`).
  */
-export const SETTING_ENV: Record<Exclude<keyof ServerSettings, 'otherVersions' | 'bedrock'>, string> = {
+export const SETTING_ENV: Record<
+  Exclude<keyof ServerSettings, 'otherVersions' | 'bedrock' | 'keepInventory'>,
+  string
+> = {
   difficulty: 'DIFFICULTY',
   defaultGameMode: 'MODE',
   pvp: 'PVP',

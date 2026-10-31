@@ -46,6 +46,12 @@ export interface ServerSettings {
    * Minecraft (`bedrockOf`). Its own change, like `otherVersions`.
    */
   bedrock?: boolean
+  /**
+   * Whether players keep what they carry when they die: the game's keep-inventory rule, set in
+   * every dimension as the server starts and as it changes (`minecraft/settings.ts`). Absent is
+   * off, as Minecraft has it.
+   */
+  keepInventory?: boolean
 }
 
 export type OtherVersions = 'off' | 'on' | 'oldest'
@@ -76,7 +82,9 @@ const settingOf = (
     ? otherVersionsOf(revision)
     : key === 'bedrock'
       ? bedrockOf(revision)
-      : revision.settings[key]
+      : key === 'keepInventory'
+        ? revision.settings.keepInventory === true
+        : revision.settings[key]
 
 /** The settings the game form edits: everything but how players are checked and who can join. */
 export type GameSettings = Omit<ServerSettings, 'onlineMode' | 'otherVersions' | 'bedrock'>
