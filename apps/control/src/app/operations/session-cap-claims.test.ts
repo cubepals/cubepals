@@ -28,7 +28,12 @@ describe('session warning claims', () => {
   const claimWaiting = async () => {
     for (let tries = 0; tries < 200; tries++) {
       const { rows } = await h.db.execute<{ waiting: number }>(
-        sql`select count(*)::int as waiting from pg_locks where not granted`,
+        sql`select count(*)::int as waiting
+            from pg_locks as locks
+            join pg_stat_activity as activity on activity.pid = locks.pid
+            where not locks.granted
+              and activity.datname = current_database()
+              and activity.query like '%session_warned_minutes%'`,
       )
       if (rows[0]?.waiting) return
       await Bun.sleep(25)
