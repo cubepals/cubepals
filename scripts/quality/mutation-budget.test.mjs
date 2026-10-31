@@ -120,6 +120,10 @@ test('a subject that outgrows its budget finishes with a failing report instead 
     'apps/slow.test.ts',
     "import { expect, test } from 'bun:test'\nimport { advance } from './source'\ntest('slow and strict', async () => { await Bun.sleep(3000); expect(() => advance(-1)).toThrow('negative'); expect(advance(0)).toBe(1); expect(advance(9)).toBe(10); expect(advance(10)).toBe(10); expect(advance(11)).toBe(10) }, 20000)\n",
   )
+  write(
+    'apps/other.test.ts',
+    "import { expect, test } from 'bun:test'\nimport { advance } from './source'\ntest('other', () => { expect(advance(0)).toBe(1) })\n",
+  )
   const git = (...args) => execFileSync('git', args, { cwd: root, encoding: 'utf8' })
   git('init', '--quiet', '--template=', '-b', 'fixture')
   git('add', '--all')
@@ -141,6 +145,8 @@ test('a subject that outgrows its budget finishes with a failing report instead 
         root,
         subjects: ['apps/source.ts'],
         testsByFile: { 'apps/source.ts': ['apps/slow.test.ts'] },
+        // An expansion past the deadline could evaluate nothing, so it must not start.
+        additionalTestsByFile: { 'apps/source.ts': [['apps/other.test.ts']] },
         reportDir: reports,
         timeoutMs: 10 * SECOND_MS,
         subjectTimeoutMs: 40 * SECOND_MS,
@@ -155,6 +161,8 @@ test('a subject that outgrows its budget finishes with a failing report instead 
   assert.ok(row.killed > 0, 'mutants before the deadline were judged normally')
   assert.ok(row.score < 80)
   assert.doesNotMatch(summary.failures[0].error, /ETIMEDOUT|failed to finish/)
+  const attempts = JSON.parse(readFileSync(join(reports, '0', 'attempts.json'), 'utf8'))
+  assert.equal(attempts.length, 1, 'no expansion started after the deadline')
   t.diagnostic(
     `${row.unevaluated} of ${row.total} mutants unevaluated; ${row.killed} killed before the deadline`,
   )

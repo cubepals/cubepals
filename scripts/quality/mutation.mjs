@@ -298,7 +298,14 @@ export function runMutation({
         const deadline = started + Math.max(subjectTimeoutMs / 2, subjectTimeoutMs - timeoutMs - MINUTE_MS)
         let verdict
         let runStatus
+        let expansionStopped = false
         for (let attempt = 0; attempt <= batches.length; attempt++) {
+          // Past the deadline an expansion could only record its mutants as not evaluated, so
+          // the last full census stands and fails below with its own score.
+          if (attempt > 0 && Date.now() >= deadline) {
+            expansionStopped = true
+            break
+          }
           if (attempt > 0) {
             for (const test of batches[attempt - 1]) {
               if (!selectedTests.includes(test)) selectedTests.push(test)
@@ -431,9 +438,12 @@ export function runMutation({
             ? `${subject}: ${row.notApplicable}; baseline passed\n`
             : `${subject}: ${row.killed}/${row.total} killed (${row.score.toFixed(1)}%, required ${required.toFixed(1)}%; ${row.inconclusive} inconclusive)\n`,
         )
+        const minutes = Number((subjectTimeoutMs / MINUTE_MS).toFixed(1))
         const budget = row.unevaluated
-          ? `; ${row.unevaluated} of ${row.total} mutants were not evaluated within the ${Number((subjectTimeoutMs / MINUTE_MS).toFixed(1))}-minute budget`
-          : ''
+          ? `; ${row.unevaluated} of ${row.total} mutants were not evaluated within the ${minutes}-minute budget`
+          : expansionStopped
+            ? `; expanding to more dependent tests would have passed the ${minutes}-minute budget`
+            : ''
         if (!verdict.passed || runStatus !== 0)
           throw new Error(
             `${subject}: mutation score ${row.score?.toFixed(1) ?? 'N/A'}% is below ${required.toFixed(1)}% or Stryker failed${budget}`,

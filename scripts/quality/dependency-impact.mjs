@@ -76,9 +76,9 @@ const INSTALL_SCRIPTS = new Set([
   'postprepare',
 ])
 
-// Files a package can ship without any of them ever running.
+// Files a package can ship without any of them ever running. Other JSON is data a test can import.
 const DECLARATION =
-  /(?:\.d\.[cm]?ts|\.d\.ts\.map|\.(?:json|mdx?|markdown|txt))$|(?:^|\/)(?:licen[cs]e|notice|readme|changelog|authors)[^/]*$/i
+  /(?:\.d\.[cm]?ts|\.d\.ts\.map|(?:^|\/)package\.json|\.(?:mdx?|markdown|txt))$|(?:^|\/)(?:licen[cs]e|notice|readme|changelog|authors)[^/]*$/i
 
 /** Where the hoisted install puts a lock key, in the root or under the workspace that owns it. */
 function installedDirectory(root, lock, key) {
