@@ -120,23 +120,32 @@ export class WaitingChanges {
     return moved
   }
 
+  /**
+   * The configuration and size go back to what booted first. Stop cheaters is then compared with
+   * what runs again, and the switch goes back only where it still differs: a waiting version that
+   * merely made Grim available or not leaves the owner's switch as they set it.
+   */
   async #cancel(
     tx: Tx,
     server: MinecraftServer,
     waiting: WaitingChangesView,
     applied: AppliedConfigJson,
   ): Promise<MinecraftServer> {
-    if (waiting.stopCheaters === 'ours') await saveStopCheaters(tx, server.id, { takeOver: false })
-    else if (waiting.stopCheaters !== null)
+    const back =
+      waiting.changes.length === 0 && waiting.size === null
+        ? server
+        : await setDesired(tx, server, {
+            revisionId: applied.revisionId,
+            memoryTier: applied.memoryTier as MemoryTier,
+          })
+    const still = await stopCheatersWaiting(tx, back, applied)
+    if (still === 'ours') await saveStopCheaters(tx, server.id, { takeOver: false })
+    else if (still !== null)
       await saveStopCheaters(tx, server.id, {
-        setting: waiting.stopCheaters === 'on' ? 'off' : 'on',
+        setting: still === 'on' ? 'off' : 'on',
         reason: null,
         takeOver: false,
       })
-    if (waiting.changes.length === 0 && waiting.size === null) return server
-    return setDesired(tx, server, {
-      revisionId: applied.revisionId,
-      memoryTier: applied.memoryTier as MemoryTier,
-    })
+    return back
   }
 }
