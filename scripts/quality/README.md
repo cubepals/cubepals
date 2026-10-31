@@ -30,6 +30,11 @@ The lexical scan catches ordinary exclusion, test-disabling, and evidence-aware 
 security sandbox or proof that an arbitrary program is honest. Executable tests can inspect or
 forge their own process state. Coverage, mutation, invariant tests, strict evidence validation,
 and the policy guard provide complementary evidence, not a proof of all possible behavior.
+The modifier scan reserves `only`, `skip`, `todo`, `skipIf`, `runIf`, and `failing` as member names
+in test files, so ordinary APIs using those names can also be rejected. This conservative scan
+catches aliased runners, literal computed properties, and extracted references such as
+`const disabled = test.skip` without executing proposed code. Restricting it to familiar receiver
+names would let runner aliases bypass the check; the ordinary-API false positives remain a limit.
 The install protections cover the repository's current entrypoints and declared trusted dependency
 graph. They are not a general shell interpreter, a registry audit, or a sandbox for executable
 application code. A policy update that introduces another lifecycle helper or Lefthook include
@@ -37,9 +42,11 @@ must protect its new repository-controlled inputs too.
 
 ## Incremental test obligations and legacy code
 
-New and changed production files must meet their per-file coverage floors and the 80% mutation
-floor. Existing files retain measured coverage through a non-regression ratchet. The initial
-complete hosted measurement, using the earlier six-shard layout, covered 1,163 source files:
+New and changed executable production files must meet 80% branch, 90% function/method, and 90%
+line coverage, plus the 80% mutation floor. Modifying deficient source requires closing its test
+evidence gap; one-line edits and moves do not waive those floors. Unchanged legacy files retain
+measured coverage through a non-regression ratchet. The initial complete hosted measurement,
+using the earlier six-shard layout, covered 1,163 source files:
 715 had 1,675 legacy metric deficits (605 branch, 566 function, and 504 line deficits).
 Those deficits are visible debt, not evidence
 that the files satisfy the new floors. The first complete comparison rejected 11 regressed
@@ -118,6 +125,15 @@ through the dedicated `required_signatures` endpoint, then independently reads t
 `--check` fails unless verified signatures are required; a missing permission, missing setting,
 or unsuccessful verification fails closed. Rollout commits must also be signed and verified;
 disabling signing or using unsigned commits is not a bootstrap fallback.
+
+GitHub supports both check runs and commit statuses as required checks, including restriction to
+an expected GitHub App. The REST `app_id` setting pins that source; `GITHUB_TOKEN` authenticates as
+the Actions App's installation token. Posting `Quality policy` through the commit-status API is
+therefore compatible with an App-pinned requirement. See [protected branch status checks](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/about-protected-branches#require-status-checks-before-merging),
+[the protection API](https://docs.github.com/en/rest/branches/branch-protection#update-branch-protection),
+and [the token's authentication model](https://docs.github.com/en/actions/concepts/security/github_token).
+These API semantics do not establish that this repository's protection is activated; live
+verification of the required status and blocked merges remains necessary.
 
 Then open an ordinary PR and a deliberately failing policy PR. Confirm the expected status is
 attached to each current head and that GitHub refuses to merge the latter. The local adversarial

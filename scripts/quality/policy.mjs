@@ -23,7 +23,7 @@ const PROTECTED = [
   /(?:^|\/)junit-platform\.properties$/,
   /(?:^|\/)(?:\.babelrc|\.nycrc)(?:\.json|\.[cm]?js)?$/,
   /(?:^|\/)babel\.config\.[cm]?[jt]s$/,
-  /(?:^|\/)(?:vitest|jest|stryker|nyc|c8|istanbul|coverage)[^/]*\.(?:[cm]?[jt]s|json|toml|ya?ml)$/,
+  /(?:^|\/)(?:(?:vitest|jest|stryker|nyc|c8|istanbul|coverage)\.(?:config|conf)|vitest\.workspace)\.(?:[cm]?[jt]s|json|toml|ya?ml)$/,
   /^tools\/quality\//,
   /(?:^|\/)node_modules(?:\/|$)/,
   /^bun\.lockb$/,
