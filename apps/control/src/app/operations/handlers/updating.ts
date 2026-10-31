@@ -32,6 +32,7 @@ import type { GameConsole } from './game-console.ts'
 import { type GoingBack, NotPutBack } from './going-back.ts'
 import type { Rechecks } from './rechecks.ts'
 import { RESTARTING_FOR_A_CHANGE, type RestartNotice, restartNotice } from './restart-notice.ts'
+import { warnBeforeRestart } from './restart-warning.ts'
 import type { WorldCopies } from './world-copies.ts'
 
 interface UpdateInput {
@@ -61,14 +62,16 @@ async function forgetHearts(runtime: Pick<Runtimes, 'exec'>, handle: RuntimeHand
  * Whoever is on hears why they are dropped, before the reboot. A failed server's game is already
  * down, with nobody on it to tell.
  */
-function tellPlayers(
+async function tellPlayers(
   notice: RestartNotice,
+  countdown: (server: MinecraftServer, handle: RuntimeHandle) => Promise<unknown>,
   server: MinecraftServer,
   handle: RuntimeHandle,
   input: UpdateInput,
 ): Promise<void> {
-  if (input.fromFailure === true) return Promise.resolve()
-  return notice.sendOff(server, handle, RESTARTING_FOR_A_CHANGE)
+  if (input.fromFailure === true) return
+  await countdown(server, handle)
+  await notice.sendOff(server, handle, RESTARTING_FOR_A_CHANGE)
 }
 
 /**
@@ -143,6 +146,8 @@ export function updating(deps: {
     restBack,
   } = deps
   const notice = restartNotice(deps)
+  const countdown = (server: MinecraftServer, handle: RuntimeHandle) =>
+    warnBeforeRestart(deps.console, consoleTarget(server, handle))
 
   /**
    * A new configuration on a running server (§9): a snapshot first, then the provider applies
@@ -207,7 +212,7 @@ export function updating(deps: {
         snapshot = await capture(server, binding.handle, previous, 'pre_apply')
       }
       await ctx.step('compute')
-      await tellPlayers(notice, server, binding.handle, input)
+      await tellPlayers(notice, countdown, server, binding.handle, input)
       try {
         await forgetHearts(runtime, binding.handle, input)
         const changed = await runtime.apply(binding.handle, desired.spec)
