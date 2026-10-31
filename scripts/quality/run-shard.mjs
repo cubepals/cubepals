@@ -30,6 +30,7 @@ import { writeRuntimeManifest } from './coverage-cache.mjs'
 import { createFragmentCollector } from './coverage-fragments.mjs'
 import { assertInputsUnchanged, partitionTests, snapshotInputs, testManifest } from './coverage-inputs.mjs'
 import { checkJUnit, mergeJUnit } from './coverage-junit.mjs'
+import { executionProfile, recordExecution } from './mutation-test-order.mjs'
 import { groupOf, groups } from './shards.mjs'
 
 export { checkJUnit } from './coverage-junit.mjs'
@@ -102,6 +103,7 @@ export function runShard({ root, group, reportDir, baseManifest }) {
     if (preparation.status !== 0) throw new Error(`Coverage preparation failed: ${preparation.stderr}`)
     const preparedBytes = readFileSync(preparedPath)
     const prepared = JSON.parse(preparedBytes)
+    const execution = executionProfile(prepared, group)
     const runtime = writeRuntimeManifest(prepared, temporary)
     const preparedSha256 = runtime.sha256
     assertInputsUnchanged(root, inputs)
@@ -163,6 +165,7 @@ export function runShard({ root, group, reportDir, baseManifest }) {
           })
         // Absorb evidence in trusted parent memory before subsequent tests can touch its files.
         collector.accept(fragments, [testPath])
+        recordExecution(execution, fragments)
         documents.push(xml)
         rmSync(parts, { recursive: true, force: true })
         rmSync(fileJUnit, { force: true })
@@ -179,6 +182,9 @@ export function runShard({ root, group, reportDir, baseManifest }) {
     writeFileSync(report, `${JSON.stringify(combined)}\n`)
     writeFileSync(junit, xml)
     writeFileSync(manifest, `${JSON.stringify(testManifest(prepared.tests), null, 2)}\n`)
+    const executionDir = join(reportDir, 'test-execution')
+    mkdirSync(executionDir, { recursive: true })
+    writeFileSync(join(executionDir, `${group}.json`), `${JSON.stringify(execution)}\n`)
     console.warn(`${group}: ${executed} executed cases and complete coverage evidence verified`)
   } finally {
     rmSync(temporary, { recursive: true, force: true })

@@ -271,6 +271,16 @@ describe('a review the pull request has moved past', () => {
     )
   })
 
+  test('unavailability says no review happened and preserves earlier findings', () => {
+    const notice = noticeLine('unavailable', 'cubepals/cubepals', SHA, HEAD)
+    expect(notice).toContain('Automated review unavailable.')
+    expect(notice).toContain('Skipped for')
+    expect(notice).not.toContain('429')
+    expect(notice).not.toContain('limit')
+    expect(reviewedIn(withNotice(body, notice))).toBe(SHA)
+    expect(reviewedIn(withNotice(MARKER, notice))).toBeUndefined()
+  })
+
   test('the notice goes under the marker, above the review, and keeps it whole', () => {
     const line = noticeLine('running', 'cubepals/cubepals', SHA, HEAD)
     const marked = withNotice(body, line)

@@ -10,6 +10,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import test from 'node:test'
 import { SECOND_MS } from '../../packages/contracts/src/durations.ts'
+import { baselineComparison } from './coverage-impact.mjs'
 import { inventory, sourceFiles } from './inventory.mjs'
 import { selectMutationScope } from './mutation-scope.mjs'
 import { analyzeTestImpact } from './test-impact.mjs'
@@ -494,6 +495,168 @@ test('changing a fixture forces conservative scope even beside an added test', (
   assert.equal(impact.baseFull, true)
   assert.ok(impact.requiredChangedFiles.includes(path))
   assert.match(impact.reasons.join('\n'), /fixture or data input/)
+})
+
+test('a changed literal JSON input retains its base and head consumers and tests', (t) => {
+  const path = 'apps/a/src/limits.json'
+  const f = fixture(t, {
+    [path]: '{"most":10}',
+    [subject]:
+      "import limits from './limits.json' with {type:'json'}; export const choose = (value) => Math.min(value, limits.most)",
+  })
+  f.write(path, '{"most":11}')
+  f.save()
+  const impact = f.analyze()
+  assert.equal(impact.baseFull, false)
+  assert.ok(impact.baseRequiredSubjects.has(subject))
+  assert.ok(impact.mappedDataInputs.includes(path))
+  assert.ok(impact.affectedExistingTests.includes(originalTest))
+  assert.equal(impact.baseRequiredSubjects.has(other), false)
+})
+
+test('an imported fixture still retains the production dependencies of its test', (t) => {
+  const path = 'apps/a/fixtures/expected.json'
+  const f = fixture(t, {
+    [path]: '{"expected":10}',
+    [originalTest]:
+      "import {test,expect} from 'bun:test'; import expected from '../fixtures/expected.json' with {type:'json'}; import {choose} from './subject.ts'; test('boundary',()=>expect(choose(11)).toBe(expected.expected))",
+  })
+  f.write(path, '{"expected":11}')
+  f.save()
+  const scope = f.scope()
+  assert.equal(scope.full, false)
+  assert.ok(scope.subjects.includes(subject))
+})
+
+test('a new imported runtime table selects its new consumer instead of the whole inventory', (t) => {
+  const f = fixture(t)
+  const path = 'apps/a/src/table.json'
+  const consumer = 'apps/a/src/table.ts'
+  f.write(path, '{"value":7}')
+  f.write(consumer, "import table from './table.json' with {type:'json'}; export const value=()=>table.value")
+  f.write(
+    addedTest,
+    "import {test,expect} from 'bun:test'; import {value} from './table.ts'; test('table',()=>expect(value()).toBe(7))",
+  )
+  f.save()
+  const scope = f.scope()
+  assert.equal(scope.full, false)
+  assert.ok(scope.subjects.includes(consumer))
+  assert.equal(scope.subjects.includes(other), false)
+})
+
+test('an unmapped base data input cannot acquire an exemption through a new dummy importer', (t) => {
+  const path = 'apps/a/fixtures/expected.json'
+  const f = fixture(t, { [path]: '{"expected":10}' })
+  f.write(path, '{"expected":11}')
+  f.write(
+    'apps/a/src/dummy.ts',
+    "import expected from '../fixtures/expected.json' with {type:'json'}; export const value=expected.expected",
+  )
+  f.save()
+  assert.equal(f.analyze().baseFull, true)
+})
+
+test('losing an existing data import mapping retains conservative scope', (t) => {
+  const path = 'apps/a/src/limits.json'
+  const f = fixture(t, {
+    [path]: '{"most":10}',
+    [subject]:
+      "import limits from './limits.json' with {type:'json'}; export const choose=value=>Math.min(value,limits.most)",
+  })
+  f.write(path, '{"most":11}')
+  f.write(subject, 'export const choose=value=>Math.min(value,11)')
+  f.save()
+  assert.equal(f.analyze().baseFull, true)
+})
+
+test('ambiguous dynamic data loading cannot waive the full inventory', (t) => {
+  const path = 'apps/a/src/limits.json'
+  const f = fixture(t, {
+    [path]: '{"most":10}',
+    [subject]: 'export const choose=async name=>(await import(name)).default.most',
+  })
+  f.write(path, '{"most":11}')
+  f.save()
+  assert.throws(() => f.analyze(), /Unresolved dynamic module import/)
+})
+
+test('tightening structure metadata does not require mutation of unrelated application code', (t) => {
+  const path = 'scripts/structure-baseline.json'
+  const f = fixture(t, { [path]: JSON.stringify({ size: { [subject]: { n: 900, reason: 'Existing.' } } }) })
+  f.write(path, JSON.stringify({ size: { [subject]: { n: 850, reason: 'Existing.' } } }))
+  f.save()
+  const impact = f.analyze()
+  assert.equal(impact.baseFull, false)
+  assert.ok(impact.verifiedQualityOnlyConfigs.includes(path))
+})
+
+test('growing a structure allowance retains conservative full mutation obligations', (t) => {
+  const path = 'scripts/structure-baseline.json'
+  const f = fixture(t, { [path]: JSON.stringify({ size: { [subject]: { n: 900, reason: 'Existing.' } } }) })
+  f.write(path, JSON.stringify({ size: { [subject]: { n: 901, reason: 'Existing.' } } }))
+  f.save()
+  assert.equal(f.analyze().baseFull, true)
+})
+
+test('Git-proved additive tests cannot lower the inputs of preexisting isolated tests', (t) => {
+  const f = fixture(t)
+  f.write(addedTest, weak)
+  const head = f.save()
+  const proof = baselineComparison(
+    f.root,
+    { base: f.baseSha, head },
+    f.changed(),
+    inventory(f.root),
+    f.analyze().baseInventory,
+  )
+  assert.deepEqual(proof.files, [])
+  assert.match(proof.reason, /additive/)
+})
+
+test('existing test edits retain the complete coverage ratchet', (t) => {
+  const f = fixture(t)
+  f.write(originalTest, weak)
+  const head = f.save()
+  assert.equal(
+    baselineComparison(
+      f.root,
+      { base: f.baseSha, head },
+      f.changed(),
+      inventory(f.root),
+      f.analyze().baseInventory,
+    ),
+    null,
+  )
+})
+
+test('production changes retain the complete coverage ratchet', (t) => {
+  const f = fixture(t)
+  f.write(subject, 'export const choose = (value) => value > 12 ? 12 : value')
+  const head = f.save()
+  assert.equal(
+    baselineComparison(
+      f.root,
+      { base: f.baseSha, head },
+      f.changed(),
+      inventory(f.root),
+      f.analyze().baseInventory,
+    ),
+    null,
+  )
+})
+
+test('coverage scope rejects changed identities, invented diffs and non-authoritative bases', (t) => {
+  const f = fixture(t)
+  f.write(addedTest, weak)
+  const head = f.save()
+  const before = f.analyze().baseInventory
+  const compare = (comparison, changed = f.changed(), baseInventory = before) =>
+    baselineComparison(f.root, comparison, changed, inventory(f.root), baseInventory)
+  assert.throws(() => compare({ base: f.baseSha, head: f.baseSha }), /checked-out head/)
+  assert.throws(() => compare({ base: head, head }), /cannot use|cannot be|cannot use|comparison|base/i)
+  assert.throws(() => compare({ base: f.baseSha, head }, []), /complete base-to-head/)
+  assert.throws(() => compare({ base: f.baseSha, head }, f.changed(), []), /authoritative base/)
 })
 
 test('changed dependencies or runner configuration cannot be waived by added tests', (t) => {

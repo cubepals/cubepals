@@ -137,6 +137,7 @@ jobs:
           done
       - run: bun run openapi:install
       - run: bun run quality:install
+      - run: bun run labels:install
       - name: API types match their pinned specs
         run: bun run openapi:check
       - run: bun run lint
@@ -168,15 +169,26 @@ jobs:
           if-no-files-found: error
           retention-days: 14
       - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        id: terraform_setup
+        continue-on-error: true
+        with:
+          terraform_version: 1.15.3
+          terraform_wrapper: false
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        if: steps.terraform_setup.outcome == 'failure'
         with:
           terraform_version: 1.15.3
           terraform_wrapper: false
       - name: Terraform is formatted and valid against its providers
         run: |
           terraform fmt -check -recursive infra/terraform
-          for env in staging production; do
-            terraform -chdir=infra/terraform/environments/$env init -backend=false -input=false
-            terraform -chdir=infra/terraform/environments/$env validate
+          for tf_environment in staging production; do
+            for tf_wait in 5 15 30 0; do
+              terraform -chdir=infra/terraform/environments/$tf_environment init -backend=false -input=false && break
+              [ "$tf_wait" = 0 ] && exit 1
+              sleep "$tf_wait"
+            done
+            terraform -chdir=infra/terraform/environments/$tf_environment validate
           done
       # A plan of each environment against its example config, with stand-in credentials and no
       # state: a variable or secret the stack reads and an environment doesn't give fails here, not
@@ -454,6 +466,7 @@ jobs:
           done
       - run: bun run openapi:install
       - run: bun run quality:install
+      - run: bun run labels:install
       - name: Create the test bucket
         run: |
           for _ in $(seq 1 60); do
@@ -463,6 +476,13 @@ jobs:
           done
           exit 1
       - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        id: terraform_setup
+        continue-on-error: true
+        with:
+          terraform_version: 1.15.3
+          terraform_wrapper: false
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        if: steps.terraform_setup.outcome == 'failure'
         with:
           terraform_version: 1.15.3
           terraform_wrapper: false
@@ -478,7 +498,7 @@ jobs:
           GROUP: ${{ matrix.quality }}
         run: |
           git worktree add --detach "$RUNNER_TEMP/quality-base" "$BASE"
-          (cd "$RUNNER_TEMP/quality-base" && bun install --frozen-lockfile && bun run openapi:install)
+          (cd "$RUNNER_TEMP/quality-base" && bun install --frozen-lockfile && bun run openapi:install && bun run labels:install)
           node scripts/quality/run-shard.mjs "$RUNNER_TEMP/quality-base" "$GROUP" "$GITHUB_WORKSPACE/coverage/quality/base"
       - name: Test ${{ matrix.group }} with branch coverage
         env:
@@ -531,6 +551,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          fetch-depth: 0
           persist-credentials: false
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
@@ -540,16 +561,21 @@ jobs:
           node-version: 22.23.4
       - run: bun install --frozen-lockfile
       - run: bun run quality:install
-      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: quality-*
           path: coverage/quality
           merge-multiple: true
+      - name: Verify the comparison from Git independently of test artifacts
+        env:
+          QUALITY_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before || 'HEAD^' }}
+          QUALITY_PR_HEAD: ${{ github.event.pull_request.head.sha || '' }}
+        run: node scripts/quality/prepare.mjs coverage/quality/verified-comparison
       - name: Enforce every source file and all seven evidence shards
         run: |
           node scripts/quality/coverage.mjs merge --output coverage/quality/base.json --expected-shards 7 coverage/quality/base/*.json
           node scripts/quality/coverage.mjs merge --output coverage/quality/head.json --expected-shards 7 coverage/quality/head/*.json
-          node scripts/quality/coverage.mjs check --report coverage/quality/head.json --base coverage/quality/base.json --changed coverage/quality/changed.json --root . --output coverage/quality/findings.json
+          node scripts/quality/coverage.mjs check --report coverage/quality/head.json --base coverage/quality/base.json --changed coverage/quality/verified-comparison/changed.json --comparison coverage/quality/verified-comparison/comparison.json --root . --output coverage/quality/findings.json
 
       - name: Keep merged coverage and legacy deficit findings
         if: ${{ !cancelled() }}

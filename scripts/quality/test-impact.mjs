@@ -95,7 +95,8 @@ function readHead(root, entries) {
     const oid = createHash('sha1').update(`blob ${bytes.length}\0`).update(bytes).digest('hex')
     if (oid !== entry.oid) throw new Error(`Working tree differs from inspected head: ${path}`)
     hashes.set(path, fileHash(bytes))
-    if (MODULE.test(path) || path.endsWith('package.json')) contents.set(path, bytes)
+    if (MODULE.test(path) || IMPORTED_DATA.test(path) || path.endsWith('package.json'))
+      contents.set(path, bytes)
   }
   if (git(root, ['ls-files', '--others', '--exclude-standard', '-z']).length)
     throw new Error('Untracked inputs cannot receive committed test-addition evidence')
@@ -198,12 +199,20 @@ function retainImpactedDependencies(
   const changedModules = changed.filter(
     (path) => entries.get(path)?.kind === 'source' || headEntries.get(path)?.kind === 'source',
   )
-  if (!changedTests.length && !changedModules.length)
-    return { full: false, affectedTests: [], mappedBaseTests: new Set() }
+  const changedData = changed.filter(
+    (path) =>
+      IMPORTED_DATA.test(path) &&
+      !CONFIG.test(path) &&
+      !path.startsWith('scripts/quality/') &&
+      path !== 'scripts/structure-baseline.json',
+  )
+  if (!changedTests.length && !changedModules.length && !changedData.length)
+    return { full: false, affectedTests: [], mappedBaseTests: new Set(), mappedData: new Set() }
   const snapshot = mkdtempSync(join(tmpdir(), 'quality-base-impact-'))
   let full = false
   const affected = new Set(changedTests)
   const mappedBaseTests = new Set()
+  const mappedData = new Set(changedData)
   try {
     for (const [path, bytes] of contents) {
       const target = resolve(snapshot, path)
@@ -211,24 +220,48 @@ function retainImpactedDependencies(
       writeFileSync(target, bytes, { mode: 0o444 })
     }
     const graphs = [
-      { label: 'base', entries, contents, ...dependencyGraph(snapshot, [...entries.keys()]) },
+      {
+        label: 'base',
+        entries,
+        contents,
+        ...dependencyGraph(snapshot, [...entries.keys()], { includeData: true }),
+      },
       {
         label: 'head',
         entries: headEntries,
         contents: headContents,
-        ...dependencyGraph(root, [...headEntries.keys()]),
+        ...dependencyGraph(root, [...headEntries.keys()], { includeData: true }),
       },
     ]
     for (const view of graphs) {
+      for (const path of changedData)
+        if (
+          view.contents.has(path) &&
+          ![...view.graph.values()].some((dependencies) => dependencies.has(path))
+        )
+          mappedData.delete(path)
+      if (changedData.length)
+        for (const entry of view.entries.values()) {
+          if (entry.kind !== 'source') continue
+          const dependencies = reachable(view.graph, [entry.path])
+          if (changedData.some((path) => dependencies.has(path))) required.add(entry.path)
+        }
       const support = potentialSupport(view.graph, view.entries, changedModules, view.contents)
       for (const entry of view.entries.values()) {
         if (entry.kind !== 'test') continue
         const dependencies = reachable(view.graph, [entry.path])
+        if (changedData.some((path) => dependencies.has(path))) {
+          affected.add(entry.path)
+          reasons.push(`changed imported data affects ${view.label} test: ${entry.path}`)
+        }
         if ([...support].some((path) => dependencies.has(path))) {
           affected.add(entry.path)
           reasons.push(`changed potential test support affects ${view.label} test: ${entry.path}`)
         }
-        if (changedModules.length && [...dependencies].some((path) => view.ambiguous.has(path))) {
+        if (
+          (changedModules.length || changedData.length) &&
+          [...dependencies].some((path) => view.ambiguous.has(path))
+        ) {
           full = true
           reasons.push(`ambiguous ${view.label} test dependencies after executable changes: ${entry.path}`)
         }
@@ -256,7 +289,7 @@ function retainImpactedDependencies(
   } finally {
     rmSync(snapshot, { recursive: true, force: true })
   }
-  return { full, affectedTests: [...affected].sort(), mappedBaseTests }
+  return { full, affectedTests: [...affected].sort(), mappedBaseTests, mappedData }
 }
 
 /** All returned exemptions are derived here; callers cannot supply an eligibility assertion. */
@@ -367,6 +400,7 @@ export function analyzeTestImpact({ root, baseSha, changedFiles, headSha = 'HEAD
       (ORACLE_DATA.test(path) || FIXTURE_INPUT.test(path)) &&
       !path.startsWith('scripts/quality/') &&
       !verifiedQualityOnlyConfigs.has(path) &&
+      !impact.mappedData.has(path) &&
       !dependencyFiles.has(path)
     ) {
       baseFull = true
@@ -392,6 +426,9 @@ export function analyzeTestImpact({ root, baseSha, changedFiles, headSha = 'HEAD
     version: 1,
     base,
     head,
+    baseInventory: [...oldEntries.values()]
+      .map(({ path, sha256, kind }) => ({ path, sha256, kind }))
+      .sort((a, b) => a.path.localeCompare(b.path)),
     verifiedChangedFiles,
     verifiedAddedTests: [...verifiedAddedTests].sort(),
     verifiedAppendedTests: [...verifiedAppendedTests].sort(),
@@ -406,6 +443,7 @@ export function analyzeTestImpact({ root, baseSha, changedFiles, headSha = 'HEAD
     verifiedQualityOnlyConfigs: [...verifiedQualityOnlyConfigs].sort(),
     dependencyOnly,
     affectedExistingTests: impact.affectedTests,
+    mappedDataInputs: [...impact.mappedData].sort(),
     unchangedTestManifest,
     preservedInputs,
     preservedInputsHash: fileHash(JSON.stringify(preservedInputs)),

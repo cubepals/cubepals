@@ -48,6 +48,22 @@ test('raw TypeScript generics and JSX parse without erasing source locations', (
   assert.throws(() => classifySource('export const value = 1', 'apps/types.d.ts'), /executable code/)
 })
 
+test('verified unchanged inputs retain visible deficits without treating timing samples as regressions', () => {
+  const result = checkCoverage(evidence(), covered(), [], undefined, new Set())
+  assert.deepEqual(result.failures, [])
+  assert.equal(result.legacyDeficits.length, 3)
+  assert.deepEqual(result.unaffectedBaselineFiles, [path])
+})
+
+test('affected baseline files still reject every measured coverage regression', () => {
+  assert.equal(checkCoverage(evidence(), covered(), [], undefined, new Set([path])).failures.length, 6)
+})
+
+test('an empty baseline scope cannot waive changed-source floors or regressions', () => {
+  assert.equal(checkCoverage(evidence(), covered(), [path], undefined, new Set()).failures.length, 9)
+  assert.throws(() => checkCoverage(evidence(), covered(), [], undefined, []), /verified scope/)
+})
+
 test('generated code and test support are classified by executable content', () => {
   assert.equal(classifySource(source, 'apps/generated/schema.ts'), 'source')
   assert.equal(classifySource(source, 'apps/testing/provider.ts'), 'source')

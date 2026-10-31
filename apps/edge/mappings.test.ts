@@ -42,9 +42,13 @@ test('a running server goes to itself, or to the restarting notice while it does
   })
 })
 
-test('a restarting server goes to the restarting notice', () => {
+test('a restarting server goes to the sleeping notice, which holds its joins until it is back', () => {
   const routes = [
     { hostname: 'lobby.play.test', destination: 'bly-a.flycast:25565', state: 'restarting' as const },
   ]
-  expect(mappings(routes, new Set(), NOTICES)).toEqual({ 'lobby.play.test': NOTICES.restarting })
+  // Not to the restarting notice, which would turn every join that came with another away at once.
+  expect(mappings(routes, new Set(), NOTICES)).toEqual({ 'lobby.play.test': NOTICES.asleep })
+  expect(mappings(routes, new Set(['bly-a.flycast:25565']), NOTICES)).toEqual({
+    'lobby.play.test': NOTICES.asleep,
+  })
 })

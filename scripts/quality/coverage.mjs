@@ -5,12 +5,14 @@
 /**
  * Validates and merges branch evidence without trusting the runner's aggregate percentage.
  * Missing files, shards, counters or source identities fail closed. Changed/new modules meet
- * per-file floors; every measured existing module also keeps its measured base percentages.
+ * per-file floors; production and existing-test edits retain the complete measured-base ratchet.
+ * Git-proved unchanged inputs can scope comparisons without discarding any measured module.
  * Legacy deficits are reported individually, never converted into an invented passing baseline.
  */
 import { readFileSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { baselineComparison } from './coverage-impact.mjs'
 import { inventory, sourceFiles } from './inventory.mjs'
 
 export const FLOORS = Object.freeze({ branches: 80, functions: 90, lines: 90 })
@@ -171,7 +173,7 @@ export function fileMetrics(file) {
   }
 }
 
-export function checkCoverage(report, base, changed, currentInventory) {
+export function checkCoverage(report, base, changed, currentInventory, baselineFiles = null) {
   validateReport(report)
   validateReport(base)
   if (!Array.isArray(changed) || changed.some((path) => typeof path !== 'string'))
@@ -185,13 +187,18 @@ export function checkCoverage(report, base, changed, currentInventory) {
     throw new Error('Coverage evidence does not describe the current checkout')
   const baseEntries = new Map(base.inventory.map((entry) => [entry.path, entry]))
   const changedSet = new Set(changed)
+  if (baselineFiles !== null && !(baselineFiles instanceof Set))
+    throw new Error('Baseline comparison files must come from a verified scope')
   const failures = []
   const legacyDeficits = []
+  const unaffectedBaselineFiles = []
   for (const entry of report.inventory.filter((item) => item.kind === 'source')) {
     const previous = baseEntries.get(entry.path)
     const touched = changedSet.has(entry.path) || previous?.sha256 !== entry.sha256
     const metrics = fileMetrics(report.files[entry.path])
     const previousMetrics = base.files[entry.path] && fileMetrics(base.files[entry.path])
+    const compare = touched || baselineFiles === null || baselineFiles.has(entry.path)
+    if (previousMetrics && !compare) unaffectedBaselineFiles.push(entry.path)
     for (const [name, floor] of Object.entries(FLOORS)) {
       const current = metrics[name]
       const prior = previousMetrics?.[name]
@@ -199,17 +206,22 @@ export function checkCoverage(report, base, changed, currentInventory) {
         failures.push(`${entry.path}: ${name} ${current.percent.toFixed(2)}% is below ${floor}%`)
       else if (!touched && current.percent < floor)
         legacyDeficits.push({ path: entry.path, metric: name, ...current, floor })
-      if (prior && current.percent + Number.EPSILON < prior.percent)
+      if (compare && prior && current.percent + Number.EPSILON < prior.percent)
         failures.push(
           `${entry.path}: ${name} regressed from ${prior.percent.toFixed(2)}% to ${current.percent.toFixed(2)}%`,
         )
-      if (prior && current.total - current.covered > prior.total - prior.covered)
+      if (compare && prior && current.total - current.covered > prior.total - prior.covered)
         failures.push(
           `${entry.path}: uncovered ${name} increased from ${prior.total - prior.covered} to ${current.total - current.covered}`,
         )
     }
   }
-  return { failures, legacyDeficits, measuredFiles: Object.keys(report.files).length }
+  return {
+    failures,
+    legacyDeficits,
+    measuredFiles: Object.keys(report.files).length,
+    ...(baselineFiles === null ? {} : { unaffectedBaselineFiles }),
+  }
 }
 
 function readJson(path) {
@@ -226,7 +238,17 @@ function args(values) {
       paths.push(value)
       continue
     }
-    if (!['--output', '--report', '--base', '--changed', '--root', '--expected-shards'].includes(value))
+    if (
+      ![
+        '--output',
+        '--report',
+        '--base',
+        '--changed',
+        '--root',
+        '--expected-shards',
+        '--comparison',
+      ].includes(value)
+    )
       throw new Error(`Unknown argument: ${value}`)
     if (!values[i + 1] || values[i + 1].startsWith('--')) throw new Error(`Missing value: ${value}`)
     if (flags[value] !== undefined) throw new Error(`Repeated argument: ${value}`)
@@ -242,12 +264,22 @@ export function main(values) {
   if (command === 'inventory') result = inventory(resolve(flags['--root'] ?? process.cwd()))
   else if (command === 'merge') result = mergeReports(paths.map(readJson), Number(flags['--expected-shards']))
   else if (command === 'check') {
-    result = checkCoverage(
-      readJson(flags['--report']),
-      readJson(flags['--base']),
-      readJson(flags['--changed']),
-      flags['--root'] ? inventory(resolve(flags['--root'])) : undefined,
-    )
+    const report = readJson(flags['--report'])
+    const base = readJson(flags['--base'])
+    const changed = readJson(flags['--changed'])
+    const current = flags['--root'] ? inventory(resolve(flags['--root'])) : undefined
+    if (flags['--comparison'] && !current) throw new Error('A verified comparison requires --root')
+    const comparison = flags['--comparison']
+      ? baselineComparison(
+          resolve(flags['--root']),
+          readJson(flags['--comparison']),
+          changed,
+          current,
+          base.inventory,
+        )
+      : null
+    result = checkCoverage(report, base, changed, current, comparison ? new Set(comparison.files) : null)
+    if (comparison) result.baselineScope = comparison
   } else throw new Error('Use inventory, merge, or check')
   const serialized = `${JSON.stringify(result, null, 2)}\n`
   if (flags['--output']) writeFileSync(flags['--output'], serialized)
