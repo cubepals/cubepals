@@ -124,6 +124,12 @@ regular inputs. This keeps static JSON and CSS imports resolvable in both revisi
 relaxing the fallback for genuinely unknown imports. No directory name exempts executable test
 helpers from coverage or mutation. Scheduled runs audit the complete source inventory in stable partitions.
 
+An existing test file that only gained plain cases after every existing one (`test-appends.mjs`),
+with everything else byte-for-byte as before except names added to an existing import, counts as an
+addition. Any other edit keeps the edited-test rule. The policy lets a new control-plane test file
+carry exactly `describe.skipIf(!hasDatabase)` when it starts the database harness. Every other new
+skip is refused, and CI's JUnit evidence still refuses a skipped case.
+
 A dependency-only update (`dependency-impact.mjs`: only `bun.lock`, manifests whose registry
 versions moved, and `.github/dependabot.yml`) owes no new-code floor, because no source or test
 byte changed. The whole suite and the coverage ratchet still run. Tests that load an updated
