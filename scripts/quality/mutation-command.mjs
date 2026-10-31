@@ -6,6 +6,9 @@
  * Stryker's command runner sees only an exit code. Preserve Bun's JUnit evidence separately so
  * a missing executable, empty test run, skipped suite or runner error cannot masquerade as a
  * killed mutant. The controller validates this evidence after Stryker restores the source.
+ * Mutant runs stop at the first failing test: a kill needs one failure, and survivors still run
+ * every test. Past the subject's deadline a mutant is recorded as not evaluated, never as killed,
+ * so Stryker finishes with a complete report instead of being stopped mid-run.
  */
 import { spawnSync } from 'node:child_process'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
@@ -24,13 +27,23 @@ try {
   if (!Array.isArray(manifest.tests) || manifest.tests.length === 0) throw new Error('No tests selected')
   const baseline =
     mutant === 'baseline' ? null : JSON.parse(readFileSync(join(manifest.evidence, 'baseline.json'), 'utf8'))
+  if (baseline && Number.isFinite(manifest.deadline) && Date.now() >= manifest.deadline) {
+    outcome.status = 'budget-exhausted'
+    throw new Error('The subject reached its mutation time budget before this mutant ran')
+  }
   // Finish before Stryker's outer timeout so even a synchronous infinite loop leaves evidence.
   const timeout = baseline
     ? Math.min(manifest.timeoutMs, Math.ceil(baseline.durationMs * 1.5) + 3 * SECOND_MS)
     : manifest.timeoutMs
   const run = spawnSync(
     manifest.bun,
-    ['test', ...manifest.tests.map((file) => `./${file}`), '--reporter=junit', `--reporter-outfile=${junit}`],
+    [
+      'test',
+      ...manifest.tests.map((file) => `./${file}`),
+      ...(baseline ? ['--bail'] : []),
+      '--reporter=junit',
+      `--reporter-outfile=${junit}`,
+    ],
     {
       cwd: process.cwd(),
       env: process.env,
@@ -44,7 +57,7 @@ try {
   if (run.error?.code === 'ETIMEDOUT') outcome.status = 'timeout'
   if (run.error || run.signal || run.status === null) throw new Error('Bun process did not finish normally')
   const xml = readFileSync(junit, 'utf8')
-  Object.assign(outcome, readMutationJUnit(xml, manifest.tests))
+  Object.assign(outcome, readMutationJUnit(xml, manifest.tests, { bail: Boolean(baseline) }))
   if (run.status === 0 && outcome.failed === 0) outcome.status = 'passed'
   else if (run.status !== 0 && outcome.failed > 0) outcome.status = 'test-failure'
   else throw new Error('Bun exit status disagrees with its test results')

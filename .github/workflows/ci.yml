@@ -497,7 +497,9 @@ jobs:
           args=()
           if [ "$FULL_QUALITY" = true ]; then args+=(--full); fi
           if [ "$EVENT_NAME" = schedule ]; then args+=(--rotation "$(( $(date -u +%u) - 1 ))"); fi
-          node scripts/quality/mutation-cli.mjs --base "$QUALITY_EXPECTED_BASE" --head "$QUALITY_EXPECTED_HEAD" --changed coverage/quality/changed.json --group "$GROUP" --output "coverage/quality/mutation/$GROUP" "${args[@]}"
+          # A dependency-only update measures its subjects again on the base worktree installed
+          # above from the base lockfile, and holds the head to those scores.
+          node scripts/quality/mutation-cli.mjs --base "$QUALITY_EXPECTED_BASE" --head "$QUALITY_EXPECTED_HEAD" --changed coverage/quality/changed.json --group "$GROUP" --output "coverage/quality/mutation/$GROUP" --base-root "$RUNNER_TEMP/quality-base" "${args[@]}"
       - name: Concurrent wake contracts reject shared denial
         if: matrix.quality == 'access'
         run: node scripts/quality/behavior-proof.mjs "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/coverage/quality/service-proof" services

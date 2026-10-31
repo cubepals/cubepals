@@ -20,7 +20,8 @@ function walk(node, visit) {
   }
 }
 
-function references(text, file) {
+/** Every literal module specifier a file loads at runtime, and whether any load is unresolvable. */
+export function references(text, file) {
   const ast = parseSource(text, file)
   const constants = new Map()
   const bindings = new Map()
@@ -40,6 +41,7 @@ function references(text, file) {
   })
   for (const name of constants.keys()) if (bindings.get(name) !== 1) constants.delete(name)
   const imports = new Set()
+  const templates = []
   let ambiguous = false
   walk(ast, (node) => {
     if (
@@ -72,9 +74,17 @@ function references(text, file) {
             ? dynamic.quasis[0]?.value.cooked
             : undefined
     if (typeof value === 'string') imports.add(value)
-    else ambiguous = true
+    else {
+      ambiguous = true
+      // A relative template can only name local files: keep its fixed ends for callers that can
+      // enumerate them. Every caller still sees the load as ambiguous.
+      const quasis = dynamic.type === 'TemplateLiteral' ? dynamic.quasis : []
+      const prefix = quasis[0]?.value.cooked
+      if (/^\.\.?\//.test(prefix ?? '')) templates.push({ prefix, suffix: quasis.at(-1).value.cooked })
+      else templates.push(null)
+    }
   })
-  return { imports: [...imports], ambiguous }
+  return { imports: [...imports], ambiguous, templates }
 }
 
 export function dependencyGraph(root, files) {
