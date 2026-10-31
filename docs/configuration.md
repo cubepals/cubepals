@@ -339,7 +339,9 @@ which the project's charts leave out.
 | `IDLE_HINT_AFTER` | `10m` (compose knob) | `10m` | toml |
 | `MINECRAFT_PORT` | `25565` | `25565` | toml |
 | `FLOODGATE_KEY` | unset: Bedrock players aren't taken | the same key as the control plane's, base64 of 16 bytes. With it the agent starts Geyser (`apps/edge/bedrock.ts`) and answers Bedrock on UDP `BEDROCK_PORT` | Terraform (edge) |
-| `BEDROCK_PORT`, `BEDROCK_BIND` | `19132`, `fly-global-services` | same: the one address Fly delivers UDP to | toml |
+| `BEDROCK_PORT`, `BEDROCK_BIND` | `19132`, `fly-global-services` | same: the one address Fly delivers UDP to. Older clients join over RakNet on UDP `BEDROCK_PORT`, through the relay; NetherNet's signaling is HTTPS on TCP `BEDROCK_PORT` (Fly's TLS) | toml |
+| `BEDROCK_SIGNALING_PORT`, `BEDROCK_WEBRTC_PORT` | `19134`, `19133` | same: the agent's door Fly's proxy hands NetherNet's signaling to, and the UDP port NetherNet's game runs on, which Fly exposes as is | — |
+| `BEDROCK_ADVERTISE` | `bedrock.<first of PLAY_DOMAINS>`, or none | same: a name for the edge's public IPv4, which NetherNet players are sent to on `BEDROCK_WEBRTC_PORT`. With none, Bedrock 26.60 and later can't join | — |
 | `BEDROCK_VALIDATE_LOGIN` | `true` | `true`. `false` skips Xbox sign-in and is for a test edge whose headless clients have no account (`tools/bedrock-join`); the Bedrock E2E and Join times workflows set it on staging for their run and back after | — |
 | `BEDROCK_PONGS_PER_SECOND`, `BEDROCK_PONGS_BURST`, `BEDROCK_TOTAL_PONGS_PER_SECOND`, `BEDROCK_TOTAL_PONGS_BURST`, `BEDROCK_OPENS_PER_SECOND`, `BEDROCK_OPENS_BURST`, `BEDROCK_ADDRESS_PLAYERS`, `BEDROCK_MOST_PLAYERS` | `2`, `10`, `200`, `400`, `1`, `10`, `32`, `2000` | same: pongs sent per address and in all, new connections opened per address, players held per address (an IPv6 one by its /64) and at once | — |
 | `GEYSER_JAR`, `GEYSER_DIR`, `GEYSER_WARM`, `GEYSER_HEAP` | the image's jar, `/tmp/geyser`, the game files fetched at image build, `768m` | same, with `GEYSER_HEAP` set in the toml to fit the machine. The jar's build is pinned in `apps/edge/Dockerfile` and raised with `bun scripts/geyser.ts bump` | — |

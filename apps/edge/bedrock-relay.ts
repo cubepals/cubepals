@@ -3,9 +3,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * The edge's Bedrock front door: the UDP socket Bedrock players reach on the edge's dedicated
- * address, in front of the Geyser the agent supervises (`bedrock.ts`). Geyser listens on loopback;
- * this hands it each player's datagrams and gives each player an upstream socket of their own, so
+ * The edge's RakNet front door: the UDP socket older Bedrock clients reach on the edge's dedicated
+ * address, in front of the Geyser the agent supervises (`bedrock.ts`), whose RakNet port nothing else
+ * exposes. NetherNet, which Bedrock 26.60 and later join by, reaches Geyser without it. This hands
+ * Geyser each player's datagrams and gives each player an upstream socket of their own, so
  * Geyser's replies find their way back. A player's first datagram goes to Geyser behind a PROXY v2
  * header naming their real address, which Geyser reads once per source (its Bedrock
  * `use-haproxy-protocol`), so its own limits, the logs and the address Floodgate hands the server

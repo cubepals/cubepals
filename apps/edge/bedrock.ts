@@ -5,9 +5,15 @@
 /**
  * Bedrock players on the edge: one Geyser, supervised here, translating each to a Java player who
  * dials this edge's own front door with the name the Bedrock player typed, so routing, the hold and
- * wake-on-join are the Java path's, unchanged. Players reach it on UDP through the relay
- * (`bedrock-relay.ts`), bound to the address Fly hands UDP to. Fly never starts a stopped machine
- * for UDP, which is why this lives on the always-on edge and not on any server.
+ * wake-on-join are the Java path's, unchanged. Fly never starts a stopped machine for UDP, which is
+ * why this lives on the always-on edge and not on any server. Bedrock joins two ways:
+ *
+ * - NetherNet (Bedrock 26.60 and later, the only way they join): a player's client asks Geyser's
+ *   signaling over HTTPS on TCP `port` (Fly ends TLS with the play domain's certificate and hands
+ *   it to the agent's door on `signalingPort`, which passes it to Geyser), then plays over WebRTC on
+ *   UDP `webrtcPort`, at the edge's public IPv4, straight to Geyser on the address Fly hands UDP to. The identity signaling signs with is the
+ *   same on every edge (`nethernet-identity.ts`), since clients pin it.
+ * - RakNet (older clients): on UDP `port`, through the relay (`bedrock-relay.ts`).
  *
  * Left out where there is no Floodgate key: the edge then takes Java players only. Bedrock never
  * takes Java down with it: Geyser restarts alone, the relay's bind is tried again until it holds,
@@ -16,13 +22,16 @@
 
 import { lookup } from 'node:dns/promises'
 import { chmodSync, cpSync, existsSync, mkdirSync, writeFileSync } from 'node:fs'
+import { createServer, type Server } from 'node:net'
 import { join } from 'node:path'
-import { SECOND_MS } from '../../packages/contracts/src/durations.ts'
+import { MINUTE_MS, SECOND_MS } from '../../packages/contracts/src/durations.ts'
 import { bedrockRelay, type Relay } from './bedrock-relay.ts'
+import { pipe } from './front.ts'
 import { Supervised } from './geyser.ts'
 import { geyserConfig } from './geyser-config.ts'
 import type { Rate } from './limits.ts'
 import { bedrockOpened } from './metrics.ts'
+import { nethernetIdentity } from './nethernet-identity.ts'
 
 export interface BedrockOptions {
   /** The Floodgate key: base64 of 16 bytes, the same on every Paper server (FLOODGATE_KEY). */
@@ -38,7 +47,17 @@ export interface BedrockOptions {
   heap: string
   /** The name Fly's UDP is reached by on this machine (`fly-global-services`), or an address. */
   bind: string
+  /** The port players join: RakNet over UDP through the relay, and NetherNet's signaling over TCP. */
   port: number
+  /**
+   * The agent's door for NetherNet's signaling, on every address: Fly's proxy ends TLS on `port` over
+   * TCP and connects here, and the door passes each connection to Geyser's own signaling.
+   */
+  signalingPort: number
+  /** The UDP port NetherNet's game runs on, the same inside and out, as Fly doesn't rewrite UDP ports. */
+  webrtcPort: number
+  /** A name that resolves to the edge's public IPv4, which NetherNet tells players to reach; null for none. */
+  advertise: string | null
   /** The edge's front door for Geyser (`front.ts`), which it dials for every player. */
   front: number
   validateLogin: boolean
@@ -66,6 +85,9 @@ export function bedrockFromEnv(env: NodeJS.ProcessEnv, front: number): BedrockOp
     heap: env.GEYSER_HEAP ?? '768m',
     bind: env.BEDROCK_BIND ?? 'fly-global-services',
     port: number('BEDROCK_PORT', 19132),
+    signalingPort: number('BEDROCK_SIGNALING_PORT', 19134),
+    webrtcPort: number('BEDROCK_WEBRTC_PORT', 19133),
+    advertise: env.BEDROCK_ADVERTISE ?? advertisedName(env.PLAY_DOMAINS),
     front,
     // On unless a test edge says otherwise: a test edge's clients have no Xbox account.
     validateLogin: env.BEDROCK_VALIDATE_LOGIN !== 'false',
@@ -80,8 +102,32 @@ export function bedrockFromEnv(env: NodeJS.ProcessEnv, front: number): BedrockOp
   }
 }
 
-/** The port Geyser listens on, on loopback, behind the relay. */
+/**
+ * The name looked up for the edge's public address: any name under a play domain's wildcard
+ * records is the edge's, so this one needs no record of its own.
+ */
+export function advertisedName(playDomains: string | undefined): string | null {
+  const domain = (playDomains ?? '').split(',')[0]?.trim()
+  return domain ? `bedrock.${domain}` : null
+}
+
+/** The port Geyser's RakNet listens on, behind the relay: no service of Fly's exposes it. */
 const GEYSER_PORT = 19131
+/**
+ * The port Geyser's signaling listens on. Geyser listens on Fly's UDP address alone, which Fly's
+ * proxy doesn't connect to, so it is reached only through the agent's door (`signalingPort`).
+ */
+const GEYSER_SIGNALING_PORT = 19135
+/**
+ * How long the door keeps a signaling connection that has gone quiet both ways: far longer than a
+ * signaling exchange, so only one left behind is closed.
+ */
+const SIGNALING_IDLE_MS = 10 * MINUTE_MS
+/**
+ * Where Fly's proxy connects from, which built-in signaling trusts to name the player in
+ * X-Forwarded-For: private addresses only, which nothing on the internet can be.
+ */
+const FLY_PROXY = ['10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16', 'fc00::/7']
 /**
  * How long Geyser keeps a source's PROXY header while nothing comes from it: SESSION_TIMEOUT_MS of
  * its RakNet library (org.cloudburstmc.netty's RakConstants), which nothing outside Java exports.
@@ -113,19 +159,39 @@ export interface Bedrock {
   stop: () => void
 }
 
-/** Writes Geyser's folder: what it fetched at build, the key (readable by this user alone), its config. */
-export function prepareGeyserDir(options: BedrockOptions): void {
+/** Where Geyser listens, and the public address NetherNet players are sent to, as looked up at start. */
+export interface GeyserPlace {
+  address: string
+  /** The edge's public IPv4, or null where it has none to give. */
+  publicAddress: string | null
+}
+
+/** Writes `contents` readable by this user alone, as Geyser's secrets must be. */
+function writePrivate(file: string, contents: string | Uint8Array): void {
+  writeFileSync(file, contents, { mode: 0o600 })
+  chmodSync(file, 0o600)
+}
+
+/**
+ * Writes Geyser's folder: what it fetched at build, the key and NetherNet's identity (readable by
+ * this user alone), its config.
+ */
+export function prepareGeyserDir(options: BedrockOptions, place: GeyserPlace): void {
   const key = Buffer.from(options.key, 'base64')
   if (key.length !== KEY_BYTES) throw new Error(`FLOODGATE_KEY must be base64 of ${KEY_BYTES} bytes`)
-  mkdirSync(options.dir, { recursive: true })
+  mkdirSync(join(options.dir, 'nethernet'), { recursive: true })
   if (existsSync(options.warm)) cpSync(options.warm, options.dir, { recursive: true })
-  const keyFile = join(options.dir, 'key.pem')
-  writeFileSync(keyFile, key, { mode: 0o600 })
-  chmodSync(keyFile, 0o600)
+  writePrivate(join(options.dir, 'key.pem'), key)
+  writePrivate(join(options.dir, 'nethernet', 'identity.pem'), nethernetIdentity(key))
   writeFileSync(
     join(options.dir, 'config.yml'),
     geyserConfig({
-      bedrock: { address: '127.0.0.1', port: GEYSER_PORT },
+      bedrock: { address: place.address, port: GEYSER_PORT },
+      nethernet: {
+        webrtcPort: options.webrtcPort,
+        advertise: place.publicAddress === null ? [] : [`${place.publicAddress}:${options.webrtcPort}`],
+        trustedProxies: FLY_PROXY,
+      },
       publicPort: options.port,
       java: { address: '127.0.0.1', port: options.front },
       keyFile: 'key.pem',
@@ -155,40 +221,78 @@ export async function untilItHolds<T>(
 }
 
 /**
- * Starts Geyser, supervised, and the relay in front of it. Returns once the folder is written: the
- * relay's bind, which can fail (Fly's UDP address isn't there yet), is tried again in the
- * background until it holds, and never makes the caller wait or fail.
+ * The door Fly's proxy hands NetherNet's signaling to, on every address: each connection is passed
+ * to Geyser's own signaling at `geyser`, as it came, the player named by Fly in X-Forwarded-For.
+ */
+export function signalingDoor(port: number, geyser: string): Server {
+  const door = createServer((client) => {
+    pipe(client, geyser, new Uint8Array(0), { connectMs: 5 * SECOND_MS, idleMs: SIGNALING_IDLE_MS })
+  })
+  door.on('error', (error) => console.error('[geyser] the NetherNet signaling door failed', error))
+  door.listen(port, '0.0.0.0')
+  return door
+}
+
+/** The public IPv4 behind `name`, which NetherNet players are told to reach; null without a name. */
+async function publicAddressOf(name: string | null): Promise<string | null> {
+  return name === null ? null : (await lookup(name, { family: 4 })).address
+}
+
+/**
+ * Starts Geyser, supervised, and the relay in front of it. Returns at once: Geyser listens on Fly's
+ * UDP address, which may not be there yet, so finding it, the public address, starting Geyser and
+ * the relay's bind are tried again in the background until they hold, and never make the caller
+ * wait or fail. A wrong key is the one thing that fails here, as nothing would ever fix it.
  */
 export function startBedrock(options: BedrockOptions): Bedrock {
-  prepareGeyserDir(options)
+  if (Buffer.from(options.key, 'base64').length !== KEY_BYTES)
+    throw new Error(`FLOODGATE_KEY must be base64 of ${KEY_BYTES} bytes`)
   if (!options.validateLogin) console.error('[geyser] XBOX SIGN-IN IS OFF: for a test edge only')
 
   let relay: Relay | null = null
-  const geyser = new Supervised({
-    command: [
-      'java',
-      `-Xmx${options.heap}`,
-      '-XX:+UseSerialGC',
-      '-XX:+ExitOnOutOfMemoryError',
-      '-jar',
-      options.jar,
-      '--nogui',
-    ],
-    cwd: options.dir,
-    env: geyserEnv(process.env),
-    prefix: '[geyser]',
-    // The Geyser that starts next knows no player and has given no pong.
-    exited: () => relay?.forget(),
-  })
-  void geyser.run()
-
+  let geyser: Supervised | null = null
+  let door: Server | null = null
   let stopped = false
+  const startGeyser = (place: GeyserPlace): Supervised => {
+    prepareGeyserDir(options, place)
+    const supervised = new Supervised({
+      command: [
+        'java',
+        `-Xmx${options.heap}`,
+        '-XX:+UseSerialGC',
+        '-XX:+ExitOnOutOfMemoryError',
+        // Signaling on a port of its own, reached through the agent's door: the public one is Fly's proxy's.
+        `-DgeyserSignalingPort=${GEYSER_SIGNALING_PORT}`,
+        '-jar',
+        options.jar,
+        '--nogui',
+      ],
+      cwd: options.dir,
+      env: geyserEnv(process.env),
+      prefix: '[geyser]',
+      // The Geyser that starts next knows no player and has given no pong.
+      exited: () => relay?.forget(),
+    })
+    void supervised.run()
+    return supervised
+  }
+
   void untilItHolds(
     async () => {
-      const hostname = (await lookup(options.bind, { family: 4 })).address
+      const address = (await lookup(options.bind, { family: 4 })).address
+      if (geyser === null) {
+        const publicAddress = await publicAddressOf(options.advertise)
+        geyser = startGeyser({ address, publicAddress })
+        door = signalingDoor(options.signalingPort, `${address}:${GEYSER_SIGNALING_PORT}`)
+        console.error(
+          publicAddress === null
+            ? "[geyser] no public address to give: NetherNet players can't reach this edge"
+            : `[geyser] NetherNet players play at ${publicAddress}:${options.webrtcPort}`,
+        )
+      }
       relay = await bedrockRelay({
-        bind: { hostname, port: options.port },
-        geyser: { hostname: '127.0.0.1', port: GEYSER_PORT },
+        bind: { hostname: address, port: options.port },
+        geyser: { hostname: address, port: GEYSER_PORT },
         pongs: options.pongs,
         totalPongs: options.totalPongs,
         opens: options.opens,
@@ -198,7 +302,7 @@ export function startBedrock(options: BedrockOptions): Bedrock {
         idleMs: GEYSER_KEEPS_QUIET_SOURCE_MS - 2 * SECOND_MS,
         pongRefreshMs: 5 * SECOND_MS,
       })
-      console.error(`[geyser] Bedrock players join at ${hostname}:${options.port}`)
+      console.error(`[geyser] Bedrock players join at ${address}:${options.port}`)
     },
     (error) => console.error('[geyser] the Bedrock port could not be opened; trying again', error),
     () => stopped,
@@ -206,18 +310,19 @@ export function startBedrock(options: BedrockOptions): Bedrock {
   let answered = false
   return {
     status() {
-      const up = geyser.state === 'running' && relay?.ready() === true
+      const up = geyser?.state === 'running' && relay?.ready() === true
       answered ||= up
       return {
         state: up ? 'up' : answered ? 'down' : 'starting',
         bound: relay !== null,
-        restarts: geyser.restarts,
+        restarts: geyser?.restarts ?? 0,
       }
     },
     stop() {
       stopped = true
-      geyser.stop()
+      geyser?.stop()
       relay?.close()
+      door?.close()
     },
   }
 }

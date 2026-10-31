@@ -6,9 +6,9 @@
 # Geyser is one build of its standalone jar, pinned here by version, build and hash. To take a newer
 # one: `bun scripts/geyser.ts bump` (the latest) or `bun scripts/geyser.ts bump <build>`, which
 # rewrites the three lines below; `bun scripts/geyser.ts check` says whether the hash is the build's.
-ARG GEYSER_VERSION=2.12.0
-ARG GEYSER_BUILD=1268
-ARG GEYSER_SHA256=87c8d732c4772b813f65b245acdabf9852af3632854116a312a132568141a348
+ARG GEYSER_VERSION=2.12.1
+ARG GEYSER_BUILD=1279
+ARG GEYSER_SHA256=15205b459883a9046160e479b705f4f6bc4deeeff6f2ae97da1897e90be3a25b
 
 FROM ghcr.io/itzg/mc-router:1.49.0@sha256:76697861c41e7d64880accf0d25e953a3c2d871e6f5f0922d7c830ffcb2b75ab AS router
 
