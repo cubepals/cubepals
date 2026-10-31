@@ -224,7 +224,13 @@ export function leftOutOf(paths: readonly string[], world: FoundWorld, most = 8)
  */
 export function gameFolderOf(world: FoundWorld): string {
   const base = world.folder === '' ? '' : folderOf(world.folder.slice(0, -1))
-  return /(^|\/)saves\/$/.test(base) ? base.slice(0, -'saves/'.length) : base
+  return playedInGame(world) ? base.slice(0, -'saves/'.length) : base
+}
+
+/** Whether a world sits in a game's `saves/` (a launcher's, an instance's), not as a server's folder holds it. */
+export function playedInGame(world: FoundWorld): boolean {
+  const base = world.folder === '' ? '' : folderOf(world.folder.slice(0, -1))
+  return /(^|\/)saves\/$/.test(base)
 }
 
 /**

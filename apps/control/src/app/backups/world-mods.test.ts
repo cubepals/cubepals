@@ -98,8 +98,8 @@ afterAll(async () => {
   await rm(scratch, { recursive: true, force: true })
 })
 
-const server = async (name: string): Promise<{ owner: UserActor; id: string }> => {
-  const owner = await h.user(name, 'plus')
+const server = async (name: string, plan = 'plus'): Promise<{ owner: UserActor; id: string }> => {
+  const owner = await h.user(name, plan)
   const { id } = await h.create(owner, { loader: 'vanilla', gameVersion: '26.3' })
   await h.until(id, 'running')
   await h.settled(id)
@@ -199,6 +199,14 @@ describe.skipIf(!hasDatabase)('a world brought with its mods', () => {
     await h.until(id, (s) => s.lifecycle.status !== 'restoring', 20_000)
     await h.settled(id, 20_000)
     expect((await loadRevision(h.db, (await h.server(id)).desiredRevisionId)).loaderVersion).toBe('0.16.0')
+  }, 120_000)
+})
+
+describe.skipIf(!hasDatabase)('a world brought from an instance on a plan without mods', () => {
+  test('comes, with players’ mods left out, rather than being refused', async () => {
+    const { owner, id } = await server('Kim', 'free')
+    const read = await brought(owner, id, await instance({ 'sodium-fabric-0.9.3.jar': SODIUM }))
+    expect(read.status).toBe('ready')
   }, 120_000)
 })
 

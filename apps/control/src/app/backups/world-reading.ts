@@ -26,6 +26,7 @@ import {
   leftOutOf,
   modsBeside,
   placeOnServer,
+  playedInGame,
   playersWithFiles,
   type UploadHolds,
   uploadHolds,
@@ -277,7 +278,8 @@ export class WorldReading {
           `This world was last played on Minecraft ${played}, newer than ${serverVersion}. Choose ${played} for the new server.`,
         )
     }
-    const jars = modJars(read)
+    // A game's mods come as the plan allows, and players' own among them never need one (`world-mods.ts`).
+    const jars = playedInGame(read.world) ? [] : modJars(read)
     const standing = await loadStanding(this.#db, to.ownerId)
     const plan = entitlementsOf(standing)
     // Held to the room an upload is (`beginWorldUpload`), as the world lies on disk, not as it was sent.
@@ -291,8 +293,8 @@ export class WorldReading {
       throw new Refused(
         `This world is ${gigabytes(unpacked)} GB unpacked, and ${to.serverId === null ? 'a server on your plan' : 'this server'} has room for a world of up to ${gigabytes(room)} GB.`,
       )
-    // A world made with mods is never opened on plain Minecraft on a plan without them: it would
-    // lose every modded block and item without a word.
+    // A world its server ran with mods is never opened on plain Minecraft on a plan without them:
+    // it would lose every modded block and item without a word.
     if (jars.length > 0 && !plan.mayUseMods)
       throw new Refused(
         comesWith('Worlds made with mods', planThatRuns({ tier: '3g', loader: 'fabric', modded: true })),
