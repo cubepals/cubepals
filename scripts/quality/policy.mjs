@@ -37,6 +37,7 @@ const JAVA_TEST = /^apps\/reporter\/src\/test\/.*\.java$/
 const ASSUMPTIONS = new Set(['assumeTrue', 'assumeFalse', 'assumeNotNull', 'assumingThat', 'abort'])
 const CONDITIONAL_MODIFIERS = new Set(['if', 'skipIf', 'runIf', 'todoIf', 'failingIf'])
 const MODIFIERS = new Set(['only', 'skip', 'todo', 'failing', ...CONDITIONAL_MODIFIERS])
+const DISABLED_RUNNERS = new Set(['xit', 'xtest', 'xdescribe'])
 const EVIDENCE_APIS = new Set([
   '__qualityCoverage__',
   '__coverage__',
@@ -96,7 +97,14 @@ export function escapeHatches(source, isTest, javaTest = false) {
     const property =
       (token.type === 'code' && ['.', '?.'].includes(code[i - 1]?.value)) ||
       (token.type === 'string' && code[i - 1]?.value === '[' && code[i + 1]?.value === ']')
-    if (!property || !MODIFIERS.has(token.value)) continue
+    // A named import or destructuring binding can extract a disabled runner without a dot.
+    // Reserve these keys independently of the receiver; otherwise aliases evade the scan.
+    const binding =
+      ['{', ','].includes(code[i - 1]?.value) && [':', ',', '}', 'as', '='].includes(code[i + 1]?.value)
+    if (DISABLED_RUNNERS.has(token.value) && (token.type === 'code' || property || binding)) {
+      findings.push(`test modifier: disabled runner ${token.value}`)
+    }
+    if ((!property && !binding) || !MODIFIERS.has(token.value)) continue
     let end = i + (token.type === 'string' ? 2 : 1)
     if (CONDITIONAL_MODIFIERS.has(token.value) && code[end]?.value === '(') {
       let depth = 0

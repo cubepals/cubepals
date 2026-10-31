@@ -20,22 +20,36 @@ resolution records, integrity hashes, and complete transitive lock graphs. New o
 binaries cannot shadow those tools or the node, Bun, Git, and shell executables they invoke.
 Unrelated dependency updates may change `bun.lock`; changes to a dependency shared with a protected
 tool require a policy update. New skip/focus modifiers and coverage/mutation suppression comments
-are refused. Existing conditional skips are frozen by expression and occurrence count.
+are refused. Existing direct conditional-member skips are frozen by expression and occurrence count.
 Reporter test annotations that disable or conditionally enable a case, and JUnit assumptions,
 cannot be introduced through an ordinary PR.
 New direct references to coverage counters, active mutant identifiers, and quality evidence
 locations are also refused outside protected infrastructure, including quoted property names.
+
+The local gate runs the controller suite with Node. Bun's exact `scripts/quality/*.test.mjs`
+discovery exclusion prevents running those same controller tests again under the wrong runtime;
+application tests remain included. The configuration-impact check accepts only that exact routing
+addition while the Node suite remains mandatory. Broader Bun configuration changes retain the
+normal configuration-change obligations.
 
 The lexical scan catches ordinary exclusion, test-disabling, and evidence-aware changes. It is not a JavaScript
 security sandbox or proof that an arbitrary program is honest. Executable tests can inspect or
 forge their own process state. Coverage, mutation, invariant tests, strict evidence validation,
 and the policy guard provide complementary evidence, not a proof of all possible behavior.
 The modifier scan reserves `only`, `skip`, `todo`, `if`, `skipIf`, `runIf`, `todoIf`, `failing`, and
-`failingIf` as member names in test files, so ordinary APIs using those names can also be rejected.
-Conditional expressions are frozen too. This conservative scan
-catches aliased runners, literal computed properties, and extracted references such as
-`const disabled = test.skip` without executing proposed code. Restricting it to familiar receiver
-names would let runner aliases bypass the check; the ordinary-API false positives remain a limit.
+`failingIf` as member and binding keys in test files, so ordinary APIs and object properties using
+those names can also be rejected. The disabled Bun exports `xit`, `xtest`, and `xdescribe` are
+reserved identifiers too, including named-import aliases and quoted import or property keys.
+Conditional member expressions are frozen too. This conservative scan catches aliased runners,
+literal computed properties, and extracted references such as `const disabled = test.skip` and
+`const { 'skip': disabled } = test` without executing proposed code. Restricting it to familiar
+receiver names would let runner aliases bypass the check; ordinary-API false positives remain a
+limit. A regression test inventories the pinned Bun runner exports, method declarations, and test
+options so a runtime upgrade requires repeating the audit. Scheduling methods (`concurrent`,
+`serial`, and their conditionals) and data-driven `each` remain available; arbitrary conditional
+registration or empty test data still requires behavioral evidence, not lexical certification.
+The scan does not resolve names assembled through variables or follow later calls through a
+preexisting extracted alias.
 The install protections cover the repository's current entrypoints and declared trusted dependency
 graph. They are not a general shell interpreter, a registry audit, or a sandbox for executable
 application code. A policy update that introduces another lifecycle helper or Lefthook include

@@ -24,6 +24,9 @@ const GROUPS = ['dependencies', 'devDependencies', 'optionalDependencies', 'peer
 const QUALITY_COMMAND =
   /^(?:node (?:--test )?scripts\/quality\/[\w.*-]+\.mjs|python3 scripts\/quality\/[\w.-]+\.py|bun run quality:install)$/
 const QUALITY_INSTALL = 'bun install --cwd tools/quality --frozen-lockfile'
+const CONTROLLER_ROUTING =
+  '\n[test]\n# These controllers run once under Node through test:quality and the CI static job.\n' +
+  'pathIgnorePatterns = ["scripts/quality/*.test.mjs"]\n'
 
 function canonical(value) {
   if (Array.isArray(value)) return value.map(canonical)
@@ -212,10 +215,28 @@ export function configurationOnlyAffectsQuality(beforeManifest, afterManifest, b
   }
 }
 
+/** Only the exact Node-controller discovery rule may be appended; all old Bun bytes must remain. */
+export function configurationOnlyRoutesNodeControllers(before, after, manifest) {
+  if (typeof before !== 'string' || typeof after !== 'string' || !before.endsWith('\n')) return false
+  if (/(?:^|\n)\s*\[\s*(?:test\b|["']test["'])/.test(before)) return false
+  if (after !== before + CONTROLLER_ROUTING) return false
+  const scripts = manifest?.scripts ?? {}
+  if (typeof scripts['test:quality'] !== 'string' || typeof scripts.gates !== 'string') return false
+  const quality = scripts['test:quality'].split(' && ')
+  const gates = scripts.gates.split(' && ')
+  return (
+    quality.filter((command) => command === 'node --test scripts/quality/*.test.mjs').length === 1 &&
+    quality.every((command) => QUALITY_COMMAND.test(command)) &&
+    gates.filter((command) => command === 'bun run test:quality').length === 1 &&
+    gates.at(-1) === 'bun test' &&
+    scripts.test === 'bun test'
+  )
+}
+
 export function qualityOnlyChanges(root, baseSha, changedFiles) {
   const result = new Set()
   if (!/^[0-9a-f]{40}$/.test(baseSha ?? '') || !Array.isArray(changedFiles)) return result
-  const config = changedFiles.filter((path) => ['package.json', 'bun.lock'].includes(path))
+  const config = changedFiles.filter((path) => ['package.json', 'bun.lock', 'bunfig.toml'].includes(path))
   if (!config.length) return result
   try {
     const before = (path) =>
@@ -230,16 +251,23 @@ export function qualityOnlyChanges(root, baseSha, changedFiles) {
       if (!lstatSync(full).isFile()) throw new Error('Configuration is not a regular file')
       return readFileSync(full, 'utf8')
     }
+    const beforeManifest = JSON.parse(before('package.json'))
+    const afterManifest = JSON.parse(after('package.json'))
     if (
       configurationOnlyAffectsQuality(
-        JSON.parse(before('package.json')),
-        JSON.parse(after('package.json')),
+        beforeManifest,
+        afterManifest,
         parseLock(before('bun.lock')),
         parseLock(after('bun.lock')),
       )
     ) {
-      for (const path of config) result.add(path)
+      for (const path of config.filter((path) => path !== 'bunfig.toml')) result.add(path)
     }
+    if (
+      config.includes('bunfig.toml') &&
+      configurationOnlyRoutesNodeControllers(before('bunfig.toml'), after('bunfig.toml'), afterManifest)
+    )
+      result.add('bunfig.toml')
   } catch {
     /* Missing evidence expands mutation scope instead of waiving it. */
   }

@@ -6,6 +6,7 @@
 import assert from 'node:assert/strict'
 import { execFileSync, spawnSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { test } from 'node:test'
@@ -114,6 +115,173 @@ function rejected(path, contents, reason) {
     assert.match(child.stderr, reason)
   })
 }
+
+function rejectedHiddenFailure(source, executed = 0) {
+  repository(({ cwd, put, commit, base }) => {
+    const path = 'apps/control/src/infra/fleet/fleet-runtime.e2e.test.ts'
+    put(path, source)
+    const junit = join(cwd, 'observed.xml')
+    const run = spawnSync(
+      process.env.QUALITY_BUN ?? 'bun',
+      ['test', '--reporter=junit', `--reporter-outfile=${junit}`, `./${path}`],
+      { cwd, encoding: 'utf8' },
+    )
+    assert.equal(run.status, 0, run.stdout + run.stderr)
+    assert.equal(checkJUnit(readFileSync(junit, 'utf8'), [path], { allowOptionalOnly: true }), executed)
+    const policy = spawnSync(process.execPath, [controller, '--base', base, '--head', commit()], {
+      cwd,
+      encoding: 'utf8',
+    })
+    assert.equal(policy.status, 1, policy.stdout + policy.stderr)
+    assert.match(policy.stderr, /added test modifier/)
+  })
+}
+
+test('the pinned Bun runner exports and declared API are completely classified', () => {
+  const typesManifest = createRequire(import.meta.url).resolve('@types/bun/package.json')
+  const typesPackage = JSON.parse(readFileSync(typesManifest, 'utf8'))
+  const entry = readFileSync(join(dirname(typesManifest), typesPackage.types), 'utf8')
+  const references = [...entry.matchAll(/<reference types="([^"]+)"\s*\/>/g)].map((match) => match[1])
+  assert.equal(references.length, 1, 'the Bun declaration facade must identify one provider')
+  assert.ok(typesPackage.dependencies[references[0]], 'the type provider must be a declared dependency')
+  const declarations = readFileSync(
+    createRequire(typesManifest).resolve(`${references[0]}/test.d.ts`),
+    'utf8',
+  )
+  const members = (name) => {
+    const body = declarations.match(new RegExp(`export interface ${name}<[\\s\\S]*?\\n  }`))?.[0]
+    assert.ok(body, `${name} declaration must exist`)
+    return [...new Set([...body.matchAll(/^ {4}([A-Za-z]\w*)(?:[<(:])/gm)].map((match) => match[1]))].sort()
+  }
+  const describe = ['only', 'skip', 'todo', 'concurrent', 'serial', 'if', 'skipIf', 'todoIf', 'each'].sort()
+  const testApi = [...describe, 'failing', 'failingIf', 'concurrentIf', 'serialIf'].sort()
+  assert.deepEqual(members('Describe'), describe)
+  assert.deepEqual(members('Test'), testApi)
+  const options = declarations.match(/export interface TestOptions \{[\s\S]*?\n {2}}/)?.[0]
+  assert.ok(options)
+  assert.deepEqual([...options.matchAll(/^ {4}(\w+)\?:/gm)].map((match) => match[1]).sort(), [
+    'repeats',
+    'retry',
+    'timeout',
+  ])
+  repository(({ cwd, put }) => {
+    put(
+      'audit.test.ts',
+      `import * as runner from 'bun:test'
+runner.test('audit', () => console.log('API ' + JSON.stringify({
+  version: Bun.version,
+  exports: Object.keys(runner).sort(),
+  describe: ${JSON.stringify(describe)}.filter(name => typeof runner.describe[name] === 'function'),
+  test: ${JSON.stringify(testApi)}.filter(name => typeof runner.test[name] === 'function')
+})))`,
+    )
+    const child = spawnSync(process.env.QUALITY_BUN ?? 'bun', ['test', './audit.test.ts'], {
+      cwd,
+      encoding: 'utf8',
+    })
+    assert.equal(child.status, 0, child.stdout + child.stderr)
+    const api = JSON.parse(child.stdout.match(/^API (.+)$/m)?.[1] ?? 'null')
+    assert.equal(api?.version, '1.4.3', 'a Bun upgrade must repeat the runner API audit')
+    assert.deepEqual(api.exports, [
+      'afterAll',
+      'afterEach',
+      'beforeAll',
+      'beforeEach',
+      'default',
+      'describe',
+      'expect',
+      'expectTypeOf',
+      'it',
+      'jest',
+      'mock',
+      'onTestFinished',
+      'setDefaultTimeout',
+      'setSystemTime',
+      'spyOn',
+      'test',
+      'vi',
+      'xdescribe',
+      'xit',
+      'xtest',
+    ])
+    assert.deepEqual(api.describe, describe)
+    assert.deepEqual(api.test, testApi)
+  })
+})
+
+for (const name of ['xit', 'xtest', 'xdescribe']) {
+  for (const aliased of [false, true]) {
+    test(`the real controller rejects ${aliased ? 'aliased' : 'bare'} Bun ${name} hiding a defect`, () => {
+      const runner = aliased ? 'disabled' : name
+      const failingCase = "test('deliberate defect', () => { throw new Error('defect') })"
+      rejectedHiddenFailure(
+        `import { test, ${name}${aliased ? ' as disabled' : ''} } from 'bun:test'\n${
+          name === 'xdescribe'
+            ? `${runner}('hidden suite', () => { ${failingCase} })`
+            : `${runner}('deliberate defect', () => { throw new Error('defect') })`
+        }\n`,
+      )
+    })
+  }
+  for (const binding of [
+    `import { '${name}' as disabled } from 'bun:test'`,
+    `import * as runner from 'bun:test'; const disabled = runner['${name}']`,
+    `const { ${name}: disabled } = require('bun:test')`,
+  ]) {
+    test(`the real controller rejects extracting ${name}: ${binding}`, () => {
+      rejected('apps/weak.test.ts', `${binding}\ndisabled('hidden', () => {})`, /added test modifier/)
+    })
+  }
+}
+
+for (const [modifier, condition, executed] of [
+  ['skip', '', 0],
+  ['todo', '', 0],
+  ['if', '.call(test, false)', 0],
+  ['skipIf', '.call(test, true)', 0],
+  ['todoIf', '.call(test, true)', 0],
+  ['failing', '', 1],
+  ['failingIf', '.call(test, true)', 1],
+]) {
+  test(`the real controller rejects destructured Bun ${modifier} hiding a defect`, () => {
+    rejectedHiddenFailure(
+      `import { test } from 'bun:test'
+const { '${modifier}': disabled } = test
+disabled${condition}('deliberate defect', () => { throw new Error('defect') })\n`,
+      executed,
+    )
+  })
+}
+
+for (const source of [
+  'const { only: focused } = test',
+  'const { runIf: conditional } = test',
+  'const { skip } = test',
+  'const { skip = fallback } = test',
+  'const { ["skip"]: disabled } = test',
+  '({ skip: disabled } = test)',
+]) {
+  test(`the real controller rejects runner modifier bindings: ${source}`, () => {
+    rejected('apps/weak.test.ts', source, /added test modifier/)
+  })
+}
+
+test('disabled names are frozen by occurrence while ordinary fixture text remains data', () => {
+  assert.deepEqual(escapeHatches("const fixture = 'xit'; // xdescribe and xtest\n", true), [])
+  const source = "import { xit as disabled } from 'bun:test'\n"
+  assert.deepEqual(
+    inspectChanges([{ path: 'a.test.ts', before: source, after: `${source}test('new', () => {})` }]),
+    [],
+  )
+  assert.match(
+    inspectChanges([{ path: 'a.test.ts', before: source, after: source + source }]).join('\n'),
+    /added test modifier/,
+  )
+  assert.deepEqual(
+    escapeHatches("test.concurrentIf(false)('a', () => {}); describe.serial('b', () => {})", true),
+    [],
+  )
+})
 
 test('the real controller accepts a behavior test and production change', () => {
   repository(({ cwd, put, commit, base }) => {

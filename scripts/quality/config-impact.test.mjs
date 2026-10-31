@@ -5,11 +5,18 @@
 /** A config-only mutation waiver requires unchanged application bytes and runtime resolution. */
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
-import { configurationOnlyAffectsQuality, qualityOnlyChanges } from './config-impact.mjs'
+import {
+  configurationOnlyAffectsQuality,
+  configurationOnlyRoutesNodeControllers,
+  qualityOnlyChanges,
+} from './config-impact.mjs'
+
+const originalBunConfiguration = '[install]\nlinker = "hoisted"\n'
+const bunConfiguration = readFileSync(new URL('../../bunfig.toml', import.meta.url), 'utf8')
 
 function fixture() {
   const beforeManifest = {
@@ -118,6 +125,61 @@ test('a quality tool installed as a production dependency is not exempt', () => 
   assert.equal(qualifies(data), false)
 })
 
+test('only the exact Node-controller routing preserves the rest of Bun configuration', () => {
+  const manifest = fixture().afterManifest
+  assert.equal(
+    configurationOnlyRoutesNodeControllers(originalBunConfiguration, bunConfiguration, manifest),
+    true,
+  )
+  for (const changed of [
+    bunConfiguration.replace('scripts/quality/*.test.mjs', 'scripts/quality/**'),
+    bunConfiguration.replace('*.test.mjs"]', '*.test.mjs", "apps/**"]'),
+    bunConfiguration.replace('"hoisted"', '"isolated"'),
+    `${bunConfiguration}root = "apps/edge"\n`,
+    `${bunConfiguration}preload = ["./setup.ts"]\n`,
+    `${bunConfiguration}env = "disable"\n`,
+    `${bunConfiguration}coverage = false\n`,
+    bunConfiguration.replace('[install]\nlinker = "hoisted"\n', ''),
+  ])
+    assert.equal(configurationOnlyRoutesNodeControllers(originalBunConfiguration, changed, manifest), false)
+  const prior = `${originalBunConfiguration}\n[test]\ntimeout = 30000\n`
+  assert.equal(
+    configurationOnlyRoutesNodeControllers(
+      prior,
+      prior + bunConfiguration.slice(originalBunConfiguration.length),
+      manifest,
+    ),
+    false,
+  )
+})
+
+test('controller routing requires the complete Node suite to stay mandatory in local gates', () => {
+  for (const change of [
+    (scripts) => {
+      scripts['test:quality'] = 'node --test scripts/quality/policy.test.mjs'
+    },
+    (scripts) => {
+      scripts.gates = 'bun run lint && bun test'
+    },
+    (scripts) => {
+      scripts['test:quality'] += ' || true'
+    },
+    (scripts) => {
+      scripts.test = 'bun test apps/edge'
+    },
+    (scripts) => {
+      delete scripts['test:quality']
+    },
+  ]) {
+    const manifest = fixture().afterManifest
+    change(manifest.scripts)
+    assert.equal(
+      configurationOnlyRoutesNodeControllers(originalBunConfiguration, bunConfiguration, manifest),
+      false,
+    )
+  }
+})
+
 test('only config paths proved against a real base commit are returned', () => {
   const root = mkdtempSync(join(tmpdir(), 'quality-config-impact-'))
   const git = (...args) =>
@@ -130,6 +192,7 @@ test('only config paths proved against a real base commit are returned', () => {
     const data = fixture()
     git('init', '--quiet')
     put(data.beforeManifest, data.beforeLock)
+    writeFileSync(join(root, 'bunfig.toml'), originalBunConfiguration)
     git('add', '.')
     git(
       '-c',
@@ -144,8 +207,18 @@ test('only config paths proved against a real base commit are returned', () => {
     )
     const base = git('rev-parse', 'HEAD')
     put(data.afterManifest, data.afterLock)
+    writeFileSync(join(root, 'bunfig.toml'), bunConfiguration)
     assert.deepEqual(
       [...qualityOnlyChanges(root, base, ['package.json', 'bun.lock', 'src/runtime.ts'])],
+      ['package.json', 'bun.lock'],
+    )
+    assert.deepEqual(
+      [...qualityOnlyChanges(root, base, ['package.json', 'bun.lock', 'bunfig.toml'])],
+      ['package.json', 'bun.lock', 'bunfig.toml'],
+    )
+    writeFileSync(join(root, 'bunfig.toml'), `${bunConfiguration}preload = ["./setup.ts"]\n`)
+    assert.deepEqual(
+      [...qualityOnlyChanges(root, base, ['package.json', 'bun.lock', 'bunfig.toml'])],
       ['package.json', 'bun.lock'],
     )
     assert.deepEqual([...qualityOnlyChanges(root, 'HEAD', ['package.json', 'bun.lock'])], [])
