@@ -30,6 +30,7 @@ import { appliedConfig, type ServerBinding } from './binding.ts'
 import type { GameConsole } from './game-console.ts'
 import { type GoingBack, NotPutBack } from './going-back.ts'
 import type { Rechecks } from './rechecks.ts'
+import { warnBeforeRestart } from './restart-warning.ts'
 import type { WorldCopies } from './world-copies.ts'
 
 interface UpdateInput {
@@ -191,6 +192,7 @@ export function updating(deps: {
       }
       await ctx.step('compute')
       try {
+        await warnBeforeRestart(deps.console, consoleTarget(server, binding.handle))
         await forgetHearts(runtime, binding.handle, input)
         const changed = await runtime.apply(binding.handle, desired.spec)
         if (changed !== binding.handle) await saveHandle(db, server.id, changed)

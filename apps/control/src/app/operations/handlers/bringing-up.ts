@@ -351,7 +351,7 @@ export function bringingUp(deps: {
       if (server.lifecycle.status === 'stopping') {
         if (binding.handle !== null) {
           await ctx.step('saving')
-          await windDown(server, binding.handle)
+          await windDown(server, binding.handle, { warn: true })
           await ctx.step('stopping')
           await runtime.stop(binding.handle)
         }

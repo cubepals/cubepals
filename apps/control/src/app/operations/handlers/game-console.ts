@@ -3,8 +3,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * What operations ask of the running game through its console: where it answers, and the save
- * that winds it down before its process goes away. All of it is best effort; the commands
+ * What operations ask of the running game through its console: where it answers, the countdown
+ * players read before a restart, and the save that winds it down before its process goes away. All of it is best effort; the commands
  * themselves are `minecraft/console.ts`'s, and the snapshot that pauses saving around it is
  * `world-copies.ts`'s.
  */
@@ -16,6 +16,7 @@ import type { ServerConsole } from '../../ports/minecraft.ts'
 import type { RuntimeHandle } from '../../ports/runtime.ts'
 import type { Runtimes } from '../../runtimes/router.ts'
 import type { RuntimeSpecs } from '../../servers/specs.ts'
+import { warnBeforeRestart } from './restart-warning.ts'
 
 export type GameConsole = ReturnType<typeof gameConsole>
 
@@ -27,12 +28,27 @@ export function gameConsole(deps: {
 }) {
   const { runtime, specs } = deps
 
+  const consoleTarget = (server: MinecraftServer, handle: RuntimeHandle) => ({
+    endpoint: runtime.endpoint(handle, PORT_NAMES.rcon, 'control'),
+    passwords: specs.rconPasswords(server.id),
+  })
+
+  /** Counts down in chat for whoever is on, before a restart drops them (`restart-warning.ts`). */
+  const warnPlayers = (server: MinecraftServer, handle: RuntimeHandle): Promise<number> =>
+    warnBeforeRestart(deps.console, consoleTarget(server, handle))
+
   /**
    * Saves the world and keeps in-game access changes before the process goes away. Best effort,
    * but says whether the world was saved: a server put to sleep with its memory kept needs it,
-   * since a provider may drop that memory and boot from what was saved.
+   * since a provider may drop that memory and boot from what was saved. `warn`: a restart, which
+   * counts down for whoever is on first.
    */
-  const windDown = async (server: MinecraftServer, handle: RuntimeHandle): Promise<boolean> => {
+  const windDown = async (
+    server: MinecraftServer,
+    handle: RuntimeHandle,
+    options: { warn?: boolean } = {},
+  ): Promise<boolean> => {
+    if (options.warn === true) await warnPlayers(server, handle)
     await deps.access.reconcile(server, handle, 'import').catch(() => undefined)
     const target = {
       endpoint: runtime.endpoint(handle, PORT_NAMES.rcon, 'control'),
@@ -43,11 +59,6 @@ export function gameConsole(deps: {
       () => false,
     )
   }
-
-  const consoleTarget = (server: MinecraftServer, handle: RuntimeHandle) => ({
-    endpoint: runtime.endpoint(handle, PORT_NAMES.rcon, 'control'),
-    passwords: specs.rconPasswords(server.id),
-  })
 
   return { consoleTarget, windDown }
 }
