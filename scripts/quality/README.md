@@ -3,6 +3,25 @@
 
 # Quality policy trust boundary
 
+Incremental evidence distinguishes runtime inputs from structure metadata. A structure baseline
+may avoid application-wide mutation only when its existing allowances are retained, tightened or
+removed without other metadata changes. A literal JSON, CSS or HTML import is a data leaf: changes
+retain the base and head importing code, its consumers and affected tests. Unmapped data or an
+ambiguous loader still requires the full inventory.
+
+Each isolated test's validated counters also produce a source- and test-hashed execution profile.
+Mutation runs try tests that actually execute the subject before tests that merely import a shared
+harness. Every static candidate remains available for expansion; subjects, mutants, score floors
+and incomplete-evidence failures are unchanged. Dependency comparisons keep their identical oracle
+sets and do not use this reordering.
+
+Coverage's aggregate independently reconstructs its comparison from Git after downloading test
+artifacts. Existing-test and production edits retain the complete baseline ratchet. Verified test
+additions and quality-only inputs preserve the old isolated test inputs, so timing differences in
+unchanged code do not constitute a regression. Dependency-only updates compare the affected oracle
+closures. Every module remains measured, legacy deficits remain visible, and changed-source floors
+always apply. Missing Git identity or mismatched base coverage cannot establish a narrower scope.
+
 `quality-policy.yml` reads the controller from the pull request's base commit and reads proposed
 files as Git objects. It does not install packages, import modules, follow proposed symlinks, or
 run scripts from the proposed tree. A separate job publishes `Quality policy` on the exact head
