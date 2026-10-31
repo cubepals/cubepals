@@ -29,6 +29,13 @@ updates:
     ignore:
       - dependency-name: '@types/node'
         update-types: ['version-update:semver-major']
+      # Holds a worker until a handler past its deadline returns, which the server operations lanes
+      # (apps/control/src/infra/pg/lanes.ts) don't expect.
+      - dependency-name: pg-boss
+        versions: ['12.38.0']
+      # Reports grid-template-areas whose rows have the same number of cells as inconsistent.
+      - dependency-name: '@biomejs/biome'
+        versions: ['2.6.2']
     groups:
       bun-security:
         applies-to: security-updates
