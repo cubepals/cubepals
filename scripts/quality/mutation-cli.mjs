@@ -8,12 +8,14 @@
  * from the base lockfile) and holds the head to those scores.
  */
 import { execFileSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { parseArgs } from 'node:util'
 import { inventory, sourceFiles } from './inventory.mjs'
 import { runMutation } from './mutation.mjs'
 import { rotationSubjects, selectMutationScope } from './mutation-scope.mjs'
+import { orderMutationTests } from './mutation-test-order.mjs'
 import { groupOf, groups } from './shards.mjs'
 
 const { values } = parseArgs({
@@ -68,7 +70,7 @@ if (anchored) {
   if (checkout !== values.head) throw new Error('The checkout does not match the authoritative --head')
 }
 const entries = inventory(root)
-const scope = selectMutationScope({
+let scope = selectMutationScope({
   root,
   productionFiles: sourceFiles(entries),
   testFiles: entries.filter((entry) => entry.kind === 'test').map((entry) => entry.path),
@@ -77,6 +79,17 @@ const scope = selectMutationScope({
   baseSha: anchored ? values.base : undefined,
   headSha: anchored ? values.head : 'HEAD',
 })
+const executionPath = values.changed
+  ? join(dirname(resolve(values.changed)), 'head', 'test-execution', `${values.group}.json`)
+  : null
+if (executionPath && existsSync(executionPath)) {
+  const bytes = readFileSync(executionPath)
+  scope = orderMutationTests(scope, JSON.parse(bytes), entries, values.group)
+  scope.testOrdering = {
+    kind: 'isolated-execution',
+    sha256: createHash('sha256').update(bytes).digest('hex'),
+  }
+}
 const groupSubjects = scope.subjects.filter((subject) => groupOf(subject) === values.group)
 const rotation = values.rotation === undefined ? null : Number(values.rotation)
 const subjects = rotation === null ? groupSubjects : rotationSubjects(groupSubjects, rotation)

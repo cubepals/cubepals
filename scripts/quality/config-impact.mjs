@@ -233,24 +233,56 @@ export function configurationOnlyRoutesNodeControllers(before, after, manifest) 
   )
 }
 
+/** A structure ratchet can tighten or remove an existing allowance, never add or enlarge one. */
+export function structureBaselineOnlyShrinks(before, after) {
+  const object = (value) => value && typeof value === 'object' && !Array.isArray(value)
+  if (!object(before) || !object(after)) return false
+  for (const [rule, entries] of Object.entries(after)) {
+    if (!object(entries) || !object(before[rule])) return false
+    for (const [path, entry] of Object.entries(entries)) {
+      const previous = before[rule][path]
+      if (
+        !object(entry) ||
+        !object(previous) ||
+        !Number.isFinite(entry.n) ||
+        entry.n < 0 ||
+        !Number.isFinite(previous.n) ||
+        entry.n > previous.n ||
+        !equal({ ...entry, n: previous.n }, previous)
+      )
+        return false
+    }
+  }
+  return true
+}
+
 export function qualityOnlyChanges(root, baseSha, changedFiles) {
   const result = new Set()
   if (!/^[0-9a-f]{40}$/.test(baseSha ?? '') || !Array.isArray(changedFiles)) return result
+  const before = (path) =>
+    execFileSync('git', ['show', `${baseSha}:${path}`], {
+      cwd: root,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+      maxBuffer: 16 * 1024 * 1024,
+    })
+  const after = (path) => {
+    const full = resolve(root, path)
+    if (!lstatSync(full).isFile()) throw new Error('Configuration is not a regular file')
+    return readFileSync(full, 'utf8')
+  }
+  const baseline = 'scripts/structure-baseline.json'
+  if (changedFiles.includes(baseline)) {
+    try {
+      if (structureBaselineOnlyShrinks(JSON.parse(before(baseline)), JSON.parse(after(baseline))))
+        result.add(baseline)
+    } catch {
+      /* Missing or invalid baseline evidence receives no exception. */
+    }
+  }
   const config = changedFiles.filter((path) => ['package.json', 'bun.lock', 'bunfig.toml'].includes(path))
   if (!config.length) return result
   try {
-    const before = (path) =>
-      execFileSync('git', ['show', `${baseSha}:${path}`], {
-        cwd: root,
-        encoding: 'utf8',
-        stdio: ['ignore', 'pipe', 'pipe'],
-        maxBuffer: 16 * 1024 * 1024,
-      })
-    const after = (path) => {
-      const full = resolve(root, path)
-      if (!lstatSync(full).isFile()) throw new Error('Configuration is not a regular file')
-      return readFileSync(full, 'utf8')
-    }
     const beforeManifest = JSON.parse(before('package.json'))
     const afterManifest = JSON.parse(after('package.json'))
     if (
