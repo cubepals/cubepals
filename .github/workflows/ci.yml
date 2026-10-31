@@ -23,10 +23,10 @@ on:
 permissions:
   contents: read
 
-# A newer PR revision supersedes its earlier evidence; main and scheduled runs finish normally.
+# Required ruleset workflows must finish their evidence; newer revisions queue behind a running check.
 concurrency:
   group: ci-${{ github.event_name }}-${{ github.event.pull_request.number || github.event.merge_group.head_sha || github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: false
 
 jobs:
   # A change to nothing but prose skips the rest. `check` still reports, so it can stay required.

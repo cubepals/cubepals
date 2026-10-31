@@ -165,16 +165,19 @@ node scripts/quality/coverage.mjs check --report coverage/head.json --base cover
 The `check` status explicitly requires successful quality jobs whenever code changed. Policy
 checks run separately from trusted base code and publish their result on the exact proposed
 commit. Protecting that status on the server is necessary: repository files alone cannot prevent
-an administrator or an unprotected workflow from bypassing checks. The installation instructions
-include an administrator-enforcement check and describe the stronger independently administered
-workflow/App boundary needed against deliberately malicious workflow spoofing. Activation also
-requires GitHub-verified signed commits on `main`; the installer enables and independently checks
-the dedicated commit-signature protection setting while preserving existing branch protections.
-Rollout commits must be signed too, with no unsigned bootstrap fallback.
+an administrator or an unprotected workflow from bypassing checks. The installer preserves the
+existing repository protections and requires an independently administered organization ruleset
+for this repository's `main` branch. That rule requires the actual CI and quality-policy workflows
+from protected `main`, signed commits, and pull requests, with no bypass actors. It does not add a
+human-approval requirement. A matching check name from another workflow cannot satisfy the
+required-workflow rule. Verification fails when either protection layer is missing or unreadable.
+Repository and organization administration are separate permissions; routine agents must not
+hold credentials that can administer the organization rule. Required workflow runs finish rather
+than cancelling their evidence when another revision arrives. Rollout commits must be signed too,
+with no unsigned bootstrap fallback.
 
 Separate test processes, ordered phases, input snapshots, and lexical policy checks are complementary
 controls. They are not a security sandbox for arbitrary JavaScript or a proof that expected
 values are independent of application code. Processes still share the filesystem and test services;
 process isolation does not prevent malicious filesystem writes. The trust-boundary document
-states these limits and the stronger external
-workflow/App controls required against malicious status spoofing.
+states these limits and the external administration boundary required for server enforcement.

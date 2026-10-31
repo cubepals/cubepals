@@ -107,7 +107,7 @@ as a cached passing result, and no threshold is lowered to make the rollout pass
 
 The workflow must first be installed on `main`: a new `pull_request_target` workflow cannot
 protect the pull request that introduces it. After the initial reviewed implementation lands,
-an administrator with repository-administration API permission runs:
+an administrator with both repository and organization administration API permissions runs:
 
 ```sh
 node scripts/quality/protection.mjs --apply
@@ -118,7 +118,24 @@ When `CUBEPALS_ADMIN_GITHUB_TOKEN` is available in the environment, the installe
 its GitHub CLI child process as `GH_TOKEN`. The secret does not need to be renamed or pasted
 into commands or chat.
 
-This preserves existing required checks, review rules, and push restrictions. It adds the
+The installer creates or maintains the organization-owned `Cubepals automated test quality`
+ruleset. Its scope is exactly repository ID `1415897625` and `refs/heads/main`, with no bypass
+actors. It requires `.github/workflows/ci.yml` and `.github/workflows/quality-policy.yml` from
+this repository's trusted `refs/heads/main`, verified commit signatures, and pull requests.
+The added pull-request rule requires zero human approvals; existing stricter review rules
+remain in force. Other rulesets, unrelated rules, and additional required workflows are preserved.
+An ambiguous name or different repository/ref scope stops the installer instead of repurposing
+another rule. The installer verifies both trusted workflow files exist before making changes,
+then reads the organization rule back independently. A conforming organization rule is not rewritten.
+
+Classic protection alone cannot pass `--check`. The organization workflow rule requires
+[organization Administration(write)](https://docs.github.com/en/rest/orgs/rules#create-an-organization-repository-ruleset),
+distinct from the repository Administration(write) permission used for branch protection.
+Organization owners or delegated organization ruleset managers must authorize that boundary.
+Missing permission, an unsupported workflow-rule API, or a failed readback stops activation;
+there is no fallback that reports classic protection as sufficient.
+
+The installer also preserves existing required checks, review rules, and push restrictions. It adds the
 `Quality policy` status beside `check`, requires an up-to-date branch, and enables enforcement
 for administrators. It also enables GitHub's **Require signed commits** protection for `main`
 through the dedicated `required_signatures` endpoint, then independently reads that setting back.
@@ -144,25 +161,34 @@ node --test scripts/quality/policy.test.mjs
 node --test scripts/quality/protection.test.mjs
 ```
 
-The protection tests replace `gh` with a local fixture. They prove that unsigned-commit
-protection cannot be reported as enabled when it is absent, disabled, unreadable, or unchanged
-after an enable request, and that existing checks, reviews, and push restrictions are preserved.
+The protection tests replace `gh` with a local fixture. They prove that missing or weakened
+organization workflow rules, scope changes, bypass actors, unavailable administration, and
+unapplied writes fail verification. They also verify idempotent creation and preservation of
+unrelated rules. Signature protection cannot be reported as enabled when it is absent, disabled,
+unreadable, or unchanged after an enable request; existing checks, reviews, and push restrictions remain.
 They make no live repository changes.
 
 At implementation time, both available GitHub credentials returned HTTP 403 for protection
 administration. The readable branch summary showed `check`, title and label checks required,
 with enforcement only for non-administrators. Repository-side activation and real GitHub merge
-rejection, including required verified commit signatures, therefore remain unverified until
+rejection, including organization workflow enforcement and verified commit signatures, remain unverified until
 the installation steps succeed.
 
 ## Stronger isolation and policy updates
 
 A required check associated with the GitHub Actions app identifies the app, not a particular
-workflow. For resistance to deliberately malicious workflow/status spoofing, require this
-workflow through a separately administered organization ruleset, or publish the required status
-through a dedicated GitHub App whose credentials are unavailable to proposed code. Classic
-branch protection alone does not establish that stronger boundary. Repository administrators
-can always change controls they administer.
+workflow. The required organization workflows supply that independent identity: posting another
+successful status with the same name cannot substitute for either required workflow. Repository
+administrators cannot weaken an organization-owned rule merely by changing repository protection.
+Routine agents and proposed-code CI jobs must not receive organization-administration credentials;
+an organization administrator can still edit the rules it administers. Provisioning credentials
+belong only in the separate activation context, not in ordinary agent sessions.
+
+GitHub supports `pull_request_target` and `merge_group` for required workflows. Ruleset runs ignore
+event filters and use default activity types, so the repository workflow retains its separate
+`edited` trigger for PR retargeting. An already open PR needs a new supported event after rule
+installation. Required workflows must complete without `cancel-in-progress` cancellation.
+See [ruleset workflow requirements](https://docs.github.com/en/enterprise-cloud@latest/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/troubleshooting-rules).
 
 Ordinary PRs cannot modify protected files, even to raise a threshold. There is deliberately no
 PR label, input, environment variable, or file that authorizes an exception. An administrator

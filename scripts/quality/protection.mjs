@@ -4,14 +4,15 @@
 
 /**
  * Audits or provisions classic main protection and verified commit signatures without replacing
- * unrelated required checks, review rules, or push restrictions. Needs repository administration.
- * It cannot install an organization required-workflow rule or prevent an administrator editing
- * protection; use a separately administered required workflow for a stronger trust boundary.
+ * unrelated required checks, review rules, or push restrictions. An organization-owned ruleset
+ * independently requires the trusted CI and policy workflows. Both repository and organization
+ * administration permissions are needed; controllers cannot prevent their administrators editing rules.
  *
  * node scripts/quality/protection.mjs --check
  * node scripts/quality/protection.mjs --apply
  */
 import { execFileSync } from 'node:child_process'
+import { planOrganizationProtection } from './organization-protection.mjs'
 
 const REPOSITORY = 'cubepals/cubepals'
 const BRANCH = 'main'
@@ -85,7 +86,11 @@ try {
   const endpoint = `repos/${REPOSITORY}/branches/${BRANCH}/protection`
   const signaturesEndpoint = `${endpoint}/required_signatures`
   let current = api(endpoint)
+  const organization = planOrganizationProtection(api)
   if (mode === '--apply') {
+    // Unsupported workflow rules or missing organization authority must stop before changing
+    // classic protection. These independent rule identities prevent app-wide status spoofing.
+    organization.apply()
     const checks = [...(current.required_status_checks?.checks ?? [])]
     for (const context of REQUIRED) {
       const existing = checks.find((check) => check.context === context)
@@ -114,16 +119,17 @@ try {
       if (current[key] !== undefined) body[key] = current[key].enabled
     }
     // Signature protection has its own endpoint; the bulk protection PUT cannot enable it.
-    // Enable it first so denied signature administration cannot leave a partially applied gate.
+    // Enable it before the classic protection PUT; organization protection may already be
+    // stronger, but a later repository-write failure must still leave verification failed.
     api(signaturesEndpoint, undefined, 'POST')
     api(endpoint, body)
     current = api(endpoint)
   }
   const signatures = api(signaturesEndpoint)
-  const failures = problems(current, signatures)
+  const failures = [...problems(current, signatures), ...organization.verify()]
   if (failures.length) throw new Error(failures.join('\n'))
   process.stdout.write(
-    'Main requires CI, the quality policy and verified signed commits, including administrators, on an up-to-date branch.\n',
+    'Main requires the organization-enforced trusted CI and policy workflows, app-pinned statuses and verified signed commits, including administrators, on an up-to-date branch.\n',
   )
 } catch (error) {
   const detail = error.stderr?.toString().trim() || error.message
