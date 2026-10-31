@@ -459,6 +459,9 @@ jobs:
           if [ "$FULL_QUALITY" = true ]; then args+=(--full); fi
           if [ "$EVENT_NAME" = schedule ]; then args+=(--rotation "$(( $(date -u +%u) - 1 ))"); fi
           node scripts/quality/mutation-cli.mjs --base "$QUALITY_EXPECTED_BASE" --head "$QUALITY_EXPECTED_HEAD" --changed coverage/quality/changed.json --group "$GROUP" --output "coverage/quality/mutation/$GROUP" "${args[@]}"
+      - name: Concurrent wake contracts reject shared denial
+        if: matrix.quality == 'access'
+        run: node scripts/quality/behavior-proof.mjs "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/coverage/quality/service-proof" services
       - name: Keep mandatory quality evidence
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

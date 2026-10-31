@@ -120,7 +120,9 @@ requires executed alternatives, mutation requires observable sensitivity to defe
 properties supply independent expectations. The added properties cover same-origin redirects,
 connection accounting, exact token boundaries, IPv6 grouping, and PROXY header fragmentation.
 Injected transport, parse, and route-application failures verify recovery without acknowledging
-work that did not succeed. Seeds and bounded run counts make failures reproducible.
+work that did not succeed. Concurrent wake tests hold real eligibility reads and starts behind
+explicit barriers, proving that a known player is reconsidered after another join is denied and
+that eligible concurrent joins share one start. Seeds and bounded run counts make failures reproducible.
 
 ## Reproduce the enforcement proofs
 
@@ -140,6 +142,14 @@ hooks that could rewrite the coverage controller, changes to Lefthook configurat
 dependencies, trusted install dependency changes, and executable-name shadowing. All package
 script entrypoints are protected, including pre/post hooks around ordinary CI commands.
 Behavioral, Stryker, and reporter proof reports and logs are written under `coverage/`.
+The access shard also runs a service-backed behavioral proof: its clean concurrency tests pass,
+then reusing a stranger's denial for a known player must fail the intended assertion. This makes
+the ordering guarantee executable evidence rather than relying on a race happening to occur.
+With the local test services configured, run it directly with:
+
+```sh
+node scripts/quality/behavior-proof.mjs "$PWD" "$PWD/coverage/service-proof" services
+```
 
 For a service-enabled CI shard, after its baseline measurement has produced the test manifest,
 the workflow is the reference:

@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Proves real behavioral tests reject four representative production defects. Only disposable
+ * Proves real behavioral tests reject representative production defects. Only disposable
  * copies are modified; a clean run precedes the experiments and JUnit must identify the intended
  * assertion failure. The evidence includes source hashes and a check that the checkout was untouched.
  */
@@ -22,6 +22,7 @@ import {
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { mutationEnvironment, mutationSnapshot } from './mutation.mjs'
 import { XMLParser, XMLValidator } from './toolchain.mjs'
 
 const fixtures = [
@@ -74,9 +75,24 @@ const defects = [
   },
 ]
 
+const serviceFixtures = [
+  'apps/control/src/app/edge/service.ts',
+  'apps/control/src/app/edge/shared-wake.quality.test.ts',
+]
+const serviceDefects = [
+  {
+    name: 'shared-denial-reused-for-known-player',
+    file: serviceFixtures[0],
+    before: "if (shared?.outcome !== 'asleep') return shared",
+    after: 'return shared',
+    test: serviceFixtures[1],
+    expectedFailure: "a known player is reconsidered after sharing a stranger's denied wake",
+  },
+]
+
 const hash = (path) => createHash('sha256').update(readFileSync(path)).digest('hex')
 
-function junitCases(xml, tests) {
+export function junitCases(xml, tests) {
   if (XMLValidator.validate(xml) !== true) throw new Error('Malformed behavioral JUnit report')
   const data = new XMLParser({
     ignoreAttributes: false,
@@ -87,29 +103,49 @@ function junitCases(xml, tests) {
   if (!Array.isArray(suites) || suites.length !== tests.length)
     throw new Error('Missing behavioral test suites')
   const cases = []
-  for (const test of tests) {
-    const suite = suites.find((entry) => entry.file === test)
-    if (!suite?.testcase?.length) throw new Error(`No test cases executed for ${test}`)
-    for (const entry of suite.testcase) {
-      if ('error' in entry || 'skipped' in entry) throw new Error(`Runner error or skipped test: ${test}`)
-      cases.push({ file: test, name: entry.name, failure: entry.failure ?? null })
+  function visit(suite, file) {
+    if (suite.file && suite.file.replace(/^\.\//, '') !== file)
+      throw new Error(`Behavioral suite file mismatch: ${file}`)
+    for (const entry of suite.testcase ?? []) {
+      if (!entry || typeof entry !== 'object' || typeof entry.name !== 'string' || !entry.name)
+        throw new Error(`Invalid behavioral test case: ${file}`)
+      if (entry.file && entry.file.replace(/^\.\//, '') !== file)
+        throw new Error(`Behavioral case file mismatch: ${file}`)
+      if ('error' in entry || 'skipped' in entry) throw new Error(`Runner error or skipped test: ${file}`)
+      cases.push({ file, name: entry.name, failure: entry.failure ?? null })
     }
+    for (const child of suite.testsuite ?? []) visit(child, file)
+  }
+  for (const test of tests) {
+    const suite = suites.find((entry) => entry.file?.replace(/^\.\//, '') === test)
+    if (!suite) throw new Error(`Missing behavioral suite for ${test}`)
+    const before = cases.length
+    visit(suite, test)
+    if (cases.length === before) throw new Error(`No test cases executed for ${test}`)
   }
   return cases
 }
 
-function runTests({ snapshot, tests, name, reportDir, bun }) {
+function runTests({ snapshot, tests, name, reportDir, bun, services }) {
   const junit = join(reportDir, `${name}.xml`)
   rmSync(junit, { force: true })
-  const environment = Object.fromEntries(
-    Object.entries(process.env).filter(([key]) =>
-      /^(?:PATH|HOME|TMPDIR|TMP|TEMP|LANG|LC_[A-Z_]+|TZ)$/.test(key),
-    ),
-  )
+  const environment = services
+    ? mutationEnvironment()
+    : Object.fromEntries(
+        Object.entries(process.env).filter(([key]) =>
+          /^(?:PATH|HOME|TMPDIR|TMP|TEMP|LANG|LC_[A-Z_]+|TZ)$/.test(key),
+        ),
+      )
   const result = spawnSync(
     bun,
     ['test', ...tests.map((test) => `./${test}`), '--reporter=junit', `--reporter-outfile=${junit}`],
-    { cwd: snapshot, env: environment, encoding: 'utf8', timeout: 60_000, maxBuffer: 16 * 1024 * 1024 },
+    {
+      cwd: snapshot,
+      env: environment,
+      encoding: 'utf8',
+      timeout: services ? 120_000 : 60_000,
+      maxBuffer: 16 * 1024 * 1024,
+    },
   )
   const output = `${result.stdout ?? ''}${result.stderr ?? ''}`
   writeFileSync(join(reportDir, `${name}.log`), output)
@@ -123,40 +159,54 @@ function runTests({ snapshot, tests, name, reportDir, bun }) {
   }
 }
 
-export function proveBehavior({ root, reportDir, bun = 'bun' }) {
+export function proveBehavior({ root, reportDir, bun = 'bun', profile = 'portable' }) {
+  if (!['portable', 'services'].includes(profile)) throw new Error(`Unknown behavioral profile: ${profile}`)
+  const services = profile === 'services'
+  if (services && !process.env.DATABASE_URL) throw new Error('Service defect proof requires DATABASE_URL')
+  const inputs = services ? serviceFixtures : fixtures
+  const experiments = services ? serviceDefects : defects
   root = resolve(root)
   reportDir = resolve(reportDir)
   mkdirSync(reportDir, { recursive: true })
-  const snapshot = mkdtempSync(join(tmpdir(), 'blockly-behavior-proof-'))
-  const originalHashes = Object.fromEntries(fixtures.map((file) => [file, hash(join(root, file))]))
-  const evidence = { passed: false, unchanged: false, sources: originalHashes, baseline: null, defects: [] }
+  const originalHashes = Object.fromEntries(inputs.map((file) => [file, hash(join(root, file))]))
+  const snapshot = services ? mutationSnapshot(root) : mkdtempSync(join(tmpdir(), 'blockly-behavior-proof-'))
+  const evidence = {
+    passed: false,
+    unchanged: false,
+    profile,
+    sources: originalHashes,
+    baseline: null,
+    defects: [],
+  }
   try {
-    for (const file of fixtures) {
-      const destination = join(snapshot, file)
-      mkdirSync(dirname(destination), { recursive: true })
-      copyFileSync(join(root, file), destination)
+    if (!services) {
+      for (const file of inputs) {
+        const destination = join(snapshot, file)
+        mkdirSync(dirname(destination), { recursive: true })
+        copyFileSync(join(root, file), destination)
+      }
+      // Only external libraries are linked. Service snapshots repair all workspace links too.
+      mkdirSync(join(snapshot, 'node_modules'))
+      for (const dependency of ['fast-check', 'zod']) {
+        symlinkSync(
+          realpathSync(join(root, 'node_modules', dependency)),
+          join(snapshot, 'node_modules', dependency),
+          'dir',
+        )
+      }
     }
-    // Only external libraries are linked. Workspace imports cannot silently reach unmutated source.
-    mkdirSync(join(snapshot, 'node_modules'))
-    for (const dependency of ['fast-check', 'zod']) {
-      symlinkSync(
-        realpathSync(join(root, 'node_modules', dependency)),
-        join(snapshot, 'node_modules', dependency),
-        'dir',
-      )
-    }
-    const tests = fixtures.filter((file) => file.endsWith('.quality.test.ts'))
-    const baseline = runTests({ snapshot, tests, name: 'clean', reportDir, bun })
+    const tests = inputs.filter((file) => file.endsWith('.quality.test.ts'))
+    const baseline = runTests({ snapshot, tests, name: 'clean', reportDir, bun, services })
     evidence.baseline = { exit: baseline.exit, passed: baseline.passed, failures: baseline.failures }
-    if (baseline.exit !== 0 || baseline.failures.length > 0 || baseline.passed < 12) {
+    if (baseline.exit !== 0 || baseline.failures.length > 0 || baseline.passed < (services ? 2 : 12)) {
       throw new Error('Clean behavioral tests did not pass; defect experiments are invalid')
     }
-    for (const defect of defects) {
+    for (const defect of experiments) {
       const path = join(snapshot, defect.file)
       const original = readFileSync(path, 'utf8')
       if (original.split(defect.before).length !== 2) throw new Error(`Defect anchor changed: ${defect.name}`)
       writeFileSync(path, original.replace(defect.before, defect.after))
-      const run = runTests({ snapshot, tests: [defect.test], name: defect.name, reportDir, bun })
+      const run = runTests({ snapshot, tests: [defect.test], name: defect.name, reportDir, bun, services })
       writeFileSync(path, original)
       const expected = run.failures.find((failure) => failure.name === defect.expectedFailure)
       const rejected =
@@ -180,7 +230,7 @@ export function proveBehavior({ root, reportDir, bun = 'bun' }) {
     throw error
   } finally {
     rmSync(snapshot, { recursive: true, force: true })
-    evidence.unchanged = fixtures.every((file) => hash(join(root, file)) === originalHashes[file])
+    evidence.unchanged = inputs.every((file) => hash(join(root, file)) === originalHashes[file])
     evidence.passed &&= evidence.unchanged
     writeFileSync(join(reportDir, 'behavior-proof.json'), `${JSON.stringify(evidence, null, 2)}\n`)
   }
@@ -192,7 +242,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   const root = resolve(process.argv[2] ?? fileURLToPath(new URL('../..', import.meta.url)))
   const reportDir = resolve(process.argv[3] ?? join(root, 'coverage', 'behavior-proof'))
   try {
-    proveBehavior({ root, reportDir })
+    proveBehavior({ root, reportDir, profile: process.argv[4] ?? 'portable' })
     console.warn(`Behavioral defect evidence: ${join(reportDir, 'behavior-proof.json')}`)
   } catch (error) {
     console.error(error.message)
