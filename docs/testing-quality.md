@@ -104,8 +104,74 @@ edits to existing tests retain the union of their base and proposed source depen
 deleted test retains its completely mapped, nonempty base dependencies; empty or ambiguous
 maps expand to the full inventory. Changed test-support modules also retain affected tests'
 dependencies. Runtime configuration and dependency changes expand scope unless the verifier
-proves that only isolated quality tooling changed. Comparison metadata must match the base and
+proves that only isolated quality tooling changed, or that the change is a dependency-only update
+(below). Comparison metadata must match the base and
 head SHAs supplied directly by the protected workflow.
+
+An unresolved test dependency retains conservative full scope when production source is added or
+changed. An added module can alter an unchanged dynamic loader's fallback behavior, and a module
+used by production can also serve as a test oracle. Static reachability cannot prove either case
+harmless. Base resolution preserves the existence of committed regular JSON, CSS, and other
+assets without executing them, so static resource imports do not become artificial unknown
+dependencies. Genuine unresolved imports still expand scope.
+
+### Dependency-only updates
+
+A dependency update is judged by what it can break. `dependency-impact.mjs` accepts a change as
+dependency-only when every changed file is `bun.lock`, a `package.json`, or the inert
+`.github/dependabot.yml`; manifests differ only in the registry versions of packages they already
+declare; lock settings, overrides, patches and workspaces are unchanged; each workspace entry in
+the lock agrees with its manifest; and every changed lock record is a registry tarball with an
+integrity hash. Anything else in the diff, or anything the module cannot prove, leaves the
+conservative full-scope rule in force.
+
+Source and tests are then byte-identical to the base, so there is no new code to hold to the
+new-code floor. What the update can change is judged by what can observe it:
+
+- **Runtime behavior.** Every test group still runs its whole suite on the head, and the coverage
+  check still holds every unchanged file to its measured base percentages.
+- **Test oracles.** A test that loads an updated package itself, or through a module only tests
+  reach, may assert less than before. Those tests' source closures become mutation subjects,
+  measured with exactly those tests on the base worktree (installed from the base lockfile) and on
+  the head, and the head must reach the base score. Base and head run the same tests against the
+  same mutants, with no expansion. A base measurement with mutants left unevaluated fails.
+
+A package is updated if its lock record changed or anything it resolves to did. A changed package
+whose installed copy is this exact version and holds only type declarations and documents (such
+as `@types/bun` and `bun-types`) cannot run, so it affects nothing. A module counts as production
+when a production entry reaches it; Next's App Router files (`page`, `layout`, `route` and the
+other special files) are entries because Next loads them by name. A relative dynamic import such as
+``import(`./guides/${slug}/page.tsx`)`` names only local files, so the analysis follows the files
+it can match; any other unresolved load counts as loading an updated package. The live Fleet suites
+are left out of oracle tests because they skip in every mutation run on both sides; the required
+Fleet jobs run them against the real daemon.
+
+**Why a weakened test cannot ride along.** A dependency-only update changes no test, helper,
+fixture or source byte: the test-impact verifier compares the complete Git trees, and a single
+other file makes the change ineligible. A weakened test in the same pull request therefore puts
+the change back under the full rules: the lockfile still expands scope to the full inventory at
+the 80% floor, and the edited test's own subjects keep their base and head dependencies.
+Weakening an oracle through the update itself (a package whose new version asserts less) is what
+the base-score comparison measures, and it fails as a score below the base. Pointing a package at
+a Git URL, a tarball elsewhere, a local path, an override or a patch is refused before any of
+this applies. Dependency updates belong in their own pull request.
+
+On the update that prompted this (#341: the AWS SDK, nodemailer, PostHog, lucide-react, the MCP
+SDK and Bun's types), the rule selects two oracle tests (the S3 archive store's, which imports the
+S3 client, and `scripts/ops.test.ts`, which imports the MCP client) and four subjects, instead of
+every source file in every group.
+
+### Mutation time budget
+
+Each subject has a 20-minute budget. Mutant runs stop at their first failing test (`bun test
+--bail`): a kill needs one failure, while a survivor still runs every selected test, and a kill may
+skip fewer cases than the baseline but never new ones. A mutant that would start after the
+subject's deadline is recorded as `budget-exhausted` instead of running. It gets no kill credit,
+counts against the score, and is reported by number, so Stryker always finishes and writes its
+report inside the budget rather than being stopped mid-run. The deadline leaves one test timeout
+and a minute for Stryker to finish. A subject that runs out of time fails, with the count of
+mutants left unevaluated in its message. An expansion to more dependent tests never starts past
+the deadline; the last full census stands, and it fails with its own score.
 
 Verified new test files can be classified separately. Their tests still execute and contribute
 coverage, but importing an integration harness does not retroactively impose the mutation floor

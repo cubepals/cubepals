@@ -9,10 +9,11 @@
  */
 import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { lstatSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, rmSync, writeFileSync } from 'node:fs'
+import { lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { qualityOnlyChanges } from './config-impact.mjs'
+import { dependencyOnlyChange } from './dependency-impact.mjs'
 import { classifySource, fileHash, inventory, parseSource } from './inventory.mjs'
 import { dependencyGraph } from './mutation-dependencies.mjs'
 
@@ -85,13 +86,10 @@ function readHead(root, entries) {
       directory = dirname(directory)
     }
     const info = lstatSync(absolute)
-    const bytes =
-      entry.mode === '120000' && info.isSymbolicLink()
-        ? Buffer.from(readlinkSync(absolute))
-        : REGULAR.has(entry.mode) && info.isFile()
-          ? readFileSync(absolute)
-          : null
-    if (!bytes || (REGULAR.has(entry.mode) && Boolean(info.mode & 0o111) !== (entry.mode === '100755')))
+    if (!REGULAR.has(entry.mode) || !info.isFile())
+      throw new Error(`Head input must be a committed regular file: ${path}`)
+    const bytes = readFileSync(absolute)
+    if (Boolean(info.mode & 0o111) !== (entry.mode === '100755'))
       throw new Error(`Head input is not the committed file type: ${path}`)
     const oid = createHash('sha1').update(`blob ${bytes.length}\0`).update(bytes).digest('hex')
     if (oid !== entry.oid) throw new Error(`Working tree differs from inspected head: ${path}`)
@@ -337,15 +335,24 @@ export function analyzeTestImpact({ root, baseSha, changedFiles, headSha = 'HEAD
     )
   }
   const verifiedQualityOnlyConfigs = qualityOnlyChanges(root, base, verifiedChangedFiles)
+  // Eligible only when nothing but dependency versions moved; see dependency-impact.mjs.
+  const dependencyOnly = dependencyOnlyChange(root, base, verifiedChangedFiles)
+  const dependencyFiles = new Set(dependencyOnly.eligible ? dependencyOnly.files : [])
   for (const path of verifiedChangedFiles) {
-    if (CONFIG.test(path) && !path.startsWith('tools/quality/') && !verifiedQualityOnlyConfigs.has(path)) {
+    if (
+      CONFIG.test(path) &&
+      !path.startsWith('tools/quality/') &&
+      !verifiedQualityOnlyConfigs.has(path) &&
+      !dependencyFiles.has(path)
+    ) {
       baseFull = true
       reasons.push(`application dependency or test resolution configuration changed: ${path}`)
     }
     if (
       (ORACLE_DATA.test(path) || FIXTURE_INPUT.test(path)) &&
       !path.startsWith('scripts/quality/') &&
-      !verifiedQualityOnlyConfigs.has(path)
+      !verifiedQualityOnlyConfigs.has(path) &&
+      !dependencyFiles.has(path)
     ) {
       baseFull = true
       reasons.push(`fixture or data input requires conservative mutation scope: ${path}`)
@@ -379,6 +386,7 @@ export function analyzeTestImpact({ root, baseSha, changedFiles, headSha = 'HEAD
     baseFull,
     reasons,
     verifiedQualityOnlyConfigs: [...verifiedQualityOnlyConfigs].sort(),
+    dependencyOnly,
     affectedExistingTests: impact.affectedTests,
     unchangedTestManifest,
     preservedInputs,
@@ -390,6 +398,7 @@ export function analyzeTestImpact({ root, baseSha, changedFiles, headSha = 'HEAD
     baseRequiredSubjects,
     removedProductionFiles,
     mappedRemovedTests,
+    dependencyOnly,
     headSourceFiles: [...headEntries.values()]
       .filter((entry) => entry.kind === 'source')
       .map((entry) => entry.path)
