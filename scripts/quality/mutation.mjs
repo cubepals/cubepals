@@ -174,6 +174,7 @@ export function mutationVerdict(
     let killed = 0
     let survived = 0
     let inconclusive = 0
+    let unevaluated = 0
     const ids = new Set()
     for (const mutant of entry.mutants) {
       if (typeof mutant.id !== 'string' || !mutant.id || ids.has(mutant.id))
@@ -191,17 +192,20 @@ export function mutationVerdict(
       if (evidence) {
         const outcome = evidence[String(mutant.id)]
         if (!outcome) throw new Error(`${subject}: mutant ${mutant.id} lacks valid test evidence`)
-        if (['runner-error', 'timeout', 'inconclusive'].includes(outcome.status)) {
+        if (['runner-error', 'timeout', 'inconclusive', 'budget-exhausted'].includes(outcome.status)) {
           detected = false
           uncertain = true
+          if (outcome.status === 'budget-exhausted') unevaluated++
         } else {
           const expected = mutant.status === 'Killed' ? 'test-failure' : 'passed'
-          if (
-            outcome.status !== expected ||
-            JSON.stringify(outcome.skippedTests ?? []) !==
-              JSON.stringify(evidence.baseline?.skippedTests ?? []) ||
-            outcome.passed + outcome.failed === 0
-          ) {
+          const skipped = outcome.skippedTests ?? []
+          const baselineSkipped = evidence.baseline?.skippedTests ?? []
+          // A kill stops at its first failure, so it may skip fewer cases; it may never skip new ones.
+          const skipsMatch =
+            expected === 'test-failure'
+              ? skipped.every((identity) => baselineSkipped.includes(identity))
+              : JSON.stringify(skipped) === JSON.stringify(baselineSkipped)
+          if (outcome.status !== expected || !skipsMatch || outcome.passed + outcome.failed === 0) {
             throw new Error(`${subject}: mutant ${mutant.id} lacks valid test evidence`)
           }
         }
@@ -217,6 +221,7 @@ export function mutationVerdict(
       killed,
       survived,
       inconclusive,
+      unevaluated,
       total,
       score,
       threshold,
@@ -235,6 +240,7 @@ export function runMutation({
   additionalTestsByFile = {},
   reportDir,
   threshold = 80,
+  thresholds = {},
   bun = 'bun',
   node = 'node',
   timeoutMs = 5 * MINUTE_MS,
@@ -261,8 +267,11 @@ export function runMutation({
   try {
     const cli = join(dirname(requireQuality.resolve('@stryker-mutator/core/package.json')), 'bin/stryker.js')
     for (const [index, subject] of subjects.entries()) {
+      const required = thresholds[subject] ?? threshold
       try {
         if (!testsByFile[subject]?.length) throw new Error(`No tests depend on mutation subject ${subject}`)
+        if (!Number.isFinite(required) || required < 0 || required > 100)
+          throw new Error(`${subject}: invalid mutation threshold ${required}`)
         const outputRoot = join(reportDir, String(index))
         const batches = additionalTestsByFile[subject] ?? []
         if (
@@ -284,6 +293,9 @@ export function runMutation({
         }
         const attempts = []
         const started = Date.now()
+        // Mutants that start after this point are recorded as not evaluated, leaving one test
+        // timeout and a minute for Stryker to finish and write its report inside the budget.
+        const deadline = started + Math.max(subjectTimeoutMs / 2, subjectTimeoutMs - timeoutMs - MINUTE_MS)
         let verdict
         let runStatus
         for (let attempt = 0; attempt <= batches.length; attempt++) {
@@ -302,7 +314,7 @@ export function runMutation({
           const manifestPath = join(output, 'tests.json')
           writeFileSync(
             manifestPath,
-            JSON.stringify({ tests: selectedTests, evidence: evidenceDir, bun, timeoutMs }),
+            JSON.stringify({ tests: selectedTests, evidence: evidenceDir, bun, timeoutMs, deadline }),
           )
           const reportPath = join(output, 'mutation.json')
           const configPath = join(output, 'stryker.config.json')
@@ -323,7 +335,7 @@ export function runMutation({
               disableTypeChecks: false,
               reporters: ['json', 'clear-text'],
               jsonReporter: { fileName: reportPath },
-              thresholds: { high: threshold, low: threshold, break: threshold },
+              thresholds: { high: required, low: required, break: required },
               timeoutMS: 5 * SECOND_MS,
               timeoutFactor: 1.5,
               dryRunTimeoutMinutes: Math.ceil(timeoutMs / MINUTE_MS),
@@ -381,7 +393,7 @@ export function runMutation({
             }
           }
           verdict = mutationVerdict(report, [subject], {
-            threshold,
+            threshold: required,
             evidence,
             expectedSources: { [subject]: readFileSync(join(root, subject), 'utf8') },
             candidates,
@@ -417,11 +429,14 @@ export function runMutation({
         process.stdout.write(
           row.score === null
             ? `${subject}: ${row.notApplicable}; baseline passed\n`
-            : `${subject}: ${row.killed}/${row.total} killed (${row.score.toFixed(1)}%, required ${threshold}%; ${row.inconclusive} inconclusive)\n`,
+            : `${subject}: ${row.killed}/${row.total} killed (${row.score.toFixed(1)}%, required ${required.toFixed(1)}%; ${row.inconclusive} inconclusive)\n`,
         )
+        const budget = row.unevaluated
+          ? `; ${row.unevaluated} of ${row.total} mutants were not evaluated within the ${Number((subjectTimeoutMs / MINUTE_MS).toFixed(1))}-minute budget`
+          : ''
         if (!verdict.passed || runStatus !== 0)
           throw new Error(
-            `${subject}: mutation score ${row.score?.toFixed(1) ?? 'N/A'}% is below ${threshold}% or Stryker failed`,
+            `${subject}: mutation score ${row.score?.toFixed(1) ?? 'N/A'}% is below ${required.toFixed(1)}% or Stryker failed${budget}`,
           )
       } catch (error) {
         result.passed = false

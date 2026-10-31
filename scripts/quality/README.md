@@ -124,6 +124,20 @@ regular inputs. This keeps static JSON and CSS imports resolvable in both revisi
 relaxing the fallback for genuinely unknown imports. No directory name exempts executable test
 helpers from coverage or mutation. Scheduled runs audit the complete source inventory in stable partitions.
 
+A dependency-only update (`dependency-impact.mjs`: only `bun.lock`, manifests whose registry
+versions moved, and `.github/dependabot.yml`) owes no new-code floor, because no source or test
+byte changed. The whole suite and the coverage ratchet still run. Tests that load an updated
+package themselves, or through a module only tests reach, are its possible weaker oracles: their
+source closures are measured with those tests on the base worktree and must reach the same score on
+the head. Any other changed file makes the update ineligible, so a weakened test in the same pull
+request keeps the full-scope rule and its own subjects. Packages whose install holds only type
+declarations and documents are inert. The reasoning and its limits are in
+[docs/testing-quality.md](../../docs/testing-quality.md#dependency-only-updates).
+
+A subject that reaches its time budget records the remaining mutants as `budget-exhausted`: no
+kill credit, counted against the score, and named in the failure. Stryker always finishes and
+reports instead of being stopped mid-run.
+
 Support classification is conservative graph analysis, not a proof of a function's semantic
 role. A function shared by production and tests can also calculate expected results without
 importing an assertion library; an import graph cannot distinguish that use from ordinary
