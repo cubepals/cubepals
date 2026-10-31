@@ -10,11 +10,12 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { randomUUID } from 'node:crypto'
 import { schema } from '@blockly/db'
-import { eq, sql } from 'drizzle-orm'
+import { and, eq, sql } from 'drizzle-orm'
 import { GRIM } from '../../minecraft/stop-cheaters.ts'
-import { offeredVersions } from '../../minecraft/versions.ts'
+import { compareVersions, offeredVersions, supports } from '../../minecraft/versions.ts'
 import { Cdn } from '../../testing/cdn.ts'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
+import { loadRevision } from '../servers/persistence.ts'
 import { loadApplied } from '../servers/restart-wait.ts'
 import { loadStopCheaters } from './persistence.ts'
 import { stopCheatersWaiting } from './waiting.ts'
@@ -167,4 +168,40 @@ describe.skipIf(!hasDatabase)('Stop cheaters while players are on', () => {
     expect(await waitingOf(id)).toBeNull()
     expect(await applies(id)).toHaveLength(0)
   }, 60_000)
+})
+
+describe.skipIf(!hasDatabase)('a waiting change dropped', () => {
+  test('dropping a waiting version that only made Grim available leaves the owner’s switch alone', async () => {
+    const papers = offeredVersions()
+      .filter((offered) => supports(offered.id, 'paper'))
+      .sort((a, b) => compareVersions(b.id, a.id))
+    const [newer, older] = papers
+    if (newer === undefined || older === undefined) throw new Error('Two Paper releases are needed')
+    const owner = await h.user('Teal', 'free')
+    const { id } = await h.create(owner, { loader: 'paper', gameVersion: older.id })
+    await h.until(id, 'running')
+    await h.settled(id)
+    h.minecraft.join(id, { uuid: randomUUID(), name: 'Alex' })
+    await h.app.schedules.presenceSync()
+    const ran = await loadRevision(h.db, (await h.server(id)).desiredRevisionId)
+    // Its release has no Grim yet: the owner's "on" places nothing, and restarts nothing.
+    await h.db
+      .delete(schema.compatPlugins)
+      .where(
+        and(eq(schema.compatPlugins.projectId, GRIM), eq(schema.compatPlugins.gameVersion, ran.gameVersion)),
+      )
+    await h.app.stopCheaters.set(owner, id, true, randomUUID(), 'now')
+    expect(await applies(id)).toHaveLength(0)
+    // A newer release, which has Grim, waits for everyone to leave.
+    await h.app.mods.changeVersion(owner, id, { gameVersion: newer.id, loader: 'paper' }, [], randomUUID(), {
+      when: 'empty',
+    })
+    expect(await waitingOf(id)).toBe('on')
+    await h.app.stopCheaters.waiting.settle(owner, id, 'cancel', randomUUID())
+    // The version goes back; the switch stays as the owner set it.
+    expect((await h.server(id)).desiredRevisionId).toBe(ran.id)
+    expect((await loadStopCheaters(h.db, id)).setting).toBe('on')
+    expect(await waitingOf(id)).toBeNull()
+    await h.app.setups.compat.refresh()
+  }, 90_000)
 })
