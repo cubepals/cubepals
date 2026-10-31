@@ -20,6 +20,7 @@ import {
 import { DAY_MS, DAY_S, HOUR_S, MINUTE_S } from '@blockly/contracts/durations'
 import { PICK_ANOTHER_NAME } from '@blockly/contracts/names'
 import type { PillStatus, ProvisioningStep } from '../ui'
+import { broughtJourney } from './brought-journey'
 import { outOfPlay } from './out-of-play'
 import { restoreSeconds } from './restore-pace'
 
@@ -367,7 +368,8 @@ export function presentProgress(
   /** What the change being applied brings, where the step names its download. */
   changes: readonly RevisionChangeView[] = [],
 ): Progress | null {
-  const journey = operation.step === 'rolling_back' ? GOING_BACK[operation.kind] : JOURNEYS[operation.kind]
+  const plain = operation.step === 'rolling_back' ? GOING_BACK[operation.kind] : JOURNEYS[operation.kind]
+  const journey = broughtJourney(operation) ?? plain
   if (!journey) return null
   const step = operation.step ?? 'queued'
   const current = Math.max(

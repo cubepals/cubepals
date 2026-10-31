@@ -68,6 +68,7 @@ import { loadPackChecks } from '../setups/persistence.ts'
 import { ResolvedTemplates } from '../setups/resolved-templates.ts'
 import { type SetupService, type SetupSource, sizeOf } from '../setups/service.ts'
 import { TEMPLATES } from '../setups/templates.ts'
+import { listWorlds } from '../worlds/persistence.ts'
 import { newJoins } from './new-server.ts'
 import {
   countLive,
@@ -569,7 +570,8 @@ export class ServerQueries {
       const chosen = typeof backupId === 'string' ? await loadBackup(this.#db, backupId) : null
       // A download is fetched from the store, which takes as long as it is big; a snapshot is
       // the provider's own to bring back.
-      return operationView(op, null, chosen?.tier === 'archive' ? chosen.sizeBytes : null)
+      const size = chosen?.tier === 'archive' ? chosen.sizeBytes : null
+      return operationView(op, null, size, await broughtName(this.#db, server.id, chosen))
     }
     if (op.kind !== 'apply' || applied === null) return operationView(op, null)
     const ran = await loadChangeFacts(this.#db, applied.revisionId)
@@ -688,16 +690,28 @@ export class ServerQueries {
   }
 }
 
+/** A world its owner brought in, by its name, while a restore makes it the server's; null for any other backup. */
+async function broughtName(
+  db: Db,
+  serverId: string,
+  backup: { trigger: string; worldId: string } | null,
+): Promise<string | null> {
+  if (backup?.trigger !== 'uploaded') return null
+  return (await listWorlds(db, serverId)).find((world) => world.id === backup.worldId)?.name ?? null
+}
+
 function operationView(
   op: OperationRecord,
   change: OperationView['change'],
   worldBytes: number | null = null,
+  broughtWorld: string | null = null,
 ): OperationView {
   return {
     id: op.id,
     kind: op.kind,
     change,
     worldBytes,
+    broughtWorld,
     status: op.status,
     step: (op.step as OperationView['step']) ?? null,
     error: op.error,

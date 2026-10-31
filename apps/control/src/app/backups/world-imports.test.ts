@@ -100,9 +100,11 @@ describe.skipIf(!hasDatabase)('a single-player save', () => {
     expect(ready.notes).toEqual([
       'Found “world” in My World 🌲.',
       'Gave Alex what they carried and where they stood in the single-player world.',
-      'It was last played on Minecraft 1.21.11. Restoring it opens it on 26.3, which updates it; this backup stays as it came.',
+      'It was last played on Minecraft 1.21.11. It opens on 26.3, which updates it; the world as you uploaded it stays in Backups.',
       'Its folder on the server is world-2.',
     ])
+    // Its owner plays it as the world it is, by name, on the Minecraft that last saved it.
+    expect(ready.world).toEqual({ name: 'world', gameVersion: '1.21.11', newer: null })
 
     const backup = await broughtBackup(h, ready)
     const dir = await unpacked(backup.archiveKey)
@@ -240,7 +242,7 @@ describe.skipIf(!hasDatabase)('a server’s folder with other worlds', () => {
     const view = await bringWorld(h, owner, id, zipBytes(files), { fileName: 'server.zip' })
     if (view.status !== 'ready') throw new Error(`The import is ${view.status}`)
     expect(view.notes).toContain(
-      'Also kept creative, the server’s other world, as a backup to restore when you want to play it.',
+      'Also brought creative, the server’s other world. It waits in Backups for when you want to play it.',
     )
     expect(view.notes.find((note) => note.startsWith('Left out what isn’t the world'))).not.toContain(
       'creative',

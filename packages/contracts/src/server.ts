@@ -298,6 +298,11 @@ export interface OperationView {
    * it; null for a snapshot, and for any other kind.
    */
   worldBytes: number | null
+  /**
+   * For a `restore` of a world its owner brought in (an uploaded backup), the world's name, so
+   * the page speaks of that world rather than of a backup; null for any other.
+   */
+  broughtWorld: string | null
   status: 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled'
   step: OperationStep | null
   error: string | null

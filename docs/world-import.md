@@ -77,9 +77,9 @@ Before the plan:
   `AccessService.letIn`), which never turns a server's whitelist off.
 - **A server's other worlds come too.** A server's folder holding more worlds than the one its
   `server.properties` names, as a server with several keeps them, has each read on its own
-  (`WorldReading.others`). Brought to a server, each is kept as a backup of its own, in a folder
-  of its own (`kept-worlds.ts`), to restore when its owner wants to play it; one that wouldn't open
-  there is left out, saying why. Brought for a new server, the server starts on the one named, and
+  (`WorldReading.others`). Brought to a server, each waits in Backups on its own, in a folder of
+  its own (`kept-worlds.ts`), for when its owner wants to play it; one that wouldn't open there is
+  left out, saying why. Brought for a new server, the server starts on the one named, and
   the notes say to upload the same file on its Backups page to keep the others. A saves folder's
   other saves aren't kept: its owner chose one.
 - **The guide is published,** `guides/move-a-minecraft-world-to-a-server`: from single-player, from
@@ -89,10 +89,12 @@ Before the plan:
 ## What it does
 
 A player drops what they have. Blockly works out what is in it, makes it a world a server runs,
-says everything it changed, and keeps the upload as it came as a backup, so the way back is a
-restore. The player is asked only what only they know: which world, when there are several; which
-Minecraft account played it; which players to let in; and whether to move a world to a newer
-Minecraft.
+says everything it changed, and the player plays it. Under it, the world is kept as a backup of the
+server and playing it restores that backup, but the player never reads either word on the way: it
+is their world, coming in and then played. The world the server had is kept, and the way back to
+it is in Backups. The player is asked only what only they know: which world, when there are
+several; which Minecraft account played it; which players to let in; and whether to move a world
+to a newer Minecraft.
 
 ## Where a player starts
 
@@ -100,8 +102,9 @@ Minecraft.
    a page of its own for the world. The server is made to fit the world: its Minecraft version, its
    game mode, its difficulty, its mods. The party-size step is unchanged.
 2. **The world page:** a section, "Bring a world", beside "Make your own world". The world is added
-   as another of the server's worlds; switching to it is the existing switch, with its snapshot.
-3. **The backups page:** "Upload a download" stays and takes everything the other two take.
+   as another of the server's worlds, and played from the same dialog (below).
+3. **The backups page:** "Upload a world" opens the same dialog and takes everything the other two
+   take.
 
 Each drop target says what it takes, that the world should be closed in Minecraft first, and where
 the game keeps its saves, with the player's own system first and a button to copy the path:
@@ -212,11 +215,13 @@ links or devices, and the entry, inflated-size and time limits the world reader 
 - **It isn't, and a newer one is:** the player chooses. Opening on the newer version upgrades the
   world and can't be undone; the upload stays as a backup either way.
 - **It is newer than any offered,** a snapshot, or from before 1.9: refused, naming the version.
-- **On the world page,** a world newer than the server is kept as a backup all the same, never
-  refused after its upload: the browser reads its `level.dat` before sending it and says so up
-  front (`lib/level-version.ts`), and restoring it moves the server up to that version, which the
-  player chooses in the restore (`moveUp`, `app/backups/moved-up.ts`). A server with mods or a
-  pack changes version in its settings instead, where its mods are resolved again.
+- **On the world page,** a world newer than the server comes in all the same, never refused after
+  its upload: the browser reads its `level.dat` before sending it and says so up front
+  (`lib/level-version.ts`), and playing it moves the server up to that version, which the ready
+  screen says in one line, as a step that can't be undone, and its button names ("Play Maple
+  Hollow on 26.3", `moveUp`, `app/backups/moved-up.ts`). A server with mods or a pack changes
+  version in its settings instead, where its mods are resolved again; the ready screen says so and
+  the world waits in Backups meanwhile.
 
 ## Mods and plugins
 
@@ -251,10 +256,29 @@ is what a new server's is, or what the server's is now.
    let in, which Minecraft.
 3. **Uploading,** with progress.
 4. **Reading the world,** with the job's progress.
-5. **What Blockly did:** every rename, move and left-out file, and the backup that holds the upload
-   as it came.
+5. **What Blockly did:** every rename, move and left-out file.
 
 Every refusal says what was wrong and what to do next. Copy says Cubepals.
+
+### Bringing it to a server, and playing it
+
+On the world page (and from "Upload a world" on Backups) the dialog, `servers/[id]/bring-world.tsx`
+with its words in `bring-world-lines.ts`, reads as the player's own world coming in:
+
+1. **The file,** with what Cubepals does with it, a name to give it (its name in Minecraft, read in
+   the browser, as the placeholder), and the early note for a world from a newer release.
+2. **"Bringing Maple Hollow to your server":** the upload with its pace and Cancel, then "Reading
+   Maple Hollow" with the countdown (`lib/reading-pace.ts`), then any questions. The name is the
+   one given, else the one `level.dat` has, else "your world".
+3. **"Maple Hollow is ready":** the world by its name and the Minecraft it was last played on (the
+   import's `world`, `WorldImportView`), what Cubepals did, who of its old server's players to let
+   in, and what playing it does: the server restarts into it (or wakes on it, asleep), the world it
+   has now is kept and can be switched back to from Backups, and, for a world from a newer
+   release, the one line that the server moves up for good.
+4. **"Play Maple Hollow"** restores the backup the world waits in from the dialog itself
+   (`backups.restore`, with `moveUp` where it moves the server), and the dialog closes onto the
+   page's own progress. **"Not now"** leaves it waiting in Backups, listed under the world's name
+   with "Uploaded by you" and a "Play it" button.
 
 ## The guide
 

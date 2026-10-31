@@ -366,6 +366,28 @@ export async function wakeStarts(q: Queryable, serverId: string, since: Date): P
   return rows.map(toRecord)
 }
 
+/**
+ * Has the open restore of a server that was stopped leave it running, for `by`, who wants to play
+ * it now: a join, or its owner pressing Start. The restore reads it before it would put the server
+ * back to sleep (`handlers/restoring.ts`). False when no restore would: none is open, or the one
+ * that is leaves the server up already.
+ */
+export async function keepUpAfterRestore(tx: Tx, serverId: string, by: string): Promise<boolean> {
+  const kept = await tx
+    .update(operations)
+    .set({ input: sql`${operations.input} || ${JSON.stringify({ running: true, keptUpFor: by })}::jsonb` })
+    .where(
+      and(
+        eq(operations.serverId, serverId),
+        eq(operations.kind, 'restore'),
+        inArray(operations.status, ['queued', 'running']),
+        sql`not coalesce((${operations.input}->>'running')::boolean, false)`,
+      ),
+    )
+    .returning({ id: operations.id })
+  return kept.length > 0
+}
+
 /** Whether work of one kind is waiting or under way for a server, such as a backup being taken. */
 export async function pendingOfKind(q: Queryable, serverId: string, kind: OperationKind): Promise<boolean> {
   const [row] = await q

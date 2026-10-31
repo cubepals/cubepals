@@ -5,7 +5,7 @@
 /**
  * The guide to moving a world a player already has to a Cubepals server: from single-player, from
  * another host or a server's folder, and with mods (docs/world-import.md). The steps follow the
- * create page's "Your own world" and a server's Backups page, and the saves folders are the ones
+ * create page's "Your own world" and a server's World page, and the saves folders are the ones
  * the drop target names. The pictures are from a local stack.
  */
 import type { Metadata } from 'next'
@@ -124,17 +124,21 @@ export default async function Guide() {
 
       <Part id="existing-server" title="Into a server you already have">
         <p>
-          On a server’s <strong>Backups</strong> page, <strong>Upload a world</strong> keeps the world as a
-          backup of that server. Restoring it is the next step, and the world the server has now is backed up
-          first. A server’s folder holding more than one world, as servers with several worlds do, has each
-          one kept as its own backup. Made into a new server, it starts on the world its{' '}
-          <code>server.properties</code> names; upload the same file on its Backups page to keep the others.
+          On a server’s <strong>World</strong> page, use <strong>Bring a world</strong>. Cubepals brings the
+          world in and shows it to you by its name, with what it did, and <strong>Play</strong> switches the
+          server to it. The world the server had is kept, and you can switch back to it from{' '}
+          <strong>Backups</strong>. Choose <strong>Not now</strong> and your world waits on the Backups page,
+          under its name, until you play it. A server’s folder holding more than one world, as servers with
+          several worlds do, brings each one, and the others wait there too. Made into a new server, it starts
+          on the world its <code>server.properties</code> names; upload the same file on its Backups page to
+          keep the others.
         </p>
         <Shot
-          src={`${PICTURES}/backups.png`}
-          width={478}
-          height={302}
-          alt="Bring a world, after a server’s folder is uploaded on the Backups page: It’s kept as a backup of this server. Restore it to play it; the world it has now is backed up first. The notes list what was left out, say it was last played on Minecraft 1.21.11 and that restoring it opens it on 26.2, name its folder on the server, and say Also kept creative, the server’s other world, as a backup to restore when you want to play it."
+          src={`${PICTURES}/play.png`}
+          width={480}
+          height={526}
+          alt="Maple Hollow is ready: the world Maple Hollow, last played on Minecraft 1.21.11. Under What Cubepals did, the notes list what was left out, say it opens on 26.2, which updates it, and the world as uploaded stays in Backups, name its folder on the server, and say Also brought creative, the server’s other world, which waits in Backups. Then: The server restarts into Maple Hollow, and the world the server has now is kept, to switch back to from Backups. Buttons: Not now, and Play Maple Hollow."
+          caption="Your world, ready: one press plays it, and the world you had stays a step away."
         />
       </Part>
 
@@ -161,7 +165,7 @@ export default async function Guide() {
           {
             question: 'Is my upload kept?',
             answer:
-              'On a server you have, the world is kept as a backup of it. For a new server, it’s kept for a month while you make the server.',
+              'On a server you have, the world as you uploaded it stays on its Backups page, played or not, until the date it shows there. For a new server, it’s kept for a month while you make the server.',
           },
           {
             question: 'Where do I start?',

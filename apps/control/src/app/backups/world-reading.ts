@@ -523,7 +523,7 @@ type ImportViewOf<Ready> = { importId: string; fileName: string } & (
 /** What the Minecraft a world was last played on means here: a snapshot, an older release, a newer one. */
 function versionNote(
   played: string,
-  how: { serverVersion: string; updated: (from: string) => string; newer: (to: string) => string },
+  how: { serverVersion: string; updated: (from: string) => string; newer: (to: string) => string | null },
 ): string | null {
   if (!isRelease(played))
     return `It was last played on the Minecraft snapshot ${played}. A release older than that snapshot can’t open it.`
@@ -546,7 +546,8 @@ export function notesOn(
     asItCame: boolean
     serverVersion: string
     updated: (from: string) => string
-    newer: (to: string) => string
+    /** Null where the world's newer release is said elsewhere, as the choice it is. */
+    newer: (to: string) => string | null
     /** The upload's other worlds, kept or named on their own. */
     others?: readonly FoundWorld[]
   },
