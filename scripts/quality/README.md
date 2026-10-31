@@ -118,10 +118,9 @@ treatment. Ambiguous dependency mappings and changed fixture/data inputs expand 
 of trusting an unproved mapping. Adding or changing production source retains full scope when
 any test dependency remains unresolved: new modules can change dynamic-loader fallback behavior,
 and even modules with production importers and direct tests can also be test oracles.
-Base resolution preserves the complete committed regular-file tree, using inert read-only
-placeholders for non-code assets; it neither executes those assets nor turns symlinks into
-regular inputs. This keeps static JSON and CSS imports resolvable in both revisions without
-relaxing the fallback for genuinely unknown imports. No directory name exempts executable test
+The base view also holds the committed JSON, CSS and HTML files under `apps`, `packages`, `scripts`
+and `tools`, read from Git and never executed, so static data imports resolve in both revisions
+without relaxing the fallback for genuinely unknown imports. No directory name exempts executable test
 helpers from coverage or mutation. Scheduled runs audit the complete source inventory in stable partitions.
 
 An existing test file that only gained plain cases after every existing one (`test-appends.mjs`),

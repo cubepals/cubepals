@@ -471,6 +471,19 @@ test('ordinary production changes do not automatically expand through every impo
   assert.equal(impact.baseRequiredSubjects.has(other), false)
 })
 
+test('a module importing JSON resolves in the base view, so an unrelated change stays scoped', (t) => {
+  const f = fixture(t, {
+    'apps/a/src/limits.json': '{"most":10}',
+    [subject]:
+      "import limits from './limits.json' with { type: 'json' }\nexport const choose = (value: number) => value > limits.most ? limits.most : value\n",
+  })
+  f.write(other, 'export const different = (value: number) => value !== 0\n')
+  f.save()
+  const impact = f.analyze()
+  assert.equal(impact.baseFull, false)
+  assert.doesNotMatch(impact.reasons.join('\n'), /ambiguous/)
+})
+
 test('changing a fixture forces conservative scope even beside an added test', (t) => {
   const path = 'apps/a/fixtures/expected.json'
   const f = fixture(t, { [path]: '{"expected":10}' })

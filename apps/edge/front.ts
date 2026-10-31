@@ -362,22 +362,25 @@ class Arrival {
     }
     const toRouter = pipe(this.#client, `127.0.0.1:${router}`, sent, timeouts)
     this.#handed = true
-    this.#measure(toRouter, handshake.joining ? 'join' : 'ping')
+    this.#measure(toRouter, handshake.joining ? 'join' : 'ping', known(handshake.hostname))
     visit?.admitted(toRouter)
   }
 
   /**
    * Times the first byte back through `toRouter`, which is when the connection counts as accepted;
-   * one that closes before is a failure, the backend's unless the player left first. Once the
-   * player's side closes, what passed each way is counted.
+   * one that closes before is a failure, the backend's unless the player left first. One that
+   * dialled a name no server has (`server` false) is `no_server` instead: mc-router answers such a
+   * ping nothing, and the ones it gets are guesses (an address typed as a name, a scanner's) and
+   * Geyser's own ping of its Java side. Once the player's side closes, what passed each way is
+   * counted.
    */
-  #measure(toRouter: Socket, intent: 'join' | 'ping'): void {
+  #measure(toRouter: Socket, intent: 'join' | 'ping', server: boolean): void {
     toRouter.once('data', () => {
       if (this.#counted) return
       firstByteAfter(this.#edition, intent, performance.now() - this.#began)
       this.#count('accepted')
     })
-    toRouter.once('close', () => this.#count('failed', 'backend'))
+    toRouter.once('close', () => this.#count('failed', server ? 'backend' : 'no_server'))
     const client = this.#client
     client.once('close', () => connectionClosed(this.#edition, client.bytesRead, client.bytesWritten))
   }
