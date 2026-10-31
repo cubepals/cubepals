@@ -7,8 +7,8 @@ import { afterEach, expect, test } from 'bun:test'
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { PinnedMod } from '../domain/mods/artifact.ts'
-import { USER_MARK } from './moderation.ts'
+import type { PinnedMod } from '../../domain/mods/artifact.ts'
+import { USER_MARK } from '../../minecraft/moderation.ts'
 import {
   DEFAULT_PUNISHMENTS,
   GRIM,
@@ -21,7 +21,7 @@ import {
   STOP_CHEATERS_STEP,
   stopCheatersEnv,
   uncheckedCommand,
-} from './stop-cheaters.ts'
+} from '../../minecraft/stop-cheaters.ts'
 
 const uuid = 'abcdef01-2345-6789-abcd-ef0123456789'
 const pin: PinnedMod = {

@@ -4,7 +4,7 @@
 
 /** Moderation is enabled by actual plugin identity and only controls its own files and players. */
 import { expect, test } from 'bun:test'
-import type { PinnedMod } from '../domain/mods/artifact.ts'
+import type { PinnedMod } from '../../domain/mods/artifact.ts'
 import {
   CHATSENTINEL,
   filtersChat,
@@ -19,7 +19,7 @@ import {
   pinsProject,
   punishCommand,
   runsModeration,
-} from './moderation.ts'
+} from '../../minecraft/moderation.ts'
 
 const uuid = 'abcdef01-2345-6789-abcd-ef0123456789'
 const pin = (projectId: string): PinnedMod => ({

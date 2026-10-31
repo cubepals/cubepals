@@ -5,7 +5,13 @@
 /** Console input and responses preserve player identities and reject command smuggling. */
 import { expect, test } from 'bun:test'
 import fc from 'fast-check'
-import { announce, isPlainCommand, normalizeUuid, parseOnlinePlayers, refusedCommand } from './console.ts'
+import {
+  announce,
+  isPlainCommand,
+  normalizeUuid,
+  parseOnlinePlayers,
+  refusedCommand,
+} from '../../minecraft/console.ts'
 
 test('only nonempty printable commands up to the exact limit reach the console', () => {
   expect(isPlainCommand('')).toBe(false)

@@ -16,8 +16,14 @@ import {
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { AccessCommand } from '../domain/access/access.ts'
-import { accessCommand, accessFiles, NAME_CACHE, parseAccessFiles, writeAccessFiles } from './access.ts'
+import type { AccessCommand } from '../../domain/access/access.ts'
+import {
+  accessCommand,
+  accessFiles,
+  NAME_CACHE,
+  parseAccessFiles,
+  writeAccessFiles,
+} from '../../minecraft/access.ts'
 
 const player = { uuid: '069a79f4-44e9-4726-a5be-fca90e38aaf5', name: 'Steve' }
 

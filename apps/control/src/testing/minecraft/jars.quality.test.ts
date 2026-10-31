@@ -4,8 +4,8 @@
 
 /** Loader destinations and content-derived filenames are the image's jar-installation contract. */
 import { expect, test } from 'bun:test'
-import type { ModArtifact } from '../domain/mods/artifact.ts'
-import { diskName, JAR_LISTS, jarsOf } from './jars.ts'
+import type { ModArtifact } from '../../domain/mods/artifact.ts'
+import { diskName, JAR_LISTS, jarsOf } from '../../minecraft/jars.ts'
 
 test('vanilla installs no jars, Paper installs plugins, and mod loaders install mods', () => {
   expect(jarsOf('vanilla')).toBeNull()
