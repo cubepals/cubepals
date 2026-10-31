@@ -11,9 +11,9 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { MINUTE_MS } from '@blockly/contracts/durations'
 import { schema } from '@blockly/db'
 import { and, eq, isNull, sql } from 'drizzle-orm'
-import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
+import { type Harness, startHarness } from '../../testing/harness.ts'
 
-describe.skipIf(!hasDatabase)('session warning claims', () => {
+describe('session warning claims', () => {
   let h: Harness
 
   beforeAll(async () => {
