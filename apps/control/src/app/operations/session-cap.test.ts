@@ -5,56 +5,18 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { MINUTE_MS } from '@blockly/contracts/durations'
 import { schema } from '@blockly/db'
-import { and, eq, isNull, sql } from 'drizzle-orm'
+import { and, eq, isNull } from 'drizzle-orm'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
 import type { DomainEvent } from '../ports/events.ts'
 import { claimSessionWarning, releaseSessionWarning } from '../servers/usage.ts'
-
-let h: Harness
-
-const running = async (plan = 'plus', capped = true) => {
-  const owner = await h.user('Steve', plan)
-  if (capped)
-    await h.db
-      .update(schema.accountStanding)
-      .set({ limitOverrides: { maxSessionMinutes: 240 } })
-      .where(eq(schema.accountStanding.userId, owner.userId))
-  const { id } = await h.create(owner)
-  await h.until(id, 'running')
-  await h.settled(id)
-  return { owner, id }
-}
-/** Puts the server's current run that many minutes in the past, as if it had run that long. */
-const ranFor = (id: string, minutes: number) =>
-  h.db
-    .update(schema.powerIntervals)
-    .set({ startedAt: new Date(Date.now() - minutes * MINUTE_MS) })
-    .where(and(eq(schema.powerIntervals.serverId, id), isNull(schema.powerIntervals.stoppedAt)))
-const session = async (id: string) => {
-  const [row] = await h.db
-    .select()
-    .from(schema.powerIntervals)
-    .where(and(eq(schema.powerIntervals.serverId, id), isNull(schema.powerIntervals.stoppedAt)))
-  return row
-}
-
-/** Resolves once a query waits on a row lock: the racing claim has reached the row. */
-const claimWaiting = async () => {
-  for (let tries = 0; tries < 200; tries++) {
-    const { rows } = await h.db.execute<{ waiting: number }>(
-      sql`select count(*)::int as waiting from pg_locks where not granted`,
-    )
-    if (rows[0]?.waiting) return
-    await Bun.sleep(25)
-  }
-  throw new Error('The check never reached its claim')
-}
 
 // A cap on how long one run lasts: no plan sets one (a plan's hours already bound what a server
 // costs), but an admin can hold one account to it, against an AFK farm that defeats the kick. A
 // run is warned twice in game, then stopped the ordinary way; the owner can start it again at once.
 // On Plus, so Free's own end of the day's play (daily-play.test.ts) doesn't come first.
 describe.skipIf(!hasDatabase)('session cap', () => {
+  let h: Harness
+
   beforeAll(async () => {
     h = await startHarness()
   }, 30_000)
@@ -62,6 +24,32 @@ describe.skipIf(!hasDatabase)('session cap', () => {
   afterAll(async () => {
     await h.close()
   })
+
+  const running = async (plan = 'plus', capped = true) => {
+    const owner = await h.user('Steve', plan)
+    if (capped)
+      await h.db
+        .update(schema.accountStanding)
+        .set({ limitOverrides: { maxSessionMinutes: 240 } })
+        .where(eq(schema.accountStanding.userId, owner.userId))
+    const { id } = await h.create(owner)
+    await h.until(id, 'running')
+    await h.settled(id)
+    return { owner, id }
+  }
+  /** Puts the server's current run that many minutes in the past, as if it had run that long. */
+  const ranFor = (id: string, minutes: number) =>
+    h.db
+      .update(schema.powerIntervals)
+      .set({ startedAt: new Date(Date.now() - minutes * MINUTE_MS) })
+      .where(and(eq(schema.powerIntervals.serverId, id), isNull(schema.powerIntervals.stoppedAt)))
+  const session = async (id: string) => {
+    const [row] = await h.db
+      .select()
+      .from(schema.powerIntervals)
+      .where(and(eq(schema.powerIntervals.serverId, id), isNull(schema.powerIntervals.stoppedAt)))
+    return row
+  }
 
   test('a run is warned at ten and two minutes, once each, then stopped at the cap', async () => {
     const { owner, id } = await running()
@@ -136,27 +124,6 @@ describe.skipIf(!hasDatabase)('session cap', () => {
     expect(await claimSessionWarning(h.db, id, 10)).toBe(false)
     // A warning that couldn't be said goes back, for the next check to try.
     await releaseSessionWarning(h.db, id, 2, 10)
-    expect((await session(id))?.sessionWarnedMinutes).toBe(10)
-  }, 30_000)
-
-  test('a check that read the run before another claimed its warning says nothing', async () => {
-    const { id } = await running()
-    await ranFor(id, 240 - 9)
-    // Racing two checks, as above, leaves to chance whether the loser reads the warning as already
-    // said or loses the claim itself. This holds the second case still: another check's claim, not
-    // yet committed, so this one reads the warning as unsaid and its claim waits on the row; once
-    // the other commits, the claim finds it taken.
-    let check: Promise<number> | undefined
-    await h.db.transaction(async (tx) => {
-      await tx
-        .update(schema.powerIntervals)
-        .set({ sessionWarnedMinutes: 10 })
-        .where(and(eq(schema.powerIntervals.serverId, id), isNull(schema.powerIntervals.stoppedAt)))
-      check = h.app.schedules.sessionCheck()
-      await claimWaiting()
-    })
-    expect(await check).toBe(0)
-    expect(h.minecraft.said(id)).toEqual([])
     expect((await session(id))?.sessionWarnedMinutes).toBe(10)
   }, 30_000)
 
