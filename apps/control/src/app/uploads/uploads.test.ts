@@ -455,7 +455,7 @@ describe.skipIf(!hasDatabase || !s3.endpoint || !s3.bucket)('uploads', () => {
         ],
         [
           { 'server.properties': 'level-name=world\n', 'world/level.dat': levelDat('99.1') },
-          "This world was last played on Minecraft 99.1, newer than this server's 26.3. Move the server to 99.1 first, then try again.",
+          'This world was last played on Minecraft 99.1, which Cubepals doesn’t run yet.',
         ],
         [
           { 'server.properties': 'level-name=world\n', 'world/level.dat': 'not nbt' },

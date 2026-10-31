@@ -11,6 +11,7 @@
     "./example-address": "./src/example-address.ts",
     "./join-records": "./src/join-records.ts",
     "./durations": "./src/durations.ts",
+    "./release-order": "./src/release-order.ts",
     "./limits": "./src/limits.ts",
     "./server-list": "./src/server-list.ts",
     "./motd-layout": "./src/motd-layout.ts",

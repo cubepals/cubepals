@@ -16,7 +16,7 @@ import {
 } from '../../domain/account/entitlements.ts'
 import { ACCESS_FILES, NAME_CACHE } from '../../minecraft/access.ts'
 import { normalizeUuid } from '../../minecraft/console.ts'
-import { compareVersions, isRelease } from '../../minecraft/versions.ts'
+import { compareVersions, isRelease, supports } from '../../minecraft/versions.ts'
 import { DOWNLOAD_NOTE, jarsInNote } from '../../minecraft/world-download.ts'
 import { moddedBrands, type WorldFacts, worldFacts } from '../../minecraft/world-facts.ts'
 import {
@@ -258,11 +258,20 @@ export class WorldReading {
     read: Read,
     serverVersion: string,
   ): Promise<number> {
-    // A snapshot's name says nothing of the releases around it, so it is never called newer.
-    if (isRelease(read.facts.gameVersion) && compareVersions(read.facts.gameVersion, serverVersion) > 0)
-      throw new Refused(
-        `This world was last played on Minecraft ${read.facts.gameVersion}, newer than this server's ${serverVersion}. Move the server to ${read.facts.gameVersion} first, then try again.`,
-      )
+    // A snapshot's name says nothing of the releases around it, so it is never called newer. A
+    // newer world is kept all the same: restoring it moves its server up to it, as its owner
+    // chooses then (`BackupService.restoreBackup`), so a large upload is never thrown away for it.
+    const played = read.facts.gameVersion
+    if (isRelease(played) && compareVersions(played, serverVersion) > 0) {
+      if (!supports(played, 'vanilla'))
+        throw new Refused(
+          `This world was last played on Minecraft ${played}, which Cubepals doesn’t run yet.`,
+        )
+      if (to.serverId === null)
+        throw new Refused(
+          `This world was last played on Minecraft ${played}, newer than ${serverVersion}. Choose ${played} for the new server.`,
+        )
+    }
     const jars = modJars(read)
     const standing = await loadStanding(this.#db, to.ownerId)
     const plan = entitlementsOf(standing)
@@ -511,10 +520,22 @@ type ImportViewOf<Ready> = { importId: string; fileName: string } & (
   | { status: 'refused'; message: string }
 )
 
+/** What the Minecraft a world was last played on means here: a snapshot, an older release, a newer one. */
+function versionNote(
+  played: string,
+  how: { serverVersion: string; updated: (from: string) => string; newer: (to: string) => string },
+): string | null {
+  if (!isRelease(played))
+    return `It was last played on the Minecraft snapshot ${played}. A release older than that snapshot can’t open it.`
+  const order = compareVersions(played, how.serverVersion)
+  if (order < 0) return how.updated(played)
+  return order > 0 ? how.newer(played) : null
+}
+
 /**
  * What its owner reads Cubepals did, besides what reading found. `levelName` is the world's folder
  * on a server that has others, null on a new one; `updated` says a world from an older release is
- * opened on the server's, `serverVersion`.
+ * opened on the server's, `serverVersion`, and `newer` what a world from a newer one takes.
  */
 export function notesOn(
   read: Read,
@@ -525,6 +546,7 @@ export function notesOn(
     asItCame: boolean
     serverVersion: string
     updated: (from: string) => string
+    newer: (to: string) => string
     /** The upload's other worlds, kept or named on their own. */
     others?: readonly FoundWorld[]
   },
@@ -560,12 +582,8 @@ export function notesOn(
     notes.push(
       `It was opened with ${modded.map(brandName).join(' and ')}. Blocks and items from its mods are only there on a server running the same mods.`,
     )
-  if (!isRelease(read.facts.gameVersion))
-    notes.push(
-      `It was last played on the Minecraft snapshot ${read.facts.gameVersion}. A release older than that snapshot can’t open it.`,
-    )
-  else if (compareVersions(read.facts.gameVersion, how.serverVersion) < 0)
-    notes.push(how.updated(read.facts.gameVersion))
+  const version = versionNote(read.facts.gameVersion, how)
+  if (version !== null) notes.push(version)
   if (
     !how.asItCame &&
     how.levelName !== null &&

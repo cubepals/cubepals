@@ -212,8 +212,11 @@ links or devices, and the entry, inflated-size and time limits the world reader 
 - **It isn't, and a newer one is:** the player chooses. Opening on the newer version upgrades the
   world and can't be undone; the upload stays as a backup either way.
 - **It is newer than any offered,** a snapshot, or from before 1.9: refused, naming the version.
-- **On the world page,** a world newer than the server offers the server's existing move to that
-  version, which the player chooses.
+- **On the world page,** a world newer than the server is kept as a backup all the same, never
+  refused after its upload: the browser reads its `level.dat` before sending it and says so up
+  front (`lib/level-version.ts`), and restoring it moves the server up to that version, which the
+  player chooses in the restore (`moveUp`, `app/backups/moved-up.ts`). A server with mods or a
+  pack changes version in its settings instead, where its mods are resolved again.
 
 ## Mods and plugins
 

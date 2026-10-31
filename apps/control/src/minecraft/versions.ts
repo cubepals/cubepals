@@ -2,6 +2,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
+import { compareVersions, isRelease } from '@blockly/contracts/release-order'
 import type { Loader } from '../domain/revision/revision.ts'
 
 /**
@@ -136,24 +137,4 @@ export function releaseFor(worldVersion: string): string | null {
   return newer.sort(compareVersions)[0] ?? null
 }
 
-/** Whether a version is a release's (`1.21.11`, `26.3`), not a snapshot's (`24w14a`, `1.21-pre1`). */
-export const isRelease = (version: string): boolean => /^\d+(\.\d+){1,2}$/.test(version)
-
-/**
- * Orders release ids: 1.21.8 < 1.21.10 < 26.1.2 < 26.2. Worlds only move forward, so a change
- * to an older release is refused.
- *
- * Written out rather than taken from `compare-versions` for two reasons, checked 2026-09-23:
- * `minecraft/` imports no packages at all (`scripts/check-boundaries.ts`), and Minecraft's
- * releases are not semantic versions — `26.3` sits beside `1.21.8` — so a library that assumes
- * they are would be right today by accident. The cases that matter are in `minecraft.test.ts`.
- */
-export function compareVersions(a: string, b: string): number {
-  const parts = (v: string) => v.split('.').map((n) => Number.parseInt(n, 10) || 0)
-  const [x, y] = [parts(a), parts(b)]
-  for (let i = 0; i < Math.max(x.length, y.length); i++) {
-    const diff = (x[i] ?? 0) - (y[i] ?? 0)
-    if (diff !== 0) return Math.sign(diff)
-  }
-  return 0
-}
+export { compareVersions, isRelease }

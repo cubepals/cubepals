@@ -41,6 +41,7 @@ import { insertPendingUpload } from '../uploads/persistence.ts'
 import { keptWorlds } from '../worlds/persistence.ts'
 import { downloadsErased, downloadsToErase } from './download-records.ts'
 import { WorldDownloads } from './downloads.ts'
+import { movedUp, movesUpTo } from './moved-up.ts'
 import { NewWorldImports } from './new-world-imports.ts'
 import {
   archivesErased,
@@ -334,14 +335,15 @@ export class BackupService {
   /**
    * The world from a backup, as the server's world. With its configuration, the settings and mods
    * from then come back too, as a `restore` revision; without, a world from a newer game version
-   * can't be opened, so that is refused.
+   * can't be opened, so that is refused. A world brought in from a newer Minecraft moves the
+   * server up to it where its owner chose that (`moveUp`): a step that can't be undone.
    */
   restoreBackup(
     actor: Actor,
     serverId: string,
     backupId: string,
     requestId: string,
-    options: ChangeOptions & { withConfiguration: boolean },
+    options: ChangeOptions & { withConfiguration: boolean; moveUp?: boolean | undefined },
   ): Promise<MinecraftServer> {
     return this.#db.transaction(async (tx) => {
       const server = authorize(actor, await lockServer(tx, serverId))
@@ -360,15 +362,10 @@ export class BackupService {
           runs: runsOf(server.memoryTier, desired),
           serverId: server.id,
         })
-      // An upload brings a world, never a configuration: its own version must open here.
-      if (backup.worldFacts !== null) {
-        options = { ...options, withConfiguration: false }
-        if (compareVersions(backup.worldFacts.gameVersion, desired.gameVersion) > 0)
-          throw new AppError(
-            'version_downgrade',
-            `This world was last played on Minecraft ${backup.worldFacts.gameVersion}, newer than this server's ${desired.gameVersion}. Move the server to ${backup.worldFacts.gameVersion} first.`,
-          )
-      }
+      // An upload brings a world, never a configuration: its own version must open here, or the
+      // server moves up to it.
+      if (backup.worldFacts !== null) options = { ...options, withConfiguration: false }
+      const upTo = movesUpTo(backup.worldFacts, desired, options.moveUp)
       const then = await loadRevision(tx, backup.revisionId)
       if (!options.withConfiguration && compareVersions(then.gameVersion, desired.gameVersion) > 0)
         throw new AppError(
@@ -376,6 +373,7 @@ export class BackupService {
           `This backup's world ran on Minecraft ${then.gameVersion}, newer than the server has now. Restore it with its settings from then.`,
         )
       let revisionId: string | undefined
+      if (upTo !== null) revisionId = await this.#movedUp(tx, actor, server, desired, upTo)
       if (options.withConfiguration) {
         const draft: RevisionDraft = {
           ...draftOf(then),
@@ -414,6 +412,19 @@ export class BackupService {
       })
       return restoring
     })
+  }
+
+  /** The server moved up to the release a world it restores was last played on (`moved-up.ts`). */
+  async #movedUp(
+    tx: Tx,
+    actor: Actor,
+    server: MinecraftServer,
+    desired: Awaited<ReturnType<typeof loadRevision>>,
+    gameVersion: string,
+  ): Promise<string> {
+    const draft = await movedUp(this.#builds, desired, gameVersion)
+    requireWithinPlan(entitlementsOf(await loadStanding(tx, server.ownerId)), draft)
+    return (await insertRevision(tx, server.id, draft, requestedBy(actor))).id
   }
 
   /**
