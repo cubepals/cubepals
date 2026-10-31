@@ -29,8 +29,8 @@ import type { Launcher, System } from './saves-folders'
 
 /** A mod's source as Prism records it, inside an instance's mods folder (`indexDir`, `indexFileName`). */
 const INDEX_FILE = /^\.index\/[^/]+\.pw\.toml$/
-/** A mod in an instance's mods folder; one its launcher turned off ends `.jar.disabled`, and isn't sent. */
-const JAR = /^[^/]+\.jar$/i
+/** A mod in an instance's mods folder, as the control plane reads one: `.jar`, lowercase. One its launcher turned off ends `.jar.disabled`, and isn't sent. */
+const JAR = /^[^/]+\.jar$/
 
 /** What to pick so a world's mods come with it, as the system writes paths; null for a launcher without instances. */
 export interface InstancePick {

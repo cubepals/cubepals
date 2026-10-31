@@ -147,6 +147,6 @@ export function withPicked(
     return file === undefined ? [] : [{ path: at, file }]
   })
   const from = folder.root === null || folder.root === '' ? null : folderName(folder.root)
-  const count = files.filter((file) => /\.jar$/i.test(file.path)).length
+  const count = files.filter((file) => /\.jar$/.test(file.path)).length
   return { ...sending, mods: { held: files, count, from } }
 }
