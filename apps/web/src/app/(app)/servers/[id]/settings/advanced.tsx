@@ -8,6 +8,7 @@ import { ONLINE_MODE_KEPT, type ServerView, type SettingsOptions } from '@blockl
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
 import { useTRPC } from '../../../../../lib/api'
+import { busyFor } from '../../../../../lib/button-busy'
 import { type Outcome, useOutcome } from '../../../../../lib/outcome'
 import { runsOnPaper } from '../../../../../lib/present'
 import { Card, FormRow, Toggle } from '../../../../../ui'
@@ -60,6 +61,8 @@ function ServerSoftware({ view, outcome }: { view: ServerView; outcome: Outcome 
   )
   const on = runsOnPaper(view)
   const allowed = changeable(view)
+  // The server's words only for work this switch started; anything else it waits out disabled.
+  const busy = busyFor(outcome, view)
   const now = on
     ? 'On. Cubepals runs Minecraft on Paper: the same game, with less lag.'
     : 'Off. Mojang’s own server, exactly as it comes.'
@@ -67,7 +70,7 @@ function ServerSoftware({ view, outcome }: { view: ServerView; outcome: Outcome 
     <>
       <FormRow
         label="Run on Paper"
-        description={allowed.busy !== undefined ? `${allowed.busy}…` : now}
+        description={busy !== undefined ? `${busy}…` : now}
         control={
           <Toggle
             checked={on}
@@ -141,6 +144,8 @@ function OnlineAuthentication({ view, outcome }: { view: ServerView; outcome: Ou
   )
   const on = view.settings.onlineMode
   const allowed = changeable(view)
+  // The server's words only for work this switch started; anything else it waits out disabled.
+  const busy = busyFor(outcome, view)
   // Free keeps the check on; turning it on is always open.
   const kept = on && overview.data?.entitlements.mayTurnOffOnlineMode === false
   const now = kept ? ONLINE_MODE_KEPT : NOW[String(on) as 'true' | 'false']
@@ -150,8 +155,8 @@ function OnlineAuthentication({ view, outcome }: { view: ServerView; outcome: Ou
       <FormRow
         label="Online authentication"
         description={
-          allowed.busy !== undefined
-            ? `${allowed.busy}…`
+          busy !== undefined
+            ? `${busy}…`
             : outcome.said === 'done'
               ? `Saved. ${now}`
               : outcome.said === 'failed'

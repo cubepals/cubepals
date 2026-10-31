@@ -8,6 +8,7 @@ import type { ServerView, SettingsOptions } from '@blockly/contracts'
 import { useMutation } from '@tanstack/react-query'
 import { type SubmitEvent, useState } from 'react'
 import { useTRPC } from '../../../../../lib/api'
+import { busyFor } from '../../../../../lib/button-busy'
 import { type Outcome, said, useOutcome } from '../../../../../lib/outcome'
 import { Button, FormRow, FormSection, Select } from '../../../../../ui'
 import { ConfirmChange, changeable, useChanged } from './shared'
@@ -65,7 +66,7 @@ function LocationForm({
           <Button
             type="submit"
             variant="primary"
-            busy={allowed.busy}
+            busy={busyFor(outcome, view)}
             {...said(outcome, { done: 'Moved', failed: 'Didn’t move' })}
             disabled={region === view.region.key || !allowed.ok}
           >

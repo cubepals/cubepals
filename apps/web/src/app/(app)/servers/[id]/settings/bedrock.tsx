@@ -16,6 +16,7 @@ import type { ServerView } from '@blockly/contracts'
 import { useMutation } from '@tanstack/react-query'
 import { useState } from 'react'
 import { useTRPC } from '../../../../../lib/api'
+import { busyFor } from '../../../../../lib/button-busy'
 import { useOutcome } from '../../../../../lib/outcome'
 import { Button, CopyField, FormRow, FormSection, Toggle } from '../../../../../ui'
 import { ConfirmChange, changeable, useChanged, whatHappens } from './shared'
@@ -59,11 +60,13 @@ function BedrockForm({ view, on, blocked }: { view: ServerView; on: boolean; blo
     }),
   )
   const allowed = changeable(view)
+  // The server's words only for work this switch started; anything else it waits out disabled.
+  const busy = busyFor(outcome, view)
   const occupied = view.status === 'running' && (view.players?.online ?? 0) > 0
   const line = lineOf(on, blocked)
   const said =
-    allowed.busy !== undefined
-      ? `${allowed.busy}…`
+    busy !== undefined
+      ? `${busy}…`
       : outcome.said === 'done'
         ? `Saved. ${line}`
         : outcome.said === 'failed'
@@ -140,14 +143,11 @@ function LetThemIn({ view }: { view: ServerView }) {
     }),
   )
   const allowed = changeable(view)
+  // The server's words only for work this switch started; anything else it waits out disabled.
+  const busy = busyFor(outcome, view)
   const occupied = view.status === 'running' && (view.players?.online ?? 0) > 0
   const line = 'Friends on phones, tablets and Windows can’t join this server yet.'
-  const said =
-    allowed.busy !== undefined
-      ? `${allowed.busy}…`
-      : outcome.said === 'failed'
-        ? `Didn’t change. ${line}`
-        : line
+  const said = busy !== undefined ? `${busy}…` : outcome.said === 'failed' ? `Didn’t change. ${line}` : line
   return (
     <FormSection title="Bedrock friends" description={said}>
       <Button variant="secondary" disabled={!allowed.ok} onClick={() => setAsking(true)}>

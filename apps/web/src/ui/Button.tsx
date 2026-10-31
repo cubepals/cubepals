@@ -31,9 +31,9 @@ export interface ButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement
   /** No press scale, where motion would distract. */
   static?: boolean
   /**
-   * What the server is busy with while this button has to wait for it: the button says so
-   * itself, amber with a spinner, "Applying your changes", rather than sitting disabled beside a
-   * note, and goes back to its own words once the server is free.
+   * What the server is busy with, for work this button's own press started: the button says so
+   * itself, amber with a spinner, "Applying your changes", and goes back to its own words once
+   * the server is free. Work begun anywhere else it waits out disabled (`lib/button-busy.ts`).
    */
   busy?: string | undefined
   /**

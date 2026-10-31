@@ -15,6 +15,7 @@ import {
 import { useMutation } from '@tanstack/react-query'
 import { type SubmitEvent, useState } from 'react'
 import { useTRPC } from '../../../../../lib/api'
+import { busyFor } from '../../../../../lib/button-busy'
 import { type Outcome, said, useOutcome } from '../../../../../lib/outcome'
 import { presentChange, settingLabel } from '../../../../../lib/present'
 import { Button, FormRow, FormSection, Select, TextField, Toggle } from '../../../../../ui'
@@ -178,7 +179,7 @@ function GameForm({
             <Button
               type="submit"
               variant="primary"
-              busy={allowed.busy}
+              busy={busyFor(outcome, view)}
               {...said(outcome)}
               disabled={!valid || changes.length === 0 || !allowed.ok}
             >
