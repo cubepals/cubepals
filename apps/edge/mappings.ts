@@ -10,10 +10,14 @@ import { EXAMPLE_ADDRESS } from '../../packages/contracts/src/example-address.ts
 
 /**
  * mc-router's mappings for `routes`. A running server's hostname goes to the server, or to the
- * restarting notice while it doesn't answer (its destination is in `unreachable`). A restarting
- * one's goes to the restarting notice, and a sleeping one's to the sleeping notice, which answers
- * its ping. Its destination would be dialled for the ping instead, and on Fly that dial succeeds
- * even while the machine is stopped, so the ping would never be answered.
+ * restarting notice while it doesn't answer (its destination is in `unreachable`). A sleeping or
+ * restarting one's goes to the sleeping notice, which answers its ping and holds its join until
+ * the server is up. Its destination would be dialled for the ping instead, and on Fly that dial
+ * succeeds even while the machine is stopped, so the ping would never be answered.
+ *
+ * mc-router asks the wake webhook once for joins that arrive together and dials the route for the
+ * rest, so a restarting server's route decides those: the restarting notice turned each away at
+ * once to join again, and players did, over and over, while an owner's change rebooted the server.
  *
  * Cubepals' example address under each of `domains` goes to the sleeping notice too, which answers
  * it (`example-address.ts`), unless a server's route already names it.
@@ -29,9 +33,9 @@ export function mappings(
     ...examples,
     ...routes.map((r) => [
       r.hostname,
-      r.state === 'asleep'
+      r.state !== undefined
         ? notices.asleep
-        : r.state === 'restarting' || unreachable.has(r.destination)
+        : unreachable.has(r.destination)
           ? notices.restarting
           : r.destination,
     ]),
