@@ -315,7 +315,10 @@ export class ModService {
     const [upload] = await loadModUploads(this.#db, [uploadId])
     if (upload === undefined || upload.ownerId !== server.ownerId) throw new NotFound('Upload')
     if (await uploadInUse(this.#db, uploadId))
-      throw new AppError('invalid_choice', 'A server still has this upload. Remove it from its mods first.')
+      throw new AppError(
+        'invalid_choice',
+        'A server still has this upload, or a world in Backups comes back with it. Remove it from its mods, or delete that backup, first.',
+      )
     await deleteModUpload(this.#db, uploadId)
   }
 

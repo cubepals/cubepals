@@ -158,8 +158,12 @@ describe.skipIf(!hasDatabase)('a world brought with its mods', () => {
     const backup = await broughtBackup(h, read)
     const listed = (await h.app.backupQueries.list(owner, id)).backups.find((b) => b.id === backup.id)
     expect(listed?.playedWith).toEqual(read.playedWith)
-    // Its own jars wait with it in Backups, however long it waits there.
+    // Its own jars wait with it in Backups, however long it waits there, and stay until it goes.
     await h.app.artifacts.collectGarbage(new Date(Date.now() + 60 * DAY_MS))
+    const own = (await h.db.query.backups.findFirst({ where: (t, { eq: is }) => is(t.id, backup.id) }))
+      ?.worldFacts?.mods?.own[0]
+    if (own === undefined) throw new Error('No own jar kept')
+    await expect(h.app.mods.deleteUpload(owner, id, own.uploadId)).rejects.toThrow('a world in Backups')
 
     await h.app.backups.restoreBackup(owner, id, backup.id, randomUUID(), {
       withConfiguration: false,

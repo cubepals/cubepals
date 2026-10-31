@@ -129,8 +129,31 @@ export async function deleteModUpload(q: Queryable, id: string): Promise<void> {
   await q.delete(uploads).where(eq(uploads.id, id))
 }
 
-/** Whether a revision of a server that isn't purged pins this upload (§15.2). */
+/**
+ * Whether a revision of a server that isn't purged pins this upload (§15.2), or a backup of a world
+ * brought with it names it, to come back with it (`own-jars.ts`).
+ */
 export async function uploadInUse(q: Queryable, uploadId: string): Promise<boolean> {
+  return (await pinnedUpload(q, uploadId)) || (await namedByBackup(q, uploadId))
+}
+
+async function namedByBackup(q: Queryable, uploadId: string): Promise<boolean> {
+  const [row] = await q
+    .select({ id: schema.backups.id })
+    .from(schema.backups)
+    .innerJoin(schema.minecraftServers, eq(schema.minecraftServers.id, schema.backups.serverId))
+    .where(
+      and(
+        ne(schema.minecraftServers.status, 'purged'),
+        inArray(schema.backups.status, ['pending', 'ready']),
+        sql`${schema.backups.worldFacts} -> 'mods' -> 'own' @> ${JSON.stringify([{ uploadId }])}::jsonb`,
+      ),
+    )
+    .limit(1)
+  return row !== undefined
+}
+
+async function pinnedUpload(q: Queryable, uploadId: string): Promise<boolean> {
   const [row] = await q
     .select({ id: schema.serverRevisions.id })
     .from(schema.serverRevisions)
