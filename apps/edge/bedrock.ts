@@ -151,6 +151,8 @@ interface BedrockStatus {
   state: 'starting' | 'up' | 'down'
   /** Whether the relay holds its UDP socket. */
   bound: boolean
+  /** Whether NetherNet's signaling door listens; apart from `state`, which RakNet players' path decides. */
+  signaling: boolean
   restarts: number
 }
 
@@ -297,6 +299,8 @@ export function startBedrock(options: BedrockOptions): Bedrock {
       const address = (await lookup(options.bind, { family: 4 })).address
       if (geyser === null) {
         const publicAddress = await publicAddressOf(options.advertise)
+        // A stop while the lookups ran must not leave a Geyser that nothing holds.
+        if (stopped) return
         geyser = startGeyser({ address, publicAddress })
         console.error(
           publicAddress === null
@@ -317,10 +321,15 @@ export function startBedrock(options: BedrockOptions): Bedrock {
           idleMs: GEYSER_KEEPS_QUIET_SOURCE_MS - 2 * SECOND_MS,
           pongRefreshMs: 5 * SECOND_MS,
         })
+        if (stopped) {
+          relay.close()
+          return
+        }
         console.error(`[geyser] Bedrock players join at ${address}:${options.port}`)
       }
       // After the relay, so a door that can't open yet never keeps RakNet players out.
       door ??= await signalingDoor(options.signalingPort, `${address}:${GEYSER_SIGNALING_PORT}`)
+      if (stopped) door.close()
     },
     (error) => console.error('[geyser] the Bedrock port could not be opened; trying again', error),
     () => stopped,
@@ -328,11 +337,12 @@ export function startBedrock(options: BedrockOptions): Bedrock {
   let answered = false
   return {
     status() {
-      const up = geyser?.state === 'running' && relay?.ready() === true && door?.listening === true
+      const up = geyser?.state === 'running' && relay?.ready() === true
       answered ||= up
       return {
         state: up ? 'up' : answered ? 'down' : 'starting',
         bound: relay !== null,
+        signaling: door?.listening === true,
         restarts: geyser?.restarts ?? 0,
       }
     },
