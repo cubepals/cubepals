@@ -77,6 +77,38 @@ primary_region = "fra"
   [[services.ports]]
     port = 19132
 
+# NetherNet, the only way Bedrock 26.60 and later join (apps/edge/bedrock.ts). A client first asks
+# the name it was given over HTTPS on TCP 19132: Fly's proxy ends TLS with the app's certificate for
+# *.<play domain> (the one the browser service below uses) and hands plain HTTP, the player named in
+# X-Forwarded-For, to the agent's door, which passes it to Geyser's signaling.
+[[services]]
+  protocol = "tcp"
+  internal_port = 19134
+  auto_stop_machines = "off"
+  auto_start_machines = false
+
+  # Each signaling request is short; past the hard limit a client waits at the proxy rather than
+  # take the CPU the players on this machine need.
+  [services.concurrency]
+    type = "requests"
+    soft_limit = 200
+    hard_limit = 250
+
+  [[services.ports]]
+    port = 19132
+    handlers = ["tls", "http"]
+
+# Then the game itself, over WebRTC on UDP 19133, straight to Geyser, which tells the client this
+# port at the app's dedicated IPv4.
+[[services]]
+  protocol = "udp"
+  internal_port = 19133
+  auto_stop_machines = "off"
+  auto_start_machines = false
+
+  [[services.ports]]
+    port = 19133
+
 # A play address opened in a browser (apps/edge/browser-redirect.ts): the wildcard records send it
 # here too, and without this it would hang until the browser gave up. Fly's proxy speaks HTTP, and
 # on 443 ends TLS with the app's certificate for *.<play domain> (Terraform's fly_cert, issued over

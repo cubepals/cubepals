@@ -10,8 +10,18 @@
  */
 
 export interface GeyserSettings {
-  /** Where Geyser listens for Bedrock datagrams: loopback, behind the relay (`bedrock-relay.ts`). */
+  /**
+   * Where Geyser listens: the machine's UDP address (Fly's `fly-global-services`), which NetherNet
+   * answers players from directly. RakNet's `port` there is reached only through the relay
+   * (`bedrock-relay.ts`), which Fly doesn't expose.
+   */
   bedrock: { address: string; port: number }
+  /**
+   * NetherNet, the transport Bedrock 26.60 and later join by: signaling over HTTP on
+   * `signalingPort` (behind Fly's TLS, on the public Bedrock port over TCP), then the game over WebRTC
+   * on UDP `webrtcPort`, which players reach at `advertise` (the edge's public IPv4 and that port).
+   */
+  nethernet: { webrtcPort: number; advertise: string[]; trustedProxies: string[] }
   /** The port players reach the relay on, which a ping tells clients to join. */
   publicPort: number
   /** Where Geyser dials a Java player's connection: this edge's own front door. */
@@ -36,7 +46,15 @@ export function geyserConfig(s: GeyserSettings): string {
     'bedrock:',
     `  address: ${s.bedrock.address}`,
     `  port: ${s.bedrock.port}`,
-    '  transport: raknet',
+    `  webrtc-port: ${s.nethernet.webrtcPort}`,
+    // NetherNet for Bedrock 26.60 and later, which no longer join over RakNet; RakNet for older ones.
+    '  transport: both',
+    '  signaling:',
+    '    mode: builtin',
+    '    advertise-addresses:',
+    ...s.nethernet.advertise.map((address) => `    - ${JSON.stringify(address)}`),
+    // The edge says where it is reached: asking public STUN servers would find Fly's outbound address instead.
+    '    stun-discovery: false',
     'java:',
     `  address: ${s.java.address}`,
     `  port: ${s.java.port}`,
@@ -62,7 +80,15 @@ export function geyserConfig(s: GeyserSettings): string {
     `    mtu: ${s.mtu}`,
     // The relay says whose each player is (`bedrock-relay.ts`); a datagram that doesn't is ignored.
     '    use-haproxy-protocol: true',
+    // Only the relay, on this machine, may say so.
+    '    haproxy-protocol-whitelisted-ips:',
+    '    - 127.0.0.1',
+    // Fly's proxy ends TLS in front of signaling and names the player in X-Forwarded-For.
+    '    signaling-trusted-proxies:',
+    ...s.nethernet.trustedProxies.map((range) => `    - ${JSON.stringify(range)}`),
     `    validate-bedrock-login: ${s.validateLogin}`,
     'enable-metrics: false',
+    // The layout above is this version's, so Geyser runs no migration over it.
+    'config-version: 11',
   ].join('\n')}\n`
 }

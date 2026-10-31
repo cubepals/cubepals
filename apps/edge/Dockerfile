@@ -6,9 +6,9 @@
 # Geyser is one build of its standalone jar, pinned here by version, build and hash. To take a newer
 # one: `bun scripts/geyser.ts bump` (the latest) or `bun scripts/geyser.ts bump <build>`, which
 # rewrites the three lines below; `bun scripts/geyser.ts check` says whether the hash is the build's.
-ARG GEYSER_VERSION=2.12.0
-ARG GEYSER_BUILD=1268
-ARG GEYSER_SHA256=87c8d732c4772b813f65b245acdabf9852af3632854116a312a132568141a348
+ARG GEYSER_VERSION=2.12.1
+ARG GEYSER_BUILD=1279
+ARG GEYSER_SHA256=15205b459883a9046160e479b705f4f6bc4deeeff6f2ae97da1897e90be3a25b
 
 FROM ghcr.io/itzg/mc-router:1.49.0@sha256:76697861c41e7d64880accf0d25e953a3c2d871e6f5f0922d7c830ffcb2b75ab AS router
 
@@ -44,7 +44,7 @@ COPY packages/contracts/package.json packages/contracts/
 RUN bun -e 'const p = await Bun.file("package.json").json(); p.workspaces = ["apps/edge", "packages/contracts"]; delete p.devDependencies; await Bun.write("package.json", JSON.stringify(p))' \
  && bun install --lockfile-only \
  && bun install --production --frozen-lockfile
-COPY apps/edge/agent.ts apps/edge/asleep.ts apps/edge/bedrock-relay.ts apps/edge/bedrock.ts apps/edge/browser-redirect.ts apps/edge/clients.ts apps/edge/drain.ts apps/edge/example-address.ts apps/edge/forwarding.ts apps/edge/front.ts apps/edge/geyser-config.ts apps/edge/geyser.ts apps/edge/header.ts apps/edge/hold.ts apps/edge/join-trace.ts apps/edge/limits.ts apps/edge/mappings.ts apps/edge/metrics.ts apps/edge/notice.ts apps/edge/ping-wake.ts apps/edge/poll.ts apps/edge/resting.ts apps/edge/router.ts apps/edge/visit-reporter.ts apps/edge/visits.ts apps/edge/waking-line.ts apps/edge/
+COPY apps/edge/agent.ts apps/edge/asleep.ts apps/edge/bedrock-relay.ts apps/edge/bedrock.ts apps/edge/browser-redirect.ts apps/edge/clients.ts apps/edge/drain.ts apps/edge/example-address.ts apps/edge/forwarding.ts apps/edge/front.ts apps/edge/geyser-config.ts apps/edge/geyser.ts apps/edge/header.ts apps/edge/hold.ts apps/edge/join-trace.ts apps/edge/limits.ts apps/edge/mappings.ts apps/edge/metrics.ts apps/edge/nethernet-identity.ts apps/edge/notice.ts apps/edge/ping-wake.ts apps/edge/poll.ts apps/edge/resting.ts apps/edge/router.ts apps/edge/visit-reporter.ts apps/edge/visits.ts apps/edge/waking-line.ts apps/edge/
 COPY packages/contracts/src/durations.ts packages/contracts/src/edge-poll.ts packages/contracts/src/example-address.ts packages/contracts/src/proxy-header.ts packages/contracts/src/server-list.ts packages/contracts/src/
 COPY apps/control/src/minecraft/ports.ts apps/control/src/minecraft/
 RUN bun build apps/edge/agent.ts --compile --outfile /build/edge-agent
