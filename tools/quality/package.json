@@ -1,0 +1,13 @@
+{
+  "name": "blockly-quality-tools",
+  "private": true,
+  "type": "module",
+  "license": "AGPL-3.0-only",
+  "packageManager": "bun@1.4.3",
+  "dependencies": {
+    "@babel/parser": "8.0.10",
+    "@stryker-mutator/core": "10.1.1",
+    "fast-xml-parser": "5.11.2",
+    "istanbul-lib-instrument": "6.0.3"
+  }
+}

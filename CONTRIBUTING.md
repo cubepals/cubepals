@@ -31,11 +31,18 @@ bun test                        # the TypeScript suite
 bun run typecheck
 bun run lint                    # Biome; `bun run format` writes its fixes
 bun run gates                   # lint, typecheck, boundaries, structure, deprecations and tests
+bun run test:quality            # verify the quality controllers and policy
+bun run test:quality:proof      # deliberately weak tests and defects must be rejected
 ```
 
 Some tests need real services and skip without their variables: `DATABASE_URL` for Postgres,
 `S3_TEST_*` for an object store, `NATS_TEST_URL`, `PEBBLE_TEST_URL` and `CHALLTESTSRV_TEST_URL`.
 `.github/workflows/ci.yml` starts each one and sets its variable, and is the reference.
+
+[Test quality gates](docs/testing-quality.md) explains per-file coverage, mutation checks,
+property tests, and reproducible enforcement proofs. CI measures the base and proposed source;
+new and changed files must meet branch/function/line floors, and existing coverage cannot regress.
+Quality policy changes require the independently protected update process described there.
 
 blocklyd, the fleet node daemon, is Rust, in its own repository,
 [cubepals/blocklyd](https://github.com/cubepals/blocklyd), under FSL-1.1-ALv2. This one pins a

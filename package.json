@@ -29,13 +29,16 @@
     "check:deprecated": "node scripts/check-deprecated.ts",
     "check:move-only": "bun run scripts/check-move-only.ts",
     "check:structure": "bun run scripts/check-structure.ts",
-    "gates": "bun run lint && bun run typecheck && bun run check:boundaries && bun run check:structure && bun run check:deprecated && bun test",
+    "gates": "bun run lint && bun run typecheck && bun run check:boundaries && bun run check:structure && bun run check:deprecated && bun run test:quality && bun test",
     "labels:install": "bun install --cwd tools/labels --frozen-lockfile",
     "openapi:install": "bun install --cwd tools/openapi --frozen-lockfile",
     "openapi:generate": "bun tools/openapi/openapi.ts generate",
     "openapi:check": "bun tools/openapi/openapi.ts check",
     "openapi:update": "bun tools/openapi/openapi.ts update",
-    "prepare": "if git rev-parse --git-dir >/dev/null 2>&1 && [ -x node_modules/.bin/lefthook ]; then lefthook install; fi"
+    "prepare": "if git rev-parse --git-dir >/dev/null 2>&1 && [ -x node_modules/.bin/lefthook ]; then lefthook install; fi",
+    "test:quality": "bun run quality:install && node --test scripts/quality/*.test.mjs && python3 scripts/quality/reporter_test.py",
+    "test:quality:proof": "bun run quality:install && node --test scripts/quality/coverage-integration.test.mjs && node scripts/quality/mutation-selftest.mjs && node scripts/quality/behavior-proof.mjs",
+    "quality:install": "bun install --cwd tools/quality --frozen-lockfile"
   },
   "devDependencies": {
     "@aws-sdk/client-s3": "3.1154.0",
@@ -44,6 +47,7 @@
     "@polar-sh/sdk": "1.0.2",
     "@types/bun": "1.4.3",
     "@types/node": "22.20.5",
+    "fast-check": "4.10.2",
     "jscpd": "5.4.2",
     "knip": "6.42.1",
     "lefthook": "2.2.2",

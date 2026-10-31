@@ -32,6 +32,7 @@ class EventsTest {
         assertEquals("203.0.113.9:51234", Events.address(new InetSocketAddress("203.0.113.9", 51234)));
         assertEquals("[2001:db8:0:0:0:0:0:1]:25565", Events.address(new InetSocketAddress("2001:db8::1", 25565)));
         assertNull(Events.address(null));
+        assertNull(Events.address(InetSocketAddress.createUnresolved("not-resolved.invalid", 25565)));
     }
 
     @Test
@@ -42,10 +43,19 @@ class EventsTest {
         assertEquals("OldAuth", detail.getAsJsonArray("loginListeners").get(0).getAsString());
         assertEquals(0, detail.getAsJsonArray("configureListeners").size());
         assertEquals("1.20.1", detail.get("minecraft").getAsString());
+        assertEquals("git-Paper-196", detail.get("paper").getAsString());
+        assertEquals("boot", boot.get("kind").getAsString());
+        assertEquals("2026-10-20T10:00:01.234Z", boot.get("at").getAsString());
     }
 
     @Test
     void aTickIsRounded() {
         assertEquals("{\"tps\":19.99,\"mspt\":12.35,\"online\":3}", Events.tick(19.98765, 12.3456, 3).toString());
+        assertEquals("{\"tps\":0.0,\"mspt\":0.0,\"online\":0}", Events.tick(0, 0, 0).toString());
+    }
+
+    @Test
+    void anEmptyBatchIsStillAValidRequest() {
+        assertEquals("{\"events\":[]}", Events.batch(List.of()));
     }
 }

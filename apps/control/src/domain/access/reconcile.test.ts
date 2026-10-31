@@ -3,7 +3,14 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { describe, expect, test } from 'bun:test'
-import type { AccessEntry, AccessRecord, ObservedAccess, PlayerRef } from './access.ts'
+import {
+  type AccessCommand,
+  type AccessEntry,
+  type AccessRecord,
+  newAccessRecord,
+  type ObservedAccess,
+  type PlayerRef,
+} from './access.ts'
 import {
   commandKey,
   importObserved,
@@ -51,6 +58,73 @@ const record = (patch: Partial<AccessRecord> = {}): AccessRecord => ({
   reseedRequired: false,
   entries: [],
   ...patch,
+})
+
+describe('command failure attribution', () => {
+  test('an unseeded access record starts independently of records already being delivered', () => {
+    const first = newAccessRecord()
+    expect(first).toEqual({
+      whitelistEnabled: false,
+      whitelistEnabledPending: null,
+      reseedRequired: true,
+      entries: [],
+    })
+    first.entries.push(entry('whitelist', steve, 'pending_add'))
+    expect(newAccessRecord().entries).toEqual([])
+  })
+
+  test('server-wide commands and kicks do not claim a player-list entry', () => {
+    const commands: AccessCommand[] = [
+      { type: 'whitelist_mode', enabled: true },
+      { type: 'whitelist_mode', enabled: false },
+      { type: 'pardon_ip', ip: '203.0.113.7' },
+      { type: 'whitelist_reload' },
+      { type: 'kick', player: griefer, reason: 'griefing' },
+    ]
+    // A failed kick must not mark the later ban as failed; reloading and mode changes likewise
+    // have no individual entry to settle, even when other changes are being delivered.
+    for (const command of commands) expect(commandKey(command)).toBeNull()
+  })
+
+  test('opposite operations identify the same entry, while players and lists stay distinct', () => {
+    const pairs: [AccessCommand, AccessCommand][] = [
+      [
+        { type: 'whitelist_add', player: steve },
+        { type: 'whitelist_remove', player: steve },
+      ],
+      [
+        { type: 'op', player: steve },
+        { type: 'deop', player: steve },
+      ],
+      [
+        { type: 'ban', player: steve, reason: null },
+        { type: 'pardon', player: steve },
+      ],
+      [
+        { type: 'helper_add', player: steve },
+        { type: 'helper_remove', player: steve },
+      ],
+      [
+        { type: 'unchecked_add', player: steve },
+        { type: 'unchecked_remove', player: steve },
+      ],
+    ]
+    const keys = pairs.map(([add, remove]) => {
+      const key = commandKey(add)
+      expect(key).not.toBeNull()
+      expect(commandKey(remove)).toBe(key)
+      return key
+    })
+    expect(new Set(keys).size).toBe(pairs.length)
+    expect(commandKey({ type: 'op', player: alex })).not.toBe(commandKey({ type: 'op', player: steve }))
+    expect(commandKey({ type: 'ban', player: steve, reason: 'griefing' })).toBe(
+      commandKey({ type: 'ban', player: steve, reason: null }),
+    )
+    const differentlyCased = { uuid: 'ABCDEF01-2345-6789-ABCD-EF0123456789', name: 'Steve' }
+    expect(commandKey({ type: 'op', player: differentlyCased })).toBe(
+      'operator:abcdef01-2345-6789-abcd-ef0123456789',
+    )
+  })
 })
 
 describe('importObserved', () => {
@@ -264,5 +338,146 @@ describe('helpers', () => {
     expect(
       operatorsAndBansToWrite(files(), record({ entries: [entry('helper', alex, 'active')] })),
     ).toBeNull()
+  })
+})
+
+describe('reconciliation preserves identities and delivery state', () => {
+  test('observed metadata refreshes existing entries without losing absent rejections', () => {
+    const heldBan = { ...entry('ban', steve, 'active'), details: { reason: 'old' }, error: 'old error' }
+    const rejected = { ...entry('whitelist', alex, 'rejected'), error: 'not accepted' }
+    const renamed = { ...steve, name: 'SteveNow' }
+    const expiresAt = '2027-01-01T00:00:00Z'
+    const observed = files({
+      bans: [
+        { ...renamed, reason: 'griefing', source: 'Console', expiresAt },
+        { ...alex, reason: null, source: null, expiresAt: null },
+      ],
+    })
+    const imported = importObserved(
+      record({ entries: [heldBan, rejected, entry('operator', griefer, 'active')] }),
+      observed,
+    )
+    expect(imported.entries).toEqual([
+      {
+        ...heldBan,
+        player: renamed,
+        details: { reason: 'griefing', source: 'Console', expiresAt },
+        error: null,
+      },
+      rejected,
+      { list: 'ban', player: alex, state: 'active', origin: 'game', details: {}, error: null },
+    ])
+  })
+
+  test('delivery removes obsolete memberships and never re-adds removed or rejected entries', () => {
+    const observed = files({
+      operators: [{ ...steve, level: 4, bypassesPlayerLimit: false }],
+      bans: [{ ...alex, reason: null, source: null, expiresAt: null }],
+      helpers: [griefer],
+      unchecked: [steve],
+    })
+    const wanted = record({
+      entries: [
+        entry('operator', alex, 'active'),
+        entry('ban', steve, 'pending_add'),
+        entry('ban', alex, 'pending_remove'),
+        entry('helper', griefer, 'pending_remove'),
+        entry('helper', alex, 'pending_add'),
+        entry('unchecked', steve, 'rejected'),
+        entry('unchecked', alex, 'pending_add'),
+      ],
+    })
+    expect(planDelivery(observed, wanted)).toEqual([
+      { type: 'op', player: alex },
+      { type: 'pardon', player: alex },
+      { type: 'ban', player: steve, reason: null },
+      { type: 'deop', player: steve },
+      { type: 'helper_add', player: alex },
+      { type: 'helper_remove', player: griefer },
+      { type: 'unchecked_add', player: alex },
+      { type: 'unchecked_remove', player: steve },
+    ])
+  })
+
+  test('unchecked entries wait untouched without the plugin and settle from its actual membership', () => {
+    const held = record({
+      entries: [
+        entry('unchecked', alex, 'active'),
+        entry('unchecked', steve, 'pending_add'),
+        entry('unchecked', griefer, 'pending_remove'),
+      ],
+    })
+    expect(importObserved(held, files()).entries).toEqual(held.entries)
+    expect(planDelivery(files(), held)).toEqual([])
+    expect(settle(held, files(), files(), new Map(), javaOnly).record.entries).toEqual(held.entries)
+    const before = files({ unchecked: [alex, griefer] })
+    const after = files({ unchecked: [alex, steve] })
+    expect(planDelivery(before, held)).toEqual([
+      { type: 'unchecked_add', player: steve },
+      { type: 'unchecked_remove', player: griefer },
+    ])
+    expect(settle(held, before, after, new Map(), javaOnly).record.entries).toEqual([
+      entry('unchecked', alex, 'active'),
+      entry('unchecked', steve, 'active'),
+    ])
+  })
+
+  test('matching list sizes do not hide a different player and UUID casing does not create one', () => {
+    const named = { uuid: 'ABCDEF01-2345-6789-ABCD-EF0123456789', name: 'Steve' }
+    const wanted = record({ entries: [entry('whitelist', named, 'active')] })
+    expect(whitelistToWrite(files({ whitelist: [alex] }), wanted)).toEqual([named])
+    expect(
+      whitelistToWrite(files({ whitelist: [{ ...named, uuid: named.uuid.toLowerCase() }] }), wanted),
+    ).toBeNull()
+    const pair = record({
+      entries: [entry('whitelist', steve, 'active'), entry('whitelist', alex, 'active')],
+    })
+    expect(whitelistToWrite(files({ whitelist: [alex, steve] }), pair)).toBeNull()
+  })
+
+  test('startup files replace different identities and preserve explicit permission and ban details', () => {
+    const expiresAt = '2027-01-01T00:00:00Z'
+    const wanted = record({
+      entries: [
+        { ...entry('operator', steve, 'active'), details: { level: 0, bypassesPlayerLimit: true } },
+        { ...entry('ban', alex, 'active'), details: { reason: 'griefing', source: 'Console', expiresAt } },
+      ],
+    })
+    const observed = files({
+      operators: [{ ...alex, level: 4, bypassesPlayerLimit: false }],
+      bans: [{ ...griefer, reason: null, source: null, expiresAt: null }],
+    })
+    expect(operatorsAndBansToWrite(observed, wanted)).toEqual({
+      operators: [{ ...steve, level: 0, bypassesPlayerLimit: true }],
+      bans: [{ ...alex, reason: 'griefing', source: 'Console', expiresAt }],
+    })
+  })
+
+  test('a failed removal keeps its specific failure or naming wait until the files confirm removal', () => {
+    const cases: Array<{ list: 'operator' | 'ban'; observed: Partial<ObservedAccess>; wait: string }> = [
+      {
+        list: 'operator',
+        observed: { operators: [{ ...steve, level: 4, bypassesPlayerLimit: false }] },
+        wait: WAITS_FOR_JOIN,
+      },
+      {
+        list: 'ban',
+        observed: { bans: [{ ...steve, reason: null, source: null, expiresAt: null }] },
+        wait: WAITS_FOR_START,
+      },
+    ]
+    for (const { list, observed, wait } of cases) {
+      const pending = entry(list, steve, 'pending_remove')
+      const wanted = record({ entries: [pending] })
+      const stillThere = files({ ...observed, onlineMode: false })
+      const failures = new Map([[`${list}:${steve.uuid}`, 'connection reset']])
+      expect(settle(wanted, stillThere, stillThere, new Map(), javaOnly).record.entries).toEqual([
+        { ...pending, error: wait },
+      ])
+      expect(settle(wanted, stillThere, stillThere, failures, javaOnly).record.entries).toEqual([
+        { ...pending, error: 'connection reset' },
+      ])
+      expect(settle(wanted, stillThere, files(), failures, javaOnly).record.entries).toEqual([])
+    }
   })
 })
