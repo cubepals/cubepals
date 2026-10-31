@@ -14,6 +14,7 @@ import { dirname, join } from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
 import { MINUTE_MS } from '../../packages/contracts/src/durations.ts'
+import { baselineComparison } from './coverage-impact.mjs'
 import { dependencyOnlyChange } from './dependency-impact.mjs'
 import { inventory, sourceFiles } from './inventory.mjs'
 import { selectMutationScope } from './mutation-scope.mjs'
@@ -75,7 +76,7 @@ function install(root, { checker = strictChecker, types = '1.0.0', checkerVersio
   put('node_modules/checker-types/README.md', 'Types only.\n')
 }
 
-function repository(t, { entry = true } = {}) {
+function repository(t, { entry = true, extra = {} } = {}) {
   const root = mkdtempSync(join(tmpdir(), 'dependency-impact-'))
   t.after(() => rmSync(root, { recursive: true, force: true }))
   const git = (...args) => execFileSync('git', args, { cwd: root, encoding: 'utf8' }).trim()
@@ -101,6 +102,7 @@ function repository(t, { entry = true } = {}) {
   write('apps/source.ts', source)
   if (entry) write('apps/main.ts', "import { advance } from './source'\nadvance(0)\n")
   write('apps/existing.test.ts', strongTest)
+  for (const [path, content] of Object.entries(extra)) write(path, content)
   pin()
   install(root)
   const base = commit()
@@ -213,6 +215,49 @@ test('updating a package a test loads holds its subjects to their base scores', 
   const probe = command(t, repo)
   assert.notEqual(probe.run.status, 0, 'base scores cannot be skipped')
   assert.match(probe.run.stderr, /needs --base-root/)
+})
+
+test('dependency coverage comparisons retain affected oracles without unrelated timing samples', (t) => {
+  for (const [name, expected] of [
+    ['checker', ['apps/source.ts']],
+    ['clock', []],
+  ]) {
+    const repo = repository(t)
+    repo.pin({ [name]: '1.1.0' })
+    const head = repo.commit()
+    const scope = repo.scope()
+    const comparison = baselineComparison(
+      repo.root,
+      { base: repo.base, head },
+      repo.changed(),
+      inventory(repo.root),
+      scope.testImpact.baseInventory,
+    )
+    assert.deepEqual(comparison.files, expected)
+    assert.match(comparison.reason, /dependency-only/)
+  }
+})
+
+test('dependency oracles do not parse imported runtime JSON as executable source', (t) => {
+  const repo = repository(t, {
+    extra: {
+      'apps/input.json': '{"value":10}',
+      'apps/source.ts': `import data from './input.json' with {type:'json'};\n${source}\nexport const label=data.value;`,
+    },
+  })
+  repo.pin({ checker: '1.1.0' })
+  const head = repo.commit()
+  const scope = repo.scope()
+  assert.deepEqual(scope.subjects, ['apps/source.ts'])
+  assert.ok(scope.subjects.every((path) => !path.endsWith('.json')))
+  const comparison = baselineComparison(
+    repo.root,
+    { base: repo.base, head },
+    repo.changed(),
+    inventory(repo.root),
+    scope.testImpact.baseInventory,
+  )
+  assert.deepEqual(comparison.files, ['apps/source.ts'])
 })
 
 test('an update that weakens a test oracle falls below its base score; an equal one passes', (t) => {

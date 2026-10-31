@@ -48,9 +48,14 @@ seeded-defect proofs demonstrate gaps in test evidence; they did not establish a
 ## Required evidence
 
 Changed and new executable production files must reach **80% branches, 90% functions/methods, and 90% lines**.
-Every existing file must preserve its measured base percentages and may not increase its number
-of uncovered elements. The absolute-count check prevents padding a file with covered code to
+Production and existing-test edits require every existing file to preserve its measured base
+percentages and number of uncovered elements. The absolute-count check prevents padding a file with covered code to
 conceal new uncovered behavior. A fully covered file therefore keeps its stronger existing bar.
+With a Git-verified dependency-only update, the baseline comparison covers the affected oracle
+closures. Verified test additions and quality-only inputs preserve earlier isolated test inputs;
+sampling differences in unchanged code do not imply a regression. These narrower comparisons
+require a fresh authoritative Git comparison and matching base inventory. Every source file is
+still measured, every legacy deficit is reported, and changed-source floors always apply.
 These floors leave a limited allowance for hard-to-exercise adapter details while requiring most
 decision outcomes and almost every callable entry to be tested. Existing gaps remain visible and
 must be resolved when their source changes.
