@@ -115,8 +115,14 @@ also contributes its proposed dependencies and must still meet the mutation floo
 Changed modules reached only through tests are conservatively treated as potential test support:
 their affected tests retain both dependency closures. Assertion-library imports receive the same
 treatment. Ambiguous dependency mappings and changed fixture/data inputs expand scope instead
-of trusting an unproved mapping. No directory name exempts executable test helpers from coverage
-or mutation. Scheduled runs still audit the complete source inventory in stable partitions.
+of trusting an unproved mapping. Adding or changing production source retains full scope when
+any test dependency remains unresolved: new modules can change dynamic-loader fallback behavior,
+and even modules with production importers and direct tests can also be test oracles.
+Base resolution preserves the complete committed regular-file tree, using inert read-only
+placeholders for non-code assets; it neither executes those assets nor turns symlinks into
+regular inputs. This keeps static JSON and CSS imports resolvable in both revisions without
+relaxing the fallback for genuinely unknown imports. No directory name exempts executable test
+helpers from coverage or mutation. Scheduled runs audit the complete source inventory in stable partitions.
 
 Support classification is conservative graph analysis, not a proof of a function's semantic
 role. A function shared by production and tests can also calculate expected results without

@@ -9,7 +9,7 @@
  */
 import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { lstatSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, rmSync, writeFileSync } from 'node:fs'
+import { lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { qualityOnlyChanges } from './config-impact.mjs'
@@ -78,13 +78,10 @@ function readHead(root, entries) {
       directory = dirname(directory)
     }
     const info = lstatSync(absolute)
-    const bytes =
-      entry.mode === '120000' && info.isSymbolicLink()
-        ? Buffer.from(readlinkSync(absolute))
-        : REGULAR.has(entry.mode) && info.isFile()
-          ? readFileSync(absolute)
-          : null
-    if (!bytes || (REGULAR.has(entry.mode) && Boolean(info.mode & 0o111) !== (entry.mode === '100755')))
+    if (!REGULAR.has(entry.mode) || !info.isFile())
+      throw new Error(`Head input must be a committed regular file: ${path}`)
+    const bytes = readFileSync(absolute)
+    if (Boolean(info.mode & 0o111) !== (entry.mode === '100755'))
       throw new Error(`Head input is not the committed file type: ${path}`)
     const oid = createHash('sha1').update(`blob ${bytes.length}\0`).update(bytes).digest('hex')
     if (oid !== entry.oid) throw new Error(`Working tree differs from inspected head: ${path}`)
@@ -100,8 +97,13 @@ function baseContents(root, base, head, current) {
   const contents = new Map()
   const missing = []
   for (const [path, entry] of base) {
-    if (!MODULE.test(path) && !path.endsWith('package.json')) continue
-    if (!REGULAR.has(entry.mode)) throw new Error(`Base code/config must be a regular file: ${path}`)
+    if (!REGULAR.has(entry.mode)) throw new Error(`Base input must be a regular file: ${path}`)
+    if (!MODULE.test(path) && !path.endsWith('package.json')) {
+      // Dependency resolution needs the existence of imported JSON/CSS/assets, not their bytes.
+      // Read-only placeholders preserve the committed tree without evaluating non-code content.
+      contents.set(path, Buffer.alloc(0))
+      continue
+    }
     if (head.get(path)?.oid === entry.oid) contents.set(path, current.get(path))
     else missing.push(entry)
   }

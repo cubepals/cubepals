@@ -4,11 +4,14 @@
 
 /** Git fixtures exercise additive eligibility and retain evidence when old test oracles change. */
 import assert from 'node:assert/strict'
-import { execFileSync } from 'node:child_process'
+import { execFileSync, spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import test from 'node:test'
+import { SECOND_MS } from '../../packages/contracts/src/durations.ts'
+import { inventory, sourceFiles } from './inventory.mjs'
+import { selectMutationScope } from './mutation-scope.mjs'
 import { analyzeTestImpact } from './test-impact.mjs'
 
 const subject = 'apps/a/src/subject.ts'
@@ -53,8 +56,244 @@ function fixture(t, extra = {}) {
   const changed = () =>
     git('diff', '--name-only', '--no-renames', '-z', baseSha, 'HEAD').split('\0').filter(Boolean)
   const analyze = () => analyzeTestImpact({ root, baseSha, changedFiles: changed() })
-  return { root, git, write, save, baseSha, changed, analyze }
+  const scope = () => {
+    const entries = inventory(root)
+    return selectMutationScope({
+      root,
+      baseSha,
+      headSha: git('rev-parse', 'HEAD'),
+      changedFiles: changed(),
+      productionFiles: sourceFiles(entries),
+      testFiles: entries.filter((entry) => entry.kind === 'test').map((entry) => entry.path),
+    })
+  }
+  return { root, git, write, save, baseSha, changed, analyze, scope }
 }
+
+const dynamicTest = 'apps/a/src/guides.test.ts'
+const newSubject = 'apps/a/src/new-subject.ts'
+const newTest = 'apps/a/src/new-subject.test.ts'
+const assets = {
+  'apps/a/src/expected.json': '{"limit":10}',
+  'apps/a/src/styles.css': '.contract { color: green }',
+}
+const guideLoader = `import { test } from 'bun:test'; test('guide', async () => import(\`./guides/\${process.env.GUIDE}/page.ts\`))\n`
+const newSource = 'export const advance = (value: number) => value >= 10 ? 10 : value + 1\n'
+const newContract =
+  "import { expect, test } from 'bun:test'; import { advance } from './new-subject.ts'; test('cap', () => expect(advance(11)).toBe(10))\n"
+
+test('Git-bound new source stays incremental beside unchanged static asset imports', (t) => {
+  const f = fixture(t, {
+    ...assets,
+    [originalTest]: `${strong}import expected from './expected.json'; import './styles.css';\n`,
+  })
+  f.write(newSubject, newSource)
+  f.write(newTest, newContract)
+  const head = f.save()
+  const scope = f.scope()
+  assert.equal(scope.full, false)
+  assert.deepEqual(scope.subjects, [newSubject])
+  assert.deepEqual(scope.testsByFile[newSubject], [newTest])
+  assert.deepEqual(scope.testImpact.verifiedAddedTests, [newTest])
+  assert.equal(scope.testImpact.base, f.baseSha)
+  assert.equal(scope.testImpact.head, head)
+  assert.deepEqual(scope.testImpact.verifiedChangedFiles, [newTest, newSubject].sort())
+})
+
+test('new source retains full fallback beside an unchanged unknown loader', (t) => {
+  const f = fixture(t, {
+    ...assets,
+    [originalTest]: `${strong}import expected from './expected.json'; import './styles.css';\n`,
+    [dynamicTest]: guideLoader,
+    'apps/a/src/guides/first/page.ts': 'export const page = () => "first"\n',
+  })
+  f.write(newSubject, newSource)
+  f.write(newTest, newContract)
+  f.save()
+  const scope = f.scope()
+  assert.equal(scope.full, true)
+  assert.ok(scope.subjects.includes(newSubject))
+  assert.ok(scope.subjects.includes(subject))
+  assert.ok(scope.additionalTestsByFile[newSubject].flat().includes(dynamicTest))
+  const ambiguities = scope.reasons.filter((reason) => reason.includes('ambiguous'))
+  assert.equal(ambiguities.length, 2)
+  assert.ok(ambiguities.every((reason) => reason.endsWith(dynamicTest)))
+})
+
+test('existing production changes retain full fallback when unknown loaders may also use them as oracles', (t) => {
+  const f = fixture(t, { [dynamicTest]: guideLoader })
+  f.write(subject, 'export const choose = (value: number) => value >= 10 ? 10 : value\n')
+  f.save()
+  const scope = f.scope()
+  assert.equal(scope.full, true)
+  assert.ok(scope.subjects.includes(subject))
+  assert.ok(scope.subjects.includes(other))
+  assert.ok(scope.additionalTestsByFile[subject].flat().includes(dynamicTest))
+})
+
+test('static non-code imports preserve base resolution for an edited test', (t) => {
+  const f = fixture(t, {
+    ...assets,
+    [originalTest]: `${strong}import expected from './expected.json'; import './styles.css';\n`,
+  })
+  f.write(originalTest, `${weak}import expected from './expected.json'; import './styles.css';\n`)
+  f.save()
+  const scope = f.scope()
+  assert.equal(scope.full, false)
+  assert.deepEqual(scope.subjects, [subject])
+  assert.equal(
+    scope.reasons.some((reason) => reason.includes('ambiguous')),
+    false,
+  )
+})
+
+test('an unresolved static resource in a touched test is not invented by the base snapshot', (t) => {
+  const f = fixture(t, { [originalTest]: `${strong}import './missing.css';\n` })
+  f.write(originalTest, weak)
+  f.save()
+  assert.equal(f.scope().full, true)
+})
+
+for (const change of ['edit', 'delete']) {
+  test(`an ambiguous test ${change} retains full obligations beside new source`, (t) => {
+    const f = fixture(t, { [dynamicTest]: guideLoader })
+    if (change === 'delete') rmSync(join(f.root, dynamicTest))
+    else
+      f.write(
+        dynamicTest,
+        "import { test, expect } from 'bun:test'; test('weakened', () => expect(true).toBe(true))\n",
+      )
+    f.write(newSubject, newSource)
+    f.write(newTest, newContract)
+    f.save()
+    const scope = f.scope()
+    assert.equal(scope.full, true)
+    assert.ok(scope.subjects.includes(other), 'unknown edited/deleted tests cannot hide old subjects')
+  })
+}
+
+test('an existing oracle change retains unknown-loader obligations even beside new source', (t) => {
+  const helper = 'apps/a/src/assertions.ts'
+  const f = fixture(t, {
+    [helper]: 'export const matches = (value: number) => value === 10\n',
+    [originalTest]:
+      "import { expect, test } from 'bun:test'; import { choose } from './subject.ts'; import { matches } from './assertions.ts'; test('boundary', () => expect(matches(choose(11))).toBe(true))\n",
+    [dynamicTest]: guideLoader,
+  })
+  f.write(helper, 'export const matches = (_value: number) => true\n')
+  f.write(newSubject, newSource)
+  f.write(newTest, newContract)
+  f.save()
+  const scope = f.scope()
+  assert.equal(scope.full, true)
+  assert.ok(scope.subjects.includes(subject))
+  assert.match(scope.reasons.join('\n'), /ambiguous base test dependencies after executable changes/)
+})
+
+for (const shared of [false, true]) {
+  test(`a dynamically loaded existing oracle cannot hide subject defects${shared ? ' even with production and direct test imports' : ''}`, (t) => {
+    const helper = 'apps/a/src/oracle.ts'
+    const direct = 'apps/a/src/oracle.test.ts'
+    const oracle = 'export const matches = (value: number) => value === 10\n'
+    const dynamic =
+      "import { expect, test } from 'bun:test'; import { choose } from './subject.ts'; test('boundary', async () => { const name = ['or', 'acle'].join(''); const { matches } = await import('./' + name + '.ts'); expect(matches(choose(11))).toBe(true) })\n"
+    const f = fixture(t, {
+      [helper]: oracle,
+      [originalTest]: dynamic,
+      ...(shared
+        ? {
+            'apps/a/src/main.ts':
+              "import { choose } from './subject.ts'; import { matches } from './oracle.ts'; export const result = matches(choose(2))\n",
+            [direct]:
+              "import { expect, test } from 'bun:test'; import { matches } from './oracle.ts'; test('exists', () => expect(matches(10)).toBeDefined())\n",
+          }
+        : {}),
+    })
+    f.write(helper, 'export const matches = (_value: number) => true\n')
+    f.write(newSubject, newSource)
+    f.write(newTest, newContract)
+    f.save()
+    const scope = f.scope()
+    assert.equal(scope.full, true)
+    assert.ok(scope.subjects.includes(subject))
+    assert.ok(scope.subjects.includes(helper))
+    assert.match(scope.reasons.join('\n'), /ambiguous base test dependencies after executable changes/)
+    const run = () =>
+      spawnSync(
+        process.env.QUALITY_BUN ?? 'bun',
+        ['test', `./${originalTest}`, ...(shared ? [`./${direct}`] : [])],
+        {
+          cwd: f.root,
+          encoding: 'utf8',
+          timeout: 30 * SECOND_MS,
+        },
+      )
+    f.write(subject, 'export const choose = (value: number) => value\n')
+    f.write(helper, oracle)
+    const baseline = run()
+    assert.equal(baseline.status, 1, baseline.stdout + baseline.stderr)
+    f.write(helper, 'export const matches = (_value: number) => true\n')
+    const weakened = run()
+    assert.equal(weakened.status, 0, weakened.stdout + weakened.stderr)
+    f.write(helper, 'export const matches = (_value: number) => false\n')
+    const mutant = run()
+    assert.equal(mutant.status, 1, mutant.stdout + mutant.stderr)
+  })
+}
+
+test('adding a dynamically loaded oracle can weaken an unchanged fallback and retains full scope', (t) => {
+  const helper = 'apps/a/src/oracle.ts'
+  const f = fixture(t, {
+    [originalTest]:
+      "import { expect, test } from 'bun:test'; import { choose } from './subject.ts'; test('boundary', async () => { const name = ['or', 'acle'].join(''); const { matches } = await import('./' + name + '.ts').catch(() => ({ matches: (value: number) => value === 10 })); expect(matches(choose(11))).toBe(true) })\n",
+  })
+  f.write(helper, 'export const matches = (_value: number) => true\n')
+  f.save()
+  const scope = f.scope()
+  assert.equal(scope.full, true)
+  assert.ok(scope.subjects.includes(subject))
+  assert.ok(scope.subjects.includes(helper))
+  const run = () =>
+    spawnSync(process.env.QUALITY_BUN ?? 'bun', ['test', `./${originalTest}`], {
+      cwd: f.root,
+      encoding: 'utf8',
+      timeout: 30 * SECOND_MS,
+    })
+  f.write(subject, 'export const choose = (value: number) => value\n')
+  rmSync(join(f.root, helper))
+  const baseline = run()
+  assert.equal(baseline.status, 1, baseline.stdout + baseline.stderr)
+  f.write(helper, 'export const matches = (_value: number) => true\n')
+  const weakened = run()
+  assert.equal(weakened.status, 0, weakened.stdout + weakened.stderr)
+  f.write(helper, 'export const matches = (_value: number) => false\n')
+  const mutant = run()
+  assert.equal(mutant.status, 1, mutant.stdout + mutant.stderr)
+})
+
+test('new source cannot hide changed oracle data or runner configuration', (t) => {
+  for (const [path, value] of [
+    ['apps/a/src/expected.json', '{"limit":11}'],
+    ['bunfig.toml', '[test]\npreload = ["./oracle.ts"]\n'],
+  ]) {
+    const f = fixture(t, assets)
+    f.write(path, value)
+    f.write(newSubject, newSource)
+    f.write(newTest, newContract)
+    f.save()
+    assert.equal(f.scope().full, true, path)
+  }
+})
+
+test('non-code symlinks cannot masquerade as committed regular dependency inputs', (t) => {
+  const f = fixture(t, assets)
+  rmSync(join(f.root, 'apps/a/src/styles.css'))
+  symlinkSync('subject.ts', join(f.root, 'apps/a/src/styles.css'))
+  f.write(newSubject, newSource)
+  f.write(newTest, newContract)
+  f.save()
+  assert.throws(() => f.analyze(), /regular file/)
+})
 
 test('a true addition preserves original tests and does not certify legacy mutation coverage', (t) => {
   const f = fixture(t)

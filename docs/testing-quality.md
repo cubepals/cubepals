@@ -107,6 +107,13 @@ dependencies. Runtime configuration and dependency changes expand scope unless t
 proves that only isolated quality tooling changed. Comparison metadata must match the base and
 head SHAs supplied directly by the protected workflow.
 
+An unresolved test dependency retains conservative full scope when production source is added or
+changed. An added module can alter an unchanged dynamic loader's fallback behavior, and a module
+used by production can also serve as a test oracle. Static reachability cannot prove either case
+harmless. Base resolution preserves the existence of committed regular JSON, CSS, and other
+assets without executing them, so static resource imports do not become artificial unknown
+dependencies. Genuine unresolved imports still expand scope.
+
 Verified new test files can be classified separately. Their tests still execute and contribute
 coverage, but importing an integration harness does not retroactively impose the mutation floor
 on every legacy module it imports. This classification never waives changes to production,
