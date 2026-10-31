@@ -4,9 +4,10 @@
 
 /**
  * What operations ask of the running game through its console: where it answers, and the save
- * that winds it down before its process goes away, with word to the players first where it is
- * coming back (`restart-notice.ts`). All of it is best effort; the commands themselves are
- * `minecraft/console.ts`'s, and the snapshot that pauses saving around it is `world-copies.ts`'s.
+ * that winds it down before its process goes away, with a countdown in chat and then word to the
+ * players first where it is coming back (`restart-warning.ts`, `restart-notice.ts`). All of it is
+ * best effort; the commands themselves are `minecraft/console.ts`'s, and the snapshot that pauses
+ * saving around it is `world-copies.ts`'s.
  */
 import type { MinecraftServer } from '../../../domain/server/server.ts'
 import { SAVE_ALL_FLUSH } from '../../../minecraft/console.ts'
@@ -17,6 +18,7 @@ import type { RuntimeHandle } from '../../ports/runtime.ts'
 import type { Runtimes } from '../../runtimes/router.ts'
 import type { RuntimeSpecs } from '../../servers/specs.ts'
 import { restartNotice } from './restart-notice.ts'
+import { warnBeforeRestart } from './restart-warning.ts'
 
 export type GameConsole = ReturnType<typeof gameConsole>
 
@@ -37,10 +39,14 @@ export function gameConsole(deps: {
    * Saves the world and keeps in-game access changes before the process goes away. Best effort,
    * but says whether the world was saved: a server put to sleep with its memory kept needs it,
    * since a provider may drop that memory and boot from what was saved. Given why it is coming
-   * back (`restart-notice.ts`), whoever is on is turned out with it first.
+   * back, whoever is on reads a countdown (`restart-warning.ts`), then is turned out with it
+   * (`restart-notice.ts`).
    */
   const windDown = async (server: MinecraftServer, handle: RuntimeHandle, why?: string): Promise<boolean> => {
-    if (why !== undefined) await notice.sendOff(server, handle, why)
+    if (why !== undefined) {
+      await warnBeforeRestart(deps.console, consoleTarget(server, handle))
+      await notice.sendOff(server, handle, why)
+    }
     await deps.access.reconcile(server, handle, 'import').catch(() => undefined)
     const target = {
       endpoint: runtime.endpoint(handle, PORT_NAMES.rcon, 'control'),
