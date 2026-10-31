@@ -274,6 +274,27 @@ test('a package whose install is only declarations affects nothing, even a test 
     'checker-types',
   ])
   rmSync(join(repo.root, 'node_modules/checker-types/index.js'))
+  // A script run at install time is not a shipped file, so it is checked on its own.
+  for (const script of ['preinstall', 'install', 'postinstall', 'prepare']) {
+    const manifest = join(repo.root, 'node_modules/checker-types/package.json')
+    writeFileSync(
+      manifest,
+      JSON.stringify({ name: 'checker-types', version: '1.1.0', scripts: { [script]: 'true' } }),
+    )
+    assert.deepEqual(
+      dependencyOnlyChange(repo.root, repo.base, repo.changed()).declarationPackages,
+      [],
+      script,
+    )
+  }
+  // Scripts that run only in the package's own repository, such as build or test, are not run here.
+  writeFileSync(
+    join(repo.root, 'node_modules/checker-types/package.json'),
+    JSON.stringify({ name: 'checker-types', version: '1.1.0', scripts: { build: 'tsc', test: 'tsc' } }),
+  )
+  assert.deepEqual(dependencyOnlyChange(repo.root, repo.base, repo.changed()).declarationPackages, [
+    'checker-types',
+  ])
   install(repo.root, { types: '1.0.0' })
   assert.deepEqual(dependencyOnlyChange(repo.root, repo.base, repo.changed()).declarationPackages, [])
 })

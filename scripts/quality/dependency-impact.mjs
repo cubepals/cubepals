@@ -66,6 +66,16 @@ function registryRecord(key, record) {
   )
 }
 
+// Scripts a package manager runs while installing a package.
+const INSTALL_SCRIPTS = new Set([
+  'preinstall',
+  'install',
+  'postinstall',
+  'preprepare',
+  'prepare',
+  'postprepare',
+])
+
 // Files a package can ship without any of them ever running.
 const DECLARATION =
   /(?:\.d\.[cm]?ts|\.d\.ts\.map|\.(?:json|mdx?|markdown|txt))$|(?:^|\/)(?:licen[cs]e|notice|readme|changelog|authors)[^/]*$/i
@@ -89,7 +99,9 @@ function declarationsOnly(root, lock, key) {
     const directory = installedDirectory(root, lock, key)
     const manifest = JSON.parse(readFileSync(join(directory, 'package.json'), 'utf8'))
     if (`${manifest.name}@${manifest.version}` !== lock.packages[key][0]) return false
-    if (manifest.bin || manifest.scripts?.install || manifest.scripts?.postinstall) return false
+    // An install script runs without being a shipped file the walk below could see.
+    const scripts = Object.keys(manifest.scripts ?? {})
+    if (manifest.bin || scripts.some((name) => INSTALL_SCRIPTS.has(name))) return false
     const pending = ['']
     while (pending.length) {
       const relative = pending.pop()
