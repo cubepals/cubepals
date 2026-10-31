@@ -2,6 +2,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
+import { COMPONENTS_FILE, INSTANCE_SETTINGS } from './instance-layout.ts'
 import { isSafePath } from './mrpack.ts'
 
 /**
@@ -53,7 +54,7 @@ export function detect(names: readonly string[]): Detected | null {
   if (has('manifest.json') && (under('overrides/') || has('modlist.html') || inside.length === 1))
     return { format: 'curseforge', root, game: '' }
   if (has('pack.toml') && has('index.toml')) return { format: 'packwiz', root, game: '' }
-  if (has('mmc-pack.json') || has('instance.cfg')) {
+  if (has(COMPONENTS_FILE) || has(INSTANCE_SETTINGS)) {
     const game = under('.minecraft/') ? '.minecraft/' : under('minecraft/') ? 'minecraft/' : ''
     return { format: 'instance', root, game }
   }

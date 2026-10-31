@@ -277,7 +277,7 @@ export function composeControlPlane(ports: ControlPlanePorts, settings: ControlP
     configured: { admins: settings.adminEmails ?? [], signupCap: settings.signupCap ?? true },
   })
   const billing = new BillingService({ ...ports, db, policy, accounts, webOrigin: settings.webOrigin })
-  const backups = new BackupService({ db, transitions, events, runtime, policy, artifacts, official, ports })
+  const backups = new BackupService({ db, transitions, events, policy, artifacts, official, mods, ports })
   const worlds = new WorldService({ db, transitions, events, providers: runtime.providers })
   const reconciler = new AccessReconciler({ db, runtime, console: ports.console, profiles, specs, events })
   const consoleService = new ConsoleService({ db, policy, runtime, console: ports.console, specs })

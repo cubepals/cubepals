@@ -16,6 +16,7 @@ import {
 } from '../../domain/account/entitlements.ts'
 import { ACCESS_FILES, NAME_CACHE } from '../../minecraft/access.ts'
 import { normalizeUuid } from '../../minecraft/console.ts'
+import { INSTANCE_FILES } from '../../minecraft/instance-layout.ts'
 import { compareVersions, isRelease, supports } from '../../minecraft/versions.ts'
 import { DOWNLOAD_NOTE, jarsInNote } from '../../minecraft/world-download.ts'
 import { moddedBrands, type WorldFacts, worldFacts } from '../../minecraft/world-facts.ts'
@@ -62,9 +63,13 @@ const LIMITS = {
 /** The server's files beside the world that are read for its players, so never said to be left out. */
 const READ_BESIDE: ReadonlySet<string> = new Set([...ACCESS_FILES, NAME_CACHE])
 
-/** The few files an upload is read by: what each world says of itself, its server's settings and who joined it. */
+/**
+ * The few files an upload is read by: what each world says of itself, its server's settings and who
+ * joined it, and what an instance around it says it ran on (`INSTANCE_FILES`).
+ */
 const KEPT =
   /(^|\/)(level\.dat|level\.dat_old|server\.properties|world_gen_settings\.dat|cubepals-download\.txt|usercache\.json|whitelist\.json|ops\.json|banned-players\.json)$/
+const kept = (name: string): boolean => KEPT.test(name) || INSTANCE_FILES.test(name)
 /** How many of an offline-mode server's players are looked up as accounts: a large server's regulars. */
 const MOST_ACCOUNTS = 200
 
@@ -176,7 +181,7 @@ export class WorldReading {
       throw error
     })
     const archive = await this.#archives
-      .openWorld(path, { ...LIMITS, keep: (name) => KEPT.test(name) })
+      .openWorld(path, { ...LIMITS, keep: kept })
       .catch((error: unknown) => {
         if (error instanceof HostileArchive)
           throw new Refused(error.reason === 'too_large' ? SAID.tooLarge : SAID.hostile, error.message)
@@ -550,6 +555,8 @@ export function notesOn(
     newer: (to: string) => string | null
     /** The upload's other worlds, kept or named on their own. */
     others?: readonly FoundWorld[]
+    /** What its owner reads of its mods, where they were read (`world-mods.ts`), in place of what its level.dat says. */
+    mods?: readonly string[]
   },
 ): string[] {
   const notes: string[] = []
@@ -572,14 +579,17 @@ export function notesOn(
   // The server's other worlds are said of their own (`kept-worlds.ts`).
   const others = (how.others ?? []).flatMap((world) => [world.folder, ...world.beside])
   // Who could join and who is who are read from the server's files (`world-people.ts`), not left out.
+  // Its mods, where they were read, are said of their own too.
   const rest = leftOut.filter(
     (name) =>
       !others.some((folder) => folder === name || folder.endsWith(`/${name}`)) &&
-      !READ_BESIDE.has(name.slice(name.lastIndexOf('/') + 1)),
+      !READ_BESIDE.has(name.slice(name.lastIndexOf('/') + 1)) &&
+      !(how.mods !== undefined && name === 'mods/'),
   )
   if (!how.asItCame && rest.length > 0) notes.push(`Left out what isn’t the world: ${rest.join(', ')}.`)
   const modded = moddedBrands(read.facts)
-  if (modded.length > 0)
+  if (how.mods !== undefined) notes.push(...how.mods)
+  else if (modded.length > 0)
     notes.push(
       `It was opened with ${modded.map(brandName).join(' and ')}. Blocks and items from its mods are only there on a server running the same mods.`,
     )

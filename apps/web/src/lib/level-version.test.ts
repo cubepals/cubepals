@@ -75,7 +75,9 @@ describe('the server types a world was opened with', () => {
       version: '26.3',
       brands: ['Paper'],
     })
-    expect(await levelOf(tarOf([{ path: 'world/level.dat', file: level('paper-26.3/world') }]))).toMatchObject({
+    expect(
+      await levelOf(tarOf([{ path: 'world/level.dat', file: level('paper-26.3/world') }])),
+    ).toMatchObject({
       gameVersion: '26.3',
       moddedWith: [],
     })
@@ -85,6 +87,10 @@ describe('the server types a world was opened with', () => {
   })
 
   test('is unknown for a file it can’t read', async () => {
-    expect(await levelOf(new Blob(['not a world']))).toEqual({ gameVersion: null, name: null, moddedWith: [] })
+    expect(await levelOf(new Blob(['not a world']))).toEqual({
+      gameVersion: null,
+      name: null,
+      moddedWith: [],
+    })
   })
 })

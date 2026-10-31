@@ -46,7 +46,6 @@ import {
   supports,
 } from '../../minecraft/versions.ts'
 import { type Actor, authorize, requestedBy } from '../actor.ts'
-import { recordStored } from '../artifacts/persistence.ts'
 import { type DeploymentCapabilities, requireCapability } from '../capabilities.ts'
 import { revokedIn } from '../catalog/persistence.ts'
 import type { CatalogSync, CatalogTransition } from '../catalog/sync.ts'
@@ -71,10 +70,11 @@ import { digestsOf, quarantinedOf, refusalOf, requireInstallable } from './jar-c
 import type { JarChecks } from './jar-checks.ts'
 import { JarNeedsReader } from './jar-needs.ts'
 import { readUploadedJar } from './jar-uploads.ts'
+import { OwnJars } from './own-jars.ts'
 import {
   deleteModUpload,
   findModUpload,
-  insertModUpload,
+  keptAsUpload,
   loadModUploads,
   type ModUploadRecord,
   pinUpload,
@@ -132,7 +132,7 @@ const MAX_ROUNDS = 12
 const NEWER_RELEASES_TRIED = 3
 
 /** The largest jar Blockly takes: bigger than any mod, smaller than a mistake. */
-const MAX_JAR_BYTES = 128 * 1024 * 1024
+export const MAX_JAR_BYTES = 128 * 1024 * 1024
 /** A browser starts sending at once; the link is signed for the size it said. */
 const UPLOAD_LINK_SECONDS = 15 * MINUTE_S
 /** Long enough to read the bytes back and copy them into place. */
@@ -162,6 +162,8 @@ export class ModService {
   readonly #jars: JarNeedsReader
   readonly #datapacks: DatapackUploads
   readonly #checks: JarChecks
+  /** Jars an owner brings inside another upload, kept as their uploads are (a world's mods folder). */
+  readonly ownJars: OwnJars
 
   constructor(deps: {
     db: Db
@@ -190,6 +192,7 @@ export class ModService {
     this.#jars = new JarNeedsReader({ db: deps.db, formats: deps.formats })
     this.#datapacks = new DatapackUploads(deps)
     this.#checks = deps.jarChecks
+    this.ownJars = new OwnJars(deps)
   }
 
   /**
@@ -277,16 +280,15 @@ export class ModService {
         : { sha512, key: await store.ingestFromUrl(link.url, sha512), sizeBytes: bytes.length, metadata: jar }
 
     const upload = await this.#db.transaction(async (tx) => {
-      await recordStored(tx, { sha512: kept.sha512, key, sizeBytes: kept.sizeBytes, source: 'upload' })
+      const id = await keptAsUpload(tx, {
+        ownerId: pending.ownerId,
+        sha512: kept.sha512,
+        key,
+        sizeBytes: kept.sizeBytes,
+        fileName: pending.fileName,
+        metadata,
+      })
       if (jar !== null) await this.#checks.start(tx, digests)
-      const id =
-        (await findModUpload(tx, pending.ownerId, kept.sha512))?.id ??
-        (await insertModUpload(tx, {
-          ownerId: pending.ownerId,
-          sha512: kept.sha512,
-          fileName: pending.fileName,
-          metadata,
-        }))
       await finishPendingUpload(tx, pending.id, new Date())
       await tx.insert(schema.auditLog).values({
         actor: requestedBy(actor),
@@ -385,6 +387,15 @@ export class ModService {
       createdBy: '',
     }
     return this.#plan(empty, target.gameVersion, target.loader, { add: [...wanted] })
+  }
+
+  /**
+   * A change planned on a server type and release other than the server's own: the mods a world
+   * it restores was played with (`backups/restored-mods.ts`), with the server's own resolved again.
+   */
+  planOn(desired: ServerRevision, target: { gameVersion: string; loader: Loader }, change: ModChange) {
+    playsNoPack(desired)
+    return this.#plan(desired, target.gameVersion, target.loader, change)
   }
 
   async plan(actor: Actor, serverId: string, change: ModChange): Promise<ModPlan> {

@@ -10,10 +10,11 @@
  */
 import { NAME_MAX_LENGTH } from '@blockly/contracts'
 import { DAY_MS } from '@blockly/contracts/durations'
-import type { Tx } from '@blockly/db'
+import type { BroughtModsJson, Tx } from '@blockly/db'
 import type { MinecraftServer } from '../../domain/server/server.ts'
 import { nextLevelName } from '../../domain/world/world.ts'
 import { isRelease } from '../../minecraft/versions.ts'
+import { moddedBrands } from '../../minecraft/world-facts.ts'
 import { isLevelName } from '../../minecraft/worlds.ts'
 import { insertWorld, type listWorlds, markPruned, markWorldDeleted } from '../worlds/persistence.ts'
 import { insertArchive } from './persistence.ts'
@@ -56,6 +57,8 @@ export interface KeptWorld {
   backupId: string
   key: string
   sizeBytes: number
+  /** The mods its upload held beside it (`world-mods.ts`), for a restore to bring. */
+  mods?: BroughtModsJson | null
 }
 
 /**
@@ -69,6 +72,7 @@ export async function recordKept(
   at: { now: Date; days: number; serverVersion: string },
 ): Promise<void> {
   const { facts } = kept.read
+  const modded = moddedBrands(facts)
   let worldId = kept.known
   if (worldId === null) {
     worldId = (
@@ -100,6 +104,8 @@ export async function recordKept(
       levelType: facts.levelType,
       hardcore: facts.hardcore,
       gameVersion: facts.gameVersion,
+      ...(modded.length > 0 ? { moddedWith: modded } : {}),
+      ...(kept.mods ? { mods: kept.mods } : {}),
     },
   })
 }

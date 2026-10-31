@@ -41,7 +41,9 @@ export async function levelOf(file: Blob): Promise<LevelSays> {
     const level = (await levelInTar(file)) ?? (await levelInZip(file))
     if (level === null) return UNKNOWN
     const said = dataIn(
-      new Uint8Array(await new Response(level.stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer()),
+      new Uint8Array(
+        await new Response(level.stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer(),
+      ),
     )
     return { gameVersion: said.version, name: said.name, moddedWith: moddedOf(said.brands) }
   } catch {

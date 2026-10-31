@@ -8,6 +8,7 @@ import { DATAPACK, type PinnedMod } from '../../domain/mods/artifact.ts'
 import { type DatapackMetadata, releasesFor } from '../../minecraft/datapack-files.ts'
 import { fits, type ModMetadata, type VersionRange } from '../../minecraft/uploads.ts'
 import { offeredVersions } from '../../minecraft/versions.ts'
+import { recordStored } from '../artifacts/persistence.ts'
 import { AppError } from '../errors.ts'
 
 const uploads = schema.modUploads
@@ -48,7 +49,7 @@ const toRecord = (
   metadata: row.metadata as unknown as UploadMetadata,
 })
 
-export async function insertModUpload(
+async function insertModUpload(
   q: Queryable,
   upload: { ownerId: string; sha512: string; fileName: string; metadata: UploadMetadata },
 ): Promise<string> {
@@ -63,6 +64,30 @@ export async function insertModUpload(
     .returning({ id: uploads.id })
   if (!row) throw new Error('The upload just recorded is missing')
   return row.id
+}
+
+/**
+ * Bytes stored under their sha512 (`key`), kept as an owner's upload: their upload of the same
+ * bytes before, where they made one, else a new one. Its id.
+ */
+export async function keptAsUpload(
+  tx: Queryable,
+  upload: {
+    ownerId: string
+    sha512: string
+    key: string
+    sizeBytes: number
+    fileName: string
+    metadata: UploadMetadata
+  },
+): Promise<string> {
+  await recordStored(tx, {
+    sha512: upload.sha512,
+    key: upload.key,
+    sizeBytes: upload.sizeBytes,
+    source: 'upload',
+  })
+  return (await findModUpload(tx, upload.ownerId, upload.sha512))?.id ?? (await insertModUpload(tx, upload))
 }
 
 /** The owner's upload of these bytes, if they uploaded them before. */

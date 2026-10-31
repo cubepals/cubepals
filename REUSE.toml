@@ -108,6 +108,13 @@ precedence = "closest"
 SPDX-FileCopyrightText = ["HangarMC and Contributors", "The authors of the projects they describe"]
 SPDX-License-Identifier = "LicenseRef-Upstream-Terms"
 
+# Modrinth's answers, recorded for tests: the projects' text is their authors'.
+[[annotations]]
+path = "apps/control/src/infra/modrinth/fixtures/**"
+precedence = "closest"
+SPDX-FileCopyrightText = ["Rinth, Inc.", "The authors of the projects they describe"]
+SPDX-License-Identifier = "LicenseRef-Upstream-Terms"
+
 # AOneBlock's settings as it writes them, with one change (templates.ts).
 [[annotations]]
 path = "apps/control/src/app/setups/aoneblock-config.yml"

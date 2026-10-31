@@ -46,6 +46,8 @@ export interface BackupView {
    * does. One with them changes version in its settings first. Null for any other backup.
    */
   newerWorld: { gameVersion: string; movesServer: boolean } | null
+  /** A brought world's mods, as its import found them (`withMods` restores it with them); null for any other. */
+  playedWith: PlayedWith
 }
 
 export interface BackupsView {
@@ -176,6 +178,35 @@ export const ChooseNewWorldPeopleInput = z.object({ importId: z.uuid(), ...Peopl
 /** Players of the server a world brought to a server came from, let into it as its owner chose. */
 export const LetInFromUploadInput = WorldImportRef.extend(PeopleChoice.shape)
 
+/** A mod a brought world was played with: what its owner calls it, and its jar's name. */
+interface BroughtMod {
+  name: string
+  fileName: string
+}
+
+/**
+ * What a brought world was played with, where mods opened it (docs/world-import.md § Mods). Null
+ * for a world plain Minecraft opened, with no mods beside it.
+ */
+export type PlayedWith = {
+  /** The modded server types its level.dat says opened it (`fabric`…, said by `brandName`). */
+  moddedWith: string[]
+  /**
+   * The mods its upload held beside it (a launcher's instance, or a mods folder sent with the
+   * world); null where it held none, and its instance is to be asked for so they come too.
+   * Restoring it `withMods` moves the server to `loader` with `mods`, and what they depend on.
+   */
+  mods: {
+    loader: Exclude<Loader, 'vanilla' | 'paper'>
+    /** What comes with it: found on Modrinth, or its owner's own jar, checked as an upload is. */
+    mods: Array<BroughtMod & { from: 'modrinth' | 'own' }>
+    /** Left out: only players' games run them. */
+    forPlayers: BroughtMod[]
+    /** Left out for another reason, said in a sentence. */
+    leftOut: Array<BroughtMod & { why: string }>
+  } | null
+} | null
+
 /**
  * A world brought to a server: ready to play, with what Cubepals did. It waits in `backupId`,
  * which playing it restores (`RestoreBackupInput`), until its owner plays it.
@@ -185,6 +216,8 @@ export type WorldImportView = ImportView<{
   people: WorldPeople
   /** The world as its owner knows it; null where what it waits in is gone, deleted from Backups. */
   world: BroughtWorld | null
+  /** What it was played with, where mods opened it; null for plain Minecraft. */
+  playedWith: PlayedWith
 }>
 
 /** A world brought to a server, as its owner plays it. */
@@ -229,6 +262,11 @@ export const RestoreBackupInput = z.object({
   acknowledgeRevoked: z.boolean().optional(),
   /** For a world brought in from a newer Minecraft (`newerWorld`): the server moves up to it. */
   moveUp: z.boolean().optional(),
+  /**
+   * For a world brought with its mods (`playedWith.mods`): the server moves to the loader it was
+   * played on, with those mods, in the same step.
+   */
+  withMods: z.boolean().optional(),
 })
 /** An admin restoring one of someone's backups, as its owner would; why goes in the audit log. */
 export const AdminRestoreInput = RestoreBackupInput.extend({ reason: z.string().trim().min(1).max(500) })
