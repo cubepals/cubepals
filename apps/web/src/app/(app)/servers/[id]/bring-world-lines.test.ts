@@ -128,6 +128,9 @@ describe('the mods it was played with', () => {
     expect(notAddedLine('no-mods')).toBe(
       'There are no mods in this folder. Choose the instance you played the world in, or its mods folder.',
     )
+    expect(notAddedLine('too-large')).toBe(
+      'With its mods, this world is larger than 4 GB, more than an upload takes.',
+    )
   })
 
   test('once it is read, come and move the server to their loader, and those left out are named', () => {

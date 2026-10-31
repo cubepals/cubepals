@@ -98,6 +98,7 @@ export function BringWorld({
     const next = what.pick(files)
     if (typeof next === 'string') return next
     const file = uploadOf(next)
+    if (file !== null && file.size > MOST_BYTES) return 'too-large'
     if (file === null) reset()
     else void send(file)
     return null

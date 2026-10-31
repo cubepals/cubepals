@@ -45,8 +45,11 @@ export interface Sending {
   mods: AddedMods | null
 }
 
-/** Why a folder picked for a world's mods can't add them: it holds none, or the world came as a file. */
-export type NotAdded = 'no-mods' | 'needs-instance'
+/**
+ * Why a folder picked for a world's mods can't add them: it holds none, the world came as a file,
+ * or with them the world is more than an upload takes (said where it is sent).
+ */
+export type NotAdded = 'no-mods' | 'needs-instance' | 'too-large'
 
 /** A folder handed over, as what it is: an instance picked whole, or a world's own (or a server's). */
 export function broughtFrom(files: PickedFile[]): Brought {

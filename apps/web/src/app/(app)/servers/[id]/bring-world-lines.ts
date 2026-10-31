@@ -121,6 +121,7 @@ export const ZIP_WITHOUT_INSTANCE_LINE =
 
 /** A folder picked for the mods that can't give them. */
 export function notAddedLine(why: NotAdded): string {
+  if (why === 'too-large') return 'With its mods, this world is larger than 4 GB, more than an upload takes.'
   return why === 'no-mods'
     ? 'There are no mods in this folder. Choose the instance you played the world in, or its mods folder.'
     : 'Choose the instance’s own folder: a world that came as a zip is taken from its instance, with its mods.'
