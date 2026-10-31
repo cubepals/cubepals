@@ -176,8 +176,26 @@ export const ChooseNewWorldPeopleInput = z.object({ importId: z.uuid(), ...Peopl
 /** Players of the server a world brought to a server came from, let into it as its owner chose. */
 export const LetInFromUploadInput = WorldImportRef.extend(PeopleChoice.shape)
 
-/** A world brought to a server: ready as a backup of it, with what Cubepals did. */
-export type WorldImportView = ImportView<{ backupId: string; people: WorldPeople }>
+/**
+ * A world brought to a server: ready to play, with what Cubepals did. It waits in `backupId`,
+ * which playing it restores (`RestoreBackupInput`), until its owner plays it.
+ */
+export type WorldImportView = ImportView<{
+  backupId: string
+  people: WorldPeople
+  /** The world as its owner knows it; null where what it waits in is gone, deleted from Backups. */
+  world: BroughtWorld | null
+}>
+
+/** A world brought to a server, as its owner plays it. */
+export interface BroughtWorld {
+  /** What the server calls it. */
+  name: string
+  /** The Minecraft that last saved it. */
+  gameVersion: string
+  /** It is from a newer release than the server has now, as `BackupView.newerWorld` says. */
+  newer: BackupView['newerWorld']
+}
 
 /**
  * A world brought while a server is being made: ready as what the server is made to fit, for its

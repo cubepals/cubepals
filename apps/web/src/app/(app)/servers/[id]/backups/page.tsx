@@ -35,7 +35,6 @@ import { BringWorld } from '../bring-world'
 import { ChangeState, ConfirmChange, useChanged } from '../settings/shared'
 import { requestId, useServer } from '../use-server'
 import { useWorldDownload } from './use-download'
-import { useRestoring } from './use-restoring'
 
 /** What the page says backups are, and, where the deployment makes downloads, what one holds. */
 function aboutBackups(kept: number, archives: boolean): string {
@@ -45,8 +44,10 @@ function aboutBackups(kept: number, archives: boolean): string {
 }
 
 /**
- * When a backup was taken. One from a server going to sleep is named by the session it holds, in
- * the owner's time zone, so going back to before something went wrong is finding the evening.
+ * What a backup is called, and when it was taken where that isn't its name. One from a server
+ * going to sleep is named by the session it holds, in the owner's time zone, so going back to
+ * before something went wrong is finding the evening. A world its owner uploaded is named as the
+ * world, which is how they know it.
  */
 function takenWhen(
   backup: BackupView,
@@ -54,6 +55,7 @@ function takenWhen(
   zone: string | null,
 ): { label: string; time: string | null } {
   const time = whenTaken(backup.createdAt, now)
+  if (backup.trigger === 'uploaded') return { label: backup.world.name, time }
   if (backup.trigger !== 'sleep') return { label: time, time: null }
   return { label: sessionName(backup.createdAt, now, zone ?? undefined).label, time }
 }
@@ -62,7 +64,8 @@ function takenWhen(
 function aboutBackup(backup: BackupView, time: string | null): string {
   return [
     time,
-    backup.world.name,
+    // An uploaded world is named as the world already (`takenWhen`).
+    backup.trigger === 'uploaded' ? null : backup.world.name,
     `Minecraft ${backup.configuration.gameVersion} ${loaderLabel(backup.configuration.loader)}`,
     backup.configuration.mods > 0 ? `${backup.configuration.mods} mods` : null,
     // A snapshot's size is Fly's count of changed blocks: a volume's first one, after
@@ -105,7 +108,7 @@ function Backups({
   const trpc = useTRPC()
   const queries = useQueryClient()
   const now = useNow(MINUTE_MS)
-  const [restoring, setRestoring] = useRestoring(list.backups)
+  const [restoring, setRestoring] = useState<BackupView | null>(null)
   const [deleting, setDeleting] = useState<BackupView | null>(null)
   const [bringing, setBringing] = useState<File | null>(null)
   const refresh = () =>
@@ -298,7 +301,7 @@ function Backups({
                       disabled={busy || (backup.tier === 'archive' && !list.archives.restore.available)}
                       onClick={() => setRestoring(backup)}
                     >
-                      Restore
+                      {restoreWord(backup)}
                     </Button>
                   </div>
                 )
@@ -316,18 +319,7 @@ function Backups({
           onClose={() => setRestoring(null)}
         />
       )}
-      {bringing && (
-        <BringWorld
-          view={view}
-          file={bringing}
-          onClose={() => setBringing(null)}
-          onKept={async (backupId) => {
-            setBringing(null)
-            const fresh = await queries.query(trpc.backups.list.queryOptions({ serverId: view.id }))
-            setRestoring(fresh.backups.find((b) => b.id === backupId) ?? null)
-          }}
-        />
-      )}
+      {bringing && <BringWorld view={view} file={bringing} onClose={() => setBringing(null)} />}
       <Modal
         open={deleting !== null}
         onClose={() => setDeleting(null)}
@@ -357,6 +349,26 @@ function Backups({
       </Modal>
     </>
   )
+}
+
+/** What the button that restores a backup says: a world its owner uploaded is played. */
+const restoreWord = (backup: BackupView) => (backup.trigger === 'uploaded' ? 'Play it' : 'Restore')
+
+/** What the restore asks: a world its owner uploaded is played, as the world page plays one it brings. */
+function restoreTitle(backup: BackupView, now: number, zone: string | null): string {
+  if (backup.trigger === 'uploaded') return `Play ${backup.world.name}?`
+  if (backup.trigger === 'sleep')
+    return `Go back to how it was ${sessionName(backup.createdAt, now, zone ?? undefined).phrase}?`
+  return `Restore the backup from ${whenTaken(backup.createdAt, now).toLowerCase()}?`
+}
+
+/** The restore's button: what it does to the server, moving it up where the world is newer. */
+function restoreLabel(backup: BackupView, view: ServerView): string {
+  const verb = backup.trigger === 'uploaded' ? 'play' : 'restore'
+  if (backup.newerWorld?.movesServer) return `Move to ${backup.newerWorld.gameVersion} and ${verb}`
+  if (view.status === 'running')
+    return backup.trigger === 'uploaded' ? 'Play and restart' : 'Restore and restart'
+  return backup.trigger === 'uploaded' ? 'Play it' : 'Restore'
 }
 
 function Restore({
@@ -399,18 +411,8 @@ function Restore({
     <ConfirmChange
       open
       onClose={onClose}
-      title={
-        backup.trigger === 'sleep'
-          ? `Go back to how it was ${sessionName(backup.createdAt, now, zone ?? undefined).phrase}?`
-          : `Restore the backup from ${whenTaken(backup.createdAt, now).toLowerCase()}?`
-      }
-      confirmLabel={
-        newer?.movesServer
-          ? `Move to ${newer.gameVersion} and restore`
-          : view.status === 'running'
-            ? 'Restore and restart'
-            : 'Restore'
-      }
+      title={restoreTitle(backup, now, zone)}
+      confirmLabel={restoreLabel(backup, view)}
       disabled={newer !== null && !newer.movesServer}
       working="Bringing the world back"
       error={restore.error}
@@ -419,7 +421,7 @@ function Restore({
     >
       <p>
         {backup.trigger === 'uploaded'
-          ? `${backup.world.name} comes back as the download holds it.`
+          ? `The server plays ${backup.world.name} as you uploaded it.`
           : `${backup.world.name} goes back to how it was then.`}{' '}
         Who can join stays as it is now: bans, operators and the whitelist are put back after the restore.
       </p>
@@ -435,7 +437,7 @@ function Restore({
           It was last played on Minecraft {newer.gameVersion}, newer than this server’s {view.gameVersion}.
           Change the server to {newer.gameVersion} in{' '}
           <Link href={`/servers/${view.id}/settings`}>Settings</Link> first, so its mods move with it, then
-          restore it.
+          come back here.
         </Note>
       )}
       {backup.trigger !== 'uploaded' && (

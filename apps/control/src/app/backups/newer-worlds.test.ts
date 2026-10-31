@@ -5,7 +5,7 @@
 /**
  * A world brought in from a newer Minecraft than its server runs (docs/world-import.md § Which
  * Minecraft): kept rather than refused after its upload, and its server moved up to it when its
- * owner restores it and chooses that. The store is a real S3 server, as for every upload.
+ * owner plays it, which restores it, and chooses that. The store is a real S3 server, as for every upload.
  */
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { execFile } from 'node:child_process'
@@ -70,11 +70,15 @@ describe.skipIf(!hasDatabase || !s3.endpoint || !s3.bucket)('a world from a newe
       'server.properties': 'level-name=world\n',
       'world/level.dat': levelDat('26.3'),
     })
-    const read = await bringWorld(h, owner, id, world)
+    const read = await bringWorld(h, owner, id, world, { name: 'Maple Hollow' })
     expect(read.status).toBe('ready')
-    expect(read.status === 'ready' ? read.notes : []).toContain(
-      'It was last played on Minecraft 26.3, newer than this server’s 1.21.11. Restoring it moves the server up to 26.3.',
-    )
+    // Where it is played, the move is the choice its owner makes, said once beside it, not in the notes.
+    expect(read.status === 'ready' ? read.world : null).toEqual({
+      name: 'Maple Hollow',
+      gameVersion: '26.3',
+      newer: { gameVersion: '26.3', movesServer: true },
+    })
+    expect(read.status === 'ready' ? read.notes.filter((note) => note.includes('26.3')) : null).toEqual([])
     const backup = await broughtBackup(h, read)
     const shown = async () =>
       (await h.app.backupQueries.list(owner, id)).backups.find((b) => b.id === backup.id)
@@ -101,6 +105,8 @@ describe.skipIf(!hasDatabase || !s3.endpoint || !s3.bucket)('a world from a newe
     await h.settled(id, 20_000)
     expect((await loadRevision(h.db, (await h.server(id)).desiredRevisionId)).gameVersion).toBe('26.3')
     expect((await shown())?.newerWorld).toBeNull()
+    const played = await h.app.backups.imports.view(owner, id, read.importId)
+    expect(played.status === 'ready' ? played.world?.newer : undefined).toBeNull()
   }, 90_000)
 })
 

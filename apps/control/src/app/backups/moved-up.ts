@@ -9,6 +9,7 @@
  * (`movesWithWorld`); one with them changes version in its settings, where its mods are resolved
  * again. Not where a version change is made otherwise (`RevisionService.changeVersion`).
  */
+import type { BackupView } from '@blockly/contracts'
 import { type RevisionDraft, runsOnPaper, type ServerRevision } from '../../domain/revision/revision.ts'
 import { compareVersions, isRelease, notOffered, supports } from '../../minecraft/versions.ts'
 import { AppError } from '../errors.ts'
@@ -23,6 +24,16 @@ export const movesWithWorld = (desired: Pick<ServerRevision, 'mods' | 'modpack'>
 /** The release a world was last played on where it is newer than the server's; null otherwise, a snapshot's included, whose name orders against no release. */
 export const newerRelease = (played: string, serverVersion: string): string | null =>
   isRelease(played) && compareVersions(played, serverVersion) > 0 ? played : null
+
+/** A brought world from a newer release than the server's, and whether playing it moves the server up; null otherwise. */
+export function newerWorldOf(
+  facts: { gameVersion: string } | null,
+  serverVersion: string,
+  movesServer: boolean,
+): BackupView['newerWorld'] {
+  const newer = facts === null ? null : newerRelease(facts.gameVersion, serverVersion)
+  return newer === null ? null : { gameVersion: newer, movesServer }
+}
 
 /** The server on the release a world it restores was last played on, with its server type's build for it. */
 export async function movedUp(

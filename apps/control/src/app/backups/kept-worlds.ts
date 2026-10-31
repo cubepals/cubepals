@@ -113,7 +113,7 @@ export function othersNotes(others: readonly Read[], left: readonly string[]): s
   return [
     ...(names.length > 0
       ? [
-          `Also kept ${names.join(', ')}, the server’s other ${names.length === 1 ? 'world' : 'worlds'}, as ${names.length === 1 ? 'a backup' : 'backups'} to restore when you want to play ${names.length === 1 ? 'it' : 'them'}.`,
+          `Also brought ${names.join(', ')}, the server’s other ${names.length === 1 ? 'world' : 'worlds'}. ${names.length === 1 ? 'It waits' : 'They wait'} in Backups for when you want to play ${names.length === 1 ? 'it' : 'them'}.`,
         ]
       : []),
     ...left,

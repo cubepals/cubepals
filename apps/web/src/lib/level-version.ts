@@ -3,35 +3,39 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * The Minecraft a world was last played on, read in the browser before it is sent: its
- * `level.dat`, found in the tarball a picked folder becomes (`world-folder.ts`) or in a zip, and
- * its `Data.Version.Name`. A tarball is walked header by header and a zip read from its directory,
+ * The Minecraft a world was last played on, and the name it has there, read in the browser before
+ * it is sent: its `level.dat`, found in the tarball a picked folder becomes (`world-folder.ts`) or
+ * in a zip, and its `Data.Version.Name` and `Data.LevelName`. A tarball is walked header by header and a zip read from its directory,
  * so a world of gigabytes is never read whole. Null where it can't tell: a gzipped tarball, no
  * `level.dat`, or one it can't read. The control plane reads the world again and decides; this only
  * lets the page say early what it will.
  *
  * The reader is written here rather than taken from a library: `level.dat` is gzipped NBT, and the
  * NBT readers on npm (prismarine-nbt, which the control plane uses) need Node's Buffer, while this
- * needs one string from it.
+ * needs two strings from it.
  */
 
 const BLOCK = 512
 const decoder = new TextDecoder()
 
-/** The release in a world's file, or null where it can't tell. */
-export async function playedOn(file: Blob): Promise<string | null> {
+/** What a world's file says of it: the release that last saved it and its name, each null where it can't tell. */
+export async function levelOf(file: Blob): Promise<{ gameVersion: string | null; name: string | null }> {
   try {
     const level = (await levelInTar(file)) ?? (await levelInZip(file))
-    if (level === null) return null
-    return versionIn(
-      new Uint8Array(
-        await new Response(level.stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer(),
-      ),
+    if (level === null) return UNKNOWN
+    const bytes = new Uint8Array(
+      await new Response(level.stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer(),
     )
+    return { gameVersion: versionIn(bytes), name: nameIn(bytes) }
   } catch {
-    return null
+    return UNKNOWN
   }
 }
+
+const UNKNOWN = { gameVersion: null, name: null }
+
+/** The release in a world's file, or null where it can't tell. */
+export const playedOn = async (file: Blob): Promise<string | null> => (await levelOf(file)).gameVersion
 
 /** The shallowest `level.dat` among names, the world's own rather than one in a world beside it. */
 const isLevel = (name: string) => /(^|\/)level\.dat$/.test(name)
@@ -93,7 +97,9 @@ async function levelInZip(file: Blob): Promise<Blob | null> {
 }
 
 /** Where `Data.Version.Name` is in `level.dat`: a compound in a compound, then a string. */
-const PATH = ['Data', 'Version', 'Name']
+const VERSION = ['Data', 'Version', 'Name']
+/** Where the name the world has in Minecraft is: a string in the `Data` compound. */
+const NAME = ['Data', 'LevelName']
 /** The bytes of NBT's fixed-size tags (byte, short, int, long, float, double). */
 const FIXED: Record<number, number> = { 1: 1, 2: 2, 3: 4, 4: 8, 5: 4, 6: 8 }
 /** The width of one element of NBT's arrays (bytes, ints, longs), whose length comes first. */
@@ -153,20 +159,26 @@ function skip(nbt: Cursor, type: number): void {
   } else throw new Error(`NBT tag ${type}`)
 }
 
-/** In a compound `depth` steps along `PATH`: the string at its end, or null. */
-function seek(nbt: Cursor, depth: number): string | null {
+/** In a compound `depth` steps along `path`: the string at its end, or null. */
+function seek(nbt: Cursor, path: readonly string[], depth: number): string | null {
   for (let tag = nbt.u8(); tag !== 0; tag = nbt.u8()) {
-    if (nbt.string() !== PATH[depth]) skip(nbt, tag)
-    else if (depth === PATH.length - 1) return tag === STRING ? nbt.string() : null
-    else return tag === COMPOUND ? seek(nbt, depth + 1) : null
+    if (nbt.string() !== path[depth]) skip(nbt, tag)
+    else if (depth === path.length - 1) return tag === STRING ? nbt.string() : null
+    else return tag === COMPOUND ? seek(nbt, path, depth + 1) : null
   }
   return null
 }
 
-/** `Data.Version.Name` from NBT, following only that path and passing over the rest. */
-export function versionIn(bytes: Uint8Array): string | null {
+/** The string at `path` in NBT, following only that path and passing over the rest. */
+function stringAt(bytes: Uint8Array, path: readonly string[]): string | null {
   const nbt = new Cursor(bytes)
   if (nbt.u8() !== COMPOUND) return null
   nbt.string()
-  return seek(nbt, 0)
+  return seek(nbt, path, 0)
 }
+
+/** `Data.Version.Name` from NBT. */
+export const versionIn = (bytes: Uint8Array): string | null => stringAt(bytes, VERSION)
+
+/** `Data.LevelName` from NBT: the name the world has in Minecraft, null where it has none. */
+const nameIn = (bytes: Uint8Array): string | null => stringAt(bytes, NAME)?.trim() || null

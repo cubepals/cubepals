@@ -2,12 +2,12 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-/** The release a world was last played on, read from real `level.dat` files Minecraft saved. */
+/** The release a world was last played on, and its name, read from real `level.dat` files Minecraft saved. */
 import { describe, expect, test } from 'bun:test'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { BlobReader, BlobWriter, ZipWriter } from '@zip.js/zip.js'
-import { playedOn, versionIn } from './level-version.ts'
+import { levelOf, playedOn, versionIn } from './level-version.ts'
 import { tarOf } from './world-folder.ts'
 
 const FIXTURES = join(import.meta.dir, '../../../control/src/minecraft/world-fixtures')
@@ -34,6 +34,12 @@ describe('the release a world was last played on', () => {
     await zip.add('world/region/r.0.0.mca', new BlobReader(filler))
     await zip.add('world/level.dat', new BlobReader(level('paper-26.3/world')))
     expect(await playedOn(await zip.close())).toBe('26.3')
+  })
+
+  test('comes with the name the world has in Minecraft, read from the same level.dat', async () => {
+    const tar = tarOf([{ path: 'My World/level.dat', file: level('vanilla-26.3/world') }])
+    expect(await levelOf(tar)).toEqual({ gameVersion: '26.3', name: 'world' })
+    expect(await levelOf(new Blob(['not a world']))).toEqual({ gameVersion: null, name: null })
   })
 
   test('is unknown for a file it can’t read', async () => {

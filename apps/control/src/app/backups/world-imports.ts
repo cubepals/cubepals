@@ -5,8 +5,8 @@
 /**
  * Bringing a world someone uploaded to their server (docs/world-import.md): the upload read on a
  * worker, its world found whatever shape it came in, a question asked where only its owner knows
- * the answer, and the world kept as a backup of the server, which its owner restores like any
- * other. A world in a Cubepals download is kept as the file it came in, copied from the bytes that
+ * the answer, and the world kept as a backup of the server until its owner plays it, which
+ * restores it as any other (the world page's dialog does that in one step). A world in a Cubepals download is kept as the file it came in, copied from the bytes that
  * were read to a key of the store's choosing; any other is written again as a server keeps it
  * (`minecraft/world-layout.ts`), and what was done is said.
  *
@@ -17,7 +17,7 @@ import { openAsBlob } from 'node:fs'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { PeopleChoice, WorldImportView } from '@blockly/contracts'
+import type { BroughtWorld, PeopleChoice, WorldImportView } from '@blockly/contracts'
 import { NAME_MAX_LENGTH } from '@blockly/contracts'
 import { type Db, schema, type Tx, type WorldImportAnswerJson, type WorldPeopleJson } from '@blockly/db'
 import type { SeededAccess } from '../../domain/access/access.ts'
@@ -46,8 +46,9 @@ import { claimPendingUpload, loadPendingUpload, type PendingUpload } from '../up
 import { listWorlds } from '../worlds/persistence.ts'
 import { putStream } from './downloads.ts'
 import { type KeptWorld, levelFor, othersNotes, recordKept } from './kept-worlds.ts'
-import { movesWithWorld } from './moved-up.ts'
+import { movesWithWorld, newerWorldOf } from './moved-up.ts'
 import type { NewWorldImports } from './new-world-imports.ts'
+import { loadBackup } from './persistence.ts'
 import {
   insertWorldImport,
   loadWorldImport,
@@ -143,9 +144,36 @@ export class WorldImports {
     return { importId: pending.id }
   }
 
-  /** An import as its owner sees it: being read, asking, ready as a backup, or refused and why. */
+  /** An import as its owner sees it: being read, asking, ready to play, or refused and why. */
   async view(actor: Actor, serverId: string, importId: string): Promise<WorldImportView> {
-    return viewOf(await this.#owned(actor, serverId, importId), asBackup)
+    return this.#seen(await this.#owned(actor, serverId, importId))
+  }
+
+  /** An import as `view` gives it: ready, with the world it brought as its owner knows it. */
+  async #seen(record: WorldImportRecord): Promise<WorldImportView> {
+    const world = record.status === 'ready' ? await this.#broughtWorld(record) : null
+    return viewOf(record, (ready) => ({ backupId: ready.backupId as string, people: ready.people, world }))
+  }
+
+  /**
+   * The world a ready import brought: its name on the server, the Minecraft that last saved it,
+   * and whether that is newer than the server has now. Null where its backup is gone.
+   */
+  async #broughtWorld(record: WorldImportRecord): Promise<BroughtWorld | null> {
+    const backup = record.backupId === null ? null : await loadBackup(this.#db, record.backupId)
+    const server = record.serverId === null ? null : await findServer(this.#db, record.serverId)
+    if (backup === null || backup.worldFacts === null || server === null) return null
+    const world = (await listWorlds(this.#db, server.id)).find((each) => each.id === backup.worldId)
+    const desired = await loadRevisionFields(this.#db, server.desiredRevisionId, [
+      'gameVersion',
+      'mods',
+      'modpack',
+    ])
+    return {
+      name: world?.name ?? 'Your world',
+      gameVersion: backup.worldFacts.gameVersion,
+      newer: newerWorldOf(backup.worldFacts, desired.gameVersion, movesWithWorld(desired)),
+    }
   }
 
   /**
@@ -171,12 +199,12 @@ export class WorldImports {
     answer: WorldImportAnswerJson,
   ): Promise<WorldImportView> {
     const record = await this.#owned(actor, serverId, importId)
-    if (record.status !== 'asking') return viewOf(record, asBackup)
+    if (record.status !== 'asking') return this.#seen(record)
     const given = answerFor(record, answer)
     await this.#db.transaction(async (tx) => {
       if (await worldImportAnswered(tx, record.id, given)) await this.#jobs.enqueueWorldImport(tx, record.id)
     })
-    return viewOf((await loadWorldImport(this.#db, record.id)) ?? record, asBackup)
+    return this.#seen((await loadWorldImport(this.#db, record.id)) ?? record)
   }
 
   /**
@@ -236,8 +264,6 @@ export class WorldImports {
       const desired = await loadRevisionFields(this.#db, server.desiredRevisionId, [
         'gameVersion',
         'settings',
-        'mods',
-        'modpack',
       ])
       await this.#reading.refuseWhatWontOpen(
         { ownerId: server.ownerId, serverId: server.id },
@@ -263,7 +289,6 @@ export class WorldImports {
         people,
         others,
         serverVersion: desired.gameVersion,
-        movesServer: movesWithWorld(desired),
       })
     } finally {
       await archive.close()
@@ -291,8 +316,6 @@ export class WorldImports {
     /** The upload's other worlds, each kept as a backup of its own, and those left out. */
     others: { reads: Read[]; left: string[] }
     serverVersion: string
-    /** Whether restoring a world from a newer release moves the server up (`movesWithWorld`). */
-    movesServer: boolean
   }): Promise<void> {
     const { record, pending, server, read, player, accounts } = input
     const store = requireCapability(this.#caps, 'archives')
@@ -328,11 +351,9 @@ export class WorldImports {
         hostWritten,
         asItCame,
         updated: (from) =>
-          `It was last played on Minecraft ${from}. Restoring it opens it on ${input.serverVersion}, which updates it; this backup stays as it came.`,
-        newer: (to) =>
-          input.movesServer
-            ? `It was last played on Minecraft ${to}, newer than this server’s ${input.serverVersion}. Restoring it moves the server up to ${to}.`
-            : `It was last played on Minecraft ${to}, newer than this server’s ${input.serverVersion}. Change the server to ${to} in Settings, so its mods move with it, then restore it.`,
+          `It was last played on Minecraft ${from}. It opens on ${input.serverVersion}, which updates it; the world as you uploaded it stays in Backups.`,
+        // Said where it is played (`WorldImportView`'s `world.newer`), as the choice it is.
+        newer: () => null,
         serverVersion: input.serverVersion,
         others: input.others.reads.map((other) => other.world),
       }),
@@ -520,12 +541,6 @@ function mostOf(archive: WorldArchive): number {
   for (const file of archive.files) bytes += file.sizeBytes + 3 * 512
   return Math.ceil(bytes * 1.01)
 }
-
-/** A world brought to a server is ready as the backup it became. */
-const asBackup = (record: WorldImportRecord) => ({
-  backupId: record.backupId as string,
-  people: record.people,
-})
 
 async function audit(
   tx: Tx,
