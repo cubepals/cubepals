@@ -142,7 +142,7 @@ export class WorldMods {
   /** The loader the world was played on: its instance's, its level.dat's, or the one its jars are for. */
   #loader(read: Read, files: ReturnType<typeof playedWithIn>, jars: readonly ReadJar[]): PackLoader | null {
     const isLoader = (name: string | null | undefined): name is PackLoader =>
-      name !== null && name !== undefined && name in PACK_LOADERS
+      name !== null && name !== undefined && Object.hasOwn(PACK_LOADERS, name)
     if (files.components !== null) {
       const cfg = files.settings === null ? undefined : this.#text(read, files.settings)
       const identity = this.#decoded(read, files.components, (text) =>
