@@ -10,6 +10,7 @@
  */
 import type { Db } from '@blockly/db'
 import { describeChanges } from '../../../domain/revision/revision.ts'
+import type { MinecraftServer } from '../../../domain/server/server.ts'
 import { resetHeartsCommand } from '../../../minecraft/lifesteal.ts'
 import { type ArtifactService, ArtifactUnavailable } from '../../artifacts/service.ts'
 import type { BackupRecord } from '../../backups/persistence.ts'
@@ -30,6 +31,7 @@ import { appliedConfig, type ServerBinding } from './binding.ts'
 import type { GameConsole } from './game-console.ts'
 import { type GoingBack, NotPutBack } from './going-back.ts'
 import type { Rechecks } from './rechecks.ts'
+import { RESTARTING_FOR_A_CHANGE, type RestartNotice, restartNotice } from './restart-notice.ts'
 import { warnBeforeRestart } from './restart-warning.ts'
 import type { WorldCopies } from './world-copies.ts'
 
@@ -54,6 +56,22 @@ async function forgetHearts(runtime: Pick<Runtimes, 'exec'>, handle: RuntimeHand
   if (input.resetHearts !== true) return
   const reset = await runtime.exec(handle, resetHeartsCommand(), 60)
   if (reset.exitCode !== 0) throw new Error(`Resetting the hearts failed: ${reset.stderr.trim()}`)
+}
+
+/**
+ * Whoever is on hears why they are dropped, before the reboot. A failed server's game is already
+ * down, with nobody on it to tell.
+ */
+async function tellPlayers(
+  notice: RestartNotice,
+  countdown: (server: MinecraftServer, handle: RuntimeHandle) => Promise<unknown>,
+  server: MinecraftServer,
+  handle: RuntimeHandle,
+  input: UpdateInput,
+): Promise<void> {
+  if (input.fromFailure === true) return
+  await countdown(server, handle)
+  await notice.sendOff(server, handle, RESTARTING_FOR_A_CHANGE)
 }
 
 /**
@@ -127,6 +145,9 @@ export function updating(deps: {
     putBack,
     restBack,
   } = deps
+  const notice = restartNotice(deps)
+  const countdown = (server: MinecraftServer, handle: RuntimeHandle) =>
+    warnBeforeRestart(deps.console, consoleTarget(server, handle))
 
   /**
    * A new configuration on a running server (§9): a snapshot first, then the provider applies
@@ -191,8 +212,8 @@ export function updating(deps: {
         snapshot = await capture(server, binding.handle, previous, 'pre_apply')
       }
       await ctx.step('compute')
+      await tellPlayers(notice, countdown, server, binding.handle, input)
       try {
-        await warnBeforeRestart(deps.console, consoleTarget(server, binding.handle))
         await forgetHearts(runtime, binding.handle, input)
         const changed = await runtime.apply(binding.handle, desired.spec)
         if (changed !== binding.handle) await saveHandle(db, server.id, changed)

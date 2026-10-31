@@ -25,6 +25,7 @@
  * - `prune-worlds.ts`: removes the directories of a server's deleted worlds while it runs.
  * - `rechecks.ts`: what a worker checks again before it boots a server.
  * - `restart-warning.ts`: the countdown players read in chat before a restart drops them.
+ * - `restart-notice.ts`: turns the players out with why, before an update or a restart reboots their server.
  * - `restoring.ts`: puts a backup's world in place of the server's, with a way back.
  * - `stored-worlds.ts`: rests a world nobody plays in the archive store, and wakes it from there.
  * - `updating.ts`: puts a running server onto a new configuration, with a way back.

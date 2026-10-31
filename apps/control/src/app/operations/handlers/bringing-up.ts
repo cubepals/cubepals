@@ -38,6 +38,7 @@ import type { GameConsole } from './game-console.ts'
 import type { GoingBack } from './going-back.ts'
 import { hostRefused } from './host-refused.ts'
 import type { Rechecks } from './rechecks.ts'
+import { RESTARTING } from './restart-notice.ts'
 import type { WorldCopies } from './world-copies.ts'
 
 /** What `requestedBy()` writes for a start a connection asked for (`system:wake`). */
@@ -351,7 +352,7 @@ export function bringingUp(deps: {
       if (server.lifecycle.status === 'stopping') {
         if (binding.handle !== null) {
           await ctx.step('saving')
-          await windDown(server, binding.handle, { warn: true })
+          await windDown(server, binding.handle, RESTARTING)
           await ctx.step('stopping')
           await runtime.stop(binding.handle)
         }

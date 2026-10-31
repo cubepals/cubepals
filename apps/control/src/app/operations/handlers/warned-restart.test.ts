@@ -39,6 +39,12 @@ describe.skipIf(!hasDatabase)('players warned before a restart', () => {
     await h.settled(id)
     expect((await h.server(id)).lifecycle.status).toBe('running')
     expect(h.minecraft.said(id)).toEqual(countdown)
+    // The countdown first, then everyone is turned out with why (`restart-notice.ts`).
+    const heard = h.minecraft.heard(id)
+    const counted = heard.findIndex((command) => command.startsWith('tellraw'))
+    const kicked = heard.findIndex((command) => /^(minecraft:)?kick @a/.test(command))
+    expect(counted).toBeGreaterThanOrEqual(0)
+    expect(kicked).toBeGreaterThan(counted)
   }, 60_000)
 
   test('a change that restarts the server counts down too', async () => {
