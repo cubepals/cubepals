@@ -143,6 +143,9 @@ function bringingBack(deps: RestoringDeps) {
     const saving = deps.copies
       .capture(now.server, now.handle, now.previous, 'pre_restore')
       .then(async (kept) => {
+        // The access record is put back on the boot that follows, only once there is one: a save
+        // that fails leaves the server as it was, with nothing to put back.
+        await markReseed(db, now.server.id)
         await ctx.mark('saved')
         return kept
       })
@@ -228,7 +231,6 @@ export function restoring(deps: RestoringDeps) {
         await deps.access.reconcile(server, binding.handle, 'import').catch(() => undefined)
       // Every other world the server lists stays as it is now, whatever the backup holds.
       const besides = await others.besides(server.id, chosen)
-      await markReseed(db, server.id)
       const restore = { server, handle: binding.handle, previous, chosen, desired, besides, others, up }
       const { before, brought } = await savedWhileBrought(ctx, restore)
       let left: WorldRecord[]
