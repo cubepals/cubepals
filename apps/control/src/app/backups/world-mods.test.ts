@@ -17,6 +17,8 @@ import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
+import { schema } from '@blockly/db'
+import { eq } from 'drizzle-orm'
 import type { CatalogVersion } from '../../domain/mods/catalog.ts'
 import { Cdn } from '../../testing/cdn.ts'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
@@ -176,6 +178,20 @@ describe.skipIf(!hasDatabase)('a world brought with its mods', () => {
       ['Tree Harvester', 'tree-harvester-1'],
       ['Vein Miner', 'own'],
     ])
+
+    // Played again on the loader and release it is on: the server keeps the loader build it has.
+    await h.db
+      .update(schema.serverRevisions)
+      .set({ loaderVersion: '0.16.0' })
+      .where(eq(schema.serverRevisions.id, desired.id))
+    h.loaderBuilds.builds.set('fabric', '0.19.7')
+    await h.app.backups.restoreBackup(owner, id, backup.id, randomUUID(), {
+      withConfiguration: false,
+      withMods: true,
+    })
+    await h.until(id, (s) => s.lifecycle.status !== 'restoring', 20_000)
+    await h.settled(id, 20_000)
+    expect((await loadRevision(h.db, (await h.server(id)).desiredRevisionId)).loaderVersion).toBe('0.16.0')
   }, 120_000)
 })
 

@@ -73,7 +73,8 @@ export async function withWorldMods(
       ...draftOf(desired),
       gameVersion,
       loader,
-      loaderVersion: await loaderPin(deps.builds, loader, gameVersion),
+      // A loader build is pinned only where the loader or release changes: the server's own stays.
+      loaderVersion: moves ? await loaderPin(deps.builds, loader, gameVersion) : desired.loaderVersion,
       mods: plan.mods,
       reason: moves ? 'version_changed' : 'mods_changed',
       basedOnRevisionId: desired.id,
