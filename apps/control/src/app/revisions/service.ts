@@ -145,8 +145,11 @@ export class RevisionService {
     options: ChangeOptions = {},
   ) {
     return this.#change(actor, serverId, requestId, 'apply', options, async (_tx, server, desired) => {
+      // A page from before the setting left it out: the server keeps what it had.
+      const keepInventory = game.keepInventory ?? desired.settings.keepInventory
       const settings: ServerSettings = {
         ...game,
+        ...(keepInventory === undefined ? {} : { keepInventory }),
         motd: game.motd.trim(),
         onlineMode: desired.settings.onlineMode,
         ...(desired.settings.otherVersions === undefined
