@@ -382,8 +382,11 @@ async function apply(): Promise<void> {
       })
       if (done.error) throw new Error(`terraform: ${done.error.message}. Is it installed?`)
       if (done.status === 0) return
-      if (tries === 3) {
-        say(`terraform apply stopped (exit ${done.status}). Fix what it says, then run apply again.`)
+      // One stopped by a signal, as a cancelled deploy is, stops the deploy here: never run again.
+      if (tries === 3 || done.status === null) {
+        say(
+          `terraform apply stopped (${done.signal ?? `exit ${done.status}`}). Fix what it says, then run apply again.`,
+        )
         process.exit(1)
       }
       say(`terraform apply stopped (exit ${done.status}); trying again.`)
