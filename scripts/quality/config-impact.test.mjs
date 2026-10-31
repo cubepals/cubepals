@@ -55,6 +55,9 @@ test('the repository baseline retains nonnumeric metadata while tightening one a
   const metadata = structuredClone(after)
   metadata.headers.reason = 'Changed metadata'
   assert.equal(structureBaselineOnlyShrinks(base, metadata), false)
+  const removed = structuredClone(after)
+  delete removed.headers.reason
+  assert.equal(structureBaselineOnlyShrinks(base, removed), false)
   const added = structuredClone(after)
   added.headers.files.push('apps/new-allowance.ts')
   assert.equal(structureBaselineOnlyShrinks(base, added), false)

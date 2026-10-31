@@ -237,6 +237,12 @@ export function configurationOnlyRoutesNodeControllers(before, after, manifest) 
 export function structureBaselineOnlyShrinks(before, after) {
   const object = (value) => value && typeof value === 'object' && !Array.isArray(value)
   if (!object(before) || !object(after)) return false
+  for (const [rule, entries] of Object.entries(before)) {
+    if (!object(entries)) return false
+    for (const [path, entry] of Object.entries(entries)) {
+      if ((!object(entry) || !Number.isFinite(entry.n)) && !equal(entry, after[rule]?.[path])) return false
+    }
+  }
   for (const [rule, entries] of Object.entries(after)) {
     if (!object(entries) || !object(before[rule])) return false
     for (const [path, entry] of Object.entries(entries)) {
