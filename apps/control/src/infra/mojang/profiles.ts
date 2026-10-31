@@ -49,9 +49,17 @@ export class MojangProfiles implements PlayerProfiles {
     const textures = JSON.parse(Buffer.from(encoded, 'base64').toString('utf8')) as {
       textures?: { SKIN?: { url?: string } }
     }
-    const url = skinUrl(textures.textures?.SKIN?.url)
-    if (url === null) return null
+    return this.#skinAt(skinUrl(textures.textures?.SKIN?.url))
+  }
 
+  /** As GeyserMC names a Bedrock player's skin once it has signed it for Java. */
+  skinOfTexture(textureId: string): Promise<SkinPixels | null> {
+    if (!/^[0-9a-f]{1,128}$/.test(textureId)) return Promise.resolve(null)
+    return this.#skinAt(new URL(`https://${TEXTURES}/texture/${textureId}`))
+  }
+
+  async #skinAt(url: URL | null): Promise<SkinPixels | null> {
+    if (url === null) return null
     const response = await this.#fetch(url, { signal: AbortSignal.timeout(5_000) })
     if (response.status === 404) return null
     if (!response.ok) throw new Error(`Mojang's textures answered ${response.status}`)

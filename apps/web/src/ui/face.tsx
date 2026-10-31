@@ -4,6 +4,7 @@
 
 'use client'
 
+import { isBedrockUuid } from '@blockly/contracts'
 import { useState } from 'react'
 
 /**
@@ -19,9 +20,9 @@ export function PlayerFace({
 }: {
   name: string
   /**
-   * The UUID the server knows them by. An account's finds their skin; one a server that doesn't
-   * check accounts made up from the name finds the skin of the account with that name. Without
-   * one, only the stand-in is drawn.
+   * The UUID the server knows them by. An account's finds their skin, and a Bedrock player's the
+   * skin they joined in; one a server that doesn't check accounts made up from the name finds the
+   * skin of the account with that name. Without one, only the stand-in is drawn.
    */
   uuid?: string | undefined
   size?: number
@@ -57,10 +58,13 @@ export function PlayerFace({
   )
 }
 
-/** Where a player's face is: by their account, or by name where the server doesn't check accounts. */
+/**
+ * Where a player's face is: by their account or their Bedrock UUID, or by name where the server
+ * doesn't check accounts. A Bedrock player's name is their gamertag, never a Java account's.
+ */
 function faceSource(name: string, uuid: string | undefined): string | null {
   if (uuid === undefined) return null
-  if (isAccountUuid(uuid)) return `/api/public/players/${uuid}/face.png`
+  if (isAccountUuid(uuid) || isBedrockUuid(uuid)) return `/api/public/players/${uuid}/face.png`
   return /^[A-Za-z0-9_]{3,16}$/.test(name) ? `/api/public/names/${name}/face.png` : null
 }
 

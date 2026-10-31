@@ -17,6 +17,7 @@ export class FakeProfiles implements PlayerProfiles {
   readonly #renamed = new Map<string, string>()
   readonly #byUuid = new Map<string, { uuid: string; name: string }>()
   readonly #skins = new Map<string, SkinPixels>()
+  readonly #textures = new Map<string, SkinPixels>()
   /** How many times a skin was asked for, answered or not. */
   skinLookups = 0
 
@@ -37,6 +38,11 @@ export class FakeProfiles implements PlayerProfiles {
     this.#skins.set(uuidFor(name), skin)
   }
 
+  /** Mojang's texture host serves this skin under this texture id. */
+  serve(textureId: string, skin: SkinPixels): void {
+    this.#textures.set(textureId, skin)
+  }
+
   async byName(name: string): Promise<{ uuid: string; name: string } | null> {
     const lower = name.toLowerCase()
     if (!/^[a-z0-9_]{3,16}$/.test(lower)) return null
@@ -55,6 +61,10 @@ export class FakeProfiles implements PlayerProfiles {
   async skinOf(uuid: string): Promise<SkinPixels | null> {
     this.skinLookups++
     return this.#skins.get(uuid.replace(/-/g, '').toLowerCase()) ?? null
+  }
+
+  async skinOfTexture(textureId: string): Promise<SkinPixels | null> {
+    return this.#textures.get(textureId) ?? null
   }
 }
 

@@ -78,6 +78,8 @@ export interface PlayerProfiles {
    * account has the UUID.
    */
   skinOf(uuid: string): Promise<SkinPixels | null>
+  /** The skin with this texture id on Mojang's texture host, decoded; null where there is none. */
+  skinOfTexture(textureId: string): Promise<SkinPixels | null>
 }
 
 /**

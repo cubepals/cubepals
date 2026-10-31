@@ -55,6 +55,14 @@ describe('skins from Mojang', () => {
     expect(await new MojangProfiles({ fetch: nobody.fetch }).skinOf(UUID)).toBeNull()
   })
 
+  test('a skin by its texture id, as GeyserMC names a Bedrock player’s, and nothing for an id that isn’t one', async () => {
+    const { fetch, asked } = fakeFetch(() => new Response(new Uint8Array(skinPng())))
+    const profiles = new MojangProfiles({ fetch })
+    expect((await profiles.skinOfTexture('ab12cd'))?.width).toBe(64)
+    expect(await profiles.skinOfTexture('../../latest')).toBeNull()
+    expect(asked).toEqual(['https://textures.minecraft.net/texture/ab12cd'])
+  })
+
   test('a texture anywhere but Mojang’s host is never fetched', async () => {
     const { fetch, asked } = fakeFetch(() => listing({ SKIN: { url: 'http://169.254.169.254/latest' } }))
     expect(await new MojangProfiles({ fetch }).skinOf(UUID)).toBeNull()

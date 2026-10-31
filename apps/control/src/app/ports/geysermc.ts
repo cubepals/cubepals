@@ -3,8 +3,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * What Blockly asks GeyserMC's services: the Floodgate build a Paper server runs, and the Xbox user
- * id (XUID) behind a gamertag. Floodgate's Paper jar is published there and nowhere a catalog pins
+ * What Blockly asks GeyserMC's services: the Floodgate build a Paper server runs, the Xbox user
+ * id (XUID) behind a gamertag, and the skin a Bedrock player wears. Floodgate's Paper jar is published there and nowhere a catalog pins
  * it from (Modrinth holds only its Fabric and NeoForge ports; Hangar links to the same download).
  */
 
@@ -25,4 +25,10 @@ export interface GeyserMc {
   latestFloodgate(): Promise<FloodgateJar | null>
   /** The XUID (decimal digits) of the Xbox account with this gamertag; null where none is known. */
   xuidOf(gamertag: string): Promise<string | null>
+  /**
+   * The texture id, on Mojang's texture host, of the skin the Bedrock player with this XUID wears,
+   * as GeyserMC's global API keeps it once the edge's Geyser has uploaded it on a join; null where
+   * it has none yet. Throws when it can't be asked.
+   */
+  skinTextureOf(xuid: string): Promise<string | null>
 }
