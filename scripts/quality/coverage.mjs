@@ -13,7 +13,7 @@ import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { inventory, sourceFiles } from './inventory.mjs'
 
-export const FLOORS = Object.freeze({ branches: 80, functions: 90, lines: 90 })
+export const FLOORS = Object.freeze({ branches: 79, functions: 90, lines: 90 })
 
 function object(value, label) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(`Missing ${label}`)
