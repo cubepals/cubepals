@@ -169,10 +169,9 @@ describe.skipIf(!hasDatabase)('Stop cheaters while players are on', () => {
     expect(await applies(id)).toHaveLength(0)
   }, 60_000)
   test('dropping a waiting version that only made Grim available leaves the owner’s switch alone', async () => {
-    const papers = offeredVersions()
+    const [newer, older] = offeredVersions()
       .filter((offered) => supports(offered.id, 'paper'))
       .sort((a, b) => compareVersions(b.id, a.id))
-    const [newer, older] = papers
     if (newer === undefined || older === undefined) throw new Error('Two Paper releases are needed')
     const owner = await h.user('Teal', 'free')
     const { id } = await h.create(owner, { loader: 'paper', gameVersion: older.id })
