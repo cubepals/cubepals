@@ -10,7 +10,7 @@
  * plain `test(...)` or `it(...)` calls placed after every existing case, so they run after them;
  * removing them leaves the base file's tokens and comments, except for names added to an import
  * the base already has, which nothing else uses; and the base has no concurrent tests and no
- * after-hook that asserts, so a new case cannot run beside an old one or settle an old assertion.
+ * after-hook that could assert, so a new case cannot run beside an old one or settle an old assertion.
  *
  * Not for: judging the new cases themselves. They still run and count toward coverage, and like a
  * new test file they are not certified as strong.
@@ -75,7 +75,45 @@ const bound = (declaration) =>
       : `${item.type} ${item.local.name}`,
   )
 
-/** Whether the base's hooks or tests could let a new case run beside, or settle, an old one. */
+// Methods an afterAll hook may call to release what the file set up; anything else could assert.
+const CLEANUP = new Set([
+  'close',
+  'end',
+  'stop',
+  'unsubscribe',
+  'restore',
+  'mockRestore',
+  'cleanup',
+  'dispose',
+  'destroy',
+  'terminate',
+  'kill',
+  'rm',
+  'rmSync',
+])
+
+/**
+ * An afterAll hook runs after the new cases, so one that asserts, or calls anything that might,
+ * could be settled by them. It is safe only as an inline callback whose every call is a cleanup
+ * method on an object. An afterEach hook has already run for each existing case before any new
+ * case does, but an asserting one is refused too.
+ */
+function unsafeHook(node, text) {
+  const callback = node.arguments[0]
+  if (/\b(?:expect|assert)\b/.test(text.slice(node.start, node.end))) return true
+  if (node.callee.name === 'afterEach') return false
+  if (!['ArrowFunctionExpression', 'FunctionExpression'].includes(callback?.type)) return true
+  let unsafe = false
+  walk(callback.body, (inner) => {
+    if (inner.type !== 'CallExpression') return
+    const callee = inner.callee
+    const method = callee.type === 'MemberExpression' && !callee.computed ? callee.property.name : null
+    if (!CLEANUP.has(method)) unsafe = true
+  })
+  return unsafe
+}
+
+/** Whether the base's tests could run beside a new case, or its after-hooks be settled by one. */
 function unsafeBase(tree, text) {
   let unsafe = false
   walk(tree.program, (node) => {
@@ -84,7 +122,7 @@ function unsafeBase(tree, text) {
       node.type === 'CallExpression' &&
       node.callee.type === 'Identifier' &&
       ['afterAll', 'afterEach'].includes(node.callee.name) &&
-      /\b(?:expect|assert)\b/.test(text.slice(node.start, node.end))
+      unsafeHook(node, text)
     )
       unsafe = true
   })
@@ -105,7 +143,7 @@ export function appendedCases(path, baseText, headText) {
   } catch (error) {
     return refuse(`cannot parse: ${error.message}`)
   }
-  if (unsafeBase(base, baseText)) return refuse('concurrent cases or an asserting after-hook')
+  if (unsafeBase(base, baseText)) return refuse('concurrent cases, or an after-hook that could assert')
   const remaining = new Map()
   for (const node of cases(base)) {
     const text = baseText.slice(node.start, node.end)

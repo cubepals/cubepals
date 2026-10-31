@@ -124,7 +124,8 @@ an addition, like a new test file (`test-appends.mjs`). This holds only when:
   `test(...)` or `it(...)` calls placed after every existing case, so they run after them;
 - removing them leaves the base file's tokens and comments, apart from names added to an import
   the base already had, which no existing code uses;
-- the base has no concurrent cases and no after-hook that asserts.
+- the base has no concurrent cases, no after-hook that asserts, and no `afterAll` hook that calls
+  anything but cleanup methods such as `close` or `stop`, since it runs after the new cases.
 
 Any other edit, such as a changed or removed case, a weakened helper, a new hook, a new skip or a new
 import, leaves the file an edited test, which keeps its base and head dependencies as mutation

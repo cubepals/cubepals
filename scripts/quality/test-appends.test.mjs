@@ -102,7 +102,20 @@ test('a base whose cases could run together, or whose after-hooks assert, is nev
   const concurrent = base.replace("test('refusal'", "test.concurrent('refusal'")
   assert.match(proof(concurrent + extra, concurrent).reason, /concurrent/)
   const asserting = `${base}\nafterAll(() => expect(leaks).toBe(0))\n`
-  assert.match(proof(asserting + extra, asserting).reason, /asserting after-hook/)
+  assert.match(proof(asserting + extra, asserting).reason, /after-hook that could assert/)
+  // A helper can assert where the hook's own text doesn't show it, and so can a passed function.
+  for (const hook of [
+    'afterAll(() => verifyAll())',
+    'afterAll(async () => { await h.close(); check() })',
+    'afterAll(verifyAll)',
+    "afterAll(() => h['close']())",
+  ]) {
+    const withHook = `${base}\n${hook}\n`
+    assert.match(proof(withHook + extra, withHook).reason, /after-hook that could assert/, hook)
+  }
+  // Releasing what the file set up is fine, as every database test does.
+  const cleanup = `${base}\nafterAll(async () => {\n  await h.close()\n  server.stop()\n})\n`
+  assert.equal(proof(cleanup + extra, cleanup).appended, true)
 })
 
 function repository(t) {
