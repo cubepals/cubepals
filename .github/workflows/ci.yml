@@ -266,6 +266,7 @@ jobs:
       - name: Measure Java coverage on base and proposed source
         env:
           BASE: ${{ steps.quality.outputs.base }}
+          HEAD_SHA: ${{ github.sha }}
         run: |
           git worktree add --detach "$RUNNER_TEMP/quality-java-base" "$BASE"
           cp apps/reporter/build.gradle.kts "$RUNNER_TEMP/quality-java-base/apps/reporter/build.gradle.kts"
@@ -273,18 +274,20 @@ jobs:
           (cd apps/reporter && ./gradlew build jacocoTestReport --no-daemon --console=plain)
           cp "$RUNNER_TEMP/quality-java-base/apps/reporter/build/reports/jacoco/test/jacocoTestReport.xml" coverage/reporter/base.xml
           cp apps/reporter/build/reports/jacoco/test/jacocoTestReport.xml coverage/reporter/head.xml
-          python3 scripts/quality/reporter.py coverage --head coverage/reporter/head.xml --base coverage/reporter/base.xml --changed coverage/reporter/changed.json --root .
+          python3 scripts/quality/reporter.py coverage --head coverage/reporter/head.xml --base coverage/reporter/base.xml --changed coverage/reporter/changed.json --base-sha "$BASE" --head-sha "$HEAD_SHA" --root .
       - name: Mutation checks cover changed classes and test dependencies
         env:
           FULL_QUALITY: ${{ github.event_name == 'schedule' || inputs.full_quality == true }}
+          BASE: ${{ steps.quality.outputs.base }}
+          HEAD_SHA: ${{ github.sha }}
         run: |
           args=()
           if [ "$FULL_QUALITY" = true ]; then args+=(--full); fi
-          classes=$(python3 scripts/quality/reporter.py scope --changed coverage/reporter/changed.json --root . --output coverage/reporter/subjects.json "${args[@]}")
+          classes=$(python3 scripts/quality/reporter.py scope --changed coverage/reporter/changed.json --base-sha "$BASE" --head-sha "$HEAD_SHA" --root . --output coverage/reporter/subjects.json "${args[@]}")
           if [ -n "$classes" ]; then
             (cd apps/reporter && ./gradlew pitest "-PqualityClasses=$classes" --no-daemon --console=plain)
             cp apps/reporter/build/reports/pitest/mutations.xml coverage/reporter/mutations.xml
-            python3 scripts/quality/reporter.py mutation --report coverage/reporter/mutations.xml --subjects coverage/reporter/subjects.json
+            python3 scripts/quality/reporter.py mutation --report coverage/reporter/mutations.xml --subjects coverage/reporter/subjects.json --changed coverage/reporter/changed.json --base-sha "$BASE" --head-sha "$HEAD_SHA" --root . "${args[@]}"
           fi
       - name: Java gates reject real defects, weak tests and coverage loss
         run: python3 scripts/quality/reporter-proof.py
@@ -440,18 +443,20 @@ jobs:
         env:
           GROUP: ${{ matrix.quality }}
         run: |
-          node scripts/quality/run-shard.mjs "$GITHUB_WORKSPACE" "$GROUP" "$GITHUB_WORKSPACE/coverage/quality/head"
+          node scripts/quality/run-shard.mjs "$GITHUB_WORKSPACE" "$GROUP" "$GITHUB_WORKSPACE/coverage/quality/head" "$GITHUB_WORKSPACE/coverage/quality/base/manifests/$GROUP.json"
           cp "coverage/quality/head/$GROUP.xml" "$RUNNER_TEMP/junit.xml"
       - name: Tests kill defects in affected source files
         env:
           GROUP: ${{ matrix.quality }}
+          QUALITY_EXPECTED_BASE: ${{ steps.quality.outputs.base }}
+          QUALITY_EXPECTED_HEAD: ${{ github.sha }}
           FULL_QUALITY: ${{ github.event_name == 'schedule' || inputs.full_quality == true }}
           EVENT_NAME: ${{ github.event_name }}
         run: |
           args=()
           if [ "$FULL_QUALITY" = true ]; then args+=(--full); fi
           if [ "$EVENT_NAME" = schedule ]; then args+=(--rotation "$(( $(date -u +%u) - 1 ))"); fi
-          node scripts/quality/mutation-cli.mjs --changed coverage/quality/changed.json --group "$GROUP" --output "coverage/quality/mutation/$GROUP" "${args[@]}"
+          node scripts/quality/mutation-cli.mjs --base "$QUALITY_EXPECTED_BASE" --head "$QUALITY_EXPECTED_HEAD" --changed coverage/quality/changed.json --group "$GROUP" --output "coverage/quality/mutation/$GROUP" "${args[@]}"
       - name: Keep mandatory quality evidence
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

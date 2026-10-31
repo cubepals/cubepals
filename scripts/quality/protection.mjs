@@ -27,6 +27,11 @@ function api(path, body, method = body ? 'PUT' : 'GET') {
       encoding: 'utf8',
       input: body ? JSON.stringify(body) : undefined,
       stdio: ['pipe', 'pipe', 'pipe'],
+      // Select the explicitly configured administrator identity only for this child process.
+      env:
+        process.env.CUBEPALS_ADMIN_GITHUB_TOKEN === undefined
+          ? process.env
+          : { ...process.env, GH_TOKEN: process.env.CUBEPALS_ADMIN_GITHUB_TOKEN },
     }),
   )
 }

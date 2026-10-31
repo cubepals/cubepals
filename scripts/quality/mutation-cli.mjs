@@ -3,10 +3,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /** CI entrypoint: one exhaustive source partition, with incremental test-aware subject selection. */
+import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { parseArgs } from 'node:util'
-import { qualityOnlyChanges } from './config-impact.mjs'
 import { inventory, sourceFiles } from './inventory.mjs'
 import { runMutation } from './mutation.mjs'
 import { rotationSubjects, selectMutationScope } from './mutation-scope.mjs'
@@ -16,6 +16,8 @@ const { values } = parseArgs({
   options: {
     changed: { type: 'string' },
     comparison: { type: 'string' },
+    base: { type: 'string' },
+    head: { type: 'string' },
     group: { type: 'string' },
     full: { type: 'boolean', default: false },
     rotation: { type: 'string' },
@@ -29,31 +31,46 @@ if (
   !values.output ||
   (!values.changed && !values.full)
 ) {
-  throw new Error('Usage: mutation-cli.mjs --changed PATH --group GROUP --output DIR [--full] [--root DIR]')
+  throw new Error(
+    'Usage: mutation-cli.mjs --changed PATH --base SHA --head SHA --group GROUP --output DIR [--full] [--root DIR]',
+  )
 }
 if (values.rotation !== undefined && (!values.full || !/^[0-6]$/.test(values.rotation)))
   throw new Error('--rotation must be 0 through 6 and requires --full')
+const anchored = !values.full || values.base !== undefined || values.head !== undefined
+if (anchored && (!/^[a-f0-9]{40}$/.test(values.base ?? '') || !/^[a-f0-9]{40}$/.test(values.head ?? '')))
+  throw new Error('Incremental mutation requires authoritative --base and --head commit SHAs')
 const root = resolve(values.root)
 const output = resolve(values.output)
 const changed = values.changed ? JSON.parse(readFileSync(resolve(values.changed), 'utf8')) : []
 if (!Array.isArray(changed) || changed.some((file) => typeof file !== 'string'))
   throw new Error('Changed files must be a JSON string array')
-const entries = inventory(root)
 const comparisonPath = values.comparison
   ? resolve(values.comparison)
   : values.changed
     ? resolve(dirname(resolve(values.changed)), 'comparison.json')
     : null
-const comparison =
-  comparisonPath && existsSync(comparisonPath) ? JSON.parse(readFileSync(comparisonPath, 'utf8')) : null
-const ignoredConfigFiles = comparison?.base ? qualityOnlyChanges(root, comparison.base, changed) : new Set()
+if (anchored) {
+  if (!comparisonPath || !existsSync(comparisonPath))
+    throw new Error('Missing comparison evidence for the authoritative base and head')
+  const comparison = JSON.parse(readFileSync(comparisonPath, 'utf8'))
+  if (comparison?.base !== values.base || comparison?.head !== values.head)
+    throw new Error('Comparison evidence differs from the authoritative --base or --head')
+  const checkout = execFileSync('git', ['rev-parse', '--verify', 'HEAD^{commit}'], {
+    cwd: root,
+    encoding: 'utf8',
+  }).trim()
+  if (checkout !== values.head) throw new Error('The checkout does not match the authoritative --head')
+}
+const entries = inventory(root)
 const scope = selectMutationScope({
   root,
   productionFiles: sourceFiles(entries),
   testFiles: entries.filter((entry) => entry.kind === 'test').map((entry) => entry.path),
   changedFiles: changed,
   full: values.full,
-  ignoredConfigFiles,
+  baseSha: anchored ? values.base : undefined,
+  headSha: anchored ? values.head : 'HEAD',
 })
 const groupSubjects = scope.subjects.filter((subject) => groupOf(subject) === values.group)
 const rotation = values.rotation === undefined ? null : Number(values.rotation)
@@ -73,7 +90,7 @@ writeFileSync(
       ...scope,
       ...selection,
       selected: subjects,
-      verifiedQualityOnlyConfigs: [...ignoredConfigFiles],
+      verifiedQualityOnlyConfigs: scope.testImpact?.verifiedQualityOnlyConfigs ?? [],
     },
     null,
     2,
@@ -82,11 +99,18 @@ writeFileSync(
 if (subjects.length === 0) {
   const reason = scope.subjects.length
     ? 'No mutation subjects in this partition and rotation'
-    : 'No production or test changes'
+    : scope.noMutationReason
   writeFileSync(
     resolve(output, 'summary.json'),
     JSON.stringify({ passed: true, complete: true, files: [], reason, ...selection }, null, 2),
   )
   process.stdout.write(`${reason}; scope evidence: ${resolve(output, 'scope.json')}\n`)
 } else
-  runMutation({ root, subjects, testsByFile: scope.testsByFile, reportDir: output, collectAll: values.full })
+  runMutation({
+    root,
+    subjects,
+    testsByFile: scope.testsByFile,
+    additionalTestsByFile: scope.additionalTestsByFile,
+    reportDir: output,
+    collectAll: values.full,
+  })

@@ -34,9 +34,14 @@ commit independently. Coverage findings list existing deficits by file instead o
 an invented passing score. Live branch-protection findings and the remaining activation step are
 documented in [the policy trust boundary](../scripts/quality/README.md).
 
+The first complete JavaScript/TypeScript measurement covered 1,163 source files. It recorded
+1,675 below-floor metrics across 715 files and rejected 11 coverage regressions across six
+unchanged files. Deterministic tests address the missed failure paths. These findings and the
+seeded-defect proofs demonstrate gaps in test evidence; they did not establish a production bug.
+
 ## Required evidence
 
-Changed and new executable files must reach **80% branches, 90% functions/methods, and 90% lines**.
+Changed and new executable production files must reach **80% branches, 90% functions/methods, and 90% lines**.
 Every existing file must preserve its measured base percentages and may not increase its number
 of uncovered elements. The absolute-count check prevents padding a file with covered code to
 conceal new uncovered behavior. A fully covered file therefore keeps its stronger existing bar.
@@ -51,11 +56,19 @@ classified as a test or protected quality infrastructure. Quality infrastructure
 required controller tests and executable defect proofs. Missing, stale, malformed, or duplicate
 shard evidence fails. The checker compares source hashes with the proposed checkout.
 
-Each test shard runs once against the comparison commit and once against the proposed source.
-The checker merges all six reports before comparing per-file metrics. This preserves coverage
-provided by integration tests in another shard. CI requires service variables, a nonempty test
-run, every selected test file in JUnit, and no unexpected skipped cases. Only the two existing
-live blocklyd test files may skip here; the separate fleet workflow supplies their live nodes.
+Each test shard measures both the comparison commit and the proposed source. For a PR, the
+comparison is the checked-out merge's validated first parent, so another merged PR does not
+become part of this PR's quality obligations. The baseline run writes a manifest of test paths
+and hashes. On the proposed source, identical tests run first, then added or modified tests run
+in a separate Bun process. Both phases use Bun's per-file module isolation. The parent validates
+and retains the first phase's evidence before starting the second. Tracked source, tests,
+fixtures, and configuration must match their input snapshot after each phase.
+
+The checker merges all six shard reports before comparing per-file metrics. This preserves
+coverage provided by integration tests in another shard. CI requires service variables, a
+nonempty test run, every selected test file in JUnit, and no unexpected skipped cases. Only the
+two existing live blocklyd test files may skip here; the separate fleet workflow supplies their
+live nodes.
 
 Mutation testing requires **80% killed mutants per selected file**, rather than a project average.
 Timeouts, compilation errors, missing reports, skipped-away tests, and runner failures cannot count
@@ -63,12 +76,36 @@ as detected defects. A clean test baseline must pass first. Stryker uses its mai
 and built-in command runner, including condition boundaries, removed blocks, changed operators,
 and altered return values. Disposable copies repair workspace package links so a mutated package
 import cannot accidentally resolve to the original unmutated checkout.
+Files with no independently generated mutation candidates report that condition explicitly;
+they still require a clean baseline and their applicable coverage metrics.
 
-PR mutation scope includes changed production files and the source dependencies of changed tests.
-It includes test-only changes; uncertain dependency mapping expands the scope. Focused dependent
-tests keep this affordable, while the full existing suite still runs. Scheduled runs rotate through seven stable source partitions, visiting the complete executable
-inventory over a successful week; manual full runs cover every partition. A cancelled or timed-out
-partition is incomplete, never a passing full scan. A failing scheduled run is
+PR mutation scope always includes new and changed production files. For JavaScript/TypeScript,
+edits to existing tests retain the union of their base and proposed source dependencies. A
+deleted test retains its completely mapped, nonempty base dependencies; empty or ambiguous
+maps expand to the full inventory. Changed test-support modules also retain affected tests'
+dependencies. Runtime configuration and dependency changes expand scope unless the verifier
+proves that only isolated quality tooling changed. Comparison metadata must match the base and
+head SHAs supplied directly by the protected workflow.
+
+Verified new test files can be classified separately. Their tests still execute and contribute
+coverage, but importing an integration harness does not retroactively impose the mutation floor
+on every legacy module it imports. This classification never waives changes to production,
+existing tests, helpers, dependencies, or configuration. Test deletions disable this treatment
+for newly named tests, preventing a renamed weak replacement from hiding its original subject.
+The Java reporter retains its class-based PIT scope for production and test changes.
+
+A standalone superficial test addition can pass when production and original tests are unchanged.
+That is not a claim that every new test is useful. A subsequent production change must meet the
+production coverage and mutation gates; editing or replacing an existing test retains mutation
+obligations. No unmeasured legacy mutation result is treated as a passing cache entry.
+
+Mutation runs begin with small dependent test suites and expand to other proven dependents when
+the full per-file mutant census does not meet the threshold. Each attempt keeps the same census;
+kills are not combined across different attempts. The full ordinary test suite still runs.
+Scheduled JavaScript/TypeScript mutations rotate through seven stable source partitions, visiting
+the complete executable inventory over a successful week; manual full runs cover every partition.
+The smaller Java reporter inventory receives a full scheduled run. A cancelled or
+timed-out partition is incomplete, never a passing full scan. A failing scheduled run is
 actionable debt, not evidence that every legacy module already meets the new floor.
 
 No test-name convention can prove that a boundary or failure contract is asserted. Coverage
@@ -88,14 +125,18 @@ python3 scripts/quality/reporter-proof.py
 
 The proofs execute the real gate entrypoints in disposable repositories or copies. They verify
 clean controls pass, then reject removed negative-path tests, never-imported source, covered-code
-padding, malformed/missing evidence, threshold/exclusion/workflow edits, superficial assertions,
-and deliberate defects. Production source in the working checkout is not mutated. Behavioral,
+padding, malformed/missing evidence, threshold/exclusion/workflow edits, strong tests replaced
+by superficial assertions, and deliberate defects. They also prove that renamed weak tests
+retain their original mutation obligations and that forged comparison metadata fails. Production
+source in the working checkout is not mutated. Behavioral,
 Stryker, and reporter proof reports and logs are written under `coverage/`.
 
-For a service-enabled CI shard, the workflow is the reference:
+For a service-enabled CI shard, after its baseline measurement has produced the test manifest,
+the workflow is the reference:
 
 ```sh
-node scripts/quality/run-shard.mjs "$PWD" web "$PWD/coverage/quality/head"
+node scripts/quality/run-shard.mjs "$PWD" web "$PWD/coverage/quality/head" \
+  "$PWD/coverage/quality/base/manifests/web.json"
 node scripts/quality/coverage.mjs merge --expected-shards 6 --output coverage/head.json coverage/quality/head/*.json
 node scripts/quality/coverage.mjs check --report coverage/head.json --base coverage/base.json \
   --changed coverage/changed.json --root . --output coverage/findings.json
@@ -110,3 +151,9 @@ workflow/App boundary needed against deliberately malicious workflow spoofing. A
 requires GitHub-verified signed commits on `main`; the installer enables and independently checks
 the dedicated commit-signature protection setting while preserving existing branch protections.
 Rollout commits must be signed too, with no unsigned bootstrap fallback.
+
+Module isolation, separate phases, input snapshots, and lexical policy checks are complementary
+controls. They are not a security sandbox for arbitrary JavaScript or a proof that expected
+values are independent of application code. Executable tests can inspect their process and
+shared filesystem. The trust-boundary document states these limits and the stronger external
+workflow/App controls required against malicious status spoofing.

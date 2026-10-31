@@ -53,6 +53,12 @@ const methodIndex = args.indexOf('--method')
 const method = methodIndex < 0 ? 'GET' : args[methodIndex + 1]
 const body = args.includes('--input') ? JSON.parse(fs.readFileSync(0, 'utf8')) : null
 state.calls.push({ path, method, body })
+if (state.verifyAuthentication) {
+  state.authentication = state.authentication || []
+  state.authentication.push(state.expectedToken === null
+    ? !Object.hasOwn(process.env, 'GH_TOKEN')
+    : process.env.GH_TOKEN === state.expectedToken)
+}
 const save = () => fs.writeFileSync(stateFile, JSON.stringify(state))
 const failure = (state.failures || []).find(value => value.path === path && value.method === method)
 if (failure) {
@@ -73,7 +79,7 @@ save()
 process.stdout.write(JSON.stringify(signatures ? state.signatures : state.protection))
 `
 
-function invoke(mode, options = {}) {
+function invoke(mode, options = {}, credentialEnv = {}) {
   const directory = mkdtempSync(join(tmpdir(), 'quality-protection-'))
   const stateFile = join(directory, 'state.json')
   try {
@@ -86,6 +92,7 @@ function invoke(mode, options = {}) {
       encoding: 'utf8',
       env: {
         ...process.env,
+        ...credentialEnv,
         PATH: directory + delimiter + process.env.PATH,
         QUALITY_PROTECTION_STATE: stateFile,
       },
@@ -201,4 +208,46 @@ test('a denied signature POST prevents the bulk protection update', () => {
   assert.equal(result.status, 1)
   assert.ok(result.state.calls.every((call) => call.method !== 'PUT' && call.method !== 'DELETE'))
   assert.deepEqual(result.state.protection, current)
+})
+
+test('administrator token takes precedence over the inherited gh token without being printed', () => {
+  const expectedToken = 'fixture-administrator-credential'
+  const result = invoke(
+    '--check',
+    { verifyAuthentication: true, expectedToken },
+    {
+      CUBEPALS_ADMIN_GITHUB_TOKEN: expectedToken,
+      GH_TOKEN: 'fixture-default-credential',
+    },
+  )
+  assert.equal(result.status, 0, result.stderr)
+  assert.deepEqual(result.state.authentication, [true, true])
+  assert.equal(result.stdout.includes(expectedToken) || result.stderr.includes(expectedToken), false)
+})
+
+test('an absent administrator token preserves the inherited gh token', () => {
+  const expectedToken = 'fixture-default-credential'
+  const result = invoke(
+    '--check',
+    { verifyAuthentication: true, expectedToken },
+    {
+      CUBEPALS_ADMIN_GITHUB_TOKEN: undefined,
+      GH_TOKEN: expectedToken,
+    },
+  )
+  assert.equal(result.status, 0, result.stderr)
+  assert.deepEqual(result.state.authentication, [true, true])
+})
+
+test('absent tokens leave normal gh authentication configuration available', () => {
+  const result = invoke(
+    '--check',
+    { verifyAuthentication: true, expectedToken: null },
+    {
+      CUBEPALS_ADMIN_GITHUB_TOKEN: undefined,
+      GH_TOKEN: undefined,
+    },
+  )
+  assert.equal(result.status, 0, result.stderr)
+  assert.deepEqual(result.state.authentication, [true, true])
 })

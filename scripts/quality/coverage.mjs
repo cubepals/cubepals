@@ -80,44 +80,47 @@ export function validateReport(report) {
   const expected = sourceFiles(report.inventory).sort()
   if (JSON.stringify(expected) !== JSON.stringify(Object.keys(report.files).sort()))
     throw new Error('Coverage files do not exactly match the executable source inventory')
-  for (const [path, file] of Object.entries(report.files)) {
-    object(file, `coverage for ${path}`)
-    if (file.path !== path) throw new Error(`Coverage path mismatch: ${path}`)
-    sameKeys(file.statementMap, file.s, `${path} statements`)
-    sameKeys(file.fnMap, file.f, `${path} functions`)
-    sameKeys(file.branchMap, file.b, `${path} branches`)
-    for (const [key, value] of Object.entries(file.s)) {
-      count(value, `${path} statement ${key}`)
-      location(file.statementMap[key], `${path} statement ${key}`)
-    }
-    for (const [key, value] of Object.entries(file.f)) {
-      count(value, `${path} function ${key}`)
-      location(file.fnMap[key].loc, `${path} function ${key}`)
-    }
-    for (const [key, values] of Object.entries(file.b)) {
-      const locations = file.branchMap[key].locations
-      if (
-        !Array.isArray(values) ||
-        !Array.isArray(locations) ||
-        values.length === 0 ||
-        values.length !== locations.length
-      )
-        throw new Error(`Missing branch arms: ${path} branch ${key}`)
-      values.forEach((value, arm) => {
-        count(value, `${path} branch ${key}/${arm}`)
-        const implicitElse =
-          file.branchMap[key].type === 'if' &&
-          arm === 1 &&
-          locations[arm]?.start?.line === undefined &&
-          locations[arm]?.end?.line === undefined
-        if (!implicitElse) location(locations[arm], `${path} branch ${key}/${arm}`)
-      })
-    }
-  }
+  for (const [path, file] of Object.entries(report.files)) validateFileCoverage(path, file)
   return report
 }
 
-function identity(file) {
+export function validateFileCoverage(path, file) {
+  object(file, `coverage for ${path}`)
+  if (file.path !== path) throw new Error(`Coverage path mismatch: ${path}`)
+  sameKeys(file.statementMap, file.s, `${path} statements`)
+  sameKeys(file.fnMap, file.f, `${path} functions`)
+  sameKeys(file.branchMap, file.b, `${path} branches`)
+  for (const [key, value] of Object.entries(file.s)) {
+    count(value, `${path} statement ${key}`)
+    location(file.statementMap[key], `${path} statement ${key}`)
+  }
+  for (const [key, value] of Object.entries(file.f)) {
+    count(value, `${path} function ${key}`)
+    location(file.fnMap[key].loc, `${path} function ${key}`)
+  }
+  for (const [key, values] of Object.entries(file.b)) {
+    const locations = file.branchMap[key].locations
+    if (
+      !Array.isArray(values) ||
+      !Array.isArray(locations) ||
+      values.length === 0 ||
+      values.length !== locations.length
+    )
+      throw new Error(`Missing branch arms: ${path} branch ${key}`)
+    values.forEach((value, arm) => {
+      count(value, `${path} branch ${key}/${arm}`)
+      const implicitElse =
+        file.branchMap[key].type === 'if' &&
+        arm === 1 &&
+        locations[arm]?.start?.line === undefined &&
+        locations[arm]?.end?.line === undefined
+      if (!implicitElse) location(locations[arm], `${path} branch ${key}/${arm}`)
+    })
+  }
+  return file
+}
+
+export function coverageIdentity(file) {
   return JSON.stringify([file.statementMap, file.fnMap, file.branchMap])
 }
 
@@ -136,7 +139,8 @@ export function mergeReports(reports, expectedShards) {
       throw new Error('Shards measured different source inventories or source hashes')
     for (const [path, file] of Object.entries(report.files)) {
       const into = result.files[path]
-      if (identity(into) !== identity(file)) throw new Error(`Counter maps differ across shards: ${path}`)
+      if (coverageIdentity(into) !== coverageIdentity(file))
+        throw new Error(`Counter maps differ across shards: ${path}`)
       for (const metric of ['s', 'f'])
         for (const [key, value] of Object.entries(file[metric])) into[metric][key] += value
       for (const [key, values] of Object.entries(file.b))

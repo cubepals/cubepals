@@ -2,11 +2,11 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-/** Checks complete JUnit evidence, including nested suites, failures and unexpected skips. */
+/** Checks complete JUnit evidence and combines isolated phases without flattening suites. */
 import { liveFleet } from './evidence-policy.mjs'
-import { XMLParser, XMLValidator } from './toolchain.mjs'
+import { requireQuality, XMLParser, XMLValidator } from './toolchain.mjs'
 
-export function checkJUnit(xml, expected) {
+export function checkJUnit(xml, expected, { allowOptionalOnly = false } = {}) {
   if (XMLValidator.validate(xml) !== true) throw new Error('Malformed JUnit evidence')
   const data = new XMLParser({
     ignoreAttributes: false,
@@ -34,8 +34,23 @@ export function checkJUnit(xml, expected) {
     for (const child of suite.testsuite ?? []) visit(child, file)
   }
   for (const suite of suites) visit(suite)
-  if (executed === 0) throw new Error('No tests executed')
+  if (executed === 0 && !(allowOptionalOnly && expected.every((file) => liveFleet.has(file))))
+    throw new Error('No tests executed')
   for (const file of expected) if (!seen.has(file)) throw new Error(`Test file did not report: ${file}`)
   return executed
 }
 
+export function mergeJUnit(documents) {
+  if (documents.length === 1) return documents[0]
+  const parser = new XMLParser({
+    ignoreAttributes: false,
+    isArray: (tag) => ['testsuite', 'testcase'].includes(tag),
+  })
+  const roots = documents.map((xml) => parser.parse(xml).testsuites)
+  const merged = { testsuite: roots.flatMap((root) => root.testsuite) }
+  for (const key of ['tests', 'failures', 'errors', 'skipped', 'time']) {
+    merged[`@_${key}`] = roots.reduce((total, root) => total + Number(root[`@_${key}`] ?? 0), 0)
+  }
+  const { XMLBuilder } = requireQuality('fast-xml-parser')
+  return new XMLBuilder({ ignoreAttributes: false }).build({ testsuites: merged })
+}

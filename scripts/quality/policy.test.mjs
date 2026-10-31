@@ -227,6 +227,12 @@ for (const name of [
   'QUALITY_REPORT',
   'QUALITY_ROOT',
   'QUALITY_SHARD',
+  'QUALITY_PREPARED',
+  'QUALITY_PREPARED_SHA256',
+  'QUALITY_PARTS',
+  'QUALITY_PHASE',
+  'QUALITY_EXPECTED_BASE',
+  'QUALITY_EXPECTED_HEAD',
 ]) {
   test(`the real controller rejects quoted evidence access to ${name}`, () => {
     rejected('apps/evidence.test.ts', `const evidence = process.env['${name}']`, /added evidence access:/)

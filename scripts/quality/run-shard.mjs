@@ -3,21 +3,42 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Runs exactly one existing test shard with branch instrumentation. JUnit is required evidence;
- * missing tests, failures, and skipped cases outside the separately run live fleet suite fail.
- * The trusted checkout supplies this runner and its preload even when testing the base tree.
+ * Prepares branch instrumentation once, then runs each test file in Bun's isolated module realm.
+ * Existing unmodified tests finish before new or changed tests start; the parent validates and
+ * retains their evidence before that second process can affect filesystem or service state.
+ * JUnit, exact sparse fragments and unchanged tracked inputs are required for a complete shard.
  */
 import { spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs'
-import { resolve } from 'node:path'
+import { createHash } from 'node:crypto'
+import {
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { checkJUnit } from './coverage-junit.mjs'
-
-export { checkJUnit } from './coverage-junit.mjs'
+import { mergeReports, validateReport } from './coverage.mjs'
+import { writeRuntimeManifest } from './coverage-cache.mjs'
+import { mergeFragments } from './coverage-fragments.mjs'
+import { assertInputsUnchanged, partitionTests, snapshotInputs, testManifest } from './coverage-inputs.mjs'
+import { checkJUnit, mergeJUnit } from './coverage-junit.mjs'
 import { groupOf, groups } from './shards.mjs'
 
+export { checkJUnit } from './coverage-junit.mjs'
 
-export function runShard({ root, group, reportDir }) {
+function sha256(bytes) {
+  return createHash('sha256').update(bytes).digest('hex')
+}
+
+export function runShard({ root, group, reportDir, baseManifest }) {
+  root = resolve(root)
+  reportDir = resolve(reportDir)
   if (!Object.hasOwn(groups, group)) throw new Error(`Unknown test group ${group}`)
   for (const key of [
     'DATABASE_URL',
@@ -34,9 +55,11 @@ export function runShard({ root, group, reportDir }) {
   const listed = spawnSync('git', ['ls-files', '-z', '--cached', '--others', '--exclude-standard'], {
     cwd: root,
     encoding: 'utf8',
+    maxBuffer: 32 * 1024 * 1024,
   })
   if (listed.status !== 0) throw new Error('Cannot enumerate test files')
-  const tests = [...new Set(listed.stdout.split('\0'))]
+  const paths = [...new Set(listed.stdout.split('\0').filter(Boolean))]
+  const tests = paths
     .filter(
       (file) =>
         /\.(?:test|spec)\.[cm]?[jt]sx?$/.test(file) &&
@@ -46,40 +69,121 @@ export function runShard({ root, group, reportDir }) {
     )
     .sort()
   if (!tests.length) throw new Error(`No tests in ${group}`)
+  const base = baseManifest ? JSON.parse(readFileSync(baseManifest, 'utf8')) : undefined
+  const inputs = snapshotInputs(
+    root,
+    paths.filter((file) => /\.[cm]?[jt]sx?$/.test(file)),
+  )
   mkdirSync(reportDir, { recursive: true })
   const junit = resolve(reportDir, `${group}.xml`)
   const report = resolve(reportDir, `${group}.json`)
-  rmSync(junit, { force: true })
-  rmSync(report, { force: true })
-  const result = spawnSync(
-    process.env.QUALITY_BUN ?? 'bun',
-    [
-      'test',
-      '--preload',
-      fileURLToPath(new URL('./coverage-preload.mjs', import.meta.url)),
-      '--reporter=junit',
-      `--reporter-outfile=${junit}`,
-      ...tests.map((file) => `./${file}`),
-    ],
-    {
-      cwd: root,
-      env: { ...process.env, QUALITY_ROOT: root, QUALITY_REPORT: report, QUALITY_SHARD: group },
-      stdio: 'inherit',
-      timeout: 1_800_000,
-    },
-  )
-  if (result.status !== 0)
-    throw new Error(`Test shard ${group} failed (${result.status ?? result.error ?? result.signal})`)
-  const count = checkJUnit(readFileSync(junit, 'utf8'), tests)
-  if (!existsSync(report)) throw new Error(`Missing coverage for ${group}`)
-  console.warn(`${group}: ${count} executed cases and coverage evidence verified`)
+  mkdirSync(resolve(reportDir, 'manifests'), { recursive: true })
+  const manifest = resolve(reportDir, 'manifests', `${group}.json`)
+  for (const path of [junit, report, manifest]) rmSync(path, { force: true })
+  const temporary = mkdtempSync(join(tmpdir(), `quality-${group}-`))
+  const deadline = Date.now() + 1_800_000
+  try {
+    const preparedPath = join(temporary, 'prepared.json')
+    const selection = join(temporary, 'tests.json')
+    writeFileSync(selection, JSON.stringify(tests))
+    const preparation = spawnSync(
+      process.execPath,
+      [fileURLToPath(new URL('./coverage-prepare.mjs', import.meta.url)), root, preparedPath, selection],
+      {
+        cwd: root,
+        encoding: 'utf8',
+        timeout: Math.max(1, deadline - Date.now()),
+        maxBuffer: 4 * 1024 * 1024,
+      },
+    )
+    if (preparation.error) throw preparation.error
+    if (preparation.status !== 0) throw new Error(`Coverage preparation failed: ${preparation.stderr}`)
+    const preparedBytes = readFileSync(preparedPath)
+    const prepared = JSON.parse(preparedBytes)
+    const runtime = writeRuntimeManifest(prepared, temporary)
+    const preparedSha256 = runtime.sha256
+    assertInputsUnchanged(root, inputs)
+    const phases = partitionTests(prepared.tests, base)
+    const reports = []
+    const documents = []
+    let executed = 0
+    for (const phase of phases) {
+      const phaseName = `${group}:${phase.name}`
+      const parts = join(temporary, phase.name)
+      const phaseJUnit = join(temporary, `${phase.name}.xml`)
+      mkdirSync(parts)
+      const result = spawnSync(
+        process.env.QUALITY_BUN ?? 'bun',
+        [
+          'test',
+          '--isolate',
+          '--preload',
+          fileURLToPath(new URL('./coverage-preload.mjs', import.meta.url)),
+          '--reporter=junit',
+          `--reporter-outfile=${phaseJUnit}`,
+          ...phase.tests.map((file) => `./${file}`),
+        ],
+        {
+          cwd: root,
+          env: {
+            ...process.env,
+            QUALITY_ROOT: root,
+            QUALITY_REPORT: report,
+            QUALITY_SHARD: group,
+            QUALITY_PREPARED: runtime.path,
+            QUALITY_PREPARED_SHA256: preparedSha256,
+            QUALITY_PARTS: parts,
+            QUALITY_PHASE: phaseName,
+          },
+          stdio: 'inherit',
+          timeout: Math.max(1, deadline - Date.now()),
+        },
+      )
+      assertInputsUnchanged(root, inputs)
+      if (sha256(readFileSync(runtime.path)) !== preparedSha256)
+        throw new Error('Test run modified the prepared coverage manifest')
+      if (result.status !== 0)
+        throw new Error(`Test shard ${phaseName} failed (${result.status ?? result.error ?? result.signal})`)
+      const xml = readFileSync(phaseJUnit, 'utf8')
+      executed += checkJUnit(xml, phase.tests, { allowOptionalOnly: true })
+      const fragments = readdirSync(parts)
+        .sort()
+        .map((name) => {
+          const path = join(parts, name)
+          if (!/^[a-f0-9]{64}\.json$/.test(name) || !lstatSync(path).isFile())
+            throw new Error(`Unexpected coverage fragment entry: ${name}`)
+          const fragment = JSON.parse(readFileSync(path, 'utf8'))
+          if (!fragment.test || name !== `${sha256(fragment.test.path)}.json`)
+            throw new Error(`Coverage fragment filename does not match its test: ${name}`)
+          return fragment
+        })
+      // Absorb evidence in trusted parent memory before subsequent tests can touch its files.
+      reports.push(mergeFragments(prepared, fragments, phase.tests, { preparedSha256, phase: phaseName }))
+      documents.push(xml)
+      rmSync(parts, { recursive: true, force: true })
+      console.warn(`${phaseName}: ${phase.tests.length} isolated test files verified`)
+    }
+    const combined = mergeReports(reports, reports.length)
+    combined.shards = [group]
+    validateReport(combined)
+    const xml = mergeJUnit(documents)
+    if (checkJUnit(xml, tests) !== executed) throw new Error('Merged JUnit execution count differs')
+    assertInputsUnchanged(root, inputs)
+    writeFileSync(report, `${JSON.stringify(combined)}\n`)
+    writeFileSync(junit, xml)
+    writeFileSync(manifest, `${JSON.stringify(testManifest(prepared.tests), null, 2)}\n`)
+    console.warn(`${group}: ${executed} executed cases and complete coverage evidence verified`)
+  } finally {
+    rmSync(temporary, { recursive: true, force: true })
+  }
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
-    const [root, group, reportDir] = process.argv.slice(2)
-    if (!root || !group || !reportDir) throw new Error('Usage: run-shard.mjs ROOT GROUP REPORT_DIR')
-    runShard({ root: resolve(root), group, reportDir: resolve(reportDir) })
+    const [root, group, reportDir, baseManifest] = process.argv.slice(2)
+    if (!root || !group || !reportDir)
+      throw new Error('Usage: run-shard.mjs ROOT GROUP REPORT_DIR [BASE_TEST_MANIFEST]')
+    runShard({ root, group, reportDir, baseManifest })
   } catch (error) {
     console.error(error.message)
     process.exitCode = 1

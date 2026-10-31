@@ -37,11 +37,12 @@ export function proveMutation(output, { bun = 'bun' } = {}) {
     symlinkSync('../../packages/probe', join(root, 'node_modules/@blockly/probe'))
     execFileSync('git', ['init', '-q'], { cwd: root })
     execFileSync('git', ['add', '.'], { cwd: root })
-    const run = (name) =>
+    const run = (name, additional = []) =>
       runMutation({
         root,
         subjects: [subject],
         testsByFile: { [subject]: [testFile] },
+        additionalTestsByFile: { [subject]: additional },
         reportDir: join(output, name),
         bun,
         timeoutMs: 15_000,
@@ -62,7 +63,43 @@ export function proveMutation(output, { bun = 'bun' } = {}) {
     const weak = JSON.parse(readFileSync(join(output, 'weak/summary.json'), 'utf8'))
     assert.equal(weak.passed, false)
     results.push({ case: 'superficial toBeDefined assertions', rejected: true, score: weak.files[0].score })
+    const existingTest = 'apps/existing.test.ts'
+    write(existingTest, strong)
+    const expanded = run('expanded', [[existingTest]])
+    const attempts = JSON.parse(readFileSync(join(output, 'expanded/0/attempts.json'), 'utf8'))
+    assert.equal(expanded.files[0].attempts, 2)
+    assert.equal(attempts[0].score, weak.files[0].score)
+    assert.equal(attempts[1].score, 100)
+    assert.equal(attempts[0].total, attempts[1].total)
+    assert.deepEqual(attempts[1].tests, [testFile, existingTest])
+    results.push({
+      case: 'existing dependent tests restore full candidate evidence after a narrow initial suite',
+      rejected: false,
+      initialScore: attempts[0].score,
+      score: attempts[1].score,
+      candidates: attempts[1].total,
+    })
+    write(
+      existingTest,
+      "import { expect, test } from 'bun:test'; import { advance } from '@blockly/probe'; test('still exists', () => expect(advance(0)).toBeDefined())\n",
+    )
+    assert.throws(() => run('expanded-weak', [[existingTest]]), /mutation score .* below/)
+    const expandedWeak = JSON.parse(readFileSync(join(output, 'expanded-weak/summary.json'), 'utf8'))
+    assert.equal(expandedWeak.passed, false)
+    assert.equal(expandedWeak.files[0].total, baseline.files[0].total)
+    results.push({
+      case: 'adding another superficial test cannot reduce the mutation denominator',
+      rejected: true,
+      score: expandedWeak.files[0].score,
+    })
     write(testFile, strong)
+    const fast = run('fast', [[existingTest]])
+    assert.equal(fast.files[0].attempts, 1)
+    results.push({
+      case: 'a sufficient initial suite does not rerun unused dependent batches',
+      rejected: false,
+      attempts: 1,
+    })
     write(subject, source.replace('>= 10', '> 10'))
     assert.throws(() => run('defect'), /produced no report|clean mutation baseline/)
     const log = readFileSync(join(output, 'defect/0/stryker.log'), 'utf8')

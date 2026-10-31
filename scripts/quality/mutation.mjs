@@ -231,6 +231,7 @@ export function runMutation({
   root,
   subjects,
   testsByFile,
+  additionalTestsByFile = {},
   reportDir,
   threshold = 80,
   bun = 'bun',
@@ -258,97 +259,155 @@ export function runMutation({
     for (const [index, subject] of subjects.entries()) {
       try {
         if (!testsByFile[subject]?.length) throw new Error(`No tests depend on mutation subject ${subject}`)
-        const output = join(reportDir, String(index))
-        rmSync(output, { recursive: true, force: true })
-        mkdirSync(output, { recursive: true })
-        const evidenceDir = join(output, 'evidence')
-        const manifestPath = join(output, 'tests.json')
-        writeFileSync(
-          manifestPath,
-          JSON.stringify({ tests: testsByFile[subject], evidence: evidenceDir, bun, timeoutMs }),
+        const outputRoot = join(reportDir, String(index))
+        const batches = additionalTestsByFile[subject] ?? []
+        if (
+          !Array.isArray(batches) ||
+          batches.some(
+            (batch) =>
+              !Array.isArray(batch) || batch.length === 0 || batch.some((test) => typeof test !== 'string'),
+          )
         )
-        const reportPath = join(output, 'mutation.json')
-        const configPath = join(output, 'stryker.config.json')
-        writeFileSync(
-          configPath,
-          JSON.stringify({
-            testRunner: 'command',
-            commandRunner: { command: `${quote(node)} ${quote(command)} ${quote(manifestPath)}` },
-            // Backslashes are normalized as separators by Stryker. Character classes preserve
-            // literal Next route brackets without allowing the filename to become a glob.
-            mutate: [subject.replace(/[?*[\]{}()!+@]/g, (character) => `[${character}]`)],
-            coverageAnalysis: 'off',
-            concurrency: 1,
-            inPlace: true,
-            symlinkNodeModules: false,
-            incremental: false,
-            ignoreStatic: false,
-            disableTypeChecks: false,
-            reporters: ['json', 'clear-text'],
-            jsonReporter: { fileName: reportPath },
-            thresholds: { high: threshold, low: threshold, break: threshold },
-            timeoutMS: 5000,
-            timeoutFactor: 1.5,
-            dryRunTimeoutMinutes: Math.ceil(timeoutMs / 60_000),
-            tempDirName: join(snapshot, '.stryker-tmp'),
-            cleanTempDir: 'always',
-          }),
-        )
-        const run = spawnSync(node, [cli, 'run', configPath], {
-          cwd: snapshot,
-          env: mutationEnvironment(),
-          encoding: 'utf8',
-          maxBuffer: 64 * 1024 * 1024,
-          timeout: subjectTimeoutMs,
-          detached: process.platform !== 'win32',
-        })
-        writeFileSync(join(output, 'stryker.log'), `${run.stdout ?? ''}\n${run.stderr ?? ''}`)
-        if (run.error || run.signal) {
-          if (process.platform !== 'win32' && run.pid) {
-            try {
-              process.kill(-run.pid, 'SIGKILL')
-            } catch (error) {
-              if (error.code !== 'ESRCH') throw error
+          throw new Error(`${subject}: invalid dependent-test expansion plan`)
+        const selectedTests = [...new Set(testsByFile[subject])]
+        const planned = new Set(selectedTests)
+        for (const batch of batches) {
+          if (!batch.some((test) => !planned.has(test)))
+            throw new Error(
+              `${subject}: mutation expansion must add dependent tests, not retry the same suite`,
+            )
+          for (const test of batch) planned.add(test)
+        }
+        const attempts = []
+        const started = Date.now()
+        let verdict
+        let runStatus
+        for (let attempt = 0; attempt <= batches.length; attempt++) {
+          if (attempt > 0) {
+            for (const test of batches[attempt - 1]) {
+              if (!selectedTests.includes(test)) selectedTests.push(test)
             }
           }
-          throw new Error(`${subject}: Stryker failed to finish (${run.error ?? run.signal})`)
-        }
-        if (!existsSync(reportPath))
-          throw new Error(`${subject}: Stryker produced no report; see ${join(output, 'stryker.log')}`)
-        const evidence = Object.fromEntries(
-          readdirSync(evidenceDir)
-            .filter((file) => file.endsWith('.json'))
-            .map((file) => [
-              basename(file, '.json'),
-              JSON.parse(readFileSync(join(evidenceDir, file), 'utf8')),
-            ]),
-        )
-        if (evidence.baseline?.status !== 'passed')
-          throw new Error(`${subject}: clean mutation baseline did not pass`)
-        const report = JSON.parse(readFileSync(reportPath, 'utf8'))
-        for (const mutant of report.files[subject]?.mutants ?? []) {
-          if (!evidence[mutant.id] && ['Timeout', 'CompileError', 'RuntimeError'].includes(mutant.status)) {
-            const outcome = {
-              status: 'inconclusive',
-              reportedBy: 'Stryker',
-              reportedStatus: mutant.status,
-              reason: mutant.statusReason ?? 'The test runner did not produce a conclusive outcome',
-              passed: 0,
-              failed: 0,
-              skipped: 0,
+          // Every expansion starts from the same source and runs the complete independent
+          // candidate census again. Scores and kills are never spliced across different suites.
+          copyFileSync(join(root, subject), join(snapshot, subject), constants.COPYFILE_FICLONE)
+          const output = attempt === 0 ? outputRoot : join(outputRoot, `expanded-${attempt}`)
+          rmSync(output, { recursive: true, force: true })
+          mkdirSync(output, { recursive: true })
+          const evidenceDir = join(output, 'evidence')
+          const manifestPath = join(output, 'tests.json')
+          writeFileSync(
+            manifestPath,
+            JSON.stringify({ tests: selectedTests, evidence: evidenceDir, bun, timeoutMs }),
+          )
+          const reportPath = join(output, 'mutation.json')
+          const configPath = join(output, 'stryker.config.json')
+          writeFileSync(
+            configPath,
+            JSON.stringify({
+              testRunner: 'command',
+              commandRunner: { command: `${quote(node)} ${quote(command)} ${quote(manifestPath)}` },
+              // Backslashes are normalized as separators by Stryker. Character classes preserve
+              // literal Next route brackets without allowing the filename to become a glob.
+              mutate: [subject.replace(/[?*[\]{}()!+@]/g, (character) => `[${character}]`)],
+              coverageAnalysis: 'off',
+              concurrency: 1,
+              inPlace: true,
+              symlinkNodeModules: false,
+              incremental: false,
+              ignoreStatic: false,
+              disableTypeChecks: false,
+              reporters: ['json', 'clear-text'],
+              jsonReporter: { fileName: reportPath },
+              thresholds: { high: threshold, low: threshold, break: threshold },
+              timeoutMS: 5000,
+              timeoutFactor: 1.5,
+              dryRunTimeoutMinutes: Math.ceil(timeoutMs / 60_000),
+              tempDirName: join(snapshot, '.stryker-tmp'),
+              cleanTempDir: 'always',
+            }),
+          )
+          const remainingMs = subjectTimeoutMs - (Date.now() - started)
+          if (remainingMs <= 0) throw new Error(`${subject}: mutation expansion exhausted its time budget`)
+          const run = spawnSync(node, [cli, 'run', configPath], {
+            cwd: snapshot,
+            env: mutationEnvironment(),
+            encoding: 'utf8',
+            maxBuffer: 64 * 1024 * 1024,
+            timeout: remainingMs,
+            detached: process.platform !== 'win32',
+          })
+          writeFileSync(join(output, 'stryker.log'), `${run.stdout ?? ''}\n${run.stderr ?? ''}`)
+          if (run.error || run.signal) {
+            if (process.platform !== 'win32' && run.pid) {
+              try {
+                process.kill(-run.pid, 'SIGKILL')
+              } catch (error) {
+                if (error.code !== 'ESRCH') throw error
+              }
             }
-            evidence[mutant.id] = outcome
-            writeFileSync(join(evidenceDir, `${mutant.id}.json`), JSON.stringify(outcome))
+            throw new Error(`${subject}: Stryker failed to finish (${run.error ?? run.signal})`)
           }
+          if (!existsSync(reportPath))
+            throw new Error(`${subject}: Stryker produced no report; see ${join(output, 'stryker.log')}`)
+          const evidence = Object.fromEntries(
+            readdirSync(evidenceDir)
+              .filter((file) => file.endsWith('.json'))
+              .map((file) => [
+                basename(file, '.json'),
+                JSON.parse(readFileSync(join(evidenceDir, file), 'utf8')),
+              ]),
+          )
+          if (evidence.baseline?.status !== 'passed')
+            throw new Error(`${subject}: clean mutation baseline did not pass`)
+          const report = JSON.parse(readFileSync(reportPath, 'utf8'))
+          for (const mutant of report.files[subject]?.mutants ?? []) {
+            if (!evidence[mutant.id] && ['Timeout', 'CompileError', 'RuntimeError'].includes(mutant.status)) {
+              const outcome = {
+                status: 'inconclusive',
+                reportedBy: 'Stryker',
+                reportedStatus: mutant.status,
+                reason: mutant.statusReason ?? 'The test runner did not produce a conclusive outcome',
+                passed: 0,
+                failed: 0,
+                skipped: 0,
+              }
+              evidence[mutant.id] = outcome
+              writeFileSync(join(evidenceDir, `${mutant.id}.json`), JSON.stringify(outcome))
+            }
+          }
+          verdict = mutationVerdict(report, [subject], {
+            threshold,
+            evidence,
+            expectedSources: { [subject]: readFileSync(join(root, subject), 'utf8') },
+            candidates,
+          })
+          const row = verdict.files[0]
+          attempts.push({
+            tests: [...selectedTests],
+            report: relative(reportDir, reportPath),
+            score: row.score,
+            killed: row.killed,
+            total: row.total,
+            exitCode: run.status,
+          })
+          writeFileSync(join(outputRoot, 'attempts.json'), JSON.stringify(attempts, null, 2))
+          runStatus = run.status
+          if (verdict.passed || attempt === batches.length) break
+          if (run.status !== 0 && run.status !== 1)
+            throw new Error(`${subject}: Stryker failed before mutation expansion (exit ${run.status})`)
+          process.stdout.write(
+            `${subject}: ${row.score?.toFixed(1) ?? 'N/A'}% with ${selectedTests.length} tests; expanding existing dependent tests\n`,
+          )
         }
-        const verdict = mutationVerdict(report, [subject], {
-          threshold,
-          evidence,
-          expectedSources: { [subject]: readFileSync(join(root, subject), 'utf8') },
-          candidates,
-        })
-        result.files.push(...verdict.files)
-        result.passed &&= verdict.passed && run.status === 0
+        result.files.push(
+          ...verdict.files.map((row) => ({
+            ...row,
+            attempts: attempts.length,
+            testCount: selectedTests.length,
+          })),
+        )
+        result.passed &&= verdict.passed && runStatus === 0
         writeFileSync(join(reportDir, 'summary.json'), JSON.stringify(result, null, 2))
         const row = verdict.files[0]
         process.stdout.write(
@@ -356,7 +415,7 @@ export function runMutation({
             ? `${subject}: ${row.notApplicable}; baseline passed\n`
             : `${subject}: ${row.killed}/${row.total} killed (${row.score.toFixed(1)}%, required ${threshold}%; ${row.inconclusive} inconclusive)\n`,
         )
-        if (!verdict.passed || run.status !== 0)
+        if (!verdict.passed || runStatus !== 0)
           throw new Error(
             `${subject}: mutation score ${row.score?.toFixed(1) ?? 'N/A'}% is below ${threshold}% or Stryker failed`,
           )

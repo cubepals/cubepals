@@ -10,9 +10,13 @@ scores are per source file; only killed mutants count, and inconclusive outcomes
 """
 
 import argparse
+import hashlib
 import json
+import os
 from pathlib import Path
 import re
+import stat
+import subprocess
 import sys
 import xml.etree.ElementTree as ET
 
@@ -20,6 +24,76 @@ import xml.etree.ElementTree as ET
 SOURCE_ROOT = Path("apps/reporter/src/main/java")
 FLOORS = {"BRANCH": 80, "METHOD": 90, "LINE": 90}
 MUTATION_FLOOR = 80
+
+
+def git(root, *args):
+    result = subprocess.run(["git", *args], cwd=root, capture_output=True, text=True, check=True)
+    return result.stdout
+
+
+def verify_checkout(root, head):
+    """Match files to committed blobs, including executable bits, without trusting index flags."""
+    directories = {root}
+    for record in git(root, "ls-tree", "-r", "-z", head).split("\0"):
+        if not record:
+            continue
+        metadata, name = record.split("\t", 1)
+        mode, kind, oid = metadata.split(" ")
+        if (kind != "blob" or mode not in {"100644", "100755", "120000"}
+                or not re.fullmatch(r"[a-f0-9]{40}", oid)
+                or name.startswith("/") or any(part in {"", ".."} for part in name.split("/"))):
+            raise ValueError(f"unsupported committed reporter input: {name}")
+        path = root / name
+        directory = path.parent
+        while directory not in directories:
+            info = directory.lstat()
+            if not stat.S_ISDIR(info.st_mode):
+                raise ValueError(f"head input traverses a non-directory or symlink: {name}")
+            directories.add(directory)
+            directory = directory.parent
+        info = path.lstat()
+        if mode == "120000" and stat.S_ISLNK(info.st_mode):
+            data = os.fsencode(os.readlink(path))
+        elif mode in {"100644", "100755"} and stat.S_ISREG(info.st_mode):
+            if bool(info.st_mode & 0o111) != (mode == "100755"):
+                raise ValueError(f"working tree differs from authoritative head: {name}")
+            data = path.read_bytes()
+        else:
+            raise ValueError(f"head input is not its committed file type: {name}")
+        actual = hashlib.sha1(f"blob {len(data)}\0".encode() + data).hexdigest()
+        if actual != oid:
+            raise ValueError(f"working tree differs from authoritative head: {name}")
+    if git(root, "ls-files", "--others", "--exclude-standard", "-z"):
+        raise ValueError("untracked inputs cannot receive committed reporter evidence")
+
+
+def authoritative_changes(root, changed_path, base_sha, head_sha, comparison_path=None):
+    """Evidence files are consistency checks; protected workflow arguments supply authority."""
+    if not all(re.fullmatch(r"[a-f0-9]{40}", value or "") for value in (base_sha, head_sha)):
+        raise ValueError("reporter checks require authoritative --base-sha and --head-sha commit SHAs")
+    comparison_path = Path(comparison_path) if comparison_path else Path(changed_path).with_name("comparison.json")
+    if not comparison_path.is_file():
+        raise ValueError("missing comparison evidence for the authoritative base and head")
+    comparison = json.loads(comparison_path.read_text())
+    if not isinstance(comparison, dict) or comparison.get("base") != base_sha or comparison.get("head") != head_sha:
+        raise ValueError("comparison evidence differs from authoritative --base-sha or --head-sha")
+    if base_sha == head_sha:
+        raise ValueError("a reporter comparison cannot use the proposed head as its base")
+    root = root.resolve()
+    if git(root, "rev-parse", "--verify", "HEAD^{commit}").strip() != head_sha:
+        raise ValueError("checkout does not match authoritative --head-sha")
+    try:
+        git(root, "merge-base", "--is-ancestor", base_sha, head_sha)
+    except subprocess.CalledProcessError as error:
+        raise ValueError("reporter base must be an ancestor of the proposed head") from error
+    actual = sorted(filter(None, git(root, "diff", "--name-only", "--no-renames", "--no-ext-diff",
+                                    "-z", base_sha, head_sha, "--").split("\0")))
+    supplied = json.loads(Path(changed_path).read_text())
+    if (not isinstance(supplied, list) or any(not isinstance(path, str) for path in supplied)
+            or len(set(supplied)) != len(supplied) or sorted(supplied) != actual):
+        raise ValueError("changed files do not match the complete base-to-head Git diff")
+    verify_checkout(root, head_sha)
+    return actual
 
 
 def read_xml(path):
@@ -176,34 +250,44 @@ def main():
     cover = commands.add_parser("coverage")
     cover.add_argument("--head", required=True)
     cover.add_argument("--base", required=True)
-    cover.add_argument("--changed", required=True, help="JSON array of repository-relative paths")
-    cover.add_argument("--root", type=Path, default=Path.cwd())
     mutate = commands.add_parser("mutation")
     mutate.add_argument("--report", required=True)
     mutate.add_argument("--subjects", required=True, help="JSON array of repository-relative Java sources")
+    mutate.add_argument("--full", action="store_true")
     select = commands.add_parser("scope")
-    select.add_argument("--changed", required=True)
-    select.add_argument("--root", type=Path, default=Path.cwd())
     select.add_argument("--output", required=True)
     select.add_argument("--full", action="store_true")
+    for command in (cover, mutate, select):
+        command.add_argument("--changed", required=True, help="JSON array checked against the complete Git diff")
+        command.add_argument("--base-sha", required=True, help="comparison SHA from protected workflow context")
+        command.add_argument("--head-sha", required=True, help="tested SHA from protected workflow context")
+        command.add_argument("--comparison", help="comparison evidence; defaults beside --changed")
+        command.add_argument("--root", type=Path, default=Path.cwd())
     args = parser.parse_args()
     try:
+        args.root = args.root.resolve()
+        changed = authoritative_changes(args.root, args.changed, args.base_sha, args.head_sha, args.comparison)
         if args.command == "scope":
-            selected = scope(json.loads(Path(args.changed).read_text()), args.root, args.full)
+            selected = scope(changed, args.root, args.full)
             Path(args.output).write_text(json.dumps(selected, indent=2) + "\n")
             print(",".join(str(Path(path).relative_to(SOURCE_ROOT).with_suffix("")).replace("/", ".")
                            for path in selected))
             return 0
         if args.command == "coverage":
-            failures, deficits = compare_coverage(args.head, args.base, json.loads(Path(args.changed).read_text()), args.root)
+            failures, deficits = compare_coverage(args.head, args.base, changed, args.root)
             for deficit in deficits:
                 print(deficit)
         else:
-            failures = mutations(args.report, json.loads(Path(args.subjects).read_text()))
+            expected = scope(changed, args.root, args.full)
+            supplied = json.loads(Path(args.subjects).read_text())
+            if (not isinstance(supplied, list) or any(not isinstance(path, str) for path in supplied)
+                    or len(set(supplied)) != len(supplied) or sorted(supplied) != expected):
+                raise ValueError("mutation subjects differ from authoritative Git scope")
+            failures = mutations(args.report, expected)
         for failure in failures:
             print(f"FAIL {failure}", file=sys.stderr)
         return int(bool(failures))
-    except (OSError, ValueError, KeyError, ET.ParseError) as error:
+    except (OSError, ValueError, KeyError, ET.ParseError, subprocess.CalledProcessError) as error:
         print(f"FAIL invalid reporter quality evidence: {error}", file=sys.stderr)
         return 1
 

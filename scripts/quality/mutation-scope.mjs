@@ -5,11 +5,12 @@
 /**
  * Selects mutation subjects from source changes and the dependencies of changed tests. Imports
  * are parsed, including re-exports and literal dynamic imports; ambiguous local loading falls
- * back to the complete inventory. A test-only change therefore cannot opt out of mutation work.
+ * back to the complete inventory. Existing-test edits retain base and head dependencies; verified
+ * newly added test files do not, by themselves, certify or mutate every unchanged legacy import.
  */
 import { createHash } from 'node:crypto'
-import { basename } from 'node:path'
 import { dependencyGraph } from './mutation-dependencies.mjs'
+import { analyzeTestImpact } from './test-impact.mjs'
 
 export { dependencyGraph }
 
@@ -41,15 +42,31 @@ export function selectMutationScope({
   changedFiles,
   full = false,
   ignoredConfigFiles = new Set(),
+  baseSha,
+  headSha = 'HEAD',
 }) {
   if (full && productionFiles.length === 0) throw new Error('Full mutation inventory is empty')
+  const impact = baseSha ? analyzeTestImpact({ root, baseSha, headSha, changedFiles }) : null
+  if (impact) {
+    if (!sameFiles(productionFiles, impact.headSourceFiles) || !sameFiles(testFiles, impact.headTestFiles))
+      throw new Error('Supplied mutation inventory differs from the inspected Git head')
+    changedFiles = impact.verifiedChangedFiles
+    ignoredConfigFiles = new Set(impact.verifiedQualityOnlyConfigs)
+  }
+  const addedTests = impact?.verifiedAddedTests ?? new Set()
   const source = new Set(productionFiles)
   const tests = new Set(testFiles)
   const changed = new Set(changedFiles)
   const { graph, ambiguous } = dependencyGraph(root, [...source, ...tests])
+  const reverse = reverseDependencies(graph)
   const testDependencies = new Map(testFiles.map((file) => [file, closure(graph, file)]))
-  const reasons = []
+  const reasons = [...(impact?.reasons ?? [])]
   if (full) reasons.push('full inventory requested')
+  if (impact?.baseFull) full = true
+  if (addedTests.size)
+    reasons.push(
+      `${addedTests.size} new test files verified against Git; additions alone do not expand incremental mutation scope`,
+    )
   if (
     changedFiles.some(
       (file) =>
@@ -61,9 +78,12 @@ export function selectMutationScope({
     full = true
     reasons.push('dependency or resolution configuration changed')
   }
-  const subjects = new Set(changedFiles.filter((file) => source.has(file)))
+  const subjects = new Set([
+    ...changedFiles.filter((file) => source.has(file)),
+    ...[...(impact?.baseRequiredSubjects ?? [])].filter((file) => source.has(file)),
+  ])
   for (const file of changedFiles) {
-    if (tests.has(file)) {
+    if (tests.has(file) && !addedTests.has(file)) {
       for (const dependency of testDependencies.get(file) ?? []) {
         if (source.has(dependency)) subjects.add(dependency)
       }
@@ -71,6 +91,7 @@ export function selectMutationScope({
     if (
       /\.(?:test|spec)\.[cm]?[jt]sx?$/.test(file) &&
       !tests.has(file) &&
+      !impact?.mappedRemovedTests?.has(file) &&
       !file.startsWith('scripts/quality/') &&
       !file.startsWith('tools/quality/')
     ) {
@@ -78,30 +99,132 @@ export function selectMutationScope({
       reasons.push(`test removed: ${file}`)
     }
   }
-  for (const file of [...subjects, ...changedFiles.filter((path) => tests.has(path))]) {
+  for (const file of [
+    ...subjects,
+    ...changedFiles.filter((path) => tests.has(path) && !addedTests.has(path)),
+  ]) {
     if ([...closure(graph, file)].some((dependency) => ambiguous.has(dependency))) {
       full = true
       reasons.push(`ambiguous dependency mapping: ${file}`)
     }
   }
-  if (full) for (const file of source) subjects.add(file)
-  if (subjects.size === 0 && changedFiles.some((file) => tests.has(file))) {
+  if (full) {
+    if (source.size === 0) throw new Error('Full mutation inventory is empty')
+    for (const file of source) subjects.add(file)
+  }
+  if (subjects.size === 0 && changedFiles.some((file) => tests.has(file) && !addedTests.has(file))) {
     throw new Error('Changed tests have no mutation subjects; refusing an empty mutation run')
   }
-  const testsByFile = Object.fromEntries(
-    [...subjects].sort().map((file) => {
-      const direct = testFiles.filter((test) => graph.get(test)?.has(file))
-      const dependents = testFiles.filter((test) => {
-        const dependencies = testDependencies.get(test)
-        return dependencies.has(file) || [...dependencies].some((dependency) => ambiguous.has(dependency))
+  const testsByFile = {}
+  const additionalTestsByFile = {}
+  for (const file of [...subjects].sort()) {
+    const distances = dependencyDistances(reverse, file)
+    const dependents = testFiles.filter((test) => {
+      const dependencies = testDependencies.get(test)
+      return dependencies.has(file) || [...dependencies].some((dependency) => ambiguous.has(dependency))
+    })
+    const proven = dependents.filter((test) => testDependencies.get(test).has(file))
+    const smallest = Math.min(
+      ...(proven.length ? proven : dependents).map((test) => testDependencies.get(test).size),
+    )
+    const ordered = dependents
+      .map((test) => {
+        const footprint = testDependencies.get(test).size
+        return {
+          test,
+          footprint,
+          uncertain: testDependencies.get(test).has(file) ? 0 : 1,
+          tier: Math.max(0, Math.floor(Math.log2(footprint / smallest))),
+          distance: distances.get(test) ?? Number.POSITIVE_INFINITY,
+        }
       })
-      // Fewer tests can only leave more mutants alive, never inflate the kill score. Adjacent
-      // subject tests and changed dependent tests avoid repeating unrelated integration suites.
-      const stem = basename(file).replace(/\.[cm]?[jt]sx?$/, '')
-      const adjacent = direct.filter((test) => basename(test).startsWith(`${stem}.`))
-      const focused = [...adjacent, ...dependents.filter((test) => changed.has(test))]
-      return [file, [...new Set(focused.length ? focused : direct.length ? direct : dependents)].sort()]
-    }),
+      .sort(
+        (a, b) =>
+          a.uncertain - b.uncertain ||
+          a.tier - b.tier ||
+          a.distance - b.distance ||
+          a.footprint - b.footprint ||
+          a.test.localeCompare(b.test),
+      )
+    // Footprint and import distance schedule work; they never exclude source, tests or mutants.
+    // A small unchanged unit suite can already prove the complete per-file threshold. Keep
+    // expensive changed or direct integration tests for expansion when that proof is insufficient.
+    // Possible dynamic dependents follow statically proved dependents rather than displacing them.
+    const first = ordered[0]
+    testsByFile[file] = ordered
+      .filter(
+        (entry) =>
+          entry.uncertain === first.uncertain &&
+          entry.tier === first.tier &&
+          entry.distance === first.distance,
+      )
+      .slice(0, 4)
+      .map(({ test }) => test)
+    const selected = new Set(testsByFile[file])
+    const additional = ordered.filter(({ test }) => !selected.has(test))
+    additionalTestsByFile[file] = []
+    let batch = []
+    let previous
+    for (const entry of additional) {
+      // Never drag a large harness into the same attempt as the last inexpensive unit tests.
+      if (
+        batch.length === 4 ||
+        (previous && (entry.tier !== previous.tier || entry.uncertain !== previous.uncertain))
+      ) {
+        additionalTestsByFile[file].push(batch)
+        batch = []
+      }
+      batch.push(entry.test)
+      previous = entry
+    }
+    if (batch.length) additionalTestsByFile[file].push(batch)
+  }
+  return {
+    subjects: [...subjects].sort(),
+    testsByFile,
+    additionalTestsByFile,
+    full,
+    reasons,
+    changedFiles: [...changed],
+    testImpact: impact?.evidence ?? null,
+    noMutationReason: subjects.size
+      ? null
+      : addedTests.size
+        ? 'Verified new test additions with no production or existing-test mutation obligations; standalone new test strength is not certified'
+        : 'No executable source or existing test changes require incremental mutation',
+  }
+}
+
+function sameFiles(actual, expected) {
+  return (
+    Array.isArray(actual) &&
+    Array.isArray(expected) &&
+    new Set(actual).size === actual.length &&
+    JSON.stringify([...actual].sort()) === JSON.stringify([...expected].sort())
   )
-  return { subjects: [...subjects].sort(), testsByFile, full, reasons, changedFiles: [...changed] }
+}
+
+function reverseDependencies(graph) {
+  const reverse = new Map()
+  for (const [file, dependencies] of graph) {
+    for (const dependency of dependencies) {
+      if (!reverse.has(dependency)) reverse.set(dependency, new Set())
+      reverse.get(dependency).add(file)
+    }
+  }
+  return reverse
+}
+
+function dependencyDistances(reverse, start) {
+  const distances = new Map([[start, 0]])
+  const pending = [start]
+  for (let index = 0; index < pending.length; index++) {
+    const file = pending[index]
+    for (const importer of reverse.get(file) ?? []) {
+      if (distances.has(importer)) continue
+      distances.set(importer, distances.get(file) + 1)
+      pending.push(importer)
+    }
+  }
+  return distances
 }

@@ -42,6 +42,12 @@ const EVIDENCE_APIS = new Set([
   'QUALITY_REPORT',
   'QUALITY_ROOT',
   'QUALITY_SHARD',
+  'QUALITY_PREPARED',
+  'QUALITY_PREPARED_SHA256',
+  'QUALITY_PARTS',
+  'QUALITY_PHASE',
+  'QUALITY_EXPECTED_BASE',
+  'QUALITY_EXPECTED_HEAD',
 ])
 const IGNORE =
   /\b(?:istanbul|c8|v8|bun|stryker)\s*[-:]?\s*(?:ignore|disable)\b|\b(?:coverage|mutation)\s*[-:]?\s*(?:ignore|disable)\b/i
