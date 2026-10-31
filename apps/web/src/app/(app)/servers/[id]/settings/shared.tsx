@@ -9,6 +9,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, Check } from 'lucide-react'
 import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { codeOf, messageOf, useTRPC } from '../../../../../lib/api'
+import { broughtLanded } from '../../../../../lib/brought-journey'
 import { useNow, useSince } from '../../../../../lib/hooks'
 import { etaLine, presentProgress, presentStatus, sizeLabel, timeAgo } from '../../../../../lib/present'
 import { ActionButton, Button, ICON, Modal, Note, ProvisioningPanel, Toggle } from '../../../../../ui'
@@ -189,16 +190,17 @@ const LANDED: Record<string, string> = {
  * change seen in progress here, and only one that finished well; a failure has its own note.
  */
 function useLanded(view: ServerView): string | null {
-  const watched = useRef<{ id: string; kind: string } | null>(null)
+  const watched = useRef<{ id: string; kind: string; brought: string | null } | null>(null)
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const [landed, setLanded] = useState<string | null>(null)
   const id = view.activeOperation?.id
   const kind = view.activeOperation?.kind
+  const brought = view.activeOperation?.broughtWorld ?? null
   const changeFailed = view.lastChange?.status === 'failed'
   useEffect(() => () => clearTimeout(timer.current), [])
   useEffect(() => {
     if (id !== undefined && kind !== undefined && kind in LANDED) {
-      watched.current = { id, kind }
+      watched.current = { id, kind, brought }
       return
     }
     const was = watched.current
@@ -206,9 +208,9 @@ function useLanded(view: ServerView): string | null {
     watched.current = null
     if (view.status === 'failed' || (was.kind === 'apply' && changeFailed)) return
     clearTimeout(timer.current)
-    setLanded(LANDED[was.kind] ?? null)
+    setLanded(was.brought === null ? (LANDED[was.kind] ?? null) : broughtLanded(was.brought))
     timer.current = setTimeout(() => setLanded(null), LANDED_MS)
-  }, [id, kind, view.status, changeFailed])
+  }, [id, kind, brought, view.status, changeFailed])
   return landed
 }
 

@@ -22,6 +22,7 @@ const restoring = (worldBytes: number | null): OperationView => ({
   kind: 'restore',
   change: null,
   worldBytes,
+  broughtWorld: null,
   status: 'running',
   step: 'storage',
   error: null,

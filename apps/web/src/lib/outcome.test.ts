@@ -11,6 +11,7 @@ const running = (id: string): OperationView => ({
   kind: 'apply',
   change: 'settings',
   worldBytes: null,
+  broughtWorld: null,
   status: 'running',
   step: 'booting',
   error: null,

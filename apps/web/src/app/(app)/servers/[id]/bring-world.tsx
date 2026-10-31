@@ -264,7 +264,7 @@ function PlayActions({
       <Button
         variant="primary"
         disabled={blocked || !allowed.ok}
-        busy={playing ? `Switching to ${world.name}` : allowed.busy}
+        busy={playing ? `Switching to ${world.name}` : undefined}
         onClick={onPlay}
       >
         {playLabel(world)}
