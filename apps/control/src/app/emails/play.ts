@@ -10,8 +10,43 @@
  * word "unit". Included play is said as what is left, the way the account page says it. Last, the
  * notice that a friend came to a server resting for its owner's play (`edge/came-by-notice.ts`).
  */
+import type { UpgradeReason } from '@blockly/contracts'
+import { planOnSaleHere } from '../../domain/account/on-sale.ts'
 import { dollars } from '../../domain/policy/spend.ts'
 import { ACCOUNT, type Email, esc, INK, layout, meter, OWNER, p } from '../emails.ts'
+
+/**
+ * The plan by the month on sale here (`planOnSaleHere`), as its callers name it, which starts a
+ * server again once the free trial is played; null where none is.
+ */
+type Paid = { name: string; hours: number } | null
+
+/** Why checkout was reached, from a free trial's end: its page and these emails say it the same. */
+const TRIAL_OVER: UpgradeReason = 'trial_over'
+
+/**
+ * The button once the trial is played: checkout for the plan on sale here, by the month, back to
+ * `next` after, the one step to keep playing; `instead` where nothing is on sale.
+ */
+function keepPlaying(
+  origin: string,
+  paid: Paid,
+  next: string,
+  instead: { label: string; url: string },
+): { label: string; url: string } {
+  const plan = paid === null ? null : planOnSaleHere()
+  if (plan === null) return instead
+  return {
+    label: 'Keep playing',
+    url: `${origin}/checkout?${new URLSearchParams({ plan, reason: TRIAL_OVER, next })}`,
+  }
+}
+
+/**
+ * The line that offers a person to write to, beside the button, never instead of it: a reply
+ * reaches the address the email came from, which is read.
+ */
+const REPLY = 'Reply if you want to keep playing and something’s in the way.'
 
 /** Hours left as people say them: "less than an hour", "about an hour", "about 12 hours". */
 function leftSaid(left: number): string {
@@ -179,13 +214,14 @@ export function extraWarning(input: {
 /**
  * The warnings as a plan's hours in all run out (Free's 20), at four fifths and all of them
  * (`AccountService.warnAboutPlay`). They never come back, so the email says what does: the plan
- * by the month, `paid`, with its own hours.
+ * by the month, `paid`, with its own hours. Once they are all played, its button is that plan's
+ * checkout, and a reply reaches a person, for anyone it doesn't fit.
  */
 export function freeHoursWarning(input: {
   mark: number
   included: number
   used: number
-  paid: { name: string; hours: number } | null
+  paid: Paid
   origin: string
 }): Email {
   const account = `${input.origin}/account`
@@ -197,6 +233,7 @@ export function freeHoursWarning(input: {
     ? [
         `You’ve played the ${input.included} hours of your free trial, so your servers have stopped. Nothing is charged. Your worlds are kept, and you can still download them.`,
         again,
+        REPLY,
       ]
     : [
         `You have ${leftSaid(left)} left of your free trial. Its ${input.included} hours come once, not every month.`,
@@ -208,16 +245,18 @@ export function freeHoursWarning(input: {
     : `${leftWords.slice(0, 1).toUpperCase()}${leftWords.slice(1)} of your free trial left`
   const preheader = done ? 'Your worlds are kept.' : 'Just so the end is never a surprise.'
   const said = lines.filter((line) => line !== '')
+  const toAccount = { label: 'Open your account', url: account }
+  const action = done ? keepPlaying(input.origin, input.paid, '/servers', toAccount) : toAccount
   return {
     subject,
     preheader,
-    text: [...said, '', account].join('\n'),
+    text: [...said, '', action.url].join('\n'),
     html: layout({
       origin: input.origin,
       preheader,
       heading: done ? 'Your free trial is over' : 'Your free trial is running low',
       body: meter(Math.round(left * 10) / 10, input.included, 'left') + said.map(p).join(''),
-      action: { label: 'Open your account', url: account },
+      action,
       why: ACCOUNT,
     }),
   }
@@ -227,39 +266,42 @@ export function freeHoursWarning(input: {
  * A friend came to the owner's server while it rested for their free trial, played, and was told
  * so: the first one a rest kept away (`edge/came-by-notice.ts`), since anyone after is on the
  * server's page. `trialHours` is the trial's hours in all, as the plan says them. `paid` is the plan
- * by the month on sale here, which brings it back. From the address nobody reads, so it says so
- * instead of offering a reply.
+ * by the month on sale here, which brings it back: its checkout is the button. It comes from the
+ * address replies reach, so a reply reaches a person, for anyone the plan doesn't fit.
  */
 export function friendTurnedAway(input: {
   player: string
   server: { id: string; name: string }
   trialHours: number
-  paid: { name: string; hours: number } | null
+  paid: Paid
   origin: string
 }): Email {
   const page = `${input.origin}/servers/${input.server.id}`
   const subject = `${input.player} tried to join ${input.server.name}`
   const { paid } = input
   const came = (player: string, server: string) =>
-    `${player} tried to join ${server}, but it’s resting: you’ve played the ${input.trialHours} hours of your free trial. Cubepals told them it’s resting for now. Your world is kept.`
+    `${player} tried to join ${server}, but it’s resting: you’ve played the ${input.trialHours} hours of your free trial. Cubepals told them it’s resting for now. Your world is kept, and nothing is charged.`
   const again = paid === null ? null : `${paid.name} starts it again, with ${paid.hours} hours a month.`
   const later = 'Anyone else who comes while it rests is on your server’s page.'
-  const lines = [came(input.player, input.server.name), ...(again === null ? [] : [again]), later]
+  const lines = [came(input.player, input.server.name), ...(again === null ? [] : [again]), later, REPLY]
   const strong = (text: string) => `<strong style="color:${INK}">${esc(text)}</strong>`
   const preheader = 'Your world is kept.'
+  const action = keepPlaying(input.origin, paid, `/servers/${input.server.id}`, {
+    label: 'Open your server',
+    url: page,
+  })
   return {
     subject,
     preheader,
-    text: [...lines, '', page, '', 'This mailbox isn’t read.', '', 'Cubepals'].join('\n'),
+    text: [...lines, '', action.url, '', 'Cubepals'].join('\n'),
     html: layout({
       origin: input.origin,
       preheader,
       chip: { label: 'Free trial over', tone: 'quiet' },
       heading: `${esc(input.player)} tried to join ${esc(input.server.name)}`,
       body: [came(strong(input.player), strong(input.server.name)), ...lines.slice(1)].map(p).join(''),
-      action: { label: 'Open your server', url: page },
+      action,
       why: OWNER,
-      unread: true,
     }),
   }
 }
