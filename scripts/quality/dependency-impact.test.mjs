@@ -274,6 +274,10 @@ test('a package whose install is only declarations affects nothing, even a test 
     'checker-types',
   ])
   rmSync(join(repo.root, 'node_modules/checker-types/index.js'))
+  // JSON other than package.json is data a test can import, not a declaration.
+  writeFileSync(join(repo.root, 'node_modules/checker-types/data.json'), '{"limit": 10}\n')
+  assert.deepEqual(dependencyOnlyChange(repo.root, repo.base, repo.changed()).declarationPackages, [])
+  rmSync(join(repo.root, 'node_modules/checker-types/data.json'))
   // A script run at install time is not a shipped file, so it is checked on its own.
   for (const script of ['preinstall', 'install', 'postinstall', 'prepare']) {
     const manifest = join(repo.root, 'node_modules/checker-types/package.json')

@@ -170,7 +170,8 @@ subject's deadline is recorded as `budget-exhausted` instead of running. It gets
 counts against the score, and is reported by number, so Stryker always finishes and writes its
 report inside the budget rather than being stopped mid-run. The deadline leaves one test timeout
 and a minute for Stryker to finish. A subject that runs out of time fails, with the count of
-mutants left unevaluated in its message.
+mutants left unevaluated in its message. An expansion to more dependent tests never starts past
+the deadline; the last full census stands, and it fails with its own score.
 
 Verified new test files can be classified separately. Their tests still execute and contribute
 coverage, but importing an integration harness does not retroactively impose the mutation floor
