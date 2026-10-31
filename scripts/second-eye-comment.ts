@@ -20,7 +20,7 @@
  * label is off, so nobody merges on an old verdict.
  *
  *   bun scripts/second-eye-comment.ts
- *   NOTICE=running|draft|failed bun scripts/second-eye-comment.ts
+ *   NOTICE=running|draft|failed|unavailable bun scripts/second-eye-comment.ts
  *   DECIDE=1 bun scripts/second-eye-comment.ts
  *
  * It reads REVIEW (the action's structured output), REVIEWED (the commit and its counts, as the
@@ -108,7 +108,7 @@ export const ASKED = 'needs-second-eye'
  * Why the review on the pull request isn't for its head: a new review is running, the new commits
  * are a draft's, the new review didn't finish, or the head moved while it ran.
  */
-export type Notice = 'running' | 'draft' | 'failed' | 'moved'
+export type Notice = 'running' | 'draft' | 'failed' | 'moved' | 'unavailable'
 
 const RANK: Record<Severity, number> = { high: 0, medium: 1, low: 2 }
 /** A severity's heading over its table. */
@@ -314,6 +314,7 @@ export const reviewedIn = (body: string): string | undefined =>
 /** The line at the top that says the review isn't for `head`, the pull request's head now. */
 export function noticeLine(notice: Notice, repo: string, reviewed: string | undefined, head: string): string {
   const commit = commitLink({ repo, sha: head })
+  if (notice === 'unavailable') return `> ⏸️ **Automated review unavailable.** Skipped for ${commit}.`
   const text = {
     running: `A new review of ${commit} is running.`,
     draft: 'A new review starts when the pull request is ready for review.',
@@ -394,6 +395,19 @@ const need = (name: string): string => {
 async function markStale(repo: string, pull: string, notice: Notice): Promise<void> {
   const now = await pullNow(repo, pull)
   const comment = await ourComment(repo, pull, MARKER)
+  if (notice === 'unavailable') {
+    const reviewed = JSON.parse(need('REVIEWED')) as { sha: string }
+    // Availability belongs to the attempted commit, never a newer push.
+    if (reviewed.sha !== now.head) return
+    await keepComment(
+      repo,
+      pull,
+      MARKER,
+      withNotice(comment?.body ?? MARKER, noticeLine(notice, repo, undefined, now.head)),
+    )
+    await label(repo, pull, now.labels)
+    return
+  }
   if (comment)
     await github(`repos/${repo}/issues/comments/${comment.id}`, {
       method: 'PATCH',
@@ -447,13 +461,16 @@ async function writeStart(repo: string, pull: string): Promise<void> {
   appendFileSync(need('GITHUB_OUTPUT'), `review=${start.review}\nnotice=${start.notice}\n`)
 }
 
-if (import.meta.main) {
+export async function runSecondEyeComment(): Promise<void> {
   if (process.env.DECIDE) {
     await writeStart(need('REPO'), need('PULL'))
-    process.exit(0)
+    return
   }
   const notice = process.env.NOTICE as Notice | undefined
-  if (notice && !['running', 'draft', 'failed'].includes(notice)) throw new Error(`NOTICE is ${notice}`)
+  if (notice && !['running', 'draft', 'failed', 'unavailable'].includes(notice))
+    throw new Error(`NOTICE is ${notice}`)
   if (notice) await markStale(need('REPO'), need('PULL'), notice)
   else await writeReview(need('REPO'), need('PULL'))
 }
+
+if (import.meta.main) await runSecondEyeComment()
