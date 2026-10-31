@@ -150,10 +150,8 @@ describe.skipIf(!hasDatabase)('a world brought with its mods', () => {
         leftOut: [],
       },
     })
-    expect(read.notes).toContain(
-      'It was played with Fabric and 2 mods: Tree Harvester and Vein Miner. Restoring it with them moves the server to Fabric with them.',
-    )
-    expect(read.notes).toContain('Left out Sodium: only players’ games run it.')
+    // Said where it is played, from playedWith, not again among what Cubepals did.
+    expect(read.notes.join(' ')).not.toMatch(/Tree Harvester|Sodium|mods/)
     const backup = await broughtBackup(h, read)
     const listed = (await h.app.backupQueries.list(owner, id)).backups.find((b) => b.id === backup.id)
     expect(listed?.playedWith).toEqual(read.playedWith)
@@ -192,9 +190,7 @@ describe.skipIf(!hasDatabase)('a world brought without its mods', () => {
     expect(read.status).toBe('ready')
     if (read.status !== 'ready') return
     expect(read.playedWith).toEqual({ moddedWith: ['fabric'], mods: null })
-    expect(read.notes).toContain(
-      'It was played with Fabric mods, which aren’t in the upload. Upload the instance it was played in, or its mods folder with it, so they come too: blocks and items from its mods are only there on a server running them.',
-    )
+    expect(read.notes.join(' ')).not.toMatch(/Fabric|mods/)
     const backup = await broughtBackup(h, read)
     await expect(
       h.app.backups.restoreBackup(owner, id, backup.id, randomUUID(), {

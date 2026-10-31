@@ -32,7 +32,6 @@ import { entitlementsOf } from '../../domain/account/entitlements.ts'
 import type { MinecraftServer } from '../../domain/server/server.ts'
 import { PROPERTIES_FILE } from '../../minecraft/uploads.ts'
 import { DOWNLOAD_NOTE, inWorldDownload } from '../../minecraft/world-download.ts'
-import { moddedBrands } from '../../minecraft/world-facts.ts'
 import { placeOnServer, playerFilePath, withPlayersRenamed } from '../../minecraft/world-layout.ts'
 import { loadStanding } from '../accounts/persistence.ts'
 import { type Actor, authorize, requestedBy } from '../actor.ts'
@@ -66,7 +65,7 @@ import {
   worldImportReady,
   worldImportRefused,
 } from './world-import-records.ts'
-import { modsNotes, playedWithOf, type WorldMods } from './world-mods.ts'
+import { playedWithOf, type WorldMods } from './world-mods.ts'
 import { accessFrom } from './world-people.ts'
 import {
   type Accounts,
@@ -383,7 +382,8 @@ export class WorldImports {
         newer: () => null,
         serverVersion: input.serverVersion,
         others: input.others.reads.map((other) => other.world),
-        mods: modsNotes(moddedBrands(read.facts), input.mods),
+        // Said where it is played, as the choice it is, from `playedWith` (`WorldImportView`).
+        mods: [],
       }),
       ...accountNotes(accounts),
       ...peopleNotes(input.people),

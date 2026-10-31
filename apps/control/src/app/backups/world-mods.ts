@@ -9,19 +9,19 @@
  * pack's are (`instanceIdentity`), else from the world's `ServerBrands`, else from what its jars
  * are for (`runsOn`). Each jar is matched to Modrinth (`mods/jar-matches.ts`); one only players'
  * games run is left out and named; one no catalog has is kept as its owner's upload after an
- * upload's checks (`mods/own-jars.ts`). What is found is kept with the world's backup, and said to
- * its owner, for the restore that brings them (`restored-mods.ts`).
+ * upload's checks (`mods/own-jars.ts`). What is found is kept with the world's backup, and shown to
+ * its owner as `playedWith` (`playedWithOf`), for the restore that brings them (`restored-mods.ts`).
  */
 import { createHash } from 'node:crypto'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { brandName, type PlayedWith } from '@blockly/contracts'
+import type { PlayedWith } from '@blockly/contracts'
 import type { BroughtModsJson, UploadedWorldFactsJson } from '@blockly/db'
 import { playedWithIn } from '../../minecraft/instance-layout.ts'
 import { PACK_LOADERS, type PackLoader } from '../../minecraft/mrpack.ts'
-import { namedReleases, runsOn, someNames } from '../../minecraft/pack-build.ts'
+import { namedReleases, runsOn } from '../../minecraft/pack-build.ts'
 import { instanceIdentity, packwizMod } from '../../minecraft/pack-manifests.ts'
-import { LOADER_LABELS, offeredVersions } from '../../minecraft/versions.ts'
+import { offeredVersions } from '../../minecraft/versions.ts'
 import { moddedBrands } from '../../minecraft/world-facts.ts'
 import { type BroughtJar, type JarMatch, matchJars } from '../mods/jar-matches.ts'
 import type { OwnJars } from '../mods/own-jars.ts'
@@ -176,33 +176,6 @@ export class WorldMods {
 
 /** A path's file name. */
 const nameOf = (path: string): string => path.slice(path.lastIndexOf('/') + 1)
-
-/** What its owner reads of a world's mods: what comes with it, and what was left out and why. */
-export function modsNotes(moddedWith: readonly string[], mods: BroughtModsJson | null): string[] {
-  const loaders = moddedWith.map(brandName).join(' and ')
-  if (mods === null)
-    return moddedWith.length === 0
-      ? []
-      : [
-          `It was played with ${loaders} mods, which aren’t in the upload. Upload the instance it was played in, or its mods folder with it, so they come too: blocks and items from its mods are only there on a server running them.`,
-        ]
-  const coming = [...mods.catalog, ...mods.own].map((mod) => mod.name)
-  const loader = LOADER_LABELS[mods.loader]
-  return [
-    coming.length === 0
-      ? `It was played with ${loader}, and none of its mods run on a server.`
-      : `It was played with ${loader} and ${coming.length === 1 ? 'a mod' : `${coming.length} mods`}: ${someNames(coming, 6)}. Restoring it with them moves the server to ${loader} with them.`,
-    ...(mods.forPlayers.length === 0
-      ? []
-      : [
-          `Left out ${someNames(
-            mods.forPlayers.map((mod) => mod.name),
-            6,
-          )}: only players’ games run ${mods.forPlayers.length === 1 ? 'it' : 'them'}.`,
-        ]),
-    ...mods.refused.map((mod) => `Left out ${mod.name}: ${mod.why}`),
-  ]
-}
 
 /** A brought world's mods as its owner sees them, from what its backup keeps of them. */
 export function playedWithOf(facts: UploadedWorldFactsJson | null): PlayedWith {

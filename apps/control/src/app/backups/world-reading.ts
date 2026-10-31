@@ -579,12 +579,12 @@ export function notesOn(
   // The server's other worlds are said of their own (`kept-worlds.ts`).
   const others = (how.others ?? []).flatMap((world) => [world.folder, ...world.beside])
   // Who could join and who is who are read from the server's files (`world-people.ts`), not left out.
-  // Its mods, where they were read, are said of their own too.
+  // Its mods, where they were read, are said of their own too, with the instance's files they were read by.
   const rest = leftOut.filter(
     (name) =>
       !others.some((folder) => folder === name || folder.endsWith(`/${name}`)) &&
       !READ_BESIDE.has(name.slice(name.lastIndexOf('/') + 1)) &&
-      !(how.mods !== undefined && name === 'mods/'),
+      !(how.mods !== undefined && (name === 'mods/' || INSTANCE_FILES.test(name))),
   )
   if (!how.asItCame && rest.length > 0) notes.push(`Left out what isn’t the world: ${rest.join(', ')}.`)
   const modded = moddedBrands(read.facts)
