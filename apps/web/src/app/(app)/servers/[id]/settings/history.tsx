@@ -113,6 +113,7 @@ export function History({ view }: { view: ServerView }) {
         />
       ))}
       <ConfirmChange
+        view={view}
         open={target !== null}
         onClose={() => {
           setTarget(null)
@@ -123,18 +124,20 @@ export function History({ view }: { view: ServerView }) {
         confirmLabel={view.status === 'running' ? 'Go back and restart' : 'Go back'}
         working="Going back"
         error={rollback.error}
-        onConfirm={(requestId) =>
+        onConfirm={(requestId, when) =>
           rollback.mutateAsync({
             serverId: view.id,
             requestId,
+            when,
             version: view.version,
             revisionId: target?.id ?? '',
           })
         }
-        onAcknowledge={(requestId) =>
+        onAcknowledge={(requestId, when) =>
           rollback.mutateAsync({
             serverId: view.id,
             requestId,
+            when,
             version: view.version,
             revisionId: target?.id ?? '',
             acknowledgeRevoked: true,
