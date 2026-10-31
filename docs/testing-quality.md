@@ -128,7 +128,11 @@ clean controls pass, then reject removed negative-path tests, never-imported sou
 padding, malformed/missing evidence, threshold/exclusion/workflow edits, strong tests replaced
 by superficial assertions, and deliberate defects. They also prove that renamed weak tests
 retain their original mutation obligations and that forged comparison metadata fails. Production
-source in the working checkout is not mutated. Behavioral,
+source in the working checkout is not mutated. The policy proofs also reject install lifecycle
+hooks that could rewrite the coverage controller, changes to Lefthook configuration and its
+dependencies, trusted install dependency changes, and executable-name shadowing. All package
+script entrypoints are protected, including pre/post hooks around ordinary CI commands.
+Behavioral,
 Stryker, and reporter proof reports and logs are written under `coverage/`.
 
 For a service-enabled CI shard, after its baseline measurement has produced the test manifest,

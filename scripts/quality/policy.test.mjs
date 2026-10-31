@@ -14,15 +14,20 @@ import { escapeHatches, inspectChanges, qualityLock } from './policy.mjs'
 
 const controller = fileURLToPath(new URL('./policy.mjs', import.meta.url))
 const packageJson = {
-  scripts: { test: 'bun test', quality: 'node scripts/quality/run.mjs' },
-  devDependencies: { typescript: '7.0.2' },
+  scripts: { test: 'bun test', quality: 'node scripts/quality/run.mjs', prepare: 'lefthook install' },
+  devDependencies: { typescript: '7.0.2', lefthook: '2.2.2' },
+  trustedDependencies: ['native-install'],
 }
 const lock = {
   lockfileVersion: 3,
   configVersion: 1,
   workspaces: {
-    '': { devDependencies: { '@stryker-mutator/core': '10.1.1' }, dependencies: { ordinary: '1.0.0' } },
+    '': {
+      devDependencies: { '@stryker-mutator/core': '10.1.1', lefthook: '2.2.2' },
+      dependencies: { ordinary: '1.0.0', 'native-install': '1.0.0' },
+    },
   },
+  trustedDependencies: ['native-install'],
   packages: {
     '@stryker-mutator/core': [
       '@stryker-mutator/core@10.1.1',
@@ -33,6 +38,23 @@ const lock = {
     engine: ['engine@1.0.0', '', { dependencies: { leaf: '^1.0.0' } }, 'sha512-engine'],
     leaf: ['leaf@1.0.0', '', {}, 'sha512-leaf'],
     ordinary: ['ordinary@1.0.0', '', {}, 'sha512-ordinary'],
+    lefthook: [
+      'lefthook@2.2.2',
+      '',
+      {
+        optionalDependencies: { 'lefthook-linux-x64': '2.2.2' },
+        bin: { lefthook: 'bin/index.js' },
+      },
+      'sha512-lefthook',
+    ],
+    'lefthook-linux-x64': ['lefthook-linux-x64@2.2.2', '', {}, 'sha512-native-hook'],
+    'native-install': [
+      'native-install@1.0.0',
+      '',
+      { dependencies: { 'install-helper': '1.0.0' } },
+      'sha512-install',
+    ],
+    'install-helper': ['install-helper@1.0.0', '', {}, 'sha512-install-helper'],
   },
 }
 
@@ -62,8 +84,14 @@ function repository(run) {
   try {
     git('init', '--quiet')
     put('scripts/quality/policy.json', '{"branches":85,"functions":90,"lines":90}')
+    put('scripts/quality/coverage.mjs', 'process.exitCode = 1\n')
     put('.github/workflows/ci.yml', 'jobs:\n  check:\n    steps:\n      - run: bun test\n')
     put('bunfig.toml', '[install]\nlinker = "hoisted"\n')
+    put(
+      'lefthook.yml',
+      'commit-msg:\n  commands:\n    subject:\n      run: bun scripts/check-subject.ts {1}\n',
+    )
+    put('scripts/check-subject.ts', 'process.exitCode = 1\n')
     put('package.json', JSON.stringify(packageJson))
     put('bun.lock', JSON.stringify(lock))
     put('apps/example.test.ts', "test.skipIf(!database)('service', () => expect(read()).toBe(1))\n")
@@ -132,6 +160,137 @@ test('the real controller rejects an always-success package command', () => {
   rejected(
     'package.json',
     JSON.stringify({ ...packageJson, scripts: { ...packageJson.scripts, test: 'true' } }),
+    /protected test command/,
+  )
+})
+
+test('the real controller rejects an install hook that rewrites the controller', () => {
+  repository(({ cwd, put, commit, base }) => {
+    put(
+      'package.json',
+      JSON.stringify({
+        ...packageJson,
+        scripts: {
+          ...packageJson.scripts,
+          postinstall: 'node scripts/bootstrap.mjs',
+        },
+      }),
+    )
+    put(
+      'scripts/bootstrap.mjs',
+      "import { writeFileSync } from 'node:fs'; writeFileSync('scripts/quality/coverage.mjs', 'process.exit(0)')\n",
+    )
+    const child = spawnSync(process.execPath, [controller, '--base', base, '--head', commit()], {
+      cwd,
+      encoding: 'utf8',
+    })
+    assert.equal(child.status, 1, child.stdout + child.stderr)
+    assert.match(child.stderr, /protected test command/)
+  })
+})
+
+for (const hook of [
+  'preinstall',
+  'install',
+  'prepare',
+  'preprepare',
+  'postprepare',
+  'prepublish',
+  'prepublishOnly',
+  'prepack',
+  'postpack',
+  'publish',
+  'postpublish',
+  'prelint',
+  'postlint',
+]) {
+  test(`the real controller rejects the ${hook} lifecycle entrypoint changing`, () => {
+    rejected(
+      'package.json',
+      JSON.stringify({
+        ...packageJson,
+        scripts: {
+          ...packageJson.scripts,
+          [hook]: 'node scripts/bootstrap.mjs',
+        },
+      }),
+      /protected test command/,
+    )
+  })
+}
+
+test('workspace install hooks cannot be introduced through a new manifest', () => {
+  rejected(
+    'apps/added/package.json',
+    '{"scripts":{"postinstall":"node bootstrap.mjs"}}',
+    /protected test command/,
+  )
+})
+
+for (const path of [
+  'lefthook.yml',
+  '.lefthook.yaml',
+  'lefthook-local.toml',
+  '.lefthookrc',
+  '.lefthookrc.json',
+  '.config/lefthook.yml',
+  '.lefthook/post-checkout/attack.sh',
+  '.npmrc',
+  '.yarnrc.yml',
+  'scripts/check-subject.ts',
+  'scripts/check-mentions.ts',
+  'node_modules/.bin/lefthook',
+  'apps/control/node_modules/.bin/git',
+]) {
+  test(`the real controller rejects installer or Git-hook input ${path}`, () => {
+    rejected(
+      path,
+      'post-checkout:\n  commands:\n    rewrite:\n      run: node scripts/bootstrap.mjs\n',
+      /protected quality infrastructure/,
+    )
+  })
+}
+
+test('the prepare command tool version is protected in package manifests', () => {
+  rejected(
+    'package.json',
+    JSON.stringify({
+      ...packageJson,
+      devDependencies: {
+        ...packageJson.devDependencies,
+        lefthook: '3.0.0',
+      },
+    }),
+    /protected test command/,
+  )
+})
+
+for (const dependency of ['lefthook', 'lefthook-linux-x64', 'native-install', 'install-helper']) {
+  test(`the installer dependency ${dependency} integrity is protected`, () => {
+    const next = structuredClone(lock)
+    next.packages[dependency][3] = 'sha512-replaced'
+    rejected('bun.lock', JSON.stringify(next), /protected quality tool lock graph/)
+  })
+}
+
+test('a nested install dependency cannot shadow a trusted helper', () => {
+  const next = structuredClone(lock)
+  next.packages['native-install/install-helper'] = ['install-helper@2.0.0', '', {}, 'sha512-shadow']
+  rejected('bun.lock', JSON.stringify(next), /protected quality tool lock graph/)
+})
+
+for (const binary of ['lefthook', 'node', 'git']) {
+  test(`an unrelated dependency cannot shadow the ${binary} executable`, () => {
+    const next = structuredClone(lock)
+    next.packages.ordinary[2].bin = { [binary]: 'rewrite.mjs' }
+    rejected('bun.lock', JSON.stringify(next), /protected quality tool lock graph/)
+  })
+}
+
+test('a workspace cannot expose a replacement installer binary', () => {
+  rejected(
+    'package.json',
+    JSON.stringify({ ...packageJson, bin: { lefthook: 'scripts/bootstrap.mjs' } }),
     /protected test command/,
   )
 })

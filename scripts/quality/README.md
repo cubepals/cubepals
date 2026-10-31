@@ -10,9 +10,15 @@ commit. Failure, cancellation, and an unexpectedly skipped controller publish fa
 PR edits rerun the policy check, including changes to the target branch.
 
 `policy.mjs` protects the quality controller, workflows, ownership file, test configuration,
-reporter Gradle configuration and wrapper, and test/quality package commands. Quality dependency
-versions, resolution records, integrity hashes, and their transitive graph are protected too.
-Unrelated dependency updates may change `bun.lock`; changes to a dependency shared with a quality
+reporter Gradle configuration and wrapper, and every package script entrypoint. This includes
+install lifecycle scripts and the pre/post hooks Bun runs around ordinary CI commands. Lefthook
+configuration variants, rc files, hook directories, and the current hook's two repository scripts
+are protected, as are package-manager rc files and package binary declarations. The existing
+`prepare` command invokes only Lefthook; changing that command requires a reviewed policy update.
+Quality tools, Lefthook, and explicitly trusted install dependencies retain their versions,
+resolution records, integrity hashes, and complete transitive lock graphs. New or changed package
+binaries cannot shadow those tools or the node, Bun, Git, and shell executables they invoke.
+Unrelated dependency updates may change `bun.lock`; changes to a dependency shared with a protected
 tool require a policy update. New skip/focus modifiers and coverage/mutation suppression comments
 are refused. Existing conditional skips are frozen by expression and occurrence count.
 Reporter test annotations that disable or conditionally enable a case, and JUnit assumptions,
@@ -24,6 +30,10 @@ The lexical scan catches ordinary exclusion, test-disabling, and evidence-aware 
 security sandbox or proof that an arbitrary program is honest. Executable tests can inspect or
 forge their own process state. Coverage, mutation, invariant tests, strict evidence validation,
 and the policy guard provide complementary evidence, not a proof of all possible behavior.
+The install protections cover the repository's current entrypoints and declared trusted dependency
+graph. They are not a general shell interpreter, a registry audit, or a sandbox for executable
+application code. A policy update that introduces another lifecycle helper or Lefthook include
+must protect its new repository-controlled inputs too.
 
 ## Incremental test obligations and legacy code
 

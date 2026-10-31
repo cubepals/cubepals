@@ -17,17 +17,20 @@ const PROTECTED = [
   /^\.github\/workflows\//,
   /^\.github\/CODEOWNERS$/,
   /(?:^|\/)bunfig\.toml$/,
+  /(?:^|\/)(?:\.npmrc|\.yarnrc(?:\.yml)?|\.pnpmfile\.[cm]?js)$/,
+  /(?:^|\/)\.?lefthook(?:[./-]|rc(?:\.|$)|$)/,
+  /^scripts\/check-(?:subject|mentions)\.ts$/,
   /(?:^|\/)junit-platform\.properties$/,
   /(?:^|\/)(?:\.babelrc|\.nycrc)(?:\.json|\.[cm]?js)?$/,
   /(?:^|\/)babel\.config\.[cm]?[jt]s$/,
   /(?:^|\/)(?:vitest|jest|stryker|nyc|c8|istanbul|coverage)[^/]*\.(?:[cm]?[jt]s|json|toml|ya?ml)$/,
   /^tools\/quality\//,
+  /(?:^|\/)node_modules(?:\/|$)/,
   /^bun\.lockb$/,
   /^apps\/reporter\/(?:.*\.gradle(?:\.kts)?|gradle\.properties|gradle\/.*|gradlew(?:\.bat)?)$/,
 ]
-const TEST_COMMAND = /(?:test|quality|coverage|mutation|gates)/i
 const TEST_DEPENDENCY =
-  /(?:istanbul|babel|stryker|fast-check|fast-xml-parser|typescript|vitest|jest|c8|nyc|test-runner)/i
+  /(?:istanbul|babel|stryker|fast-check|fast-xml-parser|typescript|vitest|jest|c8|nyc|test-runner|lefthook)/i
 const SOURCE = /\.(?:[cm]?[jt]sx?|java)$/
 const TEST = /(?:\.(?:test|spec)\.[cm]?[jt]sx?$|(?:^|\/)__tests__\/)/
 const JAVA_TEST = /^apps\/reporter\/src\/test\/.*\.java$/
@@ -136,16 +139,24 @@ function packagePolicy(source) {
     'optionalDependencies',
     'peerDependencies',
   ]) {
-    const pattern = group === 'scripts' ? TEST_COMMAND : TEST_DEPENDENCY
     selected[group] = Object.fromEntries(
       Object.entries(value[group] ?? {})
-        .filter(
-          ([name, command]) => pattern.test(name) || (group === 'scripts' && TEST_COMMAND.test(command)),
-        )
+        // Every script is an entrypoint: Bun also executes pre/post hooks for ordinary CI
+        // commands. A name-based test filter misses install hooks and prelint/postlint.
+        .filter(([name]) => group === 'scripts' || TEST_DEPENDENCY.test(name))
         .sort(([a], [b]) => a.localeCompare(b)),
     )
   }
-  for (const key of ['packageManager', 'trustedDependencies', 'overrides', 'resolutions', 'workspaces']) {
+  for (const key of [
+    'packageManager',
+    'trustedDependencies',
+    'overrides',
+    'resolutions',
+    'workspaces',
+    'patchedDependencies',
+    'bin',
+    'config',
+  ]) {
     selected[key] = value[key] ?? null
   }
   return selected
@@ -177,20 +188,26 @@ export function parseLock(source) {
 }
 
 /**
- * Freeze the complete quality tool graph, including hashes and every nested/hoisted variant of
- * its dependencies. This is conservative when applications share dependencies with test tools,
- * but unrelated package updates remain possible. Added shadow versions also change this graph.
+ * Freeze quality tools and explicitly trusted install dependencies, including every nested and
+ * hoisted variant. Lefthook runs from prepare, so its binaries/configuration are trust inputs.
+ * Shared dependencies are conservative; unrelated package updates remain possible.
  */
 export function qualityLock(source) {
   const lock = parseLock(source)
   const packages = Object.entries(lock.packages)
-  const names = new Set()
+  if (
+    lock.trustedDependencies !== undefined &&
+    (!Array.isArray(lock.trustedDependencies) ||
+      lock.trustedDependencies.some((name) => typeof name !== 'string'))
+  )
+    throw new Error('invalid trusted install dependency names')
+  const names = new Set(lock.trustedDependencies ?? [])
   const roots = {}
   for (const [workspace, value] of Object.entries(lock.workspaces)) {
     const selected = {}
     for (const group of ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies']) {
       for (const [name, version] of Object.entries(value[group] ?? {})) {
-        if (!TEST_DEPENDENCY.test(name)) continue
+        if (!TEST_DEPENDENCY.test(name) && !names.has(name)) continue
         names.add(name)
         selected[`${group}:${name}`] = version
       }
@@ -210,6 +227,18 @@ export function qualityLock(source) {
         for (const dependency of Object.keys(entry[2]?.[group] ?? {})) names.add(dependency)
     }
   }
+  // An unrelated package can expose a binary named lefthook (or node/git) and replace the
+  // command reached through node_modules/.bin without changing the original tool record.
+  const commands = new Set(['bun', 'bunx', 'node', 'nodejs', 'git', 'sh', 'bash', 'lefthook'])
+  const bins = (entry) => {
+    const value = entry[2]?.bin
+    if (typeof value === 'string') return [entry[0].slice(0, entry[0].lastIndexOf('@')).split('/').at(-1)]
+    return Object.keys(value ?? {})
+  }
+  for (const entry of selected.values()) for (const command of bins(entry)) commands.add(command)
+  const executableProviders = Object.fromEntries(
+    packages.filter(([, entry]) => bins(entry).some((command) => commands.has(command))),
+  )
   for (const name of names) {
     if (
       !packages.some(
@@ -225,7 +254,7 @@ export function qualityLock(source) {
   const metadata = Object.fromEntries(
     Object.entries(lock).filter(([key]) => !['packages', 'workspaces'].includes(key)),
   )
-  return canonical({ metadata, roots, packages: Object.fromEntries(selected) })
+  return canonical({ metadata, roots, packages: Object.fromEntries(selected), executableProviders })
 }
 
 /** Pure comparison also used by the adversarial tests, with blobs supplied from real commits. */
