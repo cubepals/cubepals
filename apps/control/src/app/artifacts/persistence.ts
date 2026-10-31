@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { type Queryable, schema, type Tx } from '@blockly/db'
-import { and, asc, eq, inArray, lt, ne, notInArray, or, sql } from 'drizzle-orm'
+import { and, asc, eq, inArray, lt, ne, notInArray, or, type SQL, sql } from 'drizzle-orm'
 import type { ModArtifact, PinnedMod } from '../../domain/mods/artifact.ts'
 import { STARTER_SHA512S } from '../../minecraft/starter.ts'
 
@@ -12,6 +12,21 @@ const servers = schema.minecraftServers
 const runtimes = schema.serverRuntimes
 const stored = schema.storedArtifacts
 const worlds = schema.worlds
+const backups = schema.backups
+const uploads = schema.modUploads
+
+/**
+ * Whether a backup of a world brought with its owner's own jars (`own-jars.ts`) names an upload of
+ * the blob `sha512`: kept while the backup is, so the world can still come back with its mods.
+ */
+const namedByBackup = (sha512: SQL) => sql`exists (
+  select 1 from ${backups}
+  join ${servers} on ${servers.id} = ${backups.serverId}
+  join ${uploads} on ${uploads.sha512} = ${sha512}
+  where ${servers.status} <> 'purged'
+    and ${backups.status} in ('pending', 'ready')
+    and ${backups.worldFacts} -> 'mods' -> 'own' @> jsonb_build_array(jsonb_build_object('uploadId', ${uploads.id}::text))
+)`
 
 /**
  * What a server may fetch under a hash: a jar one of its revisions pins, or the modpack a
@@ -171,7 +186,8 @@ const IMPORT_KEPT = sql`interval '30 days'`
  * curated release is kept for as long as the release was ever checked: withdrawn ones can be
  * offered again, and rolled back to. An archive a template's world starts on (`minecraft/starter.ts`)
  * is never unused: no revision pins it, and a new server fetches it. A world its owner brought is
- * kept while a server that has it is, and a month for a server not yet made from it.
+ * kept while a server that has it is, and a month for a server not yet made from it; the jars it
+ * was brought with, while a backup of it names them (`namedByBackup`).
  */
 export async function unreferencedStored(
   q: Queryable,
@@ -208,6 +224,7 @@ export async function unreferencedStored(
           where ${schema.packImports.packSha512} = ${stored.sha512}
             and ${schema.packImports.createdAt} > now() - ${IMPORT_KEPT}
         )`,
+        sql`not ${namedByBackup(sql`${stored.sha512}`)}`,
         sql`not exists (
           select 1 from ${schema.curatedReleases}
           where ${schema.curatedReleases.pack} -> 'artifact' ->> 'sha512' = ${stored.sha512}
@@ -220,7 +237,7 @@ export async function unreferencedStored(
 
 /**
  * Forgets a blob about to leave the store, and the uploads that pointed at it, unless a
- * revision pinned it since it was found unused.
+ * revision pinned it, or a backup named it, since it was found unused.
  */
 export async function forgetStored(tx: Tx, sha512: string): Promise<boolean> {
   const [pinned] = await tx
@@ -256,6 +273,12 @@ export async function forgetStored(tx: Tx, sha512: string): Promise<boolean> {
     .where(and(ne(servers.status, 'purged'), sql`${worlds.startsOn} ->> 'sha512' = ${sha512}`))
     .limit(1)
   if (world !== undefined) return false
+  const [named] = await tx
+    .select({ sha512: stored.sha512 })
+    .from(stored)
+    .where(and(eq(stored.sha512, sha512), namedByBackup(sql`${stored.sha512}`)))
+    .limit(1)
+  if (named !== undefined) return false
   // A world brought for a server never made from it can't make one any more.
   await tx
     .update(schema.worldImports)

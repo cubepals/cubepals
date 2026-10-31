@@ -17,6 +17,7 @@ import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
+import { DAY_MS } from '@blockly/contracts/durations'
 import { schema } from '@blockly/db'
 import { eq } from 'drizzle-orm'
 import type { CatalogVersion } from '../../domain/mods/catalog.ts'
@@ -157,6 +158,8 @@ describe.skipIf(!hasDatabase)('a world brought with its mods', () => {
     const backup = await broughtBackup(h, read)
     const listed = (await h.app.backupQueries.list(owner, id)).backups.find((b) => b.id === backup.id)
     expect(listed?.playedWith).toEqual(read.playedWith)
+    // Its own jars wait with it in Backups, however long it waits there.
+    await h.app.artifacts.collectGarbage(new Date(Date.now() + 60 * DAY_MS))
 
     await h.app.backups.restoreBackup(owner, id, backup.id, randomUUID(), {
       withConfiguration: false,
