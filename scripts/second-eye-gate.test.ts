@@ -22,6 +22,9 @@ describe('isSensitive', () => {
     'scripts/second-eye-comment.ts',
     'infra/fly/app.tf',
     'apps/web/Dockerfile',
+    'Dockerfile',
+    'Dockerfile.production',
+    'custom.Dockerfile',
     'tools/bedrock-join/size/load/Dockerfile',
     'package.json',
     'apps/control/package.json',
@@ -49,6 +52,19 @@ describe('isSensitive', () => {
     'apps/control/src/app/accounts/profile.ts',
     'scripts/lib/pull-comment.ts',
     'docs/billing.md',
+    'prefix/.github/workflows/ci.yml',
+    '.github/second-eye.md.backup',
+    'prefix/scripts/second-eye-gate.ts',
+    'prefix/infra/main.tf',
+    'Dockerfilebackup',
+    'package.json.backup',
+    'prefix/packages/db/schema.ts',
+    'prefix/scripts/production.ts',
+    'prefix/apps/edge/front.ts',
+    'prefix/apps/control/src/app/billing/charge.ts',
+    'prefix/apps/control/src/infra/polar/billing.ts',
+    'prefix/apps/control/src/wake.ts',
+    'apps/control/src/app/wake-notes/nested.ts',
   ])('%s does not', (path) => expect(isSensitive(path)).toBe(false))
 })
 
@@ -90,7 +106,10 @@ describe('statusFor', () => {
   }
 
   test('a pull request touching nothing sensitive passes at once', () => {
-    expect(statusFor({ ...none, sensitive: 'false' })?.state).toBe('success')
+    expect(statusFor({ ...none, sensitive: 'false' })).toEqual({
+      state: 'success',
+      description: 'Touches no path that needs a second eye.',
+    })
   })
 
   test('a sensitive one nobody asked to review fails, saying who it waits for', () => {
@@ -100,9 +119,10 @@ describe('statusFor', () => {
   })
 
   test('a finished review passes it', () => {
-    expect(statusFor({ ...none, mark: 'success', review: 'success', comment: 'success' })?.state).toBe(
-      'success',
-    )
+    expect(statusFor({ ...none, mark: 'success', review: 'success', comment: 'success' })).toEqual({
+      state: 'success',
+      description: 'Reviewed by the second eye.',
+    })
   })
 
   test('an unavailable review passes only after its notice is published, without claiming review', () => {
@@ -122,7 +142,10 @@ describe('statusFor', () => {
   })
 
   test('a path check that failed is not a pass', () => {
-    expect(statusFor({ ...none, sensitive: '' })?.state).toBe('failure')
+    expect(statusFor({ ...none, sensitive: '' })).toEqual({
+      state: 'failure',
+      description: "Couldn't tell whether this touches a path that needs a second eye.",
+    })
   })
 
   test('a comment or a run by hand only adds a pass', () => {

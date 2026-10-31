@@ -113,9 +113,15 @@ test('an unavailable review preserves earlier findings and never labels a newer 
 test('unavailability sets an explicit skipped status, while failed notices cannot pass', async () => {
   process.env.UNAVAILABLE = 'true'
   await runSecondEyeGate()
-  expect(calls.at(-1)?.body).toMatchObject({
-    state: 'success',
-    description: 'Automated review unavailable. Skipped for this commit.',
+  expect(calls.at(-1)).toEqual({
+    path: `repos/${REPO}/statuses/${SHA}`,
+    method: 'POST',
+    body: {
+      state: 'success',
+      context: 'Second eye gate',
+      description: 'Automated review unavailable. Skipped for this commit.',
+      target_url: `https://github.com/${REPO}/actions/runs/7`,
+    },
   })
   process.env.COMMENT = 'failure'
   calls = []
@@ -125,6 +131,14 @@ test('unavailability sets an explicit skipped status, while failed notices canno
   calls = []
   await runSecondEyeGate()
   expect(calls.every((call) => call.method === 'GET')).toBe(true)
+  statuses = [{ context: 'Another check', state: 'success' }]
+  calls = []
+  await runSecondEyeGate()
+  expect(calls.at(-1)?.body).toMatchObject({ state: 'failure' })
+  statuses = [{ context: 'Second eye gate', state: 'failure' }]
+  calls = []
+  await runSecondEyeGate()
+  expect(calls.at(-1)?.body).toMatchObject({ state: 'failure' })
 })
 
 test('path analysis includes renamed sensitive files and fails closed at the API listing limit', async () => {
@@ -136,12 +150,21 @@ test('path analysis includes renamed sensitive files and fails closed at the API
   calls = []
   await runSecondEyeGate()
   expect(calls).toHaveLength(30)
+  files = []
+  process.env.GITHUB_OUTPUT = join(dir, 'non-sensitive')
+  await runSecondEyeGate()
+  expect(readFileSync(process.env.GITHUB_OUTPUT, 'utf8')).toBe('sensitive=false\nauto=false\n')
 })
 
 test('invalid status targets and unrelated manual runs write no status', async () => {
   process.env.SHA = 'bad'
   await runSecondEyeGate()
   expect(calls).toHaveLength(0)
+  for (const invalid of [`prefix${SHA}`, `${SHA}suffix`]) {
+    process.env.SHA = invalid
+    await runSecondEyeGate()
+    expect(calls).toHaveLength(0)
+  }
   process.env.SHA = SHA
   process.env.EVENT = 'workflow_dispatch'
   process.env.REVIEW = 'failure'
@@ -160,7 +183,7 @@ test('a GitHub failure cannot become a published availability notice', async () 
 
 test('a completed review publishes its actual verdict, and a later head keeps it stale', async () => {
   process.env.REVIEW = JSON.stringify({ verdict: 'merge', findings: [], files_reviewed: 1 })
-  process.env.REVIEWED = JSON.stringify({ sha: SHA, files: 1, additions: 1, deletions: 0 })
+  process.env.REVIEWED = JSON.stringify({ sha: SHA, files: 1, additions: 12, deletions: 3 })
   process.env.MODEL = 'test-model'
   process.env.PREVIOUS = JSON.stringify({ sha: HEAD, findings: [] })
   labels = [LABELS['fix first']]
@@ -171,6 +194,16 @@ test('a completed review publishes its actual verdict, and a later head keeps it
   expect(calls.find((call) => call.path.endsWith('/comments') && call.method === 'POST')?.body).toEqual({
     body: expect.stringContaining('Verdict: Merge'),
   })
+  const published = calls.find((call) => call.path.endsWith('/comments') && call.method === 'POST')?.body as {
+    body: string
+  }
+  expect(published.body).toContain('1 file, +12 −3 lines')
+  expect(published.body).toContain('test-model')
+  expect(published.body).toContain(`https://github.com/${REPO}/actions/runs/7`)
+  expect(published.body).toContain('Bugs, security')
+  expect(calls.filter((call) => call.method === 'DELETE').map((call) => call.path)).toEqual([
+    `repos/${REPO}/issues/42/labels/review%2Fai-fix-first`,
+  ])
   head = HEAD
   calls = []
   delete process.env.PREVIOUS
@@ -182,6 +215,20 @@ test('a completed review publishes its actual verdict, and a later head keeps it
   expect(calls.some((call) => JSON.stringify(call.body) === JSON.stringify({ labels: [LABELS.merge] }))).toBe(
     false,
   )
+})
+
+test('review publication defaults missing metadata and keeps an existing correct verdict label', async () => {
+  process.env.REVIEW = JSON.stringify({ verdict: 'merge', findings: [] })
+  process.env.REVIEWED = JSON.stringify({ sha: SHA })
+  delete process.env.MODEL
+  labels = [LABELS.merge]
+  await runSecondEyeComment()
+  const published = calls.find((call) => call.path.endsWith('/comments') && call.method === 'POST')?.body as {
+    body: string
+  }
+  expect(published.body).toContain('0 files, +0 −0 lines')
+  expect(published.body).not.toContain('Stryker was here')
+  expect(calls.some((call) => call.method === 'DELETE')).toBe(false)
 })
 
 test('starting decisions write no comments, and stale notices keep the old review', async () => {
@@ -218,4 +265,24 @@ test('missing configuration and unsupported notices fail instead of publishing',
   await expect(runSecondEyeComment()).rejects.toThrow('REVIEW')
   delete process.env.REPO
   await expect(runSecondEyeGate()).rejects.toThrow('REPO')
+})
+
+test('draft and forced review starts record their actual decision', async () => {
+  process.env.DECIDE = '1'
+  process.env.DRAFT = 'true'
+  await runSecondEyeComment()
+  expect(readFileSync(process.env.GITHUB_OUTPUT as string, 'utf8')).toBe('review=false\nnotice=draft\n')
+  process.env.DRAFT = 'false'
+  process.env.EVENT = 'workflow_dispatch'
+  process.env.FORCE = 'true'
+  process.env.GITHUB_OUTPUT = join(dir, 'forced-output')
+  comments = [
+    {
+      id: 9,
+      body: `${MARKER}\n[old](https://github.com/${REPO}/commit/${SHA})`,
+      user: { login: 'github-actions[bot]' },
+    },
+  ]
+  await runSecondEyeComment()
+  expect(readFileSync(process.env.GITHUB_OUTPUT, 'utf8')).toBe('review=true\nnotice=running\n')
 })
