@@ -35,7 +35,8 @@ const SOURCE = /\.(?:[cm]?[jt]sx?|java)$/
 const TEST = /(?:\.(?:test|spec)\.[cm]?[jt]sx?$|(?:^|\/)__tests__\/)/
 const JAVA_TEST = /^apps\/reporter\/src\/test\/.*\.java$/
 const ASSUMPTIONS = new Set(['assumeTrue', 'assumeFalse', 'assumeNotNull', 'assumingThat', 'abort'])
-const MODIFIERS = new Set(['only', 'skip', 'todo', 'skipIf', 'runIf', 'failing'])
+const CONDITIONAL_MODIFIERS = new Set(['if', 'skipIf', 'runIf', 'todoIf', 'failingIf'])
+const MODIFIERS = new Set(['only', 'skip', 'todo', 'failing', ...CONDITIONAL_MODIFIERS])
 const EVIDENCE_APIS = new Set([
   '__qualityCoverage__',
   '__coverage__',
@@ -97,7 +98,7 @@ export function escapeHatches(source, isTest, javaTest = false) {
       (token.type === 'string' && code[i - 1]?.value === '[' && code[i + 1]?.value === ']')
     if (!property || !MODIFIERS.has(token.value)) continue
     let end = i + (token.type === 'string' ? 2 : 1)
-    if (['skipIf', 'runIf'].includes(token.value) && code[end]?.value === '(') {
+    if (CONDITIONAL_MODIFIERS.has(token.value) && code[end]?.value === '(') {
       let depth = 0
       do {
         if (code[end].value === '(') depth++

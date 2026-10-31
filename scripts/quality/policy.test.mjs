@@ -5,11 +5,12 @@
 /** Exercises the real policy CLI against committed adversarial trees, never the working tree. */
 import assert from 'node:assert/strict'
 import { execFileSync, spawnSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
+import { checkJUnit } from './coverage-junit.mjs'
 import { escapeHatches, inspectChanges, qualityLock } from './policy.mjs'
 
 const controller = fileURLToPath(new URL('./policy.mjs', import.meta.url))
@@ -343,6 +344,72 @@ for (const modifier of ['only', 'skip', 'todo', 'failing']) {
     rejected(
       'apps/weak.test.ts',
       `test['${modifier}']('answer', () => expect(read()).toBe(1))`,
+      /added test modifier/,
+    )
+  })
+}
+
+for (const [modifier, condition, executed] of [
+  ['if', false, 0],
+  ['todoIf', true, 0],
+  ['failingIf', true, 1],
+]) {
+  test(`the real controller rejects Bun ${modifier} hiding a failure in an optional fleet file`, () => {
+    repository(({ cwd, put, commit, base }) => {
+      const path = 'apps/control/src/infra/fleet/fleet-runtime.e2e.test.ts'
+      put(
+        path,
+        `import { test } from 'bun:test'\ntest.${modifier}(${condition})('must detect a defect', () => { throw new Error('deliberate defect') })\n`,
+      )
+      const junit = join(cwd, 'observed.xml')
+      const run = spawnSync(
+        process.env.QUALITY_BUN ?? 'bun',
+        ['test', '--reporter=junit', `--reporter-outfile=${junit}`, `./${path}`],
+        { cwd, encoding: 'utf8' },
+      )
+      assert.equal(run.status, 0, run.stdout + run.stderr)
+      assert.equal(checkJUnit(readFileSync(junit, 'utf8'), [path], { allowOptionalOnly: true }), executed)
+      const policy = spawnSync(process.execPath, [controller, '--base', base, '--head', commit()], {
+        cwd,
+        encoding: 'utf8',
+      })
+      assert.equal(policy.status, 1, policy.stdout + policy.stderr)
+      assert.match(policy.stderr, /added test modifier/)
+    })
+  })
+}
+
+for (const modifier of ['if', 'todoIf', 'failingIf']) {
+  test(`existing ${modifier} conditions are frozen, including quoted aliased members`, () => {
+    const source = `const check = test; check['${modifier}'](enabled && ready())('service', () => expect(read()).toBe(1))\n`
+    assert.deepEqual(
+      inspectChanges([
+        {
+          path: 'apps/contract.test.ts',
+          before: source,
+          after: `${source}test('new case', () => expect(read()).toBe(1))\n`,
+        },
+      ]),
+      [],
+    )
+    assert.match(
+      inspectChanges([
+        {
+          path: 'apps/contract.test.ts',
+          before: source,
+          after: source.replace('enabled && ready()', modifier === 'if' ? 'false' : 'true'),
+        },
+      ]).join('\n'),
+      /added test modifier/,
+    )
+  })
+}
+
+for (const modifier of ['if', 'todoIf']) {
+  test(`the real controller rejects describe.${modifier} conditional suites`, () => {
+    rejected(
+      'apps/weak.test.ts',
+      `describe.${modifier}(${modifier === 'if' ? 'false' : 'true'})('suite', () => test('case', () => expect(read()).toBe(1)))`,
       /added test modifier/,
     )
   })

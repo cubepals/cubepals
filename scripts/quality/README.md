@@ -30,8 +30,9 @@ The lexical scan catches ordinary exclusion, test-disabling, and evidence-aware 
 security sandbox or proof that an arbitrary program is honest. Executable tests can inspect or
 forge their own process state. Coverage, mutation, invariant tests, strict evidence validation,
 and the policy guard provide complementary evidence, not a proof of all possible behavior.
-The modifier scan reserves `only`, `skip`, `todo`, `skipIf`, `runIf`, and `failing` as member names
-in test files, so ordinary APIs using those names can also be rejected. This conservative scan
+The modifier scan reserves `only`, `skip`, `todo`, `if`, `skipIf`, `runIf`, `todoIf`, `failing`, and
+`failingIf` as member names in test files, so ordinary APIs using those names can also be rejected.
+Conditional expressions are frozen too. This conservative scan
 catches aliased runners, literal computed properties, and extracted references such as
 `const disabled = test.skip` without executing proposed code. Restricting it to familiar receiver
 names would let runner aliases bypass the check; the ordinary-API false positives remain a limit.
