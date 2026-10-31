@@ -1427,10 +1427,16 @@ the control plane's **internal listener**: 6PN on Fly, loopback or the compose n
   more than 15 s from becoming running. With no edge counted, nothing waits. When the last edge
   catches up, the server's version moves and its page is told (`routed_at`). Rows for edges not seen
   for a day are pruned. The agent opens its front door only once mc-router holds the first list.
-- **The notice** (`apps/edge/notice.ts`). A `restarting` route maps to a listener in the agent,
-  not to the server. It answers the server list with "Restarting · back in a moment" and turns a
-  join away with "Restarting · join again in a moment". mc-router has one asleep MOTD for every
-  server it can't reach, so it can't tell a restart from sleep.
+- **The notice** (`apps/edge/notice.ts`). A running server that doesn't answer maps to a listener
+  in the agent, not to the server. It answers the server list with "Restarting · back in a moment"
+  and turns a join away with "Restarting · join again in a moment". mc-router has one asleep MOTD
+  for every server it can't reach, so it can't tell a restart from sleep.
+- **Restarting servers.** A `restarting` route, a server rebooting for its owner's change, maps to
+  the sleeping servers' listener below, whose ping answer says "Restarting · back in a moment"
+  (`apps/edge/waking-line.ts`) and whose joins wait in the waiting room until the server is back.
+  It used to map to the notice: mc-router asks the wake webhook once for joins that arrive
+  together and dials the route for the rest, so friends rejoining after the restart dropped them
+  were each turned away at once to join again, and did, a dozen times in a few seconds.
 - **Sleeping servers.** An `asleep` route maps to a second listener in the agent, not to the
   server. On Fly the server's Flycast address takes the connection even while the machine is
   stopped, so mc-router's asleep MOTD, shown only when a dial fails, never showed and a ping got
