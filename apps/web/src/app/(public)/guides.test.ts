@@ -10,9 +10,22 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import type { Metadata } from 'next'
 import { canonicalOrigin, UNLISTED } from '../../lib/site.ts'
 import sitemap from '../sitemap.ts'
 import { guideMetadata } from './guides/article.tsx'
+import * as aternosAlternative from './guides/aternos-alternative/page.tsx'
+import * as lifestealManhuntSkyblockWithFriends from './guides/lifesteal-manhunt-skyblock-with-friends/page.tsx'
+import * as minecraftBedrockServer from './guides/minecraft-bedrock-server/page.tsx'
+import * as minecraftServerCost from './guides/minecraft-server-cost/page.tsx'
+import * as minecraftServerForFriends from './guides/minecraft-server-for-friends/page.tsx'
+import * as minecraftServerRam from './guides/minecraft-server-ram/page.tsx'
+import * as minecraftServerThatSleeps from './guides/minecraft-server-that-sleeps/page.tsx'
+import * as minecraftServerUkEurope from './guides/minecraft-server-uk-europe/page.tsx'
+import * as minecraftServerWithoutPortForwarding from './guides/minecraft-server-without-port-forwarding/page.tsx'
+import * as moveAMinecraftWorldToAServer from './guides/move-a-minecraft-world-to-a-server/page.tsx'
+import * as playAModpackWithFriends from './guides/play-a-modpack-with-friends/page.tsx'
+import * as playMinecraftJavaWithFriends from './guides/play-minecraft-java-with-friends/page.tsx'
 import {
   draftGuides,
   footerGuides,
@@ -22,6 +35,25 @@ import {
   liveGuide,
   publishedGuides,
 } from './guides.ts'
+
+/**
+ * Each guide's page, by slug. Imported by name so the quality gate can follow every page a test
+ * reaches; a guide added to `GUIDES` without its page here fails the test below.
+ */
+const PAGES: Readonly<Record<string, { generateMetadata: () => Metadata }>> = {
+  'minecraft-server-for-friends': minecraftServerForFriends,
+  'play-minecraft-java-with-friends': playMinecraftJavaWithFriends,
+  'minecraft-server-cost': minecraftServerCost,
+  'minecraft-server-that-sleeps': minecraftServerThatSleeps,
+  'minecraft-server-ram': minecraftServerRam,
+  'minecraft-server-without-port-forwarding': minecraftServerWithoutPortForwarding,
+  'play-a-modpack-with-friends': playAModpackWithFriends,
+  'move-a-minecraft-world-to-a-server': moveAMinecraftWorldToAServer,
+  'minecraft-server-uk-europe': minecraftServerUkEurope,
+  'lifesteal-manhunt-skyblock-with-friends': lifestealManhuntSkyblockWithFriends,
+  'minecraft-bedrock-server': minecraftBedrockServer,
+  'aternos-alternative': aternosAlternative,
+}
 
 const was = process.env.WEB_INDEXABLE
 const bedrockWas = process.env.WEB_BEDROCK
@@ -73,10 +105,12 @@ describe('guides', () => {
     }
   })
 
-  test('each has its page, which production serves once the guide is approved', async () => {
+  test('each has its page, which production serves once the guide is approved', () => {
     production()
+    expect(Object.keys(PAGES).sort()).toEqual(GUIDES.map((guide) => guide.slug).sort())
     for (const guide of GUIDES) {
-      const page = await import(`./guides/${guide.slug}/page.tsx`)
+      const page = PAGES[guide.slug]
+      if (page === undefined) throw new Error(`No page for ${guide.slug}`)
       if (guide.approved) expect(page.generateMetadata().alternates?.canonical).toBe(`/guides/${guide.slug}`)
       else expect(() => page.generateMetadata()).toThrow()
     }
