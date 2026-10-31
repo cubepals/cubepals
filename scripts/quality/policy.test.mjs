@@ -171,8 +171,10 @@ test('the pinned Bun runner exports and declared API are completely classified',
 runner.test('audit', () => console.log('API ' + JSON.stringify({
   version: Bun.version,
   exports: Object.keys(runner).sort(),
-  describe: ${JSON.stringify(describe)}.filter(name => typeof runner.describe[name] === 'function'),
-  test: ${JSON.stringify(testApi)}.filter(name => typeof runner.test[name] === 'function')
+  describe: ${JSON.stringify(describe)}.filter(name => Reflect.has(runner.describe, name)),
+  test: ${JSON.stringify(testApi)}.filter(name => Reflect.has(runner.test, name)),
+  describeMembers: Object.getOwnPropertyNames(Object.getPrototypeOf(runner.describe)).sort(),
+  testMembers: Object.getOwnPropertyNames(Object.getPrototypeOf(runner.test)).sort()
 })))`,
     )
     const child = spawnSync(process.env.QUALITY_BUN ?? 'bun', ['test', './audit.test.ts'], {
@@ -206,6 +208,27 @@ runner.test('audit', () => console.log('API ' + JSON.stringify({
     ])
     assert.deepEqual(api.describe, describe)
     assert.deepEqual(api.test, testApi)
+    assert.deepEqual(api.describeMembers, testApi)
+    assert.deepEqual(api.testMembers, testApi)
+  })
+})
+
+test('Bun retains its focused-test guard in CI', () => {
+  repository(({ cwd, put }) => {
+    put(
+      'focused.test.ts',
+      `import { describe, expect, test } from 'bun:test'
+test('focused access remains forbidden', () => {
+  expect(() => test.only).toThrow()
+  expect(() => describe.only).toThrow()
+})`,
+    )
+    const child = spawnSync(process.env.QUALITY_BUN ?? 'bun', ['test', './focused.test.ts'], {
+      cwd,
+      env: { ...process.env, CI: 'true' },
+      encoding: 'utf8',
+    })
+    assert.equal(child.status, 0, child.stdout + child.stderr)
   })
 })
 
