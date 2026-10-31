@@ -6,7 +6,7 @@
 import { liveFleet } from './evidence-policy.mjs'
 import { requireQuality, XMLParser, XMLValidator } from './toolchain.mjs'
 
-export function checkJUnit(xml, expected, { allowOptionalOnly = false } = {}) {
+export function checkJUnit(xml, expected, { allowOptionalOnly = false, allowLiveFleetSkips = true } = {}) {
   if (XMLValidator.validate(xml) !== true) throw new Error('Malformed JUnit evidence')
   const data = new XMLParser({
     ignoreAttributes: false,
@@ -15,9 +15,21 @@ export function checkJUnit(xml, expected, { allowOptionalOnly = false } = {}) {
   }).parse(xml)
   const suites = data.testsuites?.testsuite
   if (!Array.isArray(suites) || !suites.length) throw new Error('Missing JUnit test suites')
+  function checkStatuses(node) {
+    if (allowLiveFleetSkips) return
+    for (const status of ['failure', 'error']) {
+      if (status in node) throw new Error(`Failed strict JUnit ${status}`)
+    }
+    for (const status of ['failures', 'errors', 'skipped']) {
+      if (node[status] !== undefined && !/^0$/.test(String(node[status])))
+        throw new Error(`Invalid strict JUnit ${status}: ${node[status]}`)
+    }
+  }
+  checkStatuses(data.testsuites)
   const seen = new Set()
   let executed = 0
   function visit(suite, parentFile) {
+    checkStatuses(suite)
     const file = (suite.file ?? parentFile)?.replace(/^\.\//, '')
     if (!expected.includes(file)) throw new Error(`Unexpected JUnit test file: ${file}`)
     for (const test of suite.testcase ?? []) {
@@ -28,7 +40,8 @@ export function checkJUnit(xml, expected, { allowOptionalOnly = false } = {}) {
       seen.add(file)
       if ('failure' in test || 'error' in test) throw new Error(`Failed test: ${file}: ${test.name}`)
       if ('skipped' in test) {
-        if (!liveFleet.has(file)) throw new Error(`Unexpected skipped test: ${file}: ${test.name}`)
+        if (!allowLiveFleetSkips || !liveFleet.has(file))
+          throw new Error(`Unexpected skipped test: ${file}: ${test.name}`)
       } else executed++
     }
     for (const child of suite.testsuite ?? []) visit(child, file)

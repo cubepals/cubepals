@@ -6,16 +6,27 @@
 import { pathToFileURL } from 'node:url'
 
 export function verifyJobs(needs) {
-  const required = ['changes', 'licenses', 'static', 'test', 'quality', 'worker', 'images', 'reporter']
+  const required = [
+    'changes',
+    'licenses',
+    'static',
+    'test',
+    'quality',
+    'worker',
+    'images',
+    'reporter',
+    'fleet',
+  ]
   if (!needs || typeof needs !== 'object') throw new Error('Missing CI dependency results')
   for (const name of required) if (!needs[name]) throw new Error(`Missing CI job: ${name}`)
   if (needs.changes.result !== 'success' || needs.licenses.result !== 'success')
     throw new Error('Change detection and licenses must succeed')
-  const { code, reporter } = needs.changes.outputs ?? {}
-  if (!['true', 'false'].includes(code) || !['true', 'false'].includes(reporter))
+  const { code, reporter, fleet } = needs.changes.outputs ?? {}
+  if ([code, reporter, fleet].some((value) => !['true', 'false'].includes(value)))
     throw new Error('Missing change classification')
-  for (const name of ['static', 'test', 'quality', 'worker', 'images', 'reporter']) {
-    const expected = (name === 'reporter' ? reporter : code) === 'true' ? 'success' : 'skipped'
+  const classifications = { reporter, fleet }
+  for (const name of ['static', 'test', 'quality', 'worker', 'images', 'reporter', 'fleet']) {
+    const expected = (classifications[name] ?? code) === 'true' ? 'success' : 'skipped'
     if (needs[name].result !== expected)
       throw new Error(`${name}: expected ${expected}, received ${needs[name].result}`)
   }

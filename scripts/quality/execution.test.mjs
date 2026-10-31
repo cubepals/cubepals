@@ -4,7 +4,9 @@
 
 /** Evidence cannot vanish behind a green aggregate, an empty test run, or a skipped scenario. */
 import assert from 'node:assert/strict'
+import { spawnSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
+import { matchesGlob } from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
 import { verifyJobs } from './aggregate.mjs'
@@ -14,10 +16,15 @@ import { groupOf, groups } from './shards.mjs'
 
 const clean = () =>
   Object.fromEntries(
-    ['changes', 'licenses', 'static', 'test', 'quality', 'worker', 'images', 'reporter'].map((key) => [
-      key,
-      { result: 'success', ...(key === 'changes' ? { outputs: { code: 'true', reporter: 'true' } } : {}) },
-    ]),
+    ['changes', 'licenses', 'static', 'test', 'quality', 'worker', 'images', 'reporter', 'fleet'].map(
+      (key) => [
+        key,
+        {
+          result: 'success',
+          ...(key === 'changes' ? { outputs: { code: 'true', reporter: 'true', fleet: 'true' } } : {}),
+        },
+      ],
+    ),
   )
 
 test('required CI rejects every non-success state, missing result and missing change output', () => {
@@ -39,12 +46,104 @@ test('required CI rejects every non-success state, missing result and missing ch
 
 test('documentation-only changes still require licenses and permit only classified skips', () => {
   const needs = clean()
-  needs.changes.outputs = { code: 'false', reporter: 'false' }
-  for (const job of ['static', 'test', 'quality', 'worker', 'images', 'reporter'])
+  needs.changes.outputs = { code: 'false', reporter: 'false', fleet: 'false' }
+  for (const job of ['static', 'test', 'quality', 'worker', 'images', 'reporter', 'fleet'])
     needs[job].result = 'skipped'
   assert.equal(verifyJobs(needs), true)
   needs.licenses.result = 'skipped'
   assert.throws(() => verifyJobs(needs), /must succeed/)
+})
+
+test('Fleet can skip only when its own classification permits it', () => {
+  const needs = clean()
+  needs.changes.outputs.fleet = 'false'
+  needs.fleet.result = 'skipped'
+  assert.equal(verifyJobs(needs), true)
+  for (const result of ['success', 'failure', 'cancelled']) {
+    needs.fleet.result = result
+    assert.throws(() => verifyJobs(needs), /fleet: expected skipped/)
+  }
+  for (const value of [undefined, '', true, 'unknown']) {
+    needs.changes.outputs.fleet = value
+    assert.throws(() => verifyJobs(needs), /Missing change classification/)
+  }
+  const prose = clean()
+  prose.changes.outputs = { code: 'false', reporter: 'false', fleet: 'true' }
+  for (const job of ['static', 'test', 'quality', 'worker', 'images', 'reporter'])
+    prose[job].result = 'skipped'
+  assert.equal(
+    verifyJobs(prose),
+    true,
+    'conservative Fleet selection remains independent of prose classification',
+  )
+  prose.fleet.result = 'skipped'
+  assert.throws(() => verifyJobs(prose), /fleet: expected success/)
+})
+
+test('the real aggregate CLI rejects absent, skipped or failed required Fleet work', () => {
+  const controller = fileURLToPath(new URL('./aggregate.mjs', import.meta.url))
+  for (const mode of ['failure', 'skipped', 'cancelled', 'missing', 'unclassified', 'detection-failed']) {
+    const needs = clean()
+    if (mode === 'missing') delete needs.fleet
+    else if (mode === 'unclassified') delete needs.changes.outputs.fleet
+    else if (mode === 'detection-failed') needs.changes.result = 'failure'
+    else needs.fleet.result = mode
+    const child = spawnSync(process.execPath, [controller], {
+      env: { ...process.env, NEEDS: JSON.stringify(needs) },
+      encoding: 'utf8',
+    })
+    assert.equal(child.status, 1, mode)
+    assert.match(child.stderr, /fleet|Missing change classification|Change detection/)
+  }
+})
+
+test('the actual Fleet classifier includes shared inputs without running for unrelated app source', () => {
+  const workflow = readFileSync(new URL('../../.github/workflows/ci.yml', import.meta.url), 'utf8')
+  const section = workflow.match(/\n {12}fleet:\n((?: {14}- '[^']+'\n)+)/)?.[1]
+  assert.ok(section, 'Fleet path classification must exist')
+  const patterns = [...section.matchAll(/- '([^']+)'/g)].map((match) => match[1])
+  const selected = (path) => patterns.some((pattern) => matchesGlob(path, pattern))
+  for (const path of [
+    'apps/control/src/infra/fleet/fleet-runtime.ts',
+    'apps/control/src/testing/fleet.ts',
+    'apps/control/Dockerfile',
+    'packages/contracts/src/runtime.ts',
+    'packages/db/migrations/new.sql',
+    'scripts/blocklyd.ts',
+    'scripts/quality/fleet-evidence.mjs',
+    'tools/quality/package.json',
+    'package.json',
+    'apps/web/package.json',
+    'bun.lock',
+    'apps/edge/bunfig.toml',
+    'bunfig.toml',
+    'tsconfig.base.json',
+    'apps/web/tsconfig.json',
+    'runtime.config.mjs',
+    '.node-version',
+    '.npmrc',
+    '.env.test',
+    '.github/workflows/ci.yml',
+    '.github/workflows/fleet.yml',
+  ])
+    assert.equal(selected(path), true, `${path} must require live Fleet evidence`)
+  for (const path of [
+    'apps/web/src/page.tsx',
+    'apps/edge/index.ts',
+    'apps/reporter/src/main/java/Example.java',
+    'docs/fleet.md',
+    'README.md',
+  ])
+    assert.equal(selected(path), false, `${path} is unrelated to the live Fleet runtime`)
+  assert.match(
+    workflow,
+    /fleet: \$\{\{ .*merge_group.*schedule.*workflow_dispatch.*steps\.fleet\.outputs\.fleet/,
+  )
+  assert.match(
+    workflow,
+    /\n {2}fleet:\n {4}needs: changes\n {4}if: needs\.changes\.outputs\.fleet == 'true'\n {4}uses: \.\/\.github\/workflows\/fleet\.yml/,
+  )
+  assert.match(workflow, /\n {2}check:\n {4}needs: \[[^\]\n]*\bfleet\]/)
 })
 
 test('JUnit requires all selected files, executed cases and no unexpected skips', () => {

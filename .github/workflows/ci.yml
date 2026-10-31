@@ -30,7 +30,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # A change to nothing but prose skips the rest. `check` still reports, so it can stay required.
+  # Unrelated jobs may skip, but `check` still reports and verifies each classification.
   changes:
     name: Find what changed
     runs-on: ubuntu-latest
@@ -41,6 +41,7 @@ jobs:
       # The queue tests everything: what a merge changes is what the commits ahead of it changed too.
       code: ${{ (github.event_name == 'merge_group' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 'true' || steps.filter.outputs.code }}
       reporter: ${{ (github.event_name == 'merge_group' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 'true' || steps.reporter.outputs.reporter }}
+      fleet: ${{ (github.event_name == 'merge_group' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 'true' || steps.fleet.outputs.fleet }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -70,6 +71,43 @@ jobs:
               - 'apps/reporter/**'
               - '.github/workflows/ci.yml'
               - 'scripts/quality/reporter*'
+
+      # Fleet's contracts, fixtures, dependency resolution and runtime setup all affect its live
+      # evidence. Keep this conservative; web/edge/reporter-only source changes can skip it.
+      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        id: fleet
+        if: github.event_name != 'merge_group' && github.event_name != 'schedule' && github.event_name != 'workflow_dispatch'
+        with:
+          filters: |
+            fleet:
+              - 'apps/control/**'
+              - 'packages/**'
+              - 'scripts/**'
+              - 'tools/**'
+              - '**/package.json'
+              - '**/bun.lock'
+              - '**/bun.lockb'
+              - '**/package-lock.json'
+              - '**/npm-shrinkwrap.json'
+              - '**/yarn.lock'
+              - '**/pnpm-lock.yaml'
+              - '**/bunfig.toml'
+              - '**/tsconfig*.json'
+              - '*.{js,cjs,mjs,ts,cts,mts,json,jsonc,toml,yml,yaml}'
+              - '.node-version'
+              - '.bun-version'
+              - '.nvmrc'
+              - '.tool-versions'
+              - '.npmrc'
+              - '.yarnrc*'
+              - '.env*'
+              - '.github/workflows/ci.yml'
+              - '.github/workflows/fleet.yml'
+
+  fleet:
+    needs: changes
+    if: needs.changes.outputs.fleet == 'true'
+    uses: ./.github/workflows/fleet.yml
 
   static:
     name: Lint, types and structure
@@ -536,7 +574,7 @@ jobs:
 
   # The required aggregate rejects missing work and unexpected skips, including failed dependencies.
   check:
-    needs: [changes, licenses, static, test, quality, worker, images, reporter]
+    needs: [changes, licenses, static, test, quality, worker, images, reporter, fleet]
     if: always()
     runs-on: ubuntu-latest
     steps:

@@ -88,6 +88,16 @@ aggregate requires all seven reports. Fresh processes still share files and exte
 process isolation is not a security sandbox and does not prevent malicious filesystem writes.
 The Java reporter continues to use class-based PIT selection for its test changes.
 
+The two live Fleet files may skip only in ordinary coverage and mutation runs that lack the
+real daemon. Applicable CI runs call the reusable Fleet workflow and require both one-node and
+two-node evidence with zero skipped cases. The required aggregate rejects a failed, cancelled,
+missing, or unexpectedly skipped Fleet job. The protected path classifier selects all control-plane,
+shared-package, script, and tool changes, all package manifests and lockfiles, Bun/TypeScript and
+root runtime configuration, and the CI/Fleet workflows. Unrelated web, edge, or reporter source
+can skip Fleet; merge-queue, scheduled, and manual CI runs always execute it. This dependency
+places live Fleet failures inside the existing required `check` and trusted CI workflow rather
+than depending on an optional external check name.
+
 The classification never removes independent obligations. Changed production remains a mutation
 subject. Dependency and runner-configuration changes retain conservative scope, except when
 `config-impact.mjs` proves application dependency resolution unchanged. Renaming, deleting, or

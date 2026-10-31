@@ -19,6 +19,9 @@ coverage thresholds, mutation checks, or property-testing dependencies.
 Bun's native coverage did not supply an enforceable branch metric. The required CI aggregate
 accepted every skipped dependency. Service-dependent tests deliberately skipped without their
 environment variables; that was convenient locally but could conceal missing CI setup.
+The separate Fleet workflow was not a required dependency and ran only the one-node suite;
+the two-node suite had no repository workflow invocation. Both live suites now feed the required
+CI result for applicable changes.
 
 The first independent reporter measurement demonstrated why a universal retroactive threshold
 would hide rather than resolve the rollout problem:
@@ -74,8 +77,18 @@ manifest must retain its hash. There is no fallback to shared Bun module realms.
 The checker merges all seven shard reports before comparing per-file metrics. This preserves
 coverage provided by integration tests in another shard. CI requires service variables, a
 nonempty test run, every selected test file in JUnit, and no unexpected skipped cases. Only the
-two existing live blocklyd test files may skip here; the separate fleet workflow supplies their
-live nodes.
+two existing live blocklyd test files may skip in these ordinary coverage shards. CI separately
+calls the reusable Fleet workflow for both the one-node and two-node suites, with the pinned
+daemon binaries, Docker, Postgres, and S3 they need. Live Fleet evidence must contain both exact
+test files with executed cases and no failures, errors, or skips. Missing or malformed evidence
+fails, as does a failed, cancelled, missing, or unexpectedly skipped Fleet job.
+
+All control-plane, shared-package, script, and tool changes require Fleet. Package manifests,
+lockfiles, Bun/TypeScript configuration, root runtime configuration, and the CI/Fleet workflows
+also require it. Unrelated web, edge, or reporter source changes can skip that job; the required
+aggregate verifies the explicit classification. Merge-queue, scheduled, and manual CI runs
+always execute Fleet. The standalone Fleet workflow retains weekly and manual runs, while PR
+and main-push execution comes through CI to avoid duplicate runs.
 
 Mutation testing requires **80% killed mutants per selected file**, rather than a project average.
 Timeouts, compilation errors, missing reports, skipped-away tests, and runner failures cannot count
