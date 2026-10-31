@@ -4,7 +4,8 @@
 
 /**
  * What the edge's front door counts, as Prometheus scrapes it: a join let through and answered, a
- * game the server can't take, bytes that aren't Minecraft, and a connection that said nothing.
+ * game the server can't take, a server that closed without answering, a ping at a name no server
+ * has, bytes that aren't Minecraft, and a connection that said nothing.
  * The exporter registers as metrics.ts loads, so the door runs in a process of its own with
  * METRICS_LISTEN set, and no label names a player, a server or an address.
  */
@@ -13,17 +14,17 @@ import { expect, test } from 'bun:test'
 const PORT = 19465
 const HERE = import.meta.dir
 
-/** Runs in the child: a door before a stand-in mc-router that answers at once, dialled four ways. */
+/** Runs in the child: a door before a stand-in mc-router, dialled six ways. */
 const SCRIPT = `
 import { connect, createServer } from 'node:net'
 import { front } from '${HERE}/front.ts'
 import { Gate } from '${HERE}/limits.ts'
 import { packet, string, varInt } from '${HERE}/notice.ts'
 
+// Answers at once, but closes without a word on a server that's gone or a name no server has.
 const router = createServer((socket) => {
   socket.on('error', () => {})
-  socket.on('data', () => {})
-  socket.write('hello')
+  socket.once('data', (bytes) => (/gone|nobody/.test(bytes.toString()) ? socket.destroy() : socket.write('hello')))
 }).listen(0, '127.0.0.1')
 await new Promise((resolve) => router.once('listening', resolve))
 const roomy = { connections: { perSecond: 100, burst: 100 } }
@@ -32,7 +33,7 @@ const door = front({
   router: router.address().port,
   proxied: false,
   gate: new Gate({ address: { ...roomy, greeting: 100, open: 100 }, server: { ...roomy, open: 100 } }),
-  known: () => true,
+  known: (hostname) => !hostname.startsWith('nobody'),
   plain: () => true,
   busy: 'Busy',
   refuse: (hostname) => (hostname === 'arcade.play.test' ? 'Wrong game' : null),
@@ -41,6 +42,8 @@ const door = front({
 await new Promise((resolve) => door.once('listening', resolve))
 const join = (address) =>
   Uint8Array.from([...packet(0, [...varInt(767), ...string(address), 0x63, 0xdd, 2]), ...packet(0, string('Notch'))])
+const ping = (address) =>
+  Uint8Array.from([...packet(0, [...varInt(767), ...string(address), 0x63, 0xdd, 1]), ...packet(0, [])])
 const dial = (bytes) =>
   new Promise((resolve) => {
     const socket = connect({ host: '127.0.0.1', port: door.address().port }, () => bytes && socket.write(bytes))
@@ -51,6 +54,8 @@ const dial = (bytes) =>
   })
 await dial(join('sunset-valley.play.test'))
 await dial(join('arcade.play.test'))
+await dial(ping('gone.play.test'))
+await dial(ping('nobody.play.test'))
 await dial(new TextEncoder().encode('GET / HTTP/1.1\\r\\n'))
 await dial(null)
 // Long enough for one sample of the event loop's lag.
@@ -73,6 +78,8 @@ test('the front door counts each connection once, times the first byte back, and
   expect(scrape).toContain(counted('refused', 'wrong_game'))
   expect(scrape).toContain(counted('failed', 'bad_greeting'))
   expect(scrape).toContain(counted('failed', 'silent'))
+  expect(scrape).toContain(counted('failed', 'backend'))
+  expect(scrape).toContain(counted('failed', 'no_server'))
   expect(scrape).toContain(
     'cubepals_edge_first_byte_seconds_count{edition="java",intent="join",edge_region="fra"} 1',
   )
@@ -85,5 +92,5 @@ test('the front door counts each connection once, times the first byte back, and
   expect(scrape).toMatch(/cubepals_event_loop_lag_seconds_count\{role="edge"\} \d/)
   expect(scrape).toMatch(/cubepals_heap_used_bytes\{role="edge"\} [1-9]/)
   for (const [, value] of scrape.matchAll(/\w+="([^"]*)"/g))
-    expect(value).not.toMatch(/sunset|arcade|Notch|127\.0\.0\.1/)
+    expect(value).not.toMatch(/sunset|arcade|gone|nobody|Notch|127\.0\.0\.1/)
 }, 20_000)

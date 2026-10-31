@@ -17,6 +17,13 @@ import { classifySource, fileHash, inventory, parseSource } from './inventory.mj
 import { dependencyGraph } from './mutation-dependencies.mjs'
 
 const MODULE = /^(?:apps|packages|scripts|tools)\/.*\.(?:[cm]?[jt]s|[jt]sx)$/
+/**
+ * Files code imports as data (`with { type: 'json' }`, CSS modules, HTML), written into the base
+ * snapshot beside the modules so an import of one resolves there as it does in the checkout.
+ * Without them, every module importing one read as ambiguous in the base view, and any executable
+ * change widened mutation to every source file.
+ */
+const IMPORTED_DATA = /^(?:apps|packages|scripts|tools)\/.*\.(?:json|css|html)$/
 const CONFIG =
   /(?:^|\/)(?:package\.json|bun\.lockb?|bunfig\.toml|tsconfig[^/]*\.jsonc?|(?:jest|vitest|stryker|nyc|c8|istanbul)[^/]*\.(?:[cm]?[jt]s|json|toml|ya?ml))$/
 const ORACLE_DATA = /^(?:apps|packages|scripts)\/.*\.(?:jsonc?|toml|ya?ml|sql|snap|csv|txt)$/
@@ -100,9 +107,13 @@ function baseContents(root, base, head, current) {
   const contents = new Map()
   const missing = []
   for (const [path, entry] of base) {
-    if (!MODULE.test(path) && !path.endsWith('package.json')) continue
-    if (!REGULAR.has(entry.mode)) throw new Error(`Base code/config must be a regular file: ${path}`)
-    if (head.get(path)?.oid === entry.oid) contents.set(path, current.get(path))
+    const code = MODULE.test(path) || path.endsWith('package.json')
+    if (!code && !IMPORTED_DATA.test(path)) continue
+    if (!REGULAR.has(entry.mode)) {
+      if (!code) continue
+      throw new Error(`Base code/config must be a regular file: ${path}`)
+    }
+    if (head.get(path)?.oid === entry.oid && current.has(path)) contents.set(path, current.get(path))
     else missing.push(entry)
   }
   if (!missing.length) return contents
