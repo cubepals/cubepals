@@ -8,7 +8,7 @@
  */
 import { describe, expect, test } from 'bun:test'
 import { MINUTE_MS, SECOND_MS } from '../../packages/contracts/src/durations.ts'
-import { WAKING, WakingLine, wakingNotice } from './waking-line.ts'
+import { RESTARTING, WAKING, WakingLine, wakingLine, wakingNotice } from './waking-line.ts'
 
 describe('a waking server’s line', () => {
   test('says about how long is left of its measured wake, rounded as the server page rounds it', () => {
@@ -75,5 +75,42 @@ describe('the line by hostname', () => {
     const line = new WakingLine('Waking up · hold on')
     expect(line.of('a.play.test', true, 37)).toBe('Waking up · hold on')
     expect(line.of('a.play.test', false, 37)).toBeNull()
+  })
+})
+
+describe('a restarting server’s line', () => {
+  test('says it restarts while its route says so, whether or not anyone is waking it', () => {
+    const line = new WakingLine('')
+    line.keep([{ hostname: 'a.play.test', state: 'restarting' }, { hostname: 'b.play.test' }], () => false)
+    expect(line.of('a.play.test', false, undefined)).toBe(RESTARTING)
+    expect(line.of('a.play.test', true, 37)).toBe(RESTARTING)
+    expect(line.of('b.play.test', false, 37)).toBeNull()
+  })
+
+  test('is a wake’s line again once its route no longer says it restarts', () => {
+    let now = 1_000_000
+    const line = new WakingLine('', () => now)
+    line.keep([{ hostname: 'a.play.test', state: 'restarting' }], () => false)
+    expect(line.of('a.play.test', true, 37)).toBe(RESTARTING)
+    line.keep([{ hostname: 'a.play.test', state: 'asleep', waking: true }], () => false)
+    expect(line.of('a.play.test', true, 37)).toBe('Waking your world · about 40 seconds')
+    now += 20 * SECOND_MS
+    line.keep([{ hostname: 'a.play.test' }], () => false)
+    expect(line.of('a.play.test', false, 37)).toBeNull()
+  })
+
+  test('the agent’s says what the restarting notice says, where no operator says otherwise', () => {
+    expect(RESTARTING).toBe('Restarting · back in a moment')
+    wakingLine.keep([{ hostname: 'a.play.test', state: 'restarting' }], () => false)
+    expect(wakingLine.of('a.play.test', false, undefined)).toBe(RESTARTING)
+    wakingLine.keep([], () => false)
+    expect(wakingLine.of('a.play.test', false, undefined)).toBeNull()
+  })
+
+  test('says an operator’s own words for a restart when they are set', () => {
+    const line = new WakingLine('Waking up · hold on', Date.now, 'Back soon')
+    line.keep([{ hostname: 'a.play.test', state: 'restarting' }], () => false)
+    expect(line.of('a.play.test', true, 37)).toBe('Back soon')
+    expect(line.of('b.play.test', true, 37)).toBe('Waking up · hold on')
   })
 })
