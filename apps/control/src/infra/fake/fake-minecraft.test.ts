@@ -157,8 +157,8 @@ describe('a start', () => {
     const now = await machine({ VERSION: '1.21.9', PVP: 'false' })
     await minecraft.start(now)
     expect(minecraft.playing(now.key).pvp).toBe(true)
-    expect(await minecraft.run(target(now), 'gamerule pvp false')).toBe('Game rule pvp is now set to false')
-    expect(await minecraft.file(now.key, 'world/gamerules')).toBe('pvp=false\n')
+    expect(await minecraft.run(target(now), 'gamerule pvp false')).toBe('Gamerule pvp is now set to: false')
+    expect(await minecraft.file(now.key, 'world/gamerules')).toBe('* pvp=false\n')
     await minecraft.stop(now)
     await minecraft.start(now)
     expect(minecraft.playing(now.key).pvp).toBe(false)
@@ -469,7 +469,7 @@ describe('the console', () => {
     expect(await ask('gamemode adventure @a')).toBe(
       "Set Steve's game mode to Adventure ModeSet Alex's game mode to Adventure Mode",
     )
-    expect(await ask('gamerule pvp')).toBe('Incorrect argument for commandgamerule pvp<--[HERE]')
+    expect(await ask('gamerule pvp')).toBe('Incorrect argument for command\ngamerule pvp<--[HERE]')
     expect(await ask('save-all flush')).toBe('Saving the game (this may take a moment!)Saved the game')
     expect(await ask('save-off')).toBe('Automatic saving is now disabled')
     expect(await ask('save-on')).toBe('Automatic saving is now enabled')
@@ -497,10 +497,10 @@ describe('the console', () => {
     const now = await machine({ VERSION: '26.3' })
     await minecraft.start(now)
     const rule = (command: string) => minecraft.run(target(now), command)
-    expect(await rule('gamerule pvp')).toBe('Game rule pvp is currently set to true')
+    expect(await rule('gamerule pvp')).toBe('Gamerule pvp is currently set to: true')
     expect(await rule('gamerule pvp maybe')).toBe('Incorrect argument for command')
     expect(await rule('gamerule keepInventory true')).toBe(
-      'Incorrect argument for commandgamerule keepInventory<--[HERE]',
+      'Incorrect argument for command\ngamerule keepInventory true<--[HERE]',
     )
   })
 
@@ -526,6 +526,87 @@ describe('the console', () => {
     expect(() => minecraft.inGame(m.key, 'list')).toThrow('The server is not running')
     await expect(minecraft.login(m.key, 'Steve')).rejects.toThrow('The server is not running')
     expect(() => minecraft.join('nope', { uuid: 'u', name: 'n' })).toThrow('No fake server nope')
+  })
+})
+
+describe('game rules', () => {
+  const started = async (minecraft: ReturnType<typeof fresh>['minecraft'], version: string) => {
+    const m = await machine({ VERSION: version })
+    await minecraft.start(m)
+    return m
+  }
+
+  test('knows each rule by the name its release gives it', async () => {
+    const { minecraft } = fresh()
+    // keep_inventory from 1.21.11 and keepInventory before; PvP a rule from 1.21.9.
+    const releases: Array<[string, string, boolean]> = [
+      ['0.30', 'keepInventory', false],
+      ['1.20.12', 'keepInventory', false],
+      ['1.21.8', 'keepInventory', false],
+      ['1.21.9', 'keepInventory', true],
+      ['1.21.10', 'keepInventory', true],
+      ['1.21.11', 'keep_inventory', true],
+      ['1.22', 'keep_inventory', true],
+      ['2.0.0', 'keep_inventory', true],
+    ]
+    for (const [version, keep, pvp] of releases) {
+      const m = await started(minecraft, version)
+      expect(await minecraft.run(target(m), `gamerule ${keep}`)).toBe(
+        `Gamerule ${keep} is currently set to: false`,
+      )
+      expect((await minecraft.run(target(m), 'gamerule pvp')).startsWith('Gamerule pvp')).toBe(pvp)
+    }
+  })
+
+  test('reads back the rules the world keeps, and writes them back the same way', async () => {
+    const { minecraft } = fresh()
+    const m = await started(minecraft, '26.2')
+    expect(await minecraft.run(target(m), 'gamerule pvp false')).toBe('Gamerule pvp is now set to: false')
+    await minecraft.stop(m)
+    await minecraft.start(m)
+    expect(await minecraft.run(target(m), 'gamerule pvp true')).toBe('Gamerule pvp is now set to: true')
+    expect(await minecraft.file(m.key, 'world/gamerules')).toBe('* pvp=true\n')
+  })
+
+  test('keeps a world’s game rules by each release’s names, apart for each dimension on Paper', async () => {
+    const { minecraft } = fresh()
+    expect(
+      await minecraft.run(target(await started(minecraft, '26.3')), 'gamerule keep_invmentory true'),
+    ).toBe('Incorrect argument for command\ngamerule keep_invmentory true<--[HERE]')
+    // Before 1.21.11 the rule is keepInventory, and the whole world shares one set.
+    const older = await machine({ VERSION: '1.21.10' })
+    await minecraft.start(older)
+    const before = (command: string) => minecraft.run(target(older), command)
+    expect(await before('gamerule keep_inventory true')).toBe(
+      'Incorrect argument for command\ngamerule keep_inventory true<--[HERE]',
+    )
+    expect(await before('gamerule keepInventory')).toBe('Gamerule keepInventory is currently set to: false')
+    expect(await before('gamerule keepInventory true')).toBe('Gamerule keepInventory is now set to: true')
+    expect(minecraft.keepsInventory(older.key, 'minecraft:the_nether')).toBe(true)
+
+    // On Paper, a console gamerule is the overworld's alone; each other dimension is set in it.
+    const paper = await machine({ VERSION: '26.2', TYPE: 'PAPER' })
+    await minecraft.start(paper)
+    const on = (command: string) => minecraft.run(target(paper), command)
+    expect(await on('gamerule keep_inventory true')).toBe('Gamerule keep_inventory is now set to: true')
+    expect(minecraft.keepsInventory(paper.key, 'minecraft:overworld')).toBe(true)
+    expect(minecraft.keepsInventory(paper.key, 'minecraft:the_nether')).toBe(false)
+    expect(await on('execute in minecraft:the_nether run gamerule keep_inventory')).toBe(
+      'Gamerule keep_inventory is currently set to: false',
+    )
+    expect(await on('execute in minecraft:the_nether run gamerule keep_inventory true')).toBe(
+      'Gamerule keep_inventory is now set to: true',
+    )
+    expect(await on('execute in minecraft:the_end run gamerule keep_inventory sometimes')).toBe(
+      'Incorrect argument for command',
+    )
+    expect(minecraft.keepsInventory(paper.key, 'minecraft:the_end')).toBe(false)
+    // The world keeps them: a stop and a start reads them back.
+    await minecraft.stop(paper)
+    await minecraft.start(paper)
+    expect(minecraft.keepsInventory(paper.key, 'minecraft:the_nether')).toBe(true)
+    expect(minecraft.keepsInventory(paper.key, 'minecraft:the_end')).toBe(false)
+    expect(minecraft.playing(paper.key).pvp).toBe(true)
   })
 })
 

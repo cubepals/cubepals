@@ -202,7 +202,7 @@ export class ServerQueries {
       partySizes: partySizesFor(entitlements),
       regions: [...this.#regions.list()],
       takes: Object.fromEntries(
-        Object.keys(revision.settings).map((setting) => [
+        Object.keys({ keepInventory: false, ...revision.settings }).map((setting) => [
           setting,
           settingTakes(setting as keyof typeof revision.settings, revision.gameVersion),
         ]),

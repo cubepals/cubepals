@@ -31,6 +31,7 @@
  *
  * Parts (`fake-minecraft/`):
  * - `access-commands.ts`: what the whitelist, op, ban and pardon commands answer and change.
+ * - `game-rules.ts`: the world's game rules, by each release's names, apart for each dimension on Paper.
  * - `image.ts`: the jars and the pack the image installs on the volume before the game starts.
  * - `lists.ts`: the access lists, held in memory and saved whole over their files.
  * - `log.ts`: one server's console output, kept and followed.
@@ -61,6 +62,7 @@ import {
   pardonIp,
   whitelist,
 } from './fake-minecraft/access-commands.ts'
+import { FakeGameRules } from './fake-minecraft/game-rules.ts'
 import {
   installJars,
   installPack,
@@ -97,6 +99,8 @@ interface Server {
   heard: string[]
   /** How the running game plays: set from the properties as it starts, and by commands after. */
   game: { difficulty: string; defaultGameMode: string; pvp: boolean }
+  /** The world's game rules, read as it opens; none before the first start. */
+  rules: FakeGameRules | null
   /** Each player's game mode, by UUID: the default one as they join, or what a command set. */
   modes: Map<string, string>
   /** Where each player on is, and where each last died, by UUID. */
@@ -148,12 +152,11 @@ export class FakeMinecraft implements FakeWorkload, ServerConsole, ReadinessProb
     const level = join(server.dir, server.env.LEVEL ?? 'world')
     await mkdir(level, { recursive: true })
     // PvP is a property until 1.21.9 and a game rule the world keeps after, which ignores the property.
-    const rules = join(level, 'gamerules')
-    const kept = (await readFile(rules, 'utf8').catch(() => 'pvp=true')).includes('pvp=true')
+    server.rules = await FakeGameRules.open(level, server.env)
     server.game = {
       difficulty: server.env.DIFFICULTY ?? 'easy',
       defaultGameMode: server.env.MODE ?? 'survival',
-      pvp: pvpIsGameRule(server.env) ? kept : server.env.PVP !== 'false',
+      pvp: server.env.PVP !== 'false',
     }
     // Opening a world stamps it with the version, as a real upgrade migrates it.
     await writeFile(join(level, 'level.dat'), `opened by ${server.env.VERSION ?? 'unknown'}\n`, { flag: 'a' })
@@ -312,7 +315,13 @@ export class FakeMinecraft implements FakeWorkload, ServerConsole, ReadinessProb
   } {
     const server = this.#require(key)
     const modes = [...server.online].map(([uuid, name]) => [name, server.modes.get(uuid) ?? ''])
-    return { ...server.game, modes: Object.fromEntries(modes) }
+    const pvp = pvpIsGameRule(server.env) ? (server.rules?.value('pvp') ?? true) : server.game.pvp
+    return { ...server.game, pvp, modes: Object.fromEntries(modes) }
+  }
+
+  /** Whether a player who dies in a dimension keeps what they carry, as the world's rule there says. */
+  keepsInventory(key: string, dimension: string): boolean {
+    return this.#require(key).rules?.value('keepInventory', dimension) ?? false
   }
 
   /** Whether the running server treats this player as an operator: what it loaded, not the file. */
@@ -423,6 +432,7 @@ export class FakeMinecraft implements FakeWorkload, ServerConsole, ReadinessProb
         said: [],
         heard: [],
         game: { difficulty: 'easy', defaultGameMode: 'survival', pvp: true },
+        rules: null,
         modes: new Map(),
         places: new Map(),
         deaths: new Map(),
@@ -516,7 +526,7 @@ export class FakeMinecraft implements FakeWorkload, ServerConsole, ReadinessProb
       case 'gamemode':
         return this.#gameMode(server, args[0] ?? '', args[1] ?? '')
       case 'gamerule':
-        return this.#gameRule(server, args[0] ?? '', args[1])
+        return this.#gameRule(server, args[0] ?? '', args[1], undefined)
       case 'data':
         return this.#data(server, args)
       case 'execute':
@@ -595,10 +605,11 @@ export class FakeMinecraft implements FakeWorkload, ServerConsole, ReadinessProb
       : `${name} has the following entity data: ${value}`
   }
 
-  /** `execute in <dimension> run tp|spreadplayers …`, moving one player on. */
-  #executeIn(server: Server, args: string[]): string {
+  /** `execute in <dimension> run tp|spreadplayers …`, moving one player on, or `run gamerule …` there. */
+  #executeIn(server: Server, args: string[]): string | Promise<string> {
     const [inWord, dimension = '', run, verb, ...rest] = args
     if (inWord !== 'in' || run !== 'run') return 'Unknown or incomplete command, see below for error'
+    if (verb === 'gamerule') return this.#gameRule(server, rest[0] ?? '', rest[1], dimension)
     if (verb === 'tp') {
       const [name = '', x = '0', y = '0', z = '0'] = rest
       const uuid = this.#onlineNamed(server, name)
@@ -649,15 +660,9 @@ export class FakeMinecraft implements FakeWorkload, ServerConsole, ReadinessProb
     return null
   }
 
-  /** The world keeps its game rules; PvP is one from 1.21.9. */
-  async #gameRule(server: Server, rule: string, value: string | undefined): Promise<string> {
-    if (rule !== 'pvp' || !pvpIsGameRule(server.env))
-      return `Incorrect argument for commandgamerule ${rule}<--[HERE]`
-    if (value === undefined) return `Game rule pvp is currently set to ${server.game.pvp}`
-    if (value !== 'true' && value !== 'false') return 'Incorrect argument for command'
-    server.game.pvp = value === 'true'
-    await writeFile(join(server.dir, server.env.LEVEL ?? 'world', 'gamerules'), `pvp=${value}\n`)
-    return `Game rule pvp is now set to ${value}`
+  /** The world keeps its game rules (`fake-minecraft/game-rules.ts`), in a dimension where named. */
+  #gameRule(server: Server, rule: string, value: string | undefined, dimension: string | undefined) {
+    return server.rules?.command(rule, value, dimension) ?? 'Incorrect argument for command'
   }
 
   /** What the access commands change on this server, and nothing else. */

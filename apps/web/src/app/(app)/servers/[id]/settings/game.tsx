@@ -43,6 +43,7 @@ const FIELDS = [
   'difficulty',
   'defaultGameMode',
   'pvp',
+  'keepInventory',
   'motd',
   'maxPlayers',
   'spawnProtection',
@@ -107,7 +108,9 @@ function GameForm({
 }) {
   const trpc = useTRPC()
   const changed = useChanged(view.id)
-  const [draft, setDraft] = useState<ServerSettingsView>(view.settings)
+  // A server that never chose keeps nothing on death, as Minecraft has it.
+  const current = { ...view.settings, keepInventory: view.settings.keepInventory === true }
+  const [draft, setDraft] = useState<ServerSettingsView>(current)
   // Numbers are typed as text so a half-typed "1" on the way to "12" isn't fought over.
   const [typed, setTyped] = useState(() => typedFrom(view.settings))
   const [confirming, setConfirming] = useState(false)
@@ -144,7 +147,7 @@ function GameForm({
     simulationDistance: Number(typed.simulationDistance),
     spawnProtection: Number(typed.spawnProtection),
   }
-  const changes = valid ? differences(view.settings, next) : []
+  const changes = valid ? differences(current, next) : []
   const allowed = changeable(view)
   const taking = (how: Takes) => FIELDS.filter((field) => options.takes[field] === how)
   const restarts =
@@ -218,13 +221,7 @@ function GameForm({
             }
           />
         </div>
-        <FormRow
-          label="PvP"
-          description="Players can hurt each other."
-          control={
-            <Toggle checked={draft.pvp} ariaLabel="PvP" onChange={(pvp) => setDraft({ ...draft, pvp })} />
-          }
-        />
+        <Rules draft={draft} onChange={setDraft} />
         <ServerMessage
           view={view}
           value={draft.motd}
@@ -271,6 +268,38 @@ function GameForm({
   )
 }
 
+/** The game's rules that are on or off: PvP, and whether players keep their items when they die. */
+function Rules({
+  draft,
+  onChange,
+}: {
+  draft: ServerSettingsView
+  onChange: (next: ServerSettingsView) => void
+}) {
+  return (
+    <>
+      <FormRow
+        label="PvP"
+        description="Players can hurt each other."
+        control={
+          <Toggle checked={draft.pvp} ariaLabel="PvP" onChange={(pvp) => onChange({ ...draft, pvp })} />
+        }
+      />
+      <FormRow
+        label="Keep items when you die"
+        description="Players keep their items and experience when they die, wherever they are."
+        control={
+          <Toggle
+            checked={draft.keepInventory === true}
+            ariaLabel="Keep items when you die"
+            onChange={(keepInventory) => onChange({ ...draft, keepInventory })}
+          />
+        }
+      />
+    </>
+  )
+}
+
 const typedFrom = (settings: ServerSettingsView): Record<NumberSetting, string> => ({
   maxPlayers: String(settings.maxPlayers),
   viewDistance: String(settings.viewDistance),
@@ -279,7 +308,10 @@ const typedFrom = (settings: ServerSettingsView): Record<NumberSetting, string> 
 })
 
 function differences(from: ServerSettingsView, to: ServerSettingsView): RevisionChangeView[] {
-  return (Object.keys(to) as (keyof ServerSettingsView)[])
-    .filter((key) => from[key] !== to[key])
-    .map((key) => ({ field: key, from: from[key], to: to[key] }))
+  return (
+    (Object.keys(to) as (keyof ServerSettingsView)[])
+      .filter((key) => from[key] !== to[key])
+      // Only keeping items on death may be unchosen, which is off.
+      .map((key) => ({ field: key, from: from[key] ?? false, to: to[key] ?? false }))
+  )
 }
