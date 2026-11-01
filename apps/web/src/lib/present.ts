@@ -604,6 +604,7 @@ const SETTING_WORDS: Record<string, { label: string; unit?: string }> = {
   difficulty: { label: 'Difficulty' },
   defaultGameMode: { label: 'Game mode' },
   pvp: { label: 'PvP' },
+  keepInventory: { label: 'Keep items when you die' },
   viewDistance: { label: 'View distance', unit: 'chunks' },
   simulationDistance: { label: 'Simulation distance', unit: 'chunks' },
   maxPlayers: { label: 'Max players' },

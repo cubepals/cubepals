@@ -88,6 +88,7 @@ type SetupSettings = Partial<
     | 'motd'
     | 'otherVersions'
     | 'bedrock'
+    | 'keepInventory'
   >
 >
 
@@ -132,6 +133,9 @@ export function setupOf(
         ? {}
         : { otherVersions: revision.settings.otherVersions }),
       ...(revision.settings.bedrock === undefined ? {} : { bedrock: revision.settings.bedrock }),
+      ...(revision.settings.keepInventory === undefined
+        ? {}
+        : { keepInventory: revision.settings.keepInventory }),
     },
     world: { levelType: world.levelType, hardcore: world.hardcore },
     party,
