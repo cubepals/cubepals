@@ -204,6 +204,35 @@ test.skipIf(!hasDatabase)(
   30 * SECOND_MS,
 )
 
+test(
+  'an older settings page preserves the saved inventory choice in its next revision',
+  async () => {
+    const { owner, id, revision } = await world('1.21.1')
+    await h.app.revisions.changeSettings(
+      owner,
+      id,
+      { ...revision.settings, keepInventory: true },
+      crypto.randomUUID(),
+    )
+    await h.settled(id, 3 * SECOND_MS)
+    const current = await loadRevision(h.db, (await h.server(id)).desiredRevisionId)
+    const { keepInventory: _choice, ...older } = current.settings
+    const difficulty = current.settings.difficulty === 'hard' ? 'easy' : 'hard'
+    const changed = await h.app.revisions.changeSettings(
+      owner,
+      id,
+      { ...older, difficulty },
+      crypto.randomUUID(),
+    )
+    expect((await loadRevision(h.db, changed.desiredRevisionId)).settings).toMatchObject({
+      difficulty,
+      keepInventory: true,
+    })
+    await h.settled(id, 3 * SECOND_MS)
+  },
+  30 * SECOND_MS,
+)
+
 for (const when of [undefined, 'now', 'empty'] as const) {
   test.skipIf(!hasDatabase)(
     `an occupied server records a revision with restart choice ${when ?? 'default'}`,
