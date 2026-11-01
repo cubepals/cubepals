@@ -6,7 +6,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { checkJUnit } from './coverage-junit.mjs'
-import { legacyCalendarCase, legacyCalendarSkips } from './legacy-calendar-case.mjs'
+import { legacyCalendarCase, legacyCalendarCases, legacyCalendarSkips } from './legacy-calendar-case.mjs'
 import { readMutationJUnit } from './mutation-evidence.mjs'
 
 const during = new Date('2040-02-01T01:00:00Z')
@@ -55,4 +55,45 @@ test('a run straddling a calendar boundary uses its trusted parent start and fin
   assert.equal(legacyCalendarSkips(legacyCalendarCase, new Date('2040-01-31T23:59:59Z'), during).size, 1)
   assert.equal(legacyCalendarSkips(legacyCalendarCase, during, after).size, 1)
   assert.equal(legacyCalendarSkips(legacyCalendarCase, after, new Date('2040-02-02T01:00:00Z')).size, 0)
+})
+
+test('each pinned fixture retains only its exact original calendar window and case names', () => {
+  for (const item of legacyCalendarCases) {
+    const allowed = legacyCalendarSkips(item, during, during)
+    assert.ok(allowed.has(JSON.stringify([item.path, item.name])))
+    const outside = new Date(Date.UTC(2040, 1, 1, item.hours))
+    assert.equal(legacyCalendarSkips(item, outside, outside).size, 0)
+    assert.equal(legacyCalendarSkips({ ...item, sha256: '0'.repeat(64) }, during, during).size, 0)
+    const cases = [...allowed].map((id) => JSON.parse(id)[1])
+    const report = `<testsuites><testsuite file="${item.path}">${cases.map((name) => `<testcase name="${name}"><skipped/></testcase>`).join('')}</testsuite></testsuites>`
+    assert.throws(() => checkJUnit(report, [item.path]), /Unexpected skipped/)
+    assert.throws(
+      () => checkJUnit(report, [item.path], { allowedSkippedTests: allowed }),
+      /No tests executed/,
+    )
+    assert.equal(
+      checkJUnit(report, [item.path], { allowOptionalOnly: true, allowedSkippedTests: allowed }),
+      0,
+    )
+    assert.throws(
+      () => readMutationJUnit(report, [item.path], { allowedSkippedTests: allowed }),
+      /No mutation tests executed/,
+    )
+    assert.throws(
+      () =>
+        checkJUnit(report.replace(cases[0], 'an unknown skip'), [item.path], {
+          allowOptionalOnly: true,
+          allowedSkippedTests: allowed,
+        }),
+      /Unexpected skipped/,
+    )
+    assert.throws(
+      () =>
+        checkJUnit(`<testsuites><testsuite file="${item.path}"/></testsuites>`, [item.path], {
+          allowOptionalOnly: true,
+          allowedSkippedTests: allowed,
+        }),
+      /did not report/,
+    )
+  }
 })
