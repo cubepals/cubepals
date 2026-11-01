@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /** Game settings are edited in a real DOM and submitted through the real router and database. */
-import { describe, expect, test } from 'bun:test'
+import { afterAll, describe, expect, test } from 'bun:test'
 import { createRequire } from 'node:module'
 import { SECOND_MS } from '@blockly/contracts/durations'
 import { fetchRequestHandler } from '@trpc/server/adapters/fetch'
@@ -13,6 +13,14 @@ import { hasDatabase, startHarness } from '../../testing/harness.ts'
 import { appRouter } from './router.ts'
 
 const quality = createRequire(new URL('../../../../../tools/quality/package.json', import.meta.url))
+// Browser cases have separate servers; the file owns the database and final cleanup.
+let harness
+afterAll(async () => {
+  await harness?.then(
+    (h) => h.close(),
+    () => undefined,
+  )
+})
 function browserScope() {
   const Window = quality('happy-dom').Window
   const browser = new Window({ url: 'http://localhost/settings' })
@@ -91,7 +99,8 @@ async function openGame({ online = false, stopped = false, keeps = false } = {})
   let h, root
   const mutations = []
   try {
-    h = await startHarness()
+    harness ??= startHarness()
+    h = await harness
     const owner = await h.user('Steve', 'plus')
     const server = await h.create(owner)
     await h.until(server.id, 'running')
@@ -155,16 +164,15 @@ async function openGame({ online = false, stopped = false, keeps = false } = {})
         return (await loadRevision(h.db, (await h.server(server.id)).desiredRevisionId)).settings
       },
       async close() {
+        await until(() => !document.querySelector('button[aria-busy="true"]'))
         await act(async () => root.unmount())
         globalThis.fetch = native
-        await h.close()
         await dom.close()
       },
     }
   } catch (error) {
     await act(async () => root?.unmount())
     globalThis.fetch = native
-    await h?.close()
     await dom.close()
     throw error
   }
