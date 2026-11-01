@@ -182,6 +182,36 @@ async function openGame({ online = false, stopped = false, keeps = false } = {})
   }
 }
 
+async function initialAndGuardedSubmit() {
+  const page = await openGame()
+  try {
+    const { FIELDS, named } = await import('../../../../web/src/app/(app)/servers/[id]/settings/game-fields')
+    const taking = (how) => FIELDS.filter((field) => page.options.takes[field] === how)
+    expect(document.body.textContent).toContain(
+      `How your world plays. ${named(taking('now'))} change as people play; ${named(taking('restart'), false)} restart the server.`,
+    )
+    expect(document.querySelector('dialog')?.open).toBe(false)
+    expect(
+      [...document.querySelectorAll('button')].some((item) => item.textContent.trim() === 'Undo changes'),
+    ).toBe(false)
+    expect(button('Save changes').disabled).toBe(true)
+    const submit = async () => {
+      const event = new page.browser.Event('submit', { bubbles: true, cancelable: true })
+      await act(async () => document.querySelector('form').dispatchEvent(event))
+      expect(event.defaultPrevented).toBe(true)
+      expect(document.querySelector('dialog')?.open).toBe(false)
+    }
+    await submit()
+    await fill(page.browser, 'Server message', '')
+    expect(button('Save changes').disabled).toBe(true)
+    expect(document.body.textContent).toContain('Write something to show under the name.')
+    await submit()
+    expect(page.mutations).toHaveLength(0)
+  } finally {
+    await page.close()
+  }
+}
+
 async function keepsItems() {
   const page = await openGame()
   try {
@@ -218,6 +248,7 @@ async function keepsItems() {
     expect(document.querySelector('dialog input[value="empty"]')).toBeNull()
     await act(async () => button('Save changes', document.querySelector('dialog')).click())
     await until(async () => (await page.settings()).keepInventory === true)
+    await until(() => document.querySelector('dialog')?.open === false)
     await page.h.settled(page.server.id)
     expect(page.mutations.some((call) => call.path.endsWith('/servers.changeSettings'))).toBe(true)
   } finally {
@@ -234,6 +265,7 @@ async function turnsKeepingOff() {
     expect(document.querySelector('dialog')?.open).toBe(true)
     await act(async () => button('Save changes', document.querySelector('dialog')).click())
     await until(async () => (await page.settings()).keepInventory === false)
+    await until(() => document.querySelector('dialog')?.open === false)
   } finally {
     await page.close()
   }
@@ -374,6 +406,11 @@ async function messageSummary(live) {
   }
 }
 describe.skipIf(!hasDatabase)('editing game settings in the browser', () => {
+  test(
+    'describes timing and prevents unchanged or invalid form submissions',
+    initialAndGuardedSubmit,
+    30 * SECOND_MS,
+  )
   test('one startup change describes its singular restart', () => restartSummary(false), 30 * SECOND_MS)
   test('multiple startup changes name every restarting setting', () => restartSummary(true), 30 * SECOND_MS)
   test('a server message alone waits for the next start', () => messageSummary(false), 30 * SECOND_MS)
