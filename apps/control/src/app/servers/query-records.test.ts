@@ -481,18 +481,16 @@ async function retainedWorlds(
 
 async function accessRecords(q: ServerQueries, owner: UserActor, serverId: string) {
   const player = { name: 'AllowedPlayer', uuid: crypto.randomUUID() }
-  await h.db
-    .insert(schema.serverAccessEntries)
-    .values({
-      serverId,
-      list: 'operator',
-      playerUuid: player.uuid,
-      playerName: player.name,
-      state: 'pending_add',
-      origin: 'blockly',
-      details: { reason: 'Owner invitation' },
-      error: 'Retry later',
-    })
+  await h.db.insert(schema.serverAccessEntries).values({
+    serverId,
+    list: 'operator',
+    playerUuid: player.uuid,
+    playerName: player.name,
+    state: 'pending_add',
+    origin: 'blockly',
+    details: { reason: 'Owner invitation' },
+    error: 'Retry later',
+  })
   await h.db
     .update(schema.serverAccess)
     .set({ whitelistEnabled: true, whitelistEnabledPending: false, syncError: 'Waiting on game', version: 7 })
