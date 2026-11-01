@@ -6,7 +6,8 @@
  * Runs Stryker's established JavaScript/TypeScript mutators against the existing Bun suite.
  * Per-file scores count test-case failures only: inconclusive outcomes stay in the denominator
  * as undetected; missing evidence fails closed. Each subject uses its dependent tests inside a copy with local workspace
- * links. Stryker's default node_modules symlink would otherwise test unmutated workspace code.
+ * links. Independent application workers keep their workspace links inside each sandbox;
+ * scripts retain a single Git-backed workspace. Every mutant keeps the same tests and budget.
  */
 import { execFileSync, spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
@@ -32,6 +33,7 @@ import { requireQuality } from './toolchain.mjs'
 
 const command = fileURLToPath(new URL('./mutation-command.mjs', import.meta.url))
 const candidatesCommand = fileURLToPath(new URL('./mutation-candidates.mjs', import.meta.url))
+const sandboxCommand = fileURLToPath(new URL('./mutation-sandbox.mjs', import.meta.url))
 
 function inside(root, path) {
   const rel = relative(root, path)
@@ -333,6 +335,7 @@ export function runMutation({
           )
           const reportPath = join(output, 'mutation.json')
           const configPath = join(output, 'stryker.config.json')
+          const isolated = /^(?:apps|packages)\//.test(subject)
           writeFileSync(
             configPath,
             JSON.stringify({
@@ -342,8 +345,15 @@ export function runMutation({
               // literal Next route brackets without allowing the filename to become a glob.
               mutate: [subject.replace(/[?*[\]{}()!+@]/g, (character) => `[${character}]`)],
               coverageAnalysis: 'off',
-              concurrency: 1,
-              inPlace: true,
+              concurrency: isolated ? 2 : 1,
+              inPlace: !isolated,
+              ...(isolated
+                ? {
+                    buildCommand: [node, sandboxCommand, snapshot]
+                      .map((argument) => argument.replaceAll(' ', '\\ '))
+                      .join(' '),
+                  }
+                : {}),
               symlinkNodeModules: false,
               incremental: false,
               ignoreStatic: false,
