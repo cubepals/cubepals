@@ -4,6 +4,7 @@
 
 /** Real browser interactions exercise restart timing through the control plane and Postgres. */
 import { describe, expect, test } from 'bun:test'
+import { createHash } from 'node:crypto'
 import { createRequire } from 'node:module'
 import { SECOND_MS } from '@blockly/contracts/durations'
 import { realtimeContract } from '@blockly/contracts/realtime'
@@ -12,6 +13,7 @@ import { act, createElement } from 'react'
 import { Client } from 'transport-io'
 import { Cdn } from '../../testing/cdn.ts'
 import { hasDatabase, startHarness } from '../../testing/harness.ts'
+import { fabricJar, utf8, zipBytes } from '../../testing/uploads.ts'
 import { appRouter } from './router.ts'
 
 const quality = createRequire(new URL('../../../../../tools/quality/package.json', import.meta.url))
@@ -152,7 +154,97 @@ async function draw(id) {
   )
   return root
 }
-async function openMods({ online = true, loader = 'fabric' } = {}) {
+function publishIris(h, cdn) {
+  h.catalog.publish(
+    {
+      projectId: 'iris',
+      slug: 'iris',
+      name: 'Iris Shaders',
+      summary: 'Iris, for tests',
+      iconUrl: null,
+      environments: ['server_only'],
+      downloads: 1,
+    },
+    [
+      {
+        versionId: 'iris-1',
+        projectId: 'iris',
+        versionLabel: '1.0',
+        channel: 'release',
+        state: 'listed',
+        environment: 'server_only',
+        loaders: ['fabric'],
+        gameVersions: ['26.3'],
+        publishedAt: new Date(),
+        file: cdn.file('iris-1'),
+        dependencies: [],
+      },
+    ],
+  )
+}
+
+function catalogPack(h, cdn, movesWorld) {
+  const versions = []
+  const publish = (number) => {
+    const gameVersion = movesWorld && number > 1 ? '26.3' : '1.21.1'
+    const bytes = fabricJar(`farm-${number}`, { depends: { minecraft: gameVersion } })
+    const mod = cdn.file(`farm-${number}`, bytes)
+    const file = cdn.file(
+      `pack-${number}`,
+      zipBytes({
+        'modrinth.index.json': utf8(
+          JSON.stringify({
+            formatVersion: 1,
+            game: 'minecraft',
+            versionId: `${number}.0`,
+            name: 'Update Pack',
+            files: [
+              {
+                path: `mods/farm-${number}.jar`,
+                hashes: { sha1: createHash('sha1').update(bytes).digest('hex'), sha512: mod.sha512 },
+                env: { client: 'required', server: 'required' },
+                downloads: [mod.url],
+                fileSize: mod.sizeBytes,
+              },
+            ],
+            dependencies: { minecraft: gameVersion, 'fabric-loader': '0.16.14' },
+          }),
+        ),
+        'overrides/config/farm.toml': utf8(`version = ${number}\n`),
+      }),
+    )
+    versions.unshift({
+      versionId: `update-${number}`,
+      projectId: 'update-pack',
+      versionLabel: `${number}.0`,
+      channel: 'release',
+      state: 'listed',
+      environment: 'client_and_server',
+      loaders: ['fabric'],
+      gameVersions: [gameVersion],
+      publishedAt: new Date(Date.UTC(2026, 0, number)),
+      file,
+      dependencies: [],
+    })
+    h.catalog.publishModpack(
+      {
+        projectId: 'update-pack',
+        slug: 'update-pack',
+        name: 'Update Pack',
+        summary: 'For tests',
+        iconUrl: null,
+        environments: ['client_and_server'],
+        downloads: 1,
+        categories: [],
+      },
+      [...versions],
+    )
+  }
+  publish(1)
+  return { request: { from: { kind: 'modpack', projectId: 'update-pack' } }, upgrade: () => publish(2) }
+}
+
+async function openMods({ online = true, loader = 'fabric', pack = false, movesWorld = false } = {}) {
   const dom = browserScope()
   const cdn = new Cdn()
   let h
@@ -162,42 +254,19 @@ async function openMods({ online = true, loader = 'fabric' } = {}) {
     await cdn.start()
     h = await startHarness()
     const owner = await h.user('Steve', 'plus')
-    const server = await h.create(owner, { loader })
+    publishIris(h, cdn)
+    const prepared = pack ? catalogPack(h, cdn, movesWorld) : null
+    const server = await h.create(owner, prepared?.request ?? { loader })
     await h.until(server.id, 'running')
     await h.settled(server.id)
     if (online) {
       h.minecraft.join(server.id, { uuid: crypto.randomUUID(), name: 'Alex' })
       await h.app.schedules.presenceSync()
     }
-    h.catalog.publish(
-      {
-        projectId: 'iris',
-        slug: 'iris',
-        name: 'Iris Shaders',
-        summary: 'Iris, for tests',
-        iconUrl: null,
-        environments: ['server_only'],
-        downloads: 1,
-      },
-      [
-        {
-          versionId: 'iris-1',
-          projectId: 'iris',
-          versionLabel: '1.0',
-          channel: 'release',
-          state: 'listed',
-          environment: 'server_only',
-          loaders: ['fabric'],
-          gameVersions: ['26.3'],
-          publishedAt: new Date(),
-          file: cdn.file('iris-1'),
-          dependencies: [],
-        },
-      ],
-    )
+    prepared?.upgrade()
     api = routeApi(h, owner, dom.browser)
     root = await draw(server.id)
-    await until(() => document.body.textContent?.includes('Iris Shaders') === true)
+    await until(() => document.body.textContent?.includes(pack ? 'Update to 2.0' : 'Iris Shaders') === true)
     const running = h
     const routed = api
     return {
@@ -206,8 +275,8 @@ async function openMods({ online = true, loader = 'fabric' } = {}) {
       server,
       mutations: routed.mutations,
       async plan() {
-        await act(async () => button('Add').click())
-        await until(() => !button('Apply and restart').disabled)
+        await act(async () => button(pack ? 'Update to 2.0' : 'Add').click())
+        await until(() => !button(pack ? 'Update and restart' : 'Apply and restart').disabled)
       },
       async close() {
         await act(async () => root?.unmount())
@@ -224,6 +293,55 @@ async function openMods({ online = true, loader = 'fabric' } = {}) {
     cdn.close()
     await dom.close()
     throw error
+  }
+}
+
+async function packWaits() {
+  const page = await openMods({ pack: true })
+  try {
+    expect(document.body.textContent).toContain('It plays a modpack')
+    expect(document.body.textContent).toContain('The server stays on 1.0 until you update it.')
+    await page.plan()
+    expect(document.body.textContent).toContain('Play Update Pack 2.0?')
+    expect(document.body.textContent).toContain('Alex is online. This change restarts the server.')
+    expect(document.querySelector('input[value="empty"]').checked).toBe(true)
+    await act(async () => button('Update and restart').click())
+    await until(async () => (await page.h.app.queries.get(page.owner, page.server.id)).waiting !== null)
+    await until(() => document.querySelector('dialog') === null)
+    expect(JSON.stringify(page.mutations.at(-1)?.input)).toContain('"when":"empty"')
+    expect(page.mutations.at(-1)?.path.endsWith('/mods.changePack')).toBe(true)
+    expect((await page.h.operations(page.server.id)).filter((op) => op.kind === 'apply')).toHaveLength(0)
+  } finally {
+    await page.close()
+  }
+}
+
+async function packCancels() {
+  const page = await openMods({ pack: true })
+  try {
+    const before = await page.h.server(page.server.id)
+    await page.plan()
+    await act(async () => button('Cancel').click())
+    expect(document.querySelector('dialog')).toBeNull()
+    expect((await page.h.server(page.server.id)).desiredRevisionId).toBe(before.desiredRevisionId)
+    expect((await page.h.app.modQueries.list(page.owner, page.server.id)).modpack.version).toBe('1.0')
+    expect(page.mutations.filter((call) => call.path.endsWith('/mods.changePack'))).toHaveLength(0)
+  } finally {
+    await page.close()
+  }
+}
+
+async function packMovesWorld() {
+  const page = await openMods({ pack: true, movesWorld: true })
+  try {
+    expect(document.body.textContent).toContain('on Minecraft 26.3')
+    await page.plan()
+    expect(document.body.textContent).toContain('The world moves to Minecraft 26.3')
+    expect(document.querySelector('input[value="empty"]').checked).toBe(true)
+    await act(async () => button('Cancel').click())
+    expect((await page.h.app.queries.get(page.owner, page.server.id)).gameVersion).toBe('1.21.1')
+  } finally {
+    await page.close()
   }
 }
 async function waitsByDefault() {
@@ -342,4 +460,7 @@ describe.skipIf(!hasDatabase)('choosing a restart from the mods page', () => {
   test('restart now applies the mod and finishes without a waiting change', restartsNow, 40 * SECOND_MS)
   test('an empty server applies immediately without asking about timing', nobodyOn, 30 * SECOND_MS)
   test('a vanilla migration offers the same player-safe timing choice', movesVanilla, 30 * SECOND_MS)
+  test('a modpack update waits for the player by default', packWaits, 40 * SECOND_MS)
+  test('cancelling a modpack update retains the installed release', packCancels, 40 * SECOND_MS)
+  test('a modpack moving the world explains the new Minecraft version', packMovesWorld, 40 * SECOND_MS)
 })
