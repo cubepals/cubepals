@@ -16,7 +16,7 @@ import { Cdn } from '../../../testing/cdn.ts'
 import { hasDatabase, startHarness } from '../../../testing/harness.ts'
 import { ArtifactUnavailable } from '../../artifacts/service.ts'
 import { RuntimeRouter } from '../../runtimes/router.ts'
-import { saveLifecycle } from '../../servers/persistence.ts'
+import { loadRuntime, saveLifecycle } from '../../servers/persistence.ts'
 import { NoLongerApplies, type OperationContext } from '../runner.ts'
 import { serverBinding } from './binding.ts'
 import { gameConsole } from './game-console.ts'
@@ -34,7 +34,7 @@ afterAll(async () => {
     (h) => h.close(),
     () => undefined,
   )
-})
+}, 30 * SECOND_MS)
 
 async function fixture() {
   harness ??= startHarness()
@@ -151,6 +151,53 @@ async function recordsPolicyStop() {
     outcome.mockRestore()
   }
 }
+async function unchangedConfigurationStaysLive() {
+  const { h, server, deps, ctx } = await fixture()
+  const decision = decide(server.lifecycle, { type: 'apply' })
+  if (decision.kind !== 'accept') throw new Error('The running fixture must accept its update')
+  ctx.server = await h.db.transaction((tx) => saveLifecycle(tx, server, decision.to))
+  ctx.op.input = {}
+  const applied = spyOn(deps.runtime, 'apply')
+  const booted = spyOn(deps.boot, 'run')
+  try {
+    expect(await updating(deps).run(ctx)).toEqual({ status: 'succeeded' })
+    expect(applied).not.toHaveBeenCalled()
+    expect(booted).not.toHaveBeenCalled()
+    expect((await h.server(server.id)).lifecycle.status).toBe('running')
+  } finally {
+    applied.mockRestore()
+    booted.mockRestore()
+  }
+}
+
+async function persistsSuccessfulBoot() {
+  const { h, server, deps, ctx } = await fixture()
+  const decision = decide(server.lifecycle, { type: 'apply' })
+  if (decision.kind !== 'accept') throw new Error('The running fixture must accept its update')
+  ctx.server = await h.db.transaction((tx) => saveLifecycle(tx, server, decision.to))
+  const outcome = spyOn(h.app.transitions, 'outcome')
+  const retained = spyOn(h.app.backups, 'enforceRetention')
+  try {
+    expect(await updating(deps).run(ctx)).toEqual({ status: 'succeeded' })
+    expect(outcome).toHaveBeenCalledTimes(1)
+    expect(outcome.mock.calls[0]?.[2]).toEqual({ type: 'updated', running: true })
+    expect((await h.server(server.id)).lifecycle.status).toBe('running')
+    const recorded = await loadRuntime(h.db, server.id, [...h.runtimes.keys()])
+    expect(recorded.applied?.revisionId).toBe(server.desiredRevisionId)
+    expect(retained).toHaveBeenCalledWith(ctx.server)
+    const intervals = await h.db
+      .select()
+      .from(schema.powerIntervals)
+      .where(eq(schema.powerIntervals.serverId, server.id))
+    expect(intervals).toHaveLength(1)
+    expect(intervals[0]?.stoppedAt).toBeNull()
+    expect(intervals[0]?.memoryTier).toBe(server.memoryTier)
+  } finally {
+    outcome.mockRestore()
+    retained.mockRestore()
+  }
+}
+
 async function resetsHearts() {
   const { h, server, deps, ctx } = await fixture()
   const listed = spyOn(h.minecraft, 'run')
@@ -359,6 +406,12 @@ async function replacementDuringBoot() {
 }
 
 describe.skipIf(!hasDatabase)('updating handler guard boundaries', () => {
+  test(
+    'keeps an unchanged configuration live without another boot',
+    unchangedConfigurationStaysLive,
+    30 * SECOND_MS,
+  )
+  test('persists a completed boot and leaves one live usage interval', persistsSuccessfulBoot, 30 * SECOND_MS)
   test('keeps replacement handles before boot and after its recheck', replacementDuringBoot, 30 * SECOND_MS)
   test('persists a policy refusal while an update owns the lifecycle', recordsPolicyStop, 30 * SECOND_MS)
   test('registers its lifecycle phase and abandonment states', handlerContract, 30 * SECOND_MS)
