@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /** Revision refusals protect the world's newest version and reject stale configuration changes. */
-import { afterAll, beforeAll, expect, test } from 'bun:test'
+import { afterAll, beforeAll, expect, spyOn, test } from 'bun:test'
 import { SECOND_MS } from '@blockly/contracts/durations'
 import { schema } from '@blockly/db'
 import { eq } from 'drizzle-orm'
@@ -203,3 +203,43 @@ test.skipIf(!hasDatabase)(
   },
   30 * SECOND_MS,
 )
+
+for (const when of [undefined, 'now', 'empty'] as const) {
+  test.skipIf(!hasDatabase)(
+    `an occupied server records a revision with restart choice ${when ?? 'default'}`,
+    async () => {
+      const { owner, id, revision } = await world('1.21.1')
+      h.minecraft.join(id, { uuid: crypto.randomUUID(), name: 'Alex' })
+      await h.app.schedules.presenceSync()
+      const requestId = crypto.randomUUID()
+      const queued = spyOn(h.jobs, 'enqueue').mockResolvedValue()
+      try {
+        const changed = await h.app.revisions.changeSettings(
+          owner,
+          id,
+          { ...revision.settings, viewDistance: revision.settings.viewDistance + 1 },
+          requestId,
+          { when },
+        )
+        expect(changed.id).toBe(id)
+        expect(changed.desiredRevisionId).not.toBe(revision.id)
+        expect((await loadRevision(h.db, changed.desiredRevisionId)).settings.viewDistance).toBe(
+          revision.settings.viewDistance + 1,
+        )
+        const operations = (await h.operations(id)).filter((operation) => operation.kind === 'apply')
+        expect(operations).toHaveLength(when === 'empty' ? 0 : 1)
+        expect(queued).toHaveBeenCalledTimes(when === 'empty' ? 0 : 1)
+        if (when !== 'empty')
+          expect(operations[0]).toMatchObject({
+            status: 'queued',
+            requestedBy: `user:${owner.userId}`,
+            idempotencyKey: `apply:${requestId}`,
+            input: { revisionId: changed.desiredRevisionId },
+          })
+      } finally {
+        queued.mockRestore()
+      }
+    },
+    30 * SECOND_MS,
+  )
+}
