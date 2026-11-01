@@ -42,12 +42,55 @@ function browserScope() {
     IS_REACT_ACT_ENVIRONMENT: true,
   }
   const previous = new Map(
-    Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]),
+    [...Object.keys(globals), 'setTimeout', 'clearTimeout'].map((key) => [
+      key,
+      Object.getOwnPropertyDescriptor(globalThis, key),
+    ]),
   )
+  const nativeTimeout = globalThis.setTimeout
+  const nativeClear = globalThis.clearTimeout
+  const pending = new Map()
   for (const [key, value] of Object.entries(globals))
     Object.defineProperty(globalThis, key, { value, writable: true, configurable: true })
   return {
     browser,
+    trackTimers() {
+      // Observe real timers without changing their delays or swallowing callback failures.
+      globalThis.setTimeout = (callback, delay, ...args) => {
+        if (typeof callback !== 'function') return nativeTimeout(callback, delay, ...args)
+        let finish
+        const done = new Promise((resolve) => {
+          finish = resolve
+        })
+        const handle = nativeTimeout(
+          (...values) => {
+            try {
+              return callback(...values)
+            } finally {
+              pending.delete(handle)
+              finish()
+            }
+          },
+          delay,
+          ...args,
+        )
+        pending.set(handle, { delay: Math.max(0, Number(delay) || 0), done, finish })
+        return handle
+      }
+      globalThis.clearTimeout = (handle) => {
+        nativeClear(handle)
+        pending.get(handle)?.finish()
+        pending.delete(handle)
+      }
+      Object.defineProperties(globalThis.setTimeout, Object.getOwnPropertyDescriptors(nativeTimeout))
+      Object.defineProperties(globalThis.clearTimeout, Object.getOwnPropertyDescriptors(nativeClear))
+    },
+    async settledTimers() {
+      // Keep browser globals alive for existing feedback callbacks; long cache timers can stay unref'ed.
+      await Promise.all(
+        [...pending.values()].filter((timer) => timer.delay <= 5 * SECOND_MS).map((timer) => timer.done),
+      )
+    },
     async close() {
       await browser.happyDOM.close()
       for (const [key, value] of previous) {
@@ -158,6 +201,7 @@ async function openGame({
     const host = document.createElement('div')
     document.body.append(host)
     root = createRoot(host)
+    dom.trackTimers()
     await act(async () =>
       root.render(createElement(ApiProvider, null, createElement(GameSettings, { view, options }))),
     )
@@ -172,10 +216,7 @@ async function openGame({
         return (await loadRevision(h.db, (await h.server(server.id)).desiredRevisionId)).settings
       },
       async close() {
-        // A completed save may have replaced its form while its button finishes working.
-        await act(async () => {
-          await Bun.sleep(SECOND_MS)
-        })
+        await act(async () => dom.settledTimers())
         await act(async () => root.unmount())
         globalThis.fetch = native
         await dom.close()
@@ -269,6 +310,7 @@ async function withdrawnModWhileSaving() {
     expect(page.mutations).toHaveLength(1)
     expect(Object.values(page.mutations[0].input)[0].acknowledgeRevoked).not.toBe(true)
     await act(async () => button('Run it anyway').click())
+    await until(() => page.mutations.length === 2)
     expect(page.mutations).toHaveLength(2)
     expect(Object.values(page.mutations[1].input)[0]).toMatchObject({
       acknowledgeRevoked: true,
