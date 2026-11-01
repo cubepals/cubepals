@@ -13,7 +13,8 @@
  * - `guide_read`: a guide was read to its end, once a view. `slug` names the guide.
  * - `section_seen`: a marked section came into view, once a view of the page: `section`, its code
  *   (a landing beat's id, `plan_<key>` for a plan's card, `locked_<plan>` for a way to play that
- *   plan runs), and `where`.
+ *   plan runs, `resting_owner` or `resting_friend` for a server resting for its free trial, as its
+ *   owner or anyone else reads it), and `where`.
  * - `detail_opened`: a marked question or "How it works" was opened: `which`, its code, and `where`.
  * - `browse_searched`: the directory answered a search or a filter: `results`, how many came
  *   back, `searched` whether words were typed (never the words), `tag`, `kind` and `online`.
@@ -65,6 +66,8 @@ const CTAS = [
   'copy_arcade',
   'own_server',
   'browse_open',
+  // A server resting for its owner's free trial, on its page: its owner's way on.
+  'keep_playing',
   // Signing in and up.
   'use_email',
   'to_sign_in',

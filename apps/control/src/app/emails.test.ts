@@ -14,7 +14,7 @@ import { paymentFailed, paymentOwed } from './emails/billing.ts'
 import { giftPreviews } from './emails/gift-previews.ts'
 import { giftReminder, giftWords } from './emails/gifts.ts'
 import { addressChanged, unlisted } from './emails/notices.ts'
-import { extraWarning, friendTurnedAway, playWarning } from './emails/play.ts'
+import { extraWarning, freeHoursWarning, friendTurnedAway, playWarning } from './emails/play.ts'
 import { keepingWorld, listingRemoved, serverRebuilt } from './emails/servers.ts'
 import { type Email, esc, INK, meter } from './emails.ts'
 
@@ -170,12 +170,12 @@ const EMAILS: Array<{
       player: 'Alex',
       server: bay,
       trialHours: 20,
-      paid: { name: 'Plus', hours: 40 },
+      paid: { name: 'Core', hours: 40 },
       origin: ORIGIN,
     }),
     subject: 'Alex tried to join Sunrise <Bay>',
     shape: 'layout',
-    link: `${ORIGIN}/servers/srv_7Kq2`,
+    link: `${ORIGIN}/checkout?plan=core&amp;reason=trial_over&amp;next=%2Fservers%2Fsrv_7Kq2`,
   },
   {
     name: 'alert',
@@ -341,13 +341,15 @@ describe('notices', () => {
   )
 
   test.each(EMAILS.filter((e) => e.name.startsWith('came by')))(
-    '$name: who came, to which server, why it rests and what brings it back, from the unread address',
+    '$name: who came, to which server, why it rests, and the one step that brings it back, with a reply read',
     (e) => {
       const { html, text } = e.email
-      expect(text).toContain('\n\nThis mailbox isn’t read.\n\nCubepals')
-      expect(html).toContain('You get this because you own this server on Cubepals. This mailbox isn’t read.')
-      expect(html).not.toContain('Reply to this email')
-      expect(html).toContain('>Open your server</a>')
+      expect(text).not.toContain('This mailbox isn’t read.')
+      expect(html).not.toContain('This mailbox isn’t read.')
+      expect(html).toContain('Reply to this email')
+      expect(text).toContain('Reply if you want to keep playing and something’s in the way.')
+      expect(html).toContain('>Keep playing</a>')
+      expect(text).toContain(`\n\n${e.link.replace(/&amp;/g, '&')}\n\nCubepals`)
       expect(html).toContain(`<strong style="color:${INK}">Sunrise &lt;Bay&gt;</strong>`)
       expect(text).toContain('Anyone else who comes while it rests is on your server’s page.')
     },
@@ -356,9 +358,9 @@ describe('notices', () => {
   test('the owner hears the trial is played, that their world is kept, and what starts it again', () => {
     const [trial] = EMAILS.filter((e) => e.name.startsWith('came by')).map((e) => e.email.text)
     expect(trial).toContain(
-      'Alex tried to join Sunrise <Bay>, but it’s resting: you’ve played the 20 hours of your free trial. Cubepals told them it’s resting for now. Your world is kept.',
+      'Alex tried to join Sunrise <Bay>, but it’s resting: you’ve played the 20 hours of your free trial. Cubepals told them it’s resting for now. Your world is kept, and nothing is charged.',
     )
-    expect(trial).toContain('Plus starts it again, with 40 hours a month.')
+    expect(trial).toContain('Core starts it again, with 40 hours a month.')
     // Where no plan by the month is on sale, nothing is offered.
     const unsold = friendTurnedAway({
       player: 'Alex',
@@ -368,6 +370,50 @@ describe('notices', () => {
       origin: ORIGIN,
     })
     expect(unsold.text).not.toContain('hours a month')
+    // And the button opens the server instead of a checkout.
+    expect(unsold.html).toContain('>Open your server</a>')
+    expect(unsold.html).toContain(`href="${ORIGIN}/servers/srv_7Kq2"`)
+    expect(unsold.html).not.toContain('checkout')
+  })
+
+  test('the trial’s end goes straight to checkout, says nothing was charged, and that a reply is read', () => {
+    const over = freeHoursWarning({
+      mark: 100,
+      included: 20,
+      used: 20,
+      paid: { name: 'Core', hours: 40 },
+      origin: ORIGIN,
+    })
+    const checkout = `${ORIGIN}/checkout?plan=core&reason=trial_over&next=%2Fservers`
+    expect(over.subject).toBe('Your Cubepals free trial is over')
+    expect(over.html).toContain(`href="${checkout.replaceAll('&', '&amp;')}"`)
+    expect(over.html).toContain('>Keep playing</a>')
+    expect(over.text).toContain('Nothing is charged. Your worlds are kept, and you can still download them.')
+    expect(over.text).toContain('Core starts them again, with 40 hours a month.')
+    expect(over.text).toContain('Reply if you want to keep playing and something’s in the way.')
+    expect(over.text.endsWith(`\n\n${checkout}`)).toBe(true)
+    // Where nothing is on sale, or the trial has hours left, its account is the way on.
+    for (const said of [
+      freeHoursWarning({ mark: 100, included: 20, used: 20, paid: null, origin: ORIGIN }),
+      freeHoursWarning({
+        mark: 80,
+        included: 20,
+        used: 16,
+        paid: { name: 'Core', hours: 40 },
+        origin: ORIGIN,
+      }),
+    ]) {
+      expect(said.html).toContain('>Open your account</a>')
+      expect(said.html).not.toContain('checkout')
+      expect(said.text.endsWith(`\n\n${ORIGIN}/account`)).toBe(true)
+    }
+    // A reply is offered once the trial is played, not before.
+    expect(
+      freeHoursWarning({ mark: 100, included: 20, used: 20, paid: null, origin: ORIGIN }).text,
+    ).toContain('Reply if')
+    expect(
+      freeHoursWarning({ mark: 80, included: 20, used: 16, paid: null, origin: ORIGIN }).text,
+    ).not.toContain('Reply if')
   })
 })
 
