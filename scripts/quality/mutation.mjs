@@ -246,6 +246,7 @@ export function runMutation({
   timeoutMs = 5 * MINUTE_MS,
   subjectTimeoutMs = 20 * MINUTE_MS,
   collectAll = false,
+  allowCaseBatches = true,
 }) {
   if (subjects.length === 0) throw new Error('No mutation subjects; caller must prove a non-code-only change')
   for (const subject of subjects) {
@@ -321,7 +322,14 @@ export function runMutation({
           const manifestPath = join(output, 'tests.json')
           writeFileSync(
             manifestPath,
-            JSON.stringify({ tests: selectedTests, evidence: evidenceDir, bun, timeoutMs, deadline }),
+            JSON.stringify({
+              tests: selectedTests,
+              evidence: evidenceDir,
+              bun,
+              timeoutMs,
+              deadline,
+              allowCaseBatches,
+            }),
           )
           const reportPath = join(output, 'mutation.json')
           const configPath = join(output, 'stryker.config.json')
