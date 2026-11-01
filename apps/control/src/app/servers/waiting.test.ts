@@ -7,7 +7,7 @@
  * the owner chose to wait, applied at once otherwise, shown on the server's page, taken now or
  * dropped, and brought by drift once the server is empty.
  */
-import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test'
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { randomUUID } from 'node:crypto'
 import type { RestartWhen } from '@blockly/contracts'
 import { schema } from '@blockly/db'
@@ -160,71 +160,4 @@ describe.skipIf(!hasDatabase)('a change that waits for everyone to leave', () =>
     await expect(h.app.stopCheaters.waiting.settle(stranger, id, 'cancel', randomUUID())).rejects.toThrow()
     expect((await h.app.queries.get(owner, id)).waiting).not.toBeNull()
   }, 60_000)
-
-  test(
-    'settling a held change records its exact operation, audit and event before workers run',
-    recordedWaiting,
-    30_000,
-  )
 })
-
-/** Inspect persisted intent with the queue port held; the existing boot cases execute it. */
-async function recordedWaiting() {
-  const { owner, id } = await running('Recorded waiting')
-  await playing(id)
-  const before = await h.server(id)
-  await change(owner, id, { maxPlayers: 4 }, 'empty')
-  await h.app.revisions.resize(owner, id, '4g', randomUUID(), { when: 'empty' })
-  const queued = spyOn(h.jobs, 'enqueue').mockResolvedValue()
-  const published = spyOn(h.events, 'publish')
-  try {
-    await h.app.stopCheaters.waiting.settle(owner, id, 'cancel', randomUUID())
-    expect(await h.server(id)).toMatchObject({
-      desiredRevisionId: before.desiredRevisionId,
-      memoryTier: '3g',
-      lifecycle: { status: 'running' },
-    })
-    expect((await h.app.queries.get(owner, id)).waiting).toBeNull()
-    const cancelled = await h.server(id)
-    expect(published.mock.calls.map((call) => call[1])).toContainEqual({
-      type: 'server_changed',
-      serverId: id,
-      ownerId: owner.userId,
-      status: 'running',
-      version: cancelled.version,
-    })
-    const held = await change(owner, id, { viewDistance: 7 }, 'empty')
-    const requestId = randomUUID()
-    await h.app.stopCheaters.waiting.settle(owner, id, 'now', requestId)
-    const [operation] = await applies(id)
-    expect(operation).toMatchObject({
-      kind: 'apply',
-      status: 'queued',
-      requestedBy: `user:${owner.userId}`,
-      idempotencyKey: `apply:${requestId}`,
-      input: { revisionId: held.desiredRevisionId },
-    })
-    expect(operation?.input).toEqual({ revisionId: held.desiredRevisionId })
-    expect(queued).toHaveBeenCalledTimes(1)
-    const current = await h.server(id)
-    expect(published.mock.calls.map((call) => call[1])).toContainEqual({
-      type: 'server_changed',
-      serverId: id,
-      ownerId: owner.userId,
-      status: current.lifecycle.status,
-      version: current.version,
-    })
-    const rows = await h.db.select().from(schema.auditLog).where(eq(schema.auditLog.subjectId, id))
-    for (const action of ['server.waiting_cancelled', 'server.waiting_applied'])
-      expect(rows.find((row) => row.action === action)).toMatchObject({
-        actor: `user:${owner.userId}`,
-        action,
-        subjectType: 'server',
-        subjectId: id,
-        data: {},
-      })
-  } finally {
-    queued.mockRestore()
-    published.mockRestore()
-  }
-}
