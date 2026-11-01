@@ -1,0 +1,88 @@
+{
+  "bounds": {
+    "viewDistance": {
+      "min": 3,
+      "max": 32
+    },
+    "simulationDistance": {
+      "min": 3,
+      "max": 32
+    },
+    "spawnProtection": {
+      "min": 0,
+      "max": 64
+    },
+    "maxPlayers": 5
+  },
+  "gameVersions": [
+    {
+      "value": "26.3",
+      "label": "26.3",
+      "loaders": [
+        {
+          "value": "vanilla",
+          "label": "Vanilla",
+          "allowed": true
+        },
+        {
+          "value": "fabric",
+          "label": "Fabric",
+          "allowed": true
+        }
+      ]
+    }
+  ],
+  "partySizes": [
+    {
+      "value": "5",
+      "label": "Up to 5",
+      "maxPlayers": 5,
+      "allowed": true
+    },
+    {
+      "value": "10",
+      "label": "Up to 10",
+      "maxPlayers": 10,
+      "allowed": true
+    },
+    {
+      "value": "20",
+      "label": "Up to 20",
+      "maxPlayers": 20,
+      "allowed": true
+    },
+    {
+      "value": "50",
+      "label": "Up to 50",
+      "maxPlayers": 50,
+      "allowed": true
+    },
+    {
+      "value": "more",
+      "label": "Up to 100",
+      "maxPlayers": 100,
+      "allowed": true
+    }
+  ],
+  "regions": [
+    {
+      "key": "local",
+      "label": "This computer"
+    },
+    {
+      "key": "far",
+      "label": "Far away"
+    }
+  ],
+  "takes": {
+    "pvp": "now",
+    "motd": "next_start",
+    "difficulty": "now",
+    "maxPlayers": "restart",
+    "onlineMode": "restart",
+    "viewDistance": "restart",
+    "defaultGameMode": "now",
+    "spawnProtection": "restart",
+    "simulationDistance": "restart"
+  }
+}

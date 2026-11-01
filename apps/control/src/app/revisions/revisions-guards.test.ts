@@ -3,10 +3,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /** Revision refusals protect the world's newest version and reject stale configuration changes. */
-import { afterAll, beforeAll, expect, test } from 'bun:test'
+import { afterAll, beforeAll, expect, spyOn, test } from 'bun:test'
 import { SECOND_MS } from '@blockly/contracts/durations'
 import { schema } from '@blockly/db'
 import { eq } from 'drizzle-orm'
+import { entitlementsFor } from '../../domain/account/entitlements.ts'
 import { settingsProblems } from '../../domain/revision/revision.ts'
 import { playerCapacity } from '../../domain/server/size.ts'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
@@ -57,6 +58,40 @@ test.skipIf(!hasDatabase)(
   30 * SECOND_MS,
 )
 
+for (const runtime of ['same', 'missing', 'different-size'] as const) {
+  test.skipIf(!hasDatabase)(
+    `live settings with players and ${runtime} applied state`,
+    async () => {
+      const { owner, id, server, revision } = await world('1.21.1')
+      h.minecraft.join(id, { uuid: crypto.randomUUID(), name: 'Player' })
+      await h.app.schedules.presenceSync()
+      if (runtime === 'missing')
+        await h.db
+          .update(schema.serverRuntimes)
+          .set({ applied: null })
+          .where(eq(schema.serverRuntimes.serverId, id))
+      if (runtime === 'different-size') {
+        const tier = entitlementsFor('plus').allowedMemoryTiers.find((tier) => tier !== server.memoryTier)
+        if (!tier) throw new Error('The plan must offer another size')
+        await h.db.transaction((tx) => setDesired(tx, server, { memoryTier: tier }))
+      }
+      const applies = async () => (await h.operations(id)).filter((op) => op.kind === 'apply')
+      const count = (await applies()).length
+      await h.app.revisions.changeSettings(
+        owner,
+        id,
+        { ...revision.settings, difficulty: revision.settings.difficulty === 'hard' ? 'easy' : 'hard' },
+        crypto.randomUUID(),
+        { when: 'empty' },
+      )
+      expect((await applies()).length).toBe(count + (runtime === 'same' ? 1 : 0))
+      expect((await h.server(id)).desiredRevisionId).not.toBe(revision.id)
+      if (runtime === 'same') await h.settled(id, 3 * SECOND_MS)
+      expect((await h.server(id)).lifecycle.status).toBe('running')
+    },
+    30 * SECOND_MS,
+  )
+}
 afterAll(async () => {
   await h?.close()
 })
@@ -168,3 +203,43 @@ test.skipIf(!hasDatabase)(
   },
   30 * SECOND_MS,
 )
+
+for (const when of [undefined, 'now', 'empty'] as const) {
+  test.skipIf(!hasDatabase)(
+    `an occupied server records a revision with restart choice ${when ?? 'default'}`,
+    async () => {
+      const { owner, id, revision } = await world('1.21.1')
+      h.minecraft.join(id, { uuid: crypto.randomUUID(), name: 'Alex' })
+      await h.app.schedules.presenceSync()
+      const requestId = crypto.randomUUID()
+      const queued = spyOn(h.jobs, 'enqueue').mockResolvedValue()
+      try {
+        const changed = await h.app.revisions.changeSettings(
+          owner,
+          id,
+          { ...revision.settings, viewDistance: revision.settings.viewDistance + 1 },
+          requestId,
+          { when },
+        )
+        expect(changed.id).toBe(id)
+        expect(changed.desiredRevisionId).not.toBe(revision.id)
+        expect((await loadRevision(h.db, changed.desiredRevisionId)).settings.viewDistance).toBe(
+          revision.settings.viewDistance + 1,
+        )
+        const operations = (await h.operations(id)).filter((operation) => operation.kind === 'apply')
+        expect(operations).toHaveLength(when === 'empty' ? 0 : 1)
+        expect(queued).toHaveBeenCalledTimes(when === 'empty' ? 0 : 1)
+        if (when !== 'empty')
+          expect(operations[0]).toMatchObject({
+            status: 'queued',
+            requestedBy: `user:${owner.userId}`,
+            idempotencyKey: `apply:${requestId}`,
+            input: { revisionId: changed.desiredRevisionId },
+          })
+      } finally {
+        queued.mockRestore()
+      }
+    },
+    30 * SECOND_MS,
+  )
+}

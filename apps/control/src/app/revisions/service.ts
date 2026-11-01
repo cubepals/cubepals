@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import { ONLINE_MODE_KEPT } from '@blockly/contracts'
+import { ONLINE_MODE_KEPT, type RestartWhen } from '@blockly/contracts'
 import { type Db, schema, type Tx } from '@blockly/db'
 import { entitlementsOf } from '../../domain/account/entitlements.ts'
 import type { PinnedMod } from '../../domain/mods/artifact.ts'
@@ -42,8 +42,9 @@ import type { AccessPolicy } from '../policy/access-policy.ts'
 import type { EventBus } from '../ports/events.ts'
 import type { LoaderBuilds } from '../ports/loaders.ts'
 import { insertRevision, loadRevision, loadRuntime, lockServer, setDesired } from '../servers/persistence.ts'
+import { restartsFor, waitsForPlayers } from '../servers/restart-wait.ts'
+import { loadChangeFacts } from '../servers/revision-reads.ts'
 import type { ServerTransitions } from '../servers/transitions.ts'
-import { presenceFor } from '../servers/usage.ts'
 import { requireWithinPlan, runsOf } from './caps.ts'
 import { paperPin, pinUnpinned } from './pins.ts'
 
@@ -55,6 +56,11 @@ export interface ChangeOptions {
    * since refuses the change rather than let it undo what the person hasn't seen.
    */
   version?: number | undefined
+  /**
+   * With players on a running server, whether a change that restarts it waits for everyone to
+   * leave (`empty`) or restarts it now (`now`). Left out, the change's own default.
+   */
+  when?: RestartWhen | undefined
 }
 
 /**
@@ -452,7 +458,7 @@ export class RevisionService {
     command: 'apply' | 'rollback',
     options: ChangeOptions,
     plan: (tx: Tx, server: MinecraftServer, desired: ServerRevision) => Promise<Plan | null>,
-    waitsForPlayers = false,
+    waitsByDefault = false,
   ): Promise<MinecraftServer> {
     return this.#db.transaction(async (tx) => {
       const server = authorize(actor, await lockServer(tx, serverId))
@@ -505,7 +511,8 @@ export class RevisionService {
         requestedBy: requestedBy(actor),
         key: `${command}:${requestId}`,
         input: revision ? { revisionId: revision.id } : {},
-        waitsForPlayers,
+        when: options.when,
+        waitsByDefault,
       })
       // Where the status didn't move, nothing else told the owner's pages that the server changed.
       if (result.server === moved)
@@ -531,8 +538,9 @@ export class RevisionService {
   }
 
   /**
-   * The command that applies a saved change. One that waits for players is not given while anyone is
-   * on a running server: the change stays the server's desired revision, and its next start runs it.
+   * The command that applies a saved change. One that restarts a running server while players are
+   * on it, where its owner chose to wait for them to leave, is not given: the change stays the
+   * server's desired revision, drift brings it once nobody is on, and a stop at the next start.
    */
   async #applyChange(
     tx: Tx,
@@ -542,19 +550,32 @@ export class RevisionService {
       requestedBy: string
       key: string
       input: { revisionId?: string }
-      waitsForPlayers: boolean
+      when: RestartWhen | undefined
+      /** Whether the change waits for players unless the owner says otherwise (Bedrock). */
+      waitsByDefault: boolean
     },
   ) {
-    const occupied =
-      how.waitsForPlayers &&
-      moved.lifecycle.status === 'running' &&
-      ((await presenceFor(tx, [moved.id])).get(moved.id)?.length ?? 0) > 0
-    if (occupied) return { server: moved }
+    const when = how.when ?? (how.waitsByDefault ? 'empty' : 'now')
+    if (await this.#waits(tx, moved, when)) return { server: moved }
     return this.#transitions.command(
       tx,
       moved,
       { type: how.command },
       { requestedBy: how.requestedBy, idempotencyKey: how.key, input: how.input },
+    )
+  }
+
+  /**
+   * Whether a change waits for players: they are on, the owner chose to wait, and it restarts the
+   * server, as anything but settings the game takes as people play does, or a new size.
+   */
+  async #waits(tx: Tx, moved: MinecraftServer, when: RestartWhen): Promise<boolean> {
+    if (!(await waitsForPlayers(tx, moved, when))) return false
+    const { applied } = await loadRuntime(tx, moved.id, this.#providers)
+    if (applied === null || applied.memoryTier !== moved.memoryTier) return true
+    return restartsFor(
+      await loadChangeFacts(tx, applied.revisionId),
+      await loadChangeFacts(tx, moved.desiredRevisionId),
     )
   }
 

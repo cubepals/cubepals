@@ -67,6 +67,8 @@ describe.skipIf(!hasDatabase)('a kept address', () => {
     const woken = await h.app.edge.wake('sunset-valley.play.test')
     expect(woken).toMatchObject({ outcome: 'ready', destination: expect.stringContaining(':') })
     expect((await h.server(made.id)).lifecycle.status).toBe('running')
+    // Running is visible before the wake operation finishes recording its result.
+    await h.settled(made.id)
     expect(await h.app.edge.wake('arcade.play.test')).toEqual({
       outcome: 'ready',
       destination: (woken as { destination: string }).destination,

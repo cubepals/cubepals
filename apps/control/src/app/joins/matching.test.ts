@@ -291,17 +291,20 @@ describe.skipIf(!hasDatabase)('the reporter’s route', () => {
     expect(report?.detail).toEqual(boot.detail)
     const padded = (n: number) => ({ events: [{ ...boot, detail: { pad: 'x'.repeat(n) } }] })
     expect((await post(padded(70_000))).status).toBe(413)
-    const statuses = await Promise.all(Array.from({ length: 12 }, () => post({ events: [] })))
+    const deployed = tuning()
+    // A burst can straddle two second buckets, even when every response takes milliseconds.
+    const burst = 2 * deployed.abuse.joinReportsPerSecond + 1
+    const statuses = await Promise.all(Array.from({ length: burst }, () => post({ events: [] })))
     expect(statuses.filter((r) => r.status === 429).length).toBeGreaterThan(0)
     // The limits are the deployment's own, from ABUSE_LIMITS.
-    const deployed = tuning()
     installTuning({
       ...deployed,
       abuse: { ...deployed.abuse, joinReportBytes: 1_000, joinReportsPerSecond: 1 },
     })
     try {
       expect((await post(padded(2_000))).status).toBe(413)
-      await Bun.sleep(SECOND_MS)
+      // Start the two assertions together in a fresh bucket rather than near its boundary.
+      await Bun.sleep(SECOND_MS - (Date.now() % SECOND_MS))
       const [first, second] = [await post({ events: [] }), await post({ events: [] })]
       expect([first.status, second.status]).toEqual([204, 429])
     } finally {

@@ -188,6 +188,7 @@ const paths = [
   'servers.saveIdentity',
   'servers.searchModpacks',
   'servers.settingsOptions',
+  'servers.settleWaiting',
   'servers.setupPreview',
   'servers.setupReleases',
   'servers.start',

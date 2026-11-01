@@ -17,6 +17,7 @@ import {
   REMOVAL_REASONS,
   type RemovalReason,
   type RemovalView,
+  type RestartWhen,
   type StopCheatersView,
 } from '@blockly/contracts'
 import { DAY_MS, MINUTE_MS } from '@blockly/contracts/durations'
@@ -31,8 +32,10 @@ import { AppError } from '../errors.ts'
 import type { AccessPolicy } from '../policy/access-policy.ts'
 import type { EventBus } from '../ports/events.ts'
 import { findServer, lockServer } from '../servers/persistence.ts'
+import { loadApplied, waitsForPlayers } from '../servers/restart-wait.ts'
 import { loadRevisionFields } from '../servers/revision-reads.ts'
 import type { ServerTransitions } from '../servers/transitions.ts'
+import { WaitingChanges } from '../servers/waiting.ts'
 import { tuning } from '../tuning.ts'
 import {
   countRemovals,
@@ -43,6 +46,7 @@ import {
   saveStopCheaters,
 } from './persistence.ts'
 import { effective } from './rule.ts'
+import { stopCheatersWaiting } from './waiting.ts'
 
 /** How many removals the Players page lists: the newest. */
 const REMOVALS_SHOWN = 20
@@ -58,12 +62,19 @@ export class StopCheatersService {
   readonly #policy: AccessPolicy
   readonly #transitions: ServerTransitions
   readonly #events: EventBus
+  /**
+   * A running server's changes that wait for everyone to leave, Stop cheaters' among them: taken
+   * now, or dropped. Made here, on the same database and transitions, as the one change that waits
+   * without a revision is this service's.
+   */
+  readonly waiting: WaitingChanges
 
   constructor(deps: { db: Db; policy: AccessPolicy; transitions: ServerTransitions; events: EventBus }) {
     this.#db = deps.db
     this.#policy = deps.policy
     this.#transitions = deps.transitions
     this.#events = deps.events
+    this.waiting = new WaitingChanges(deps)
   }
 
   /** The switch as the Players page shows it. */
@@ -100,28 +111,34 @@ export class StopCheatersService {
 
   /**
    * The owner's switch: `on` or `off`, which no automation changes after. A running server restarts
-   * for it, as the moderation switches do; a stopped one has it at its next start.
+   * for it where it changes what the server runs, or, with players on and `when` is `empty`, takes
+   * it once everyone has left; a stopped one has it at its next start.
    */
-  async set(actor: Actor, serverId: string, on: boolean, requestId: string): Promise<void> {
+  async set(
+    actor: Actor,
+    serverId: string,
+    on: boolean,
+    requestId: string,
+    when: RestartWhen = 'now',
+  ): Promise<void> {
     await this.#change(
       actor,
       serverId,
-      requestId,
+      { requestId, when },
       on ? 'moderation.stop_cheaters_on' : 'moderation.stop_cheaters_off',
       async (tx, desired) => {
-        const grim = (await grimFor(tx, desired)).kind
-        if (on && grim === 'modded') throw new AppError('invalid_choice', MODDED)
+        if (on && (await grimFor(tx, desired)).kind === 'modded') throw new AppError('invalid_choice', MODDED)
         const was = effective(await loadStopCheaters(tx, serverId)).on
         await saveStopCheaters(tx, serverId, { setting: on ? 'on' : 'off', reason: null, takeOver: false })
-        // Nothing to restart for where it already ran that way, or where its release has no Grim yet.
-        return was !== on && grim === 'placed'
+        // A press that leaves it as it was restarts nothing, even where the server runs otherwise.
+        return was !== on
       },
     )
   }
 
   /** Cubepals' punishments in place of the owner's own Grim settings, which are kept aside. */
-  async useOurs(actor: Actor, serverId: string, requestId: string): Promise<void> {
-    await this.#change(actor, serverId, requestId, 'moderation.stop_cheaters_ours', async (tx) => {
+  async useOurs(actor: Actor, serverId: string, requestId: string, when: RestartWhen = 'now'): Promise<void> {
+    await this.#change(actor, serverId, { requestId, when }, 'moderation.stop_cheaters_ours', async (tx) => {
       if (!effective(await loadStopCheaters(tx, serverId)).on)
         throw new AppError('invalid_choice', 'Turn on Stop cheaters first.')
       await saveStopCheaters(tx, serverId, { takeOver: true })
@@ -213,40 +230,46 @@ export class StopCheatersService {
     })
   }
 
-  /** A change of the owner's: their policy, audited, and a running server restarted to take it. */
+  /**
+   * A change of the owner's: their policy, audited, and a running server restarted to take it where
+   * it runs otherwise (`stopCheatersWaiting`), unless players are on and the owner chose to wait.
+   */
   async #change(
     actor: Actor,
     serverId: string,
-    requestId: string,
+    request: { requestId: string; when: RestartWhen },
     action: string,
-    /** Whether a running server restarts for it. */
+    /** Whether it changed the owner's choice, which a restart may then bring. */
     apply: (tx: Tx, desired: GrimFacts) => Promise<boolean>,
   ): Promise<void> {
     await this.#db.transaction(async (tx) => {
       const server = authorize(actor, await lockServer(tx, serverId))
       if (actor.kind === 'user') await this.#policy.require(tx, server.ownerId, { kind: 'manage_access' })
-      const restarts = await apply(tx, await loadRevisionFields(tx, server.desiredRevisionId, GRIM_FIELDS))
+      const changed = await apply(tx, await loadRevisionFields(tx, server.desiredRevisionId, GRIM_FIELDS))
       await tx.insert(schema.auditLog).values({
         actor: requestedBy(actor),
         action,
         subjectType: 'server',
         subjectId: serverId,
       })
-      const moved =
-        restarts && server.lifecycle.status === 'running'
-          ? (
-              await this.#transitions.command(
-                tx,
-                server,
-                { type: 'apply' },
-                {
-                  requestedBy: requestedBy(actor),
-                  idempotencyKey: `apply:${requestId}`,
-                  input: { boot: true },
-                },
-              )
-            ).server
-          : server
+      const restarts =
+        changed &&
+        (await stopCheatersWaiting(tx, server, await loadApplied(tx, serverId))) !== null &&
+        !(await waitsForPlayers(tx, server, request.when))
+      const moved = restarts
+        ? (
+            await this.#transitions.command(
+              tx,
+              server,
+              { type: 'apply' },
+              {
+                requestedBy: requestedBy(actor),
+                idempotencyKey: `apply:${request.requestId}`,
+                input: { boot: true },
+              },
+            )
+          ).server
+        : server
       await this.#events.publish(tx, {
         type: 'server_changed',
         serverId,
