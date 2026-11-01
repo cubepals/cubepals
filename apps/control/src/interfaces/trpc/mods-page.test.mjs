@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /** Real browser interactions exercise restart timing through the control plane and Postgres. */
-import { describe, expect, test } from 'bun:test'
+import { describe, expect, spyOn, test } from 'bun:test'
 import { createHash } from 'node:crypto'
 import { createRequire } from 'node:module'
 import { SECOND_MS } from '@blockly/contracts/durations'
@@ -117,7 +117,7 @@ async function draw(id) {
   const { createRoot } = await import('react-dom/client')
   // Resolve the browser provider from the workspace that declares and runs it.
   const web = createRequire(new URL('../../../../web/package.json', import.meta.url))
-  const { TransportProvider } = await import(web.resolve('@transport-io/react'))
+  const { TransportProvider } = web('@transport-io/react')
   const { AppRouterContext } = await import('next/dist/shared/lib/app-router-context.shared-runtime')
   const { PathParamsContext, PathnameContext, SearchParamsContext } = await import(
     'next/dist/shared/lib/hooks-client-context.shared-runtime'
@@ -169,7 +169,34 @@ async function draw(id) {
   )
   return root
 }
-function publishIris(h, cdn) {
+function publishIris(h, cdn, needsNewer = false) {
+  if (needsNewer)
+    h.catalog.publish(
+      {
+        projectId: 'foundation',
+        slug: 'foundation',
+        name: 'Foundation',
+        summary: 'Required by Iris',
+        iconUrl: null,
+        environments: ['server_only'],
+        downloads: 1,
+      },
+      [
+        {
+          versionId: 'foundation-1',
+          projectId: 'foundation',
+          versionLabel: '1.0',
+          channel: 'release',
+          state: 'listed',
+          environment: 'server_only',
+          loaders: ['fabric'],
+          gameVersions: ['26.3'],
+          publishedAt: new Date(),
+          file: cdn.file('foundation-1'),
+          dependencies: [],
+        },
+      ],
+    )
   h.catalog.publish(
     {
       projectId: 'iris',
@@ -189,10 +216,10 @@ function publishIris(h, cdn) {
         state: 'listed',
         environment: 'server_only',
         loaders: ['fabric'],
-        gameVersions: ['26.3'],
+        gameVersions: needsNewer ? ['26.2', '26.3'] : ['26.3'],
         publishedAt: new Date(),
         file: cdn.file('iris-1'),
-        dependencies: [],
+        dependencies: needsNewer ? [{ projectId: 'foundation', versionId: null, kind: 'required' }] : [],
       },
     ],
   )
@@ -278,6 +305,10 @@ async function openMods({
   pack = false,
   movesWorld = false,
   uploads = false,
+  installed = false,
+  failure = null,
+  revoked = false,
+  needsNewer = false,
 } = {}) {
   // The in-process API and disposable storage service share this fixture's origin.
   const dom = browserScope(uploads ? process.env.S3_TEST_ENDPOINT : undefined)
@@ -291,11 +322,56 @@ async function openMods({
     archive = uploads ? archiveStore() : null
     h = await startHarness(archive ? { capabilities: { archives: archive, billing: null } } : {})
     const owner = await h.user('Steve', 'plus')
-    publishIris(h, cdn)
+    publishIris(h, cdn, needsNewer)
     const prepared = pack ? catalogPack(h, cdn, movesWorld) : null
-    const server = await h.create(owner, prepared?.request ?? { loader })
+    const server = await h.create(
+      owner,
+      prepared?.request ?? { loader, ...(needsNewer ? { gameVersion: '26.2' } : {}) },
+    )
     await h.until(server.id, 'running')
     await h.settled(server.id)
+    if (installed) {
+      const requested = { add: [{ projectId: 'iris' }] }
+      const plan = await h.app.mods.plan(owner, server.id, requested)
+      if (plan.kind !== 'ok') throw new Error('The fixture mod must fit')
+      await h.app.mods.apply(
+        owner,
+        server.id,
+        requested,
+        plan.mods.map((mod) => mod.artifact.sha512),
+        crypto.randomUUID(),
+      )
+      await h.settled(server.id)
+    }
+    if (revoked) {
+      const project = await h.catalog.project('iris')
+      const version = await h.catalog.version('iris-1')
+      if (!project || !version) throw new Error('The published fixture must exist')
+      h.catalog.publish({ ...project, projectId: 'second', slug: 'second', name: 'Second Mod' }, [
+        {
+          ...version,
+          projectId: 'second',
+          versionId: 'second-1',
+          file: cdn.file('second-1', fabricJar('second')),
+        },
+      ])
+      h.catalog.setProjectState('iris', 'withheld')
+      await h.app.catalog.refresh()
+    }
+    let refused
+    if (failure) {
+      const visitor = await h.user()
+      const error = await h.app.queries.get(visitor, server.id).then(
+        () => {
+          throw new Error('Another owner must not read the server')
+        },
+        (error) => error,
+      )
+      refused = spyOn(
+        failure === 'server' ? h.app.queries : h.app.modQueries,
+        failure === 'server' ? 'get' : 'list',
+      ).mockRejectedValue(error)
+    }
     if (online) {
       h.minecraft.join(server.id, { uuid: crypto.randomUUID(), name: 'Alex' })
       await h.app.schedules.presenceSync()
@@ -303,7 +379,11 @@ async function openMods({
     prepared?.upgrade()
     api = routeApi(h, owner, dom.browser)
     root = await draw(server.id)
-    await until(() => document.body.textContent?.includes(pack ? 'Update to 2.0' : 'Iris Shaders') === true)
+    await until(() =>
+      failure
+        ? document.body.textContent.includes('Try again')
+        : document.body.textContent?.includes(pack ? 'Update to 2.0' : 'Iris Shaders') === true,
+    )
     if (uploads) await until(() => document.body.textContent.includes('Nothing uploaded yet.'))
     const running = h
     const routed = api
@@ -311,6 +391,9 @@ async function openMods({
       h: running,
       owner,
       server,
+      recover() {
+        refused?.mockRestore()
+      },
       mutations: routed.mutations,
       browser: dom.browser,
       async plan() {
@@ -318,6 +401,7 @@ async function openMods({
         await until(() => !button(pack ? 'Update and restart' : 'Apply and restart').disabled)
       },
       async close() {
+        refused?.mockRestore()
         await act(async () => root?.unmount())
         routed.close()
         await running.close()
@@ -419,6 +503,104 @@ async function uploadsItsOwnJar() {
     await page.close()
   }
 }
+async function installedRemoval() {
+  const page = await openMods({ installed: true })
+  try {
+    expect(document.body.textContent).toContain('You added it.')
+    await act(async () => button('Remove').click())
+    await until(() => document.body.textContent.includes('Remove Iris Shaders?'))
+    expect(document.querySelector('input[value="empty"]').checked).toBe(true)
+    await act(async () => button('Cancel').click())
+    expect((await page.h.app.modQueries.list(page.owner, page.server.id)).mods).toHaveLength(1)
+    expect(page.mutations.filter((call) => call.path.endsWith('/mods.change'))).toHaveLength(0)
+  } finally {
+    await page.close()
+  }
+}
+
+async function installedUpdates() {
+  const page = await openMods({ installed: true })
+  try {
+    await act(async () => button('Check for updates').click())
+    await until(() => document.body.textContent.includes('Everything is up to date'))
+    expect(button('Apply and restart').disabled).toBe(true)
+    await act(async () => button('Cancel').click())
+    expect(document.querySelector('dialog')).toBeNull()
+  } finally {
+    await page.close()
+  }
+}
+
+async function searchesByName() {
+  const page = await openMods()
+  try {
+    const input = [...document.querySelectorAll('input')].find(
+      (item) => item.placeholder === 'Sodium, Lithium, Create…',
+    )
+    const set = Object.getOwnPropertyDescriptor(page.browser.HTMLInputElement.prototype, 'value').set
+    await act(async () => {
+      set.call(input, 'nothing-matches-this-name')
+      input.dispatchEvent(new page.browser.Event('input', { bubbles: true }))
+    })
+    await until(() =>
+      document.body.textContent.includes('Nothing on Modrinth by that name fits this server.'),
+    )
+    expect(document.body.textContent).not.toContain('Iris Shaders')
+  } finally {
+    await page.close()
+  }
+}
+
+async function retriesAfterFailure(failure) {
+  const page = await openMods({ failure })
+  try {
+    expect(document.body.textContent).not.toContain('Iris Shaders')
+    page.recover()
+    await act(async () => button('Try again').click())
+    await until(() => document.body.textContent.includes('Iris Shaders'))
+    expect(document.querySelector('h1').textContent).toBe('Mods')
+  } finally {
+    await page.close()
+  }
+}
+
+async function keepsTakenDownChoiceExplicit() {
+  const page = await openMods({ installed: true, revoked: true })
+  try {
+    expect(document.body.textContent).toContain('Taken down')
+    await until(() =>
+      [...document.querySelectorAll('button')].some((item) => item.textContent.trim() === 'Add'),
+    )
+    await act(async () => button('Add').click())
+    await until(() => document.querySelector('dialog [role="switch"]') !== null)
+    expect(button('Apply and restart').disabled).toBe(true)
+    const acknowledgement = document.querySelector('dialog [role="switch"]')
+    await act(async () => acknowledgement.click())
+    expect(acknowledgement.getAttribute('aria-checked')).toBe('true')
+    await act(async () => button('Cancel').click())
+    expect(page.mutations.filter((call) => call.path.endsWith('/mods.change'))).toHaveLength(0)
+  } finally {
+    await page.close()
+  }
+}
+
+async function offersMinecraftForDependency() {
+  const page = await openMods({ needsNewer: true })
+  try {
+    await act(async () => button('Add').click())
+    await until(() => document.body.textContent.includes('Move to 26.3 and install'))
+    expect(document.body.textContent).toContain('Nothing changes, because:')
+    expect(button('Apply and restart').disabled).toBe(true)
+    await act(async () => button('Move to 26.3 and install').click())
+    await until(() => !button('Apply and restart').disabled)
+    expect(document.body.textContent).toContain('This world moves to Minecraft 26.3')
+    await act(async () => button('Cancel').click())
+    expect((await page.h.app.queries.get(page.owner, page.server.id)).gameVersion).toBe('26.2')
+  } finally {
+    await page.close()
+  }
+}
+
 async function waitsByDefault() {
   const page = await openMods()
   try {
@@ -529,6 +711,29 @@ async function movesVanilla() {
 }
 
 describe.skipIf(!hasDatabase)('choosing a restart from the mods page', () => {
+  test('a catalog takedown requires an explicit choice', keepsTakenDownChoiceExplicit, 30 * SECOND_MS)
+  test(
+    'a newer Minecraft is offered for an incompatible dependency',
+    offersMinecraftForDependency,
+    30 * SECOND_MS,
+  )
+  test(
+    'an installed mod can be offered for removal without changing it on cancel',
+    installedRemoval,
+    30 * SECOND_MS,
+  )
+  test('checking an installed mod reports that its release is current', installedUpdates, 30 * SECOND_MS)
+  test('typing a name searches the catalog and shows an empty result', searchesByName, 30 * SECOND_MS)
+  test(
+    'a failed server read can be retried against the real API',
+    () => retriesAfterFailure('server'),
+    30 * SECOND_MS,
+  )
+  test(
+    'a failed mods read can be retried against the real API',
+    () => retriesAfterFailure('mods'),
+    30 * SECOND_MS,
+  )
   test('adding a mod waits by default and keeps the player online', waitsByDefault, 30 * SECOND_MS)
   test('cancelling leaves the configuration and player alone', cancels, 30 * SECOND_MS)
   test('the last timing choice is submitted after changing it twice', changesItsMind, 30 * SECOND_MS)
