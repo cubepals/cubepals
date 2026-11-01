@@ -94,6 +94,33 @@ async function membership(
   await audit(h, owner, serverId, 'server.bedrock_changed', { bedrock: true, onPaper: true })
 }
 
+async function waitsForPlayers(h: Harness, owner: UserActor, serverId: string) {
+  await h.app.servers.start(owner, serverId, crypto.randomUUID())
+  await h.until(serverId, 'running', 3 * SECOND_MS)
+  await h.settled(serverId, 3 * SECOND_MS)
+  const player = { uuid: crypto.randomUUID(), name: 'Alex' }
+  h.minecraft.join(serverId, player)
+  await h.app.schedules.presenceSync()
+  await h.app.revisions.changeSettings(
+    owner,
+    serverId,
+    {
+      ...(await loadRevision(h.db, (await h.server(serverId)).desiredRevisionId)).settings,
+      spawnProtection: 4,
+    },
+    crypto.randomUUID(),
+    { when: 'empty' },
+  )
+  expect((await h.app.queries.get(owner, serverId)).waiting).not.toBeNull()
+  expect((await h.server(serverId)).lifecycle.status).toBe('running')
+  h.minecraft.leave(serverId, player.uuid)
+  await h.app.schedules.presenceSync()
+  await h.app.schedules.drift()
+  await h.settled(serverId, 3 * SECOND_MS)
+  expect((await h.app.queries.get(owner, serverId)).waiting).toBeNull()
+  expect(await h.minecraft.file(serverId, 'server.properties')).toContain('spawn-protection=4')
+}
+
 async function changes() {
   harness ??= startHarness()
   const h = await harness
@@ -201,6 +228,7 @@ async function changes() {
     ),
   ).rejects.toThrow()
   expect((await h.server(server.id)).lifecycle.status).toBe('stopped')
+  await waitsForPlayers(h, owner, server.id)
 }
 
 async function restoredRevision(

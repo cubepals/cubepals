@@ -6,6 +6,7 @@ import { z } from 'zod'
 import type { JoinRange } from './joins.ts'
 import { ADDRESS_MAX_LENGTH, ADDRESS_MIN_LENGTH, DESCRIPTION_MAX_LENGTH, NAME_MAX_LENGTH } from './limits.ts'
 import { oneLine, plainLines } from './plain-text.ts'
+import { RestartWhen } from './restart-when.ts'
 import { OWN_ICON_MAX_BYTES } from './server-list.ts'
 
 export const SERVER_STATUSES = [
@@ -342,6 +343,8 @@ const change = {
   requestId: z.uuid(),
   version: z.number().int().nonnegative(),
   acknowledgeRevoked: z.boolean().optional(),
+  /** With players on a running server, whether a change that restarts it waits for them to leave. */
+  when: RestartWhen.optional(),
 }
 
 export const ChangeSettingsInput = z.object({ ...change, settings: ServerSettingsInput })
@@ -389,6 +392,12 @@ export const ChangeVersionInput = z.object({
   expected: z.array(z.string().regex(/^[0-9a-f]{128}$/)).max(400),
 })
 export const ResizeInput = z.object({ ...change, partySize: PartySize })
+/** Take a running server's waiting changes now (`now`), or drop them and keep what it runs (`cancel`). */
+export const SettleWaitingInput = z.object({
+  serverId: ServerId,
+  requestId: z.uuid(),
+  settle: z.enum(['now', 'cancel']),
+})
 export const RollbackInput = z.object({ ...change, revisionId: z.uuid() })
 /** What an owner calls their world, says about it, and picks for its picture. */
 export const SaveIdentityInput = z.object({
@@ -429,6 +438,17 @@ export type RevisionChangeView =
   | { field: 'modpack'; from: string | null; to: string | null }
   /** Files Cubepals wrote for the server, named by what they set up: "LifeStealZ settings". */
   | { field: 'files'; added: string[]; removed: string[]; changed: string[] }
+
+/**
+ * What a running server takes once everyone has left, or at once if its owner says so (`SettleWaitingInput`):
+ * its configuration's differences from what it runs, a new size, and Stop cheaters turned `on` or
+ * `off`, or back to Cubepals' settings (`ours`).
+ */
+export interface WaitingChangesView {
+  changes: RevisionChangeView[]
+  size: { from: string; to: string } | null
+  stopCheaters: 'on' | 'off' | 'ours' | null
+}
 
 export interface RevisionView {
   id: string
@@ -540,6 +560,8 @@ export interface ServerView {
   partySize: PartySize
   /** Stopped with changes that apply when it next starts. */
   pendingRestart: boolean
+  /** Running with changes that wait for everyone to leave; null when nothing waits. */
+  waiting: WaitingChangesView | null
   /** When the plan's session cap stops this run; null when the plan caps none, or it isn't running. */
   sessionEndsAt: string | null
   /**

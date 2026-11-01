@@ -85,6 +85,7 @@ import { loadChangeFacts, loadRevisionCard, loadRevisionFields, revisionHistory 
 import type { MinecraftServerService } from './service.ts'
 import { lastsOnceRestored } from './temporary.ts'
 import { knownPlayers, lastActivity, openIntervalStart, openRun, presenceFor } from './usage.ts'
+import { waitingChanges } from './waiting.ts'
 
 /** Who is on a running server, as presence has it; null while it isn't running. */
 type Online = { uuid: string; name: string }[] | null
@@ -673,6 +674,7 @@ export class ServerQueries {
       movesToSize: movesTo === null ? null : { tier: movesTo, label: sizeLabel(movesTo) },
       roomier: roomier(server.memoryTier, plan.allowedMemoryTiers),
       pendingRestart,
+      waiting: await waitingChanges(this.#db, server, applied),
       onlyServer: (await countLive(this.#db, server.ownerId)) === 1,
       expiresAt: server.expiresAt?.toISOString() ?? null,
       deletesAt: await this.#deletesAt(server, plan),

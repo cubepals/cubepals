@@ -4,6 +4,7 @@
 
 import { z } from 'zod'
 import { oneLine } from './plain-text.ts'
+import { RestartWhen } from './restart-when.ts'
 import { ServerId } from './server.ts'
 
 /**
@@ -82,6 +83,7 @@ export const ChangePackInput = z.object({
   /** The server's revision version the owner looked at, so a change nobody saw isn't overwritten. */
   version: z.number().int().nonnegative(),
   acknowledgeRevoked: z.boolean().optional(),
+  when: RestartWhen.optional(),
   to: z.discriminatedUnion('kind', [
     z.object({ kind: z.literal('catalog'), versionId: z.string().trim().min(1).max(64) }),
     /** Another release of the pack Blockly offers by name that the server plays. */
