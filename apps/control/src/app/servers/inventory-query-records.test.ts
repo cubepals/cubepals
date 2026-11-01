@@ -289,6 +289,7 @@ function runningView(
     region: { key: 'local', label: 'This computer' },
     memoryTier: '3g',
     activeOperation: null,
+    waiting: null,
     lastWakeSeconds: null,
     players: { online: 0, people: [] },
     createdAt: server.createdAt.toISOString(),
