@@ -125,6 +125,7 @@ async function openBedrock({
   loader = 'paper',
   supported = true,
   online = false,
+  playing = true,
   enabled,
   blocked = false,
   legacy = false,
@@ -168,7 +169,7 @@ async function openBedrock({
     if (enabled !== undefined)
       await h.app.revisions.changeBedrock(owner, server.id, enabled, crypto.randomUUID())
     if (blocked) await h.app.revisions.changeOtherVersions(owner, server.id, 'off', crypto.randomUUID())
-    if (online) {
+    if (online && playing) {
       h.minecraft.join(server.id, { uuid: crypto.randomUUID(), name: 'Alex' })
       await h.app.schedules.presenceSync()
     }
@@ -236,6 +237,56 @@ const toggle = () => document.querySelector('[role="switch"]')
 const opened = () => document.querySelector('dialog')?.open === true
 
 describe.skipIf(!hasDatabase)('Bedrock settings in the browser', () => {
+  for (const legacy of [false, true]) {
+    test(
+      legacy
+        ? 'a failed Paper migration reports its real rollback instead of completion'
+        : 'a failed membership change reports its real rollback instead of completion',
+      async () => {
+        const page = await openBedrock({
+          online: true,
+          playing: false,
+          legacy,
+          loader: legacy ? 'vanilla' : 'paper',
+        })
+        const enqueue = page.h.jobs.enqueue.bind(page.h.jobs)
+        const pending = []
+        page.h.jobs.enqueue = async (...args) => {
+          pending.push(args)
+        }
+        let starts = 0
+        try {
+          if (legacy) await act(async () => button('Let Bedrock friends in').click())
+          else await act(async () => toggle().click())
+          await act(async () => button(legacy ? 'Let them in' : 'Stop them joining').click())
+          await until(() => pending.length > 0 && !opened())
+          expect(Object.values(page.calls.at(-1).input)[0].when).toBe('empty')
+          page.h.jobs.enqueue = enqueue
+          page.h.minecraft.breakOn(() =>
+            ++starts === 1 ? 'The fixture Bedrock change failed to start' : null,
+          )
+          await act(async () => {
+            for (const args of pending) await enqueue(...args)
+            await page.h.until(page.server.id, 'running')
+            await page.h.settled(page.server.id)
+          })
+          const failed = await page.h.app.queries.get(page.owner, page.server.id)
+          expect(failed.lastChange?.status).toBe('failed')
+          expect(failed.lastChange.error).toContain('Your server is back on the one before.')
+          await page.refresh()
+          await until(() => page.host.textContent.includes('Didn’t change.'))
+          expect(page.host.textContent).not.toContain('Saved.')
+          expect(legacy ? failed.bedrock.moves : failed.bedrock.on).toBe(true)
+        } finally {
+          page.h.jobs.enqueue = enqueue
+          page.h.minecraft.breakOn(() => null)
+          await page.close()
+        }
+      },
+      30 * SECOND_MS,
+    )
+  }
+
   test(
     'a deployment without Bedrock shows no controls',
     async () => {
