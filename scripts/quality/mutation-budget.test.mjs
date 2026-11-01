@@ -118,7 +118,7 @@ test('a subject that outgrows its budget finishes with a failing report instead 
   )
   write(
     'apps/slow.test.ts',
-    "import { expect, test } from 'bun:test'\nimport { advance } from './source'\ntest('slow and strict', async () => { await Bun.sleep(3000); expect(() => advance(-1)).toThrow('negative'); expect(advance(0)).toBe(1); expect(advance(9)).toBe(10); expect(advance(10)).toBe(10); expect(advance(11)).toBe(10) }, 20000)\n",
+    `import { expect, test } from 'bun:test'\nimport { advance } from './source'\ntest('slow and strict', async () => { expect(() => advance(-1)).toThrow('negative'); await Bun.sleep(${8 * SECOND_MS}); expect(advance(0)).toBe(1); expect(advance(9)).toBe(10); expect(advance(10)).toBe(10); expect(advance(11)).toBe(10) }, ${20 * SECOND_MS})\n`,
   )
   write(
     'apps/other.test.ts',
@@ -149,11 +149,11 @@ test('a subject that outgrows its budget finishes with a failing report instead 
         additionalTestsByFile: { 'apps/source.ts': [['apps/other.test.ts']] },
         reportDir: reports,
         timeoutMs: 10 * SECOND_MS,
-        subjectTimeoutMs: 40 * SECOND_MS,
+        subjectTimeoutMs: 30 * SECOND_MS,
       }),
-    /mutants were not evaluated within the 0\.7-minute budget/,
+    /mutants were not evaluated within the 0\.5-minute budget/,
   )
-  assert.ok(Date.now() - started < 40 * SECOND_MS, 'Stryker finished inside the budget')
+  assert.ok(Date.now() - started < 30 * SECOND_MS, 'Stryker finished inside the budget')
   const summary = JSON.parse(readFileSync(join(reports, 'summary.json'), 'utf8'))
   assert.equal(summary.passed, false)
   const row = summary.files[0]
@@ -166,4 +166,50 @@ test('a subject that outgrows its budget finishes with a failing report instead 
   t.diagnostic(
     `${row.unevaluated} of ${row.total} mutants unevaluated; ${row.killed} killed before the deadline`,
   )
+})
+
+test('a running Bun command is capped by the shared deadline, not its longer test timeout', (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'mutation-running-deadline-'))
+  t.after(() => rmSync(root, { recursive: true, force: true }))
+  const evidence = join(root, 'evidence')
+  mkdirSync(evidence)
+  writeFileSync(
+    join(root, 'a.test.ts'),
+    `import {test} from 'bun:test';import{writeFileSync}from'node:fs';test('still running',async()=>{writeFileSync('started','yes');await Bun.sleep(${10 * SECOND_MS})},${20 * SECOND_MS})`,
+  )
+  writeFileSync(
+    join(evidence, 'baseline.json'),
+    JSON.stringify({
+      status: 'passed',
+      durationMs: 10 * SECOND_MS,
+      passed: 1,
+      failed: 0,
+      skipped: 0,
+      skippedTests: [],
+    }),
+  )
+  const manifest = join(root, 'tests.json')
+  writeFileSync(
+    manifest,
+    JSON.stringify({
+      tests: ['a.test.ts'],
+      evidence,
+      bun: 'bun',
+      timeoutMs: 20 * SECOND_MS,
+      deadline: Date.now() + 2 * SECOND_MS,
+    }),
+  )
+  const began = Date.now()
+  const run = spawnSync(process.execPath, [commandScript, manifest], {
+    cwd: root,
+    env: { ...process.env, __STRYKER_ACTIVE_MUTANT__: '7' },
+    encoding: 'utf8',
+    timeout: 5 * SECOND_MS,
+  })
+  assert.equal(run.status, 1)
+  assert.equal(readFileSync(join(root, 'started'), 'utf8'), 'yes')
+  const outcome = JSON.parse(readFileSync(join(evidence, '7.json'), 'utf8'))
+  assert.equal(outcome.status, 'timeout')
+  assert.equal(outcome.passed + outcome.failed, 0)
+  assert.ok(Date.now() - began < 5 * SECOND_MS)
 })

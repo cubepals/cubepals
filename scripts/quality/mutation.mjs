@@ -6,7 +6,8 @@
  * Runs Stryker's established JavaScript/TypeScript mutators against the existing Bun suite.
  * Per-file scores count test-case failures only: inconclusive outcomes stay in the denominator
  * as undetected; missing evidence fails closed. Each subject uses its dependent tests inside a copy with local workspace
- * links. Stryker's default node_modules symlink would otherwise test unmutated workspace code.
+ * links. Independent application workers keep their workspace links inside each sandbox;
+ * scripts retain a single Git-backed workspace. Every mutant keeps the same tests and budget.
  */
 import { execFileSync, spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
@@ -28,9 +29,9 @@ import { tmpdir } from 'node:os'
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { MINUTE_MS, SECOND_MS } from '../../packages/contracts/src/durations.ts'
+import { freezeMutationRuntime } from './mutation-runtime.mjs'
 import { requireQuality } from './toolchain.mjs'
 
-const command = fileURLToPath(new URL('./mutation-command.mjs', import.meta.url))
 const candidatesCommand = fileURLToPath(new URL('./mutation-candidates.mjs', import.meta.url))
 
 function inside(root, path) {
@@ -265,7 +266,9 @@ export function runMutation({
   const candidates = JSON.parse(readFileSync(candidateOutput, 'utf8'))
   const snapshot = mutationSnapshot(root)
   const result = { passed: true, complete: false, files: [], failures: [] }
+  let runtime
   try {
+    runtime = freezeMutationRuntime()
     const cli = join(dirname(requireQuality.resolve('@stryker-mutator/core/package.json')), 'bin/stryker.js')
     for (const [index, subject] of subjects.entries()) {
       const required = thresholds[subject] ?? threshold
@@ -294,9 +297,10 @@ export function runMutation({
         }
         const attempts = []
         const started = Date.now()
-        // Mutants that start after this point are recorded as not evaluated, leaving one test
-        // timeout and a minute for Stryker to finish and write its report inside the budget.
-        const deadline = started + Math.max(subjectTimeoutMs / 2, subjectTimeoutMs - timeoutMs - MINUTE_MS)
+        // Mutants that start after this point are recorded as not evaluated, leaving a
+        // minute for Stryker to finish its census and report. Each Bun command is itself capped
+        // at this shared deadline, so a full test-timeout reserve would leave usable time idle.
+        const deadline = started + Math.max(subjectTimeoutMs / 2, subjectTimeoutMs - MINUTE_MS)
         let verdict
         let runStatus
         let expansionStopped = false
@@ -333,17 +337,25 @@ export function runMutation({
           )
           const reportPath = join(output, 'mutation.json')
           const configPath = join(output, 'stryker.config.json')
+          const isolated = /^(?:apps|packages)\//.test(subject)
           writeFileSync(
             configPath,
             JSON.stringify({
               testRunner: 'command',
-              commandRunner: { command: `${quote(node)} ${quote(command)} ${quote(manifestPath)}` },
+              commandRunner: { command: `${quote(node)} ${quote(runtime.command)} ${quote(manifestPath)}` },
               // Backslashes are normalized as separators by Stryker. Character classes preserve
               // literal Next route brackets without allowing the filename to become a glob.
               mutate: [subject.replace(/[?*[\]{}()!+@]/g, (character) => `[${character}]`)],
               coverageAnalysis: 'off',
-              concurrency: 1,
-              inPlace: true,
+              concurrency: isolated ? (subject.startsWith('apps/') ? 3 : 4) : 1,
+              inPlace: !isolated,
+              ...(isolated
+                ? {
+                    buildCommand: [node, runtime.sandbox, snapshot]
+                      .map((argument) => argument.replaceAll(' ', '\\ '))
+                      .join(' '),
+                  }
+                : {}),
               symlinkNodeModules: false,
               incremental: false,
               ignoreStatic: false,
@@ -476,5 +488,6 @@ export function runMutation({
     return result
   } finally {
     rmSync(snapshot, { recursive: true, force: true })
+    if (runtime) rmSync(runtime.root, { recursive: true, force: true })
   }
 }
