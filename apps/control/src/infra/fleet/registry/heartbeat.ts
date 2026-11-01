@@ -267,6 +267,9 @@ async function observe(t: Queryable, node: NodeRow, reported: WorkloadReport[]):
                              THEN fleet_observations.state_changed_at ELSE now() END,
           state = EXCLUDED.state
         WHERE fleet_observations.report IS DISTINCT FROM EXCLUDED.report
+          AND (fleet_observations.epoch IS DISTINCT FROM EXCLUDED.epoch
+            OR COALESCE((EXCLUDED.report->>'changedAt')::timestamptz >=
+                        (fleet_observations.report->>'changedAt')::timestamptz, true))
         RETURNING workload, (xmax = 0) AS inserted`,
   )
   const changed = new Set(written.map((w) => w.workload))

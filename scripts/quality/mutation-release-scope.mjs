@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /** PRs mutate changed production files; full audits retain the complete source inventory. */
+import { mutationLineRanges } from './mutation-lines.mjs'
 import { selectMutationScope } from './mutation-scope.mjs'
 
 export function selectReleaseMutationScope(input) {
@@ -16,12 +17,13 @@ export function selectReleaseMutationScope(input) {
   return {
     ...scope,
     subjects,
+    rangesByFile: mutationLineRanges({ ...input, subjects }),
     testsByFile: keep(scope.testsByFile),
     additionalTestsByFile: keep(scope.additionalTestsByFile),
     full: false,
     baseScore: null,
     reasons: [
-      'Release mutation scope is limited to new and changed production files; legacy audits run separately',
+      'Release mutation scope is limited to changed executable lines and complete new files; whole-file legacy audits run separately',
     ],
     noMutationReason: subjects.length
       ? null

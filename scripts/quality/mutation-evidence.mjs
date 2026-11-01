@@ -12,7 +12,7 @@ import { XMLParser, XMLValidator } from './toolchain.mjs'
 
 // Exhausted local services and filesystems cannot demonstrate a source-code defect.
 const infrastructureFailure =
-  /No space left on device|\bENOSPC\b|Disk quota exceeded|could not resize shared memory segment|the database system is (?:in recovery mode|starting up|shutting down)|server closed the connection unexpectedly|connection terminated unexpectedly|\bECONNREFUSED\b/i
+  /too many clients|remaining connection slots|Cannot use a pool after calling end|No space left on device|\bENOSPC\b|Disk quota exceeded|could not resize shared memory segment|the database system is (?:in recovery mode|starting up|shutting down)|server closed the connection unexpectedly|connection terminated unexpectedly|\bECONNREFUSED\b/i
 
 export function readMutationJUnit(
   xml,

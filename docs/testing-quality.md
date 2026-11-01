@@ -95,7 +95,7 @@ aggregate verifies the explicit classification. Merge-queue, scheduled, and manu
 always execute Fleet. The standalone Fleet workflow retains weekly and manual runs, while PR
 and main-push execution comes through CI to avoid duplicate runs.
 
-Mutation testing requires **80% killed mutants per selected file**, rather than a project average.
+Mutation testing requires **80% killed mutants per selected file’s changed code**, rather than a project average.
 Timeouts, compilation errors, missing reports, skipped-away tests, and runner failures cannot count
 as detected defects. A clean test baseline must pass first. Stryker uses its maintained mutators
 and built-in command runner, including condition boundaries, removed blocks, changed operators,
@@ -104,14 +104,20 @@ import cannot accidentally resolve to the original unmutated checkout.
 Files with no independently generated mutation candidates report that condition explicitly;
 they still require a clean baseline and their applicable coverage metrics.
 
-PR mutation scope includes only new and changed executable production files, each held to the
-80% mutation floor. A changed integration test, test deletion, fixture, dependency or runtime
+PR mutation scope includes the added/replaced lines of changed executable production files,
+held to the 80% mutation floor independently for each file. New and renamed files retain their
+whole-file census. A deletion-only hunk conservatively retains the full affected file. A changed integration test, test deletion, fixture, dependency or runtime
 configuration does not impose that floor on unchanged legacy files. Changed executable helpers
 remain subjects when the inventory classifies them as source. All dependent tests remain
 available for each selected subject, including ambiguous possible dependents.
 
 `mutation-release-scope.mjs` verifies the complete Git comparison through the existing test-impact
-verifier, then selects changed production paths. Missing tests for changed source still fail;
+verifier, then selects changed production paths. `mutation-lines.mjs` derives native Stryker ranges
+from zero-context Git hunks and verifies each source against the committed blob. Independent
+enumeration records both the whole-file and selected candidate counts, source hash and every
+selected candidate identity. The actual report must match that exact selected census. Import, type
+or comment changes with no mutable expressions say so explicitly, rather than claiming a full-file pass.
+Missing tests for changed source still fail;
 callers cannot omit a source edit from the supplied diff. Comparison metadata remains bound to
 the authoritative base and head SHAs from the protected workflow.
 
@@ -178,10 +184,11 @@ the deadline; the last full census stands, and it fails with its own score.
 
 Test-addition classification continues to protect baseline coverage evidence. No unmeasured legacy
 mutation result is represented as passing. Java PIT follows the same release rule: changed production
-classes are selected for release checks; full audits include all legacy classes.
+classes are run in full by PIT, but release scores use their changed lines. The raw complete
+PIT report and selected-line counts are retained. Full audits score all legacy classes and lines.
 
 Mutation runs begin with small dependent test suites and expand to other proven dependents when
-the full per-file mutant census does not meet the threshold. Each attempt keeps the same census;
+the complete selected per-file mutant census does not meet the threshold. Each attempt keeps the same census;
 kills are not combined across different attempts. The full ordinary test suite still runs.
 Scheduled JavaScript/TypeScript mutations rotate through seven stable source partitions, visiting
 the complete executable inventory over a successful week; manual full runs cover every partition.

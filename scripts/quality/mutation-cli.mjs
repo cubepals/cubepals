@@ -140,6 +140,7 @@ if (subjects.length === 0) {
     subjects,
     testsByFile: scope.testsByFile,
     additionalTestsByFile: scope.additionalTestsByFile,
+    rangesByFile: scope.rangesByFile,
     reportDir: output,
     collectAll: values.full,
   })
