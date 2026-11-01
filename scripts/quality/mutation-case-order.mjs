@@ -107,6 +107,7 @@ export function proveCaseOrder(cases, expected, durationMs, execute) {
       cases,
       batches: batches.sort((a, b) => a.durationMs - b.durationMs),
       durationMs: batches.reduce((sum, batch) => sum + batch.durationMs, 0),
+      originalDurationMs: durationMs,
     }
   } catch {
     // A split that cannot prove the original oracle is never used for mutations.
@@ -139,9 +140,23 @@ export function runCaseOrder(plan, expected, execute, preferred = null) {
   if (planned.size !== known.size) throw new Error('Mutation case order omits original cases')
   if (preferred !== null && !plan.batches.some((batch) => caseBatchKey(batch) === preferred))
     throw new Error('Preferred mutation batch is outside the proven case inventory')
-  const ordered = [...plan.batches].sort(
+  let ordered = [...plan.batches].sort(
     (a, b) => Number(caseBatchKey(b) === preferred) - Number(caseBatchKey(a) === preferred),
   )
+  // Splitting expensive database fixtures can cost more than the original suite. Probe the
+  // previously failing batch first, then use the original, already proven file invocation.
+  // Every original case remains required, including cases repeated by the initial probe.
+  if (Number.isFinite(plan.originalDurationMs) && plan.durationMs > plan.originalDurationMs) {
+    const first = ordered[0]
+    const files = [...new Set(ordered.map((batch) => batch.file))]
+    ordered = [
+      first,
+      ...files.map((file) => ({
+        file,
+        cases: plan.cases.filter((item) => item.file === file).map((item) => item.id),
+      })),
+    ]
+  }
   const passed = new Set()
   const failed = new Set()
   const reports = []
