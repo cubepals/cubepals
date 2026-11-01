@@ -2,7 +2,14 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import type { JoinNeeds, PublicServerView, ReactionsView, ShareView } from '@blockly/contracts'
+import type {
+  JoinNeeds,
+  OpenedPage,
+  PublicServerView,
+  ReactionsView,
+  RestingView,
+  ShareView,
+} from '@blockly/contracts'
 import type { Db } from '@blockly/db'
 import { METER_UNITS, UNIT_CENTS } from '../../domain/account/meter.ts'
 import { copying, type Trust } from '../../domain/listing/trust.ts'
@@ -18,6 +25,7 @@ import { offersChipIn } from '../billing/chip-ins.ts'
 import type { DeploymentCapabilities } from '../capabilities.ts'
 import { joinsNow, takesBedrock } from '../compat/service.ts'
 import { shownStatus } from '../edge/routed.ts'
+import { restingFor } from '../edge/turned-away.ts'
 import { AppError, NotFound } from '../errors.ts'
 import { tally } from '../guestbook/persistence.ts'
 import { trustOf } from '../listings/judge.ts'
@@ -87,12 +95,26 @@ export class SharingQueries {
    * A server's public page. Null when it isn't public, so the page can say so without guessing.
    * Its stars and notes are counted only where asked for: the page people open shows them, while
    * the status, badge and card that bots fetch have no use for them.
+   *
+   * The page people open also says whether the server rests for its owner's free trial (`resting`):
+   * the game sends everyone it turns away there. A private server that rests answers only that,
+   * its name, which the game already told whoever joined; one that doesn't is null, as before.
    */
   async page(
     slug: string,
     viewer: Actor | null,
+    options: { reactions: true; from?: string | null },
+  ): Promise<OpenedPage | null>
+  async page(
+    slug: string,
+    viewer: Actor | null,
+    options?: { reactions?: false; from?: string | null },
+  ): Promise<PublicServerView | null>
+  async page(
+    slug: string,
+    viewer: Actor | null,
     options: { reactions?: boolean; from?: string | null } = {},
-  ): Promise<PublicServerView | null> {
+  ): Promise<OpenedPage | null> {
     // The page people open is the read that shows its stars and notes.
     const opened = options.reactions === true
     const limits = tuning().abuse.publicReadsPerMinute
@@ -104,18 +126,28 @@ export class SharingQueries {
     if (server === null) return null
     const owner = viewer?.kind === 'user' && viewer.userId === server.ownerId
     const shown = await pageShown(this.#db, server)
-    if (!owner && !shown) return null
+    const resting = opened ? await this.#resting(server, owner) : null
+    if (!owner && !shown) return resting === null ? null : { kind: 'resting', resting }
     const reader =
       viewer === null || viewer.kind === 'system' || viewer.kind === 'operator' ? null : viewer.userId
-    return this.#view(server, {
+    const view = await this.#view(server, {
       invited: false,
       preview: owner && !shown,
       yours: owner,
       reactions:
-        options.reactions === true && shown
+        opened && shown
           ? { serverId: server.id, ...(await tally(this.#db, server.id, reader)), yours: owner }
           : null,
     })
+    return resting === null ? view : { ...view, resting }
+  }
+
+  /** Whether `server` rests for its owner's free trial now, as its page says it to `owner` or anyone else. */
+  async #resting(server: MinecraftServer, owner: boolean): Promise<RestingView | null> {
+    if ((await restingFor(this.#db, server, new Date())) === null) return null
+    return owner
+      ? { name: server.name, yours: true, serverId: server.id }
+      : { name: server.name, yours: false }
   }
 
   /**

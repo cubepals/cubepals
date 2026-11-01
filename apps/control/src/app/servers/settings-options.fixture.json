@@ -83,7 +83,6 @@
     "viewDistance": "restart",
     "defaultGameMode": "now",
     "spawnProtection": "restart",
-    "simulationDistance": "restart",
-    "keepInventory": "now"
+    "simulationDistance": "restart"
   }
 }

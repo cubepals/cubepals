@@ -20,6 +20,7 @@ import { type Harness, hasDatabase, startHarness } from '../../testing/harness.t
 import type { UserActor } from '../actor.ts'
 import { recordEdgePresence, replacePresence } from '../servers/usage.ts'
 import { tuning } from '../tuning.ts'
+import { addCandidate, type Candidates } from './free-links.ts'
 import { freeSharers } from './free-play.ts'
 import { loadStanding } from './persistence.ts'
 import { playTotal } from './play-total.ts'
@@ -324,4 +325,33 @@ describe.skipIf(!hasDatabase)('an admin’s hold', () => {
     await h.until(server.id, 'running')
     await h.settled(server.id)
   }, 60_000)
+})
+
+describe('candidate pair identity and retained signals', () => {
+  test('never makes a link from an account to itself', () => {
+    const found: Candidates = new Map()
+    addCandidate(found, 'a', 'a', { mainPlayer: 1 })
+    expect([...found]).toEqual([])
+  })
+
+  test('both discovery orders identify the same pair', () => {
+    for (const [a, b] of [
+      ['a', 'b'],
+      ['b', 'a'],
+    ] as const) {
+      const found: Candidates = new Map()
+      addCandidate(found, a, b, { mainPlayer: 0.7 })
+      expect([...found]).toEqual([['a b', { a: 'a', b: 'b', signals: { mainPlayer: 0.7 } }]])
+    }
+  })
+
+  test('a later discovery preserves other signals and keeps each strongest observation', () => {
+    const found: Candidates = new Map()
+    addCandidate(found, 'a', 'b', { mainPlayer: 0.7, inbox: 1 })
+    addCandidate(found, 'b', 'a', { mainPlayer: 0.3, network: 0.2 })
+    addCandidate(found, 'a', 'b', { network: 0.8 })
+    expect([...found]).toEqual([
+      ['a b', { a: 'a', b: 'b', signals: { mainPlayer: 0.7, inbox: 1, network: 0.8 } }],
+    ])
+  })
 })

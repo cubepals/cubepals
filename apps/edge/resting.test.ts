@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * What a friend reads at a server resting for its owner's free trial, rendered as the game gets it
+ * What anyone reads at a server resting for its owner's free trial, rendered as the game gets it
  * and measured in the default font against the game's own widths.
  */
 
@@ -24,11 +24,12 @@ function rendered(text: string): string[] {
   return (JSON.parse(json) as { text: string }).text.split('\n')
 }
 
-test('a friend turned away after the free trial hears whose server, that it rests for now, and that they will know', () => {
+test('anyone turned away after the free trial hears which server, why it rests, and where to go next', () => {
   expect(rendered(restingJoin('Sunset Valley'))).toEqual([
     '“Sunset Valley” is resting for now',
-    'Its owner’s free trial is used up.',
-    'They’ll see on Cubepals that you came by.',
+    'Its free trial is used up.',
+    'To keep playing, open the address',
+    'you joined with in a browser.',
   ])
 })
 
@@ -45,14 +46,17 @@ test('a name too wide for its line, or with formatting codes, is not shown as th
   expect(rendered(restingJoin(undefined))[0]).toBe('This server is resting for now')
 })
 
-test('nothing a friend reads says midnight, a time of day, or that they did something wrong', () => {
+test('nothing anyone reads says midnight, a time of day, whose trial it is, or that they did wrong', () => {
+  // The owner reads the same words as their friends: nothing knows which player is the owner.
   const words = [restingJoin('A'), restingStatus(undefined)].join(' ')
-  expect(words).not.toMatch(/midnight|\d:\d\d|your |you can’t|not allowed|denied/i)
+  expect(words).not.toMatch(/midnight|\d:\d\d|your |owner|you can’t|not allowed|denied/i)
 })
 
-test('the server list says it rests, under the server’s own message', () => {
-  expect(restingStatus(undefined)).toBe('Resting for now')
-  expect(restingStatus('§6Sunset Valley')).toBe('§6Sunset Valley\n§r§7Resting for now')
+test('the server list says the free trial is over and where to go, under the server’s own message', () => {
+  expect(restingStatus(undefined)).toBe('Free trial over · open its address in a browser')
+  expect(restingStatus('§6Sunset Valley')).toBe(
+    '§6Sunset Valley\n§r§7Free trial over · open its address in a browser',
+  )
   for (const line of restingStatus('§6Sunset Valley').split('\n'))
     expect(width(line)).toBeLessThanOrEqual(LIST_WIDTH)
 })
