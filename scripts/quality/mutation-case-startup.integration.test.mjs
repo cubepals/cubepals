@@ -67,8 +67,12 @@ test('real case proofs include the cold startup of every independent Bun process
     const result = JSON.parse(readFileSync(join(evidence, '42.json'), 'utf8'))
     assert.equal(result.status, 'passed')
     assert.equal(result.passed, 6)
-    assert.equal(result.reports.length, 6)
-    assert.ok(result.durationMs >= 30 * SECOND_MS, 'every original case must retain its real cold start')
+    assert.equal(result.reports.length, 2)
+    assert.ok(
+      result.durationMs >= 10 * SECOND_MS,
+      'both the probe and original file retain their real cold starts',
+    )
+    assert.ok(result.durationMs < clean.caseOrder.durationMs, 'survivors avoid the repeated split startups')
   } finally {
     rmSync(root, { recursive: true, force: true })
   }
