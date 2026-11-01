@@ -103,7 +103,7 @@ must protect its new repository-controlled inputs too.
 ## Incremental test obligations and legacy code
 
 New and changed executable production files must meet 80% branch, 90% function/method, and 90%
-line coverage, plus the 80% mutation floor. Modifying deficient source requires closing its test
+line coverage, plus an 80% mutation floor on changed executable lines (whole files when new). Modifying deficient source requires closing its coverage
 evidence gap; one-line edits and moves do not waive those floors. Unchanged legacy files retain
 measured coverage through a non-regression ratchet. The initial complete hosted measurement,
 using the earlier six-shard layout, covered 1,163 source files:
@@ -131,7 +131,7 @@ avoids shared native module state. There is no fallback to shared Bun module rea
 The seven coverage groups are lifecycle, providers, worlds, mods, web, access, and rest; the
 aggregate requires all seven reports. Fresh processes still share files and external services:
 process isolation is not a security sandbox and does not prevent malicious filesystem writes.
-The Java reporter continues to use class-based PIT selection for its test changes.
+The Java reporter runs PIT for changed classes and scores their changed lines; full audits score every line.
 
 The two live Fleet files may skip only in ordinary coverage and mutation runs that lack the
 real daemon. Applicable CI runs call the reusable Fleet workflow and require both one-node and
@@ -144,7 +144,10 @@ places live Fleet failures inside the existing required `check` and trusted CI w
 than depending on an optional external check name.
 
 Release mutation selection lives in `mutation-release-scope.mjs`: only new and changed production
-paths are subjects, each retaining the full census and 80% floor. Test edits, deletions, fixture,
+paths are subjects. `mutation-lines.mjs` selects added/replaced lines through native Stryker ranges,
+with complete new/renamed files and conservative whole-file fallback for deletion-only hunks.
+Each selected census retains the 80% floor. Independent whole/selected counts, source hashes and
+candidate identities prevent omitted or substituted mutations from passing. Test edits, deletions, fixture,
 configuration and dependency updates do not trigger mutation audits of unchanged legacy imports.
 All dependent tests remain available for selected source. Git comparisons and inventories are
 still verified, and changed source without detecting tests still fails.

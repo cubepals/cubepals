@@ -319,3 +319,14 @@ test('even an otherwise killed mutant fails if its skipped test identities chang
     /valid test evidence/,
   )
 })
+
+test('database exhaustion cannot be credited as detecting a source mutation', () => {
+  for (const message of [
+    'sorry, too many clients already',
+    'remaining connection slots are reserved',
+    'Cannot use a pool after calling end on the pool',
+  ]) {
+    const xml = `<testsuites><testsuite file="a.test.ts"><testcase name="records"><failure>${message}</failure></testcase></testsuite></testsuites>`
+    assert.throws(() => readMutationJUnit(xml, ['a.test.ts']), /Infrastructure failure/)
+  }
+})
