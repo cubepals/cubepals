@@ -13,7 +13,9 @@ import { Client } from 'transport-io'
 import { History } from '../../../../web/src/app/(app)/servers/[id]/settings/history'
 import { ChangeState } from '../../../../web/src/app/(app)/servers/[id]/settings/shared'
 import { ApiProvider } from '../../../../web/src/lib/api'
-import { loadRevision } from '../../app/servers/persistence.ts'
+import { loadRevision, setDesired } from '../../app/servers/persistence.ts'
+import { entitlementsFor } from '../../domain/account/entitlements.ts'
+import { MEMORY_TIERS } from '../../domain/server/size.ts'
 import { Cdn } from '../../testing/cdn.ts'
 import { hasDatabase, startHarness } from '../../testing/harness.ts'
 import { pluginJar } from '../../testing/uploads.ts'
@@ -104,7 +106,7 @@ async function revisionsFixture({ count = 10, mode = 'stopped', artifacts = fals
       crypto.randomUUID(),
     )
   }
-  let queued
+  let queued, deliver
   if (mode !== 'stopped') {
     if (mode === 'failed') h.minecraft.breakOn(() => 'The fixture world did not start')
     await h.app.servers.start(owner, server.id, crypto.randomUUID())
@@ -112,7 +114,13 @@ async function revisionsFixture({ count = 10, mode = 'stopped', artifacts = fals
     await h.settled(server.id)
     if (mode === 'failed') h.minecraft.breakOn(() => null)
     if (mode === 'updating') {
+      const enqueue = h.jobs.enqueue.bind(h.jobs)
       queued = spyOn(h.jobs, 'enqueue').mockResolvedValue()
+      deliver = async () => {
+        const pending = [...queued.mock.calls]
+        queued.mockRestore()
+        for (const args of pending) await enqueue(...args)
+      }
       const revision = await current()
       await h.app.revisions.changeSettings(
         owner,
@@ -122,7 +130,7 @@ async function revisionsFixture({ count = 10, mode = 'stopped', artifacts = fals
       )
     }
   }
-  return { h, owner, server, artifactTarget, queued, current }
+  return { h, owner, server, artifactTarget, queued, current, deliver }
 }
 function browserScope() {
   const browser = new (quality('happy-dom').Window)({ url: 'http://localhost/settings' })
@@ -189,11 +197,13 @@ async function openHistory(options = {}) {
   const gate = new Promise((resolve) => {
     release = resolve
   })
-  if (!options.pause) release()
+  if (!options.pause && !options.pauseWake) release()
   try {
     fixture = await revisionsFixture(options)
     const { h, owner, server } = fixture
     const view = await h.app.queries.get(owner, server.id)
+    const actor = options.stranger ? await h.user('A different account', 'plus') : owner
+    if (options.stranger) fixture.refusal = await h.app.queries.get(actor, server.id).catch((error) => error)
     if (options.refused) {
       const stranger = await h.user('Other owner', 'plus')
       const error = await h.app.queries.revisions(stranger, server.id).catch((error) => error)
@@ -206,12 +216,16 @@ async function openHistory(options = {}) {
         if (!url.pathname.startsWith('/api/trpc')) return native(input, init)
         const request = new Request(url, init)
         if (request.method === 'POST') calls.push({ path: url.pathname, input: await request.clone().json() })
-        if (url.pathname.includes('servers.revisions')) await gate
+        if (
+          url.pathname.includes('servers.revisions') ||
+          (options.pauseWake && url.pathname.includes('servers.start'))
+        )
+          await gate
         return fetchRequestHandler({
           endpoint: '/api/trpc',
           req: request,
           router: appRouter,
-          createContext: () => ({ actor: owner, services: h.app }),
+          createContext: () => ({ actor, services: h.app }),
         })
       },
       { preconnect: native.preconnect },
@@ -450,4 +464,124 @@ describe.skipIf(!hasDatabase)('revision history in the browser', () => {
     },
     30 * SECOND_MS,
   )
+
+  describe('feedback for a saved server change', () => {
+    test(
+      'a change watched in progress announces completion after the real worker finishes',
+      async () => {
+        const page = await openHistory({ count: 1, mode: 'updating', stateOnly: true })
+        try {
+          expect(page.view.activeOperation?.kind).toBe('apply')
+          await page.deliver()
+          await page.h.until(page.server.id, 'running')
+          await page.h.settled(page.server.id)
+          await page.refresh()
+          await until(() => page.host.textContent.includes('Your changes are in. Your friends see them now.'))
+          expect(page.host.querySelector('[role="alert"]') === null).toBe(true)
+        } finally {
+          await page.close()
+        }
+      },
+      30 * SECOND_MS,
+    )
+
+    test(
+      'a failed apply that rolls back shows its actual error and no completion message',
+      async () => {
+        const page = await openHistory({ count: 1, mode: 'updating', stateOnly: true })
+        try {
+          const desired = await page.current()
+          const wanted = String(desired.settings.viewDistance)
+          page.h.minecraft.breakOn((env) =>
+            env.VIEW_DISTANCE === wanted ? 'The fixture change failed' : null,
+          )
+          await page.deliver()
+          await page.h.until(page.server.id, 'running')
+          await page.h.settled(page.server.id)
+          const next = await page.h.app.queries.get(page.owner, page.server.id)
+          expect(next.lastChange?.status).toBe('failed')
+          await page.refresh(next)
+          expect(page.host.textContent).toContain(next.lastChange.error)
+          expect(page.host.textContent).toContain('Last change')
+          expect(page.host.textContent).not.toContain('Your changes are in.')
+        } finally {
+          page.h.minecraft.breakOn(() => null)
+          await page.close()
+        }
+      },
+      30 * SECOND_MS,
+    )
+
+    test(
+      'a legacy size describes the plan adjustment before an owner accepts a rollback',
+      async () => {
+        const page = await openHistory({ count: 2, withState: true })
+        try {
+          const allowed = entitlementsFor('plus').allowedMemoryTiers
+          const legacy = MEMORY_TIERS.find((tier) => !allowed.includes(tier))
+          if (!legacy) throw new Error('The fixture needs a size outside this plan')
+          await page.h.db.transaction(async (tx) =>
+            setDesired(tx, await page.h.server(page.server.id), { memoryTier: legacy }),
+          )
+          const next = await page.h.app.queries.get(page.owner, page.server.id)
+          expect(next.movesToSize).not.toBeNull()
+          await page.refresh(next)
+          await chooseTarget(page)
+          expect(page.host.textContent).toContain(
+            `Size ${Number.parseInt(legacy, 10)} GB → ${next.movesToSize.label}, the size your plan offers`,
+          )
+          expect(page.host.textContent).toContain('Your changes apply the next time the server starts.')
+          await act(async () => button('Cancel').click())
+          expect(opened()).toBe(false)
+        } finally {
+          await page.close()
+        }
+      },
+      30 * SECOND_MS,
+    )
+
+    test(
+      'a stale resting view can request a real wake and disables its button during delivery',
+      async () => {
+        const page = await openHistory({ count: 0, stateOnly: true, pauseWake: true })
+        try {
+          // The screen can still show a rest state after another request has made the world available.
+          await page.refresh({ ...page.view, status: 'stored' })
+          expect(page.host.textContent).toContain('Wake it to change this.')
+          await act(async () => button('Wake it up').click())
+          await until(() => page.calls.length === 1)
+          expect(button('Waking it up…').disabled).toBe(true)
+          page.release()
+          await page.h.until(page.server.id, 'running')
+          await page.h.settled(page.server.id)
+          await until(() => [...page.host.querySelectorAll('button')].every((item) => !item.disabled))
+          await page.refresh()
+          expect(page.host.textContent).not.toContain('Wake it to change this.')
+          expect(page.calls[0].path).toContain('servers.start')
+        } finally {
+          await page.close()
+        }
+      },
+      30 * SECOND_MS,
+    )
+
+    test(
+      'a stale storing view preserves a real authorization refusal instead of pretending it woke',
+      async () => {
+        const page = await openHistory({ count: 0, stateOnly: true, stranger: true })
+        try {
+          expect(page.refusal).toBeInstanceOf(Error)
+          await page.refresh({ ...page.view, status: 'storing' })
+          await act(async () => button('Wake it up').click())
+          await until(() => page.host.textContent.includes(page.refusal.message))
+          expect(page.host.querySelector('[role="alert"]')?.textContent).toBe(page.refusal.message)
+          expect(button('Wake it up').disabled).toBe(false)
+          expect((await page.h.server(page.server.id)).lifecycle.status).toBe('stopped')
+        } finally {
+          await page.close()
+        }
+      },
+      30 * SECOND_MS,
+    )
+  })
 })
