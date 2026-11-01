@@ -233,3 +233,17 @@ test('the full file fallback rejects a missing original survivor case', () => {
     /every selected case/,
   )
 })
+
+test('a full file failure remembers a proven batch for the following mutant', () => {
+  const { plan, execute } = fixture()
+  plan.originalDurationMs = 1
+  const result = runCaseOrder(plan, [file], (batch) => {
+    const run = execute(batch)
+    if (batch.pattern !== undefined) return run
+    return { ...run, exitCode: 1, xml: xml({ last: 'failed' }) }
+  })
+  assert.equal(result.failed, 1)
+  assert.ok(plan.batches.some((batch) => caseBatchKey(batch) === result.failedBatch))
+  const survivor = runCaseOrder(plan, [file], execute, result.failedBatch)
+  assert.equal(survivor.passed, names.length)
+})
