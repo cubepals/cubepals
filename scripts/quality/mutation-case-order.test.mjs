@@ -198,7 +198,7 @@ test('the preferred batch still needs a real failure before execution can stop',
   assert.equal(result.failedBatch, preferred)
 })
 
-test('expensive splits probe once then run every original case in its full file', () => {
+test('an expensive first probe still falls back to every original case', () => {
   const { plan, execute } = fixture()
   plan.originalDurationMs = 1
   const preferred = caseBatchKey(plan.batches.at(-1))
@@ -218,6 +218,47 @@ test('expensive splits probe once then run every original case in its full file'
   assert.deepEqual(new Set(seen[1].cases), new Set(plan.cases.map((item) => item.id)))
   assert.equal(result.passed, names.length)
   assert.equal(result.reports.length, 2)
+})
+
+test('later cheap assertions can reject a defect before the slow full file runs', () => {
+  const { plan, execute } = fixture()
+  plan.originalDurationMs = 3.5
+  const second = caseBatchKey(plan.batches[1])
+  const result = runCaseOrder(plan, [file], (batch) => {
+    assert.notEqual(batch.pattern, undefined, 'the defect must be caught before the full file')
+    const run = execute(batch)
+    if (caseBatchKey(batch) !== second) return run
+    const name = JSON.parse(batch.cases[0])[2]
+    return {
+      ...run,
+      exitCode: 1,
+      xml: xml(
+        Object.fromEntries(
+          names.map((item) => [
+            item,
+            item === name ? 'failed' : new RegExp(batch.pattern).test(item) ? 'passed' : 'filtered',
+          ]),
+        ),
+      ),
+    }
+  })
+  assert.equal(result.failed, 1)
+  assert.equal(result.reports.length, 2)
+  assert.equal(result.failedBatch, second)
+})
+
+test('a bounded fast prefix still runs every slow original case for a survivor', () => {
+  const { plan, execute } = fixture()
+  plan.originalDurationMs = 3.5
+  const calls = []
+  const result = runCaseOrder(plan, [file], (batch) => {
+    calls.push(batch)
+    return execute(batch)
+  })
+  assert.equal(calls.length, 4)
+  assert.equal(calls.at(-1).pattern, undefined)
+  assert.equal(result.passed, names.length)
+  assert.equal(result.failed, 0)
 })
 
 test('the full file fallback rejects a missing original survivor case', () => {
