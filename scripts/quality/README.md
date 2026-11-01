@@ -184,7 +184,7 @@ Each invocation pins the invoking checker's scripts and isolated tool installati
 disposable runtime. Proposed application files and later Git changes cannot replace those runner
 files mid-run. Missing execution evidence still fails the verdict.
 
-Application subjects use two independent command-runner processes, leaving CPU capacity for their
+Application subjects use three independent command-runner processes, leaving CPU capacity for their
 real database. Workspace package subjects use four. Each process activates only its own mutant
 inside Stryker's disposable, instrumented sandbox.
 CI gives Postgres a 1 GiB shared-memory limit so concurrent real-database cases do not exhaust
