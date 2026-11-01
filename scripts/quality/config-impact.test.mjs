@@ -42,6 +42,27 @@ test('structure metadata may only retain, tighten or remove existing allowances'
     assert.equal(structureBaselineOnlyShrinks(base, after), false)
 })
 
+test('the repository baseline retains nonnumeric metadata while tightening one allowance', () => {
+  const base = JSON.parse(readFileSync(new URL('../structure-baseline.json', import.meta.url), 'utf8'))
+  const after = structuredClone(base)
+  const [path, allowance] = Object.entries(after.size).find(([, entry]) => entry.n > 1)
+  allowance.n -= 1
+  assert.equal(structureBaselineOnlyShrinks(base, after), true)
+  assert.equal(structureBaselineOnlyShrinks(base, base), true)
+  const grown = structuredClone(base)
+  grown.size[path].n += 1
+  assert.equal(structureBaselineOnlyShrinks(base, grown), false)
+  const metadata = structuredClone(after)
+  metadata.headers.reason = 'Changed metadata'
+  assert.equal(structureBaselineOnlyShrinks(base, metadata), false)
+  const removed = structuredClone(after)
+  delete removed.headers.reason
+  assert.equal(structureBaselineOnlyShrinks(base, removed), false)
+  const added = structuredClone(after)
+  added.headers.files.push('apps/new-allowance.ts')
+  assert.equal(structureBaselineOnlyShrinks(base, added), false)
+})
+
 function fixture() {
   const beforeManifest = {
     scripts: { test: 'bun test', gates: 'bun run lint && bun test' },
