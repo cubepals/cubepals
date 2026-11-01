@@ -80,6 +80,36 @@ const lines = async (minecraft: FakeMinecraft, key: string) =>
   (await minecraft.recent(key as RuntimeHandle, 1000)).map((l) => l.text)
 const unclocked = (text: string) => text.replace(/^\[\d\d:\d\d:\d\d\] /, '')
 
+describe('game rule startup boundaries', () => {
+  test('observers see safe game defaults while the first world is still opening', async () => {
+    const { minecraft } = fresh()
+    const m = await machine({ VERSION: '26.2', TYPE: 'PAPER' })
+    const opening = minecraft.start(m)
+    try {
+      expect(minecraft.playing(m.key).pvp).toBe(true)
+      expect(minecraft.keepsInventory(m.key, 'minecraft:overworld')).toBe(false)
+    } finally {
+      await opening
+    }
+  })
+
+  test('incomplete rule commands echo their input and unsupported execute verbs are refused', async () => {
+    const { minecraft } = fresh()
+    const m = await machine({ VERSION: '26.2', TYPE: 'PAPER' })
+    await minecraft.start(m)
+    expect(await minecraft.run(target(m), 'gamerule')).toBe(
+      'Incorrect argument for command\ngamerule <--[HERE]',
+    )
+    expect(await minecraft.run(target(m), 'execute in minecraft:the_nether run gamerule')).toBe(
+      'Incorrect argument for command\ngamerule <--[HERE]',
+    )
+    expect(await minecraft.run(target(m), 'execute in minecraft:the_nether run say hello')).toBe(
+      'Unknown or incomplete command, see below for error',
+    )
+    expect(minecraft.keepsInventory(m.key, 'minecraft:the_nether')).toBe(false)
+  })
+})
+
 describe('a start', () => {
   test('writes the properties, keeps white-list once set, and logs as the image does', async () => {
     const { minecraft } = fresh()
