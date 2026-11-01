@@ -2,23 +2,53 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-/** Revision requests preserve persisted choices across no-ops, stale requests and pack changes. */
+/** Revision requests preserve persisted choices across no-ops, stale requests, waiting and pack changes. */
 import { afterAll, describe, expect, test } from 'bun:test'
 import { SECOND_MS } from '@blockly/contracts/durations'
+import { schema } from '@blockly/db'
+import { and, desc, eq } from 'drizzle-orm'
+import { entitlementsFor } from '../../domain/account/entitlements.ts'
+import { closestTier, memoryMb, playerCapacity } from '../../domain/server/size.ts'
 import { Cdn } from '../../testing/cdn.ts'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
 import { utf8, zipBytes } from '../../testing/uploads.ts'
-import type { UserActor } from '../actor.ts'
+import { requestedBy, type UserActor } from '../actor.ts'
 import { loadRevision } from '../servers/persistence.ts'
+import { acknowledged } from './service.ts'
 
 // Cases create separate servers; the file owns the database and its final cleanup.
 let harness: ReturnType<typeof startHarness> | undefined
+let acknowledgementFixture: Promise<Awaited<ReturnType<typeof acknowledgementRecords>>> | undefined
+let acknowledgementCdn: Cdn | undefined
 afterAll(async () => {
+  acknowledgementCdn?.close()
   await harness?.then(
     (h) => h.close(),
     () => undefined,
   )
 })
+
+async function audit(
+  h: Harness,
+  owner: UserActor,
+  serverId: string,
+  action: string,
+  data: Record<string, unknown>,
+) {
+  const [row] = await h.db
+    .select()
+    .from(schema.auditLog)
+    .where(and(eq(schema.auditLog.subjectId, serverId), eq(schema.auditLog.action, action)))
+    .orderBy(desc(schema.auditLog.at))
+    .limit(1)
+  expect(row).toMatchObject({
+    actor: requestedBy(owner),
+    action,
+    subjectType: 'server',
+    subjectId: serverId,
+    data,
+  })
+}
 
 async function membership(
   h: Harness,
@@ -56,6 +86,9 @@ async function membership(
   const bedrock = (await desired()).id
   await h.app.revisions.changeBedrock(owner, serverId, true, crypto.randomUUID())
   expect((await desired()).id).toBe(bedrock)
+  await audit(h, owner, serverId, 'server.authentication_changed', { onlineMode: true })
+  await audit(h, owner, serverId, 'server.other_versions_changed', { otherVersions: 'on' })
+  await audit(h, owner, serverId, 'server.bedrock_changed', { bedrock: true, onPaper: true })
 }
 
 async function changes() {
@@ -80,6 +113,12 @@ async function changes() {
     )
   await change({ difficulty: 'hard', pvp: false })
   expect((await desired()).settings).toMatchObject({ difficulty: 'hard', pvp: false })
+  await audit(h, owner, server.id, 'server.settings_changed', {
+    changes: [
+      { field: 'pvp', from: first.settings.pvp, to: false },
+      { field: 'difficulty', from: first.settings.difficulty, to: 'hard' },
+    ],
+  })
   const saved = (await desired()).id
   await change({ difficulty: 'hard', pvp: false })
   expect((await desired()).id).toBe(saved)
@@ -105,6 +144,7 @@ async function changes() {
   expect((await desired()).settings.maxPlayers).toBe(
     (await h.app.queries.settingsOptions(owner, server.id)).bounds.maxPlayers,
   )
+  await audit(h, owner, server.id, 'server.resized', { from: '4g', to: '3g' })
   const resized = (await desired()).id
   await h.app.revisions.resize(owner, server.id, '3g', crypto.randomUUID())
   expect((await desired()).id).toBe(resized)
@@ -114,6 +154,7 @@ async function changes() {
     basedOnRevisionId: first.id,
     settings: { ...first.settings, onlineMode: true },
   })
+  await audit(h, owner, server.id, 'server.rolled_back', { to: first.number, changes: expect.any(Array) })
   await expect(
     h.app.revisions.rollback(owner, server.id, crypto.randomUUID(), crypto.randomUUID()),
   ).rejects.toThrow(/Revision/)
@@ -242,6 +283,7 @@ async function packs() {
     )
     expect((await desired()).modpack).toMatchObject({ versionLabel: '2.0' })
     expect((await desired()).reason).toBe('mods_changed')
+    await audit(h, owner, server.id, 'server.pack_changed', { changes: expect.any(Array) })
     publish(3, '1.21.1')
     await expect(
       h.app.packChanges.change(
@@ -289,7 +331,136 @@ async function packs() {
   }
 }
 
+async function acknowledgementRecords() {
+  harness ??= startHarness()
+  const h = await harness
+  const owner = await h.user('Alex', 'plus')
+  const server = await h.create(owner, { loader: 'fabric' })
+  await h.until(server.id, 'running', 3 * SECOND_MS)
+  await h.settled(server.id, 3 * SECOND_MS)
+  acknowledgementCdn = new Cdn()
+  await acknowledgementCdn.start()
+  return {
+    h,
+    revision: await loadRevision(h.db, (await h.server(server.id)).desiredRevisionId),
+    cdn: acknowledgementCdn,
+  }
+}
+async function revokedAcknowledgement(mode: 'single' | 'plural' | 'accept' | 'kept' | 'mixed' | 'removed') {
+  acknowledgementFixture ??= acknowledgementRecords()
+  const { h, revision, cdn } = await acknowledgementFixture
+  const suffix = crypto.randomUUID()
+  const first = cdn.publish(`Amber-${suffix}`)
+  const second = cdn.publish(`Birch-${suffix}`)
+  const removed = cdn.publish(`Old-${suffix}`)
+  const mods = mode === 'single' ? [first] : [first, second]
+  for (const mod of mods) {
+    if (!('projectId' in mod.source)) throw new Error('The CDN fixture must publish a catalog mod')
+    await h.db.insert(schema.catalogProjects).values({
+      catalog: mod.source.catalog,
+      projectId: mod.source.projectId,
+      state: 'withheld',
+      fetchedAt: new Date(),
+      stateChangedAt: new Date(),
+    })
+  }
+  const kept =
+    mode === 'kept' || mode === 'removed'
+      ? mods.map((mod) => mod.artifact.sha512)
+      : mode === 'mixed'
+        ? [first.artifact.sha512]
+        : []
+  const draft = { ...revision, mods, acknowledgedRevoked: [...kept, removed.artifact.sha512] }
+  const call = () =>
+    h.db.transaction((tx) =>
+      acknowledged(tx, draft, { acknowledgeRevoked: mode === 'accept' || mode === 'mixed' }),
+    )
+  if (mode === 'single' || mode === 'plural') {
+    const names = mods.map((mod) => mod.name).join(', ')
+    const expected =
+      mode === 'single'
+        ? `${names} was taken down where it was published. That can be the author tidying up or a removal for malware; run it only if you trust it.`
+        : `${names} were taken down where they were published. That can be the author tidying up or a removal for malware; run them only if you trust them.`
+    await expect(call()).rejects.toThrow(expected)
+  } else {
+    expect(await call()).toEqual(mods.map((mod) => mod.artifact.sha512))
+  }
+  if (mode === 'removed') {
+    expect(await h.db.transaction((tx) => acknowledged(tx, { ...draft, mods: [second] }, {}))).toEqual([
+      second.artifact.sha512,
+    ])
+  }
+}
+
+async function downgradedSize() {
+  harness ??= startHarness()
+  const h = await harness
+  const owner = await h.user('Steve', 'plus')
+  const server = await h.create(owner)
+  await h.until(server.id, 'running', 3 * SECOND_MS)
+  await h.settled(server.id, 3 * SECOND_MS)
+  await h.app.servers.stop(owner, server.id, crypto.randomUUID())
+  await h.until(server.id, 'stopped', 3 * SECOND_MS)
+  await h.settled(server.id, 3 * SECOND_MS)
+  const largest = [...entitlementsFor('plus').allowedMemoryTiers].sort((a, b) => memoryMb(b) - memoryMb(a))[0]
+  if (!largest) throw new Error('The plan fixture must offer a server size')
+  await h.app.revisions.resize(owner, server.id, largest, crypto.randomUUID())
+  let desired = await loadRevision(h.db, (await h.server(server.id)).desiredRevisionId)
+  await h.app.revisions.changeSettings(
+    owner,
+    server.id,
+    { ...desired.settings, maxPlayers: playerCapacity(largest) },
+    crypto.randomUUID(),
+  )
+  desired = await loadRevision(h.db, (await h.server(server.id)).desiredRevisionId)
+  await h.db
+    .update(schema.accountStanding)
+    .set({ plan: 'free' })
+    .where(eq(schema.accountStanding.userId, owner.userId))
+  const moved = closestTier(largest, entitlementsFor('free').allowedMemoryTiers)
+  if (moved === null) throw new Error('The Free fixture must offer a replacement size')
+  const capacity = playerCapacity(moved)
+  const caps = entitlementsFor('free').settingCaps
+  if (!caps) throw new Error('The Free fixture must have its real setting caps')
+  expect(largest).not.toBe(moved)
+  const difficulty = desired.settings.difficulty === 'hard' ? 'easy' : 'hard'
+  await expect(
+    h.app.revisions.changeSettings(
+      owner,
+      server.id,
+      { ...desired.settings, difficulty },
+      crypto.randomUUID(),
+    ),
+  ).rejects.toThrow(/servers hold up to/)
+  expect((await h.server(server.id)).desiredRevisionId).toBe(desired.id)
+  expect((await h.server(server.id)).memoryTier).toBe(largest)
+  await h.app.revisions.changeSettings(
+    owner,
+    server.id,
+    {
+      ...desired.settings,
+      difficulty,
+      maxPlayers: Math.min(capacity, caps.maxPlayers),
+      viewDistance: caps.viewDistance,
+      simulationDistance: caps.simulationDistance,
+    },
+    crypto.randomUUID(),
+  )
+  expect((await h.server(server.id)).memoryTier).toBe(moved)
+  expect((await h.server(server.id)).lifecycle.status).toBe('stopped')
+  await audit(h, owner, server.id, 'server.settings_changed', {
+    sizeMovedByPlan: { from: largest, to: moved },
+  })
+}
+
 describe.skipIf(!hasDatabase)('revision service requests through a real composition', () => {
-  test('preserves each choice and no-op across the revision APIs', changes, 60 * SECOND_MS)
+  test('moves an obsolete plan size only after the player limit fits', downgradedSize, 30 * SECOND_MS)
+  for (const mode of ['single', 'plural', 'accept', 'kept', 'mixed', 'removed'] as const)
+    test(
+      `revoked mod acknowledgements preserve the ${mode} owner choice`,
+      () => revokedAcknowledgement(mode),
+      30 * SECOND_MS,
+    )
+  test('preserves each choice, no-op and waiting change across the revision APIs', changes, 60 * SECOND_MS)
   test('pins pack updates and rejects incompatible or unrelated changes', packs, 60 * SECOND_MS)
 })
