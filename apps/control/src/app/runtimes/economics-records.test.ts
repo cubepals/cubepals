@@ -12,7 +12,8 @@ import type { MinecraftServer } from '../../domain/server/server.ts'
 import { memoryMb } from '../../domain/server/size.ts'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
 import { installTuning, tuning } from '../tuning.ts'
-import type { EconomicsReport } from './economics.ts'
+import { type EconomicsReport, RuntimeEconomics } from './economics.ts'
+import { RuntimeRouter } from './router.ts'
 
 const installed = tuning()
 afterEach(() => installTuning(installed))
@@ -306,12 +307,16 @@ function assertRuntimes(report: EconomicsReport, first: MinecraftServer, second:
   ])
 }
 
+function economics(h: Harness) {
+  return new RuntimeEconomics({ db: h.db, runtimes: new RuntimeRouter([...h.runtimes.values()]) })
+}
+
 async function recorded() {
   figures()
   const h = await ledgerHarness()
   try {
     const { first, second } = await seedLedger(h)
-    const report = await h.app.economics.report(window, 500, at(6))
+    const report = await economics(h).report(window, 500, at(6))
     expect([report.from, report.to, report.hours]).toEqual([from.toISOString(), at(6).toISOString(), 6])
     expect(report.unattributedRevenueCents).toBe(200)
     assertServers(report, first, second)
@@ -328,7 +333,7 @@ async function equalShares() {
     await stopped(h, owner)
     await stopped(h, owner)
     await order(h, owner.userId, 1200, at(2), 0)
-    const full = await h.app.economics.report(window, 500, at(6))
+    const full = await economics(h).report(window, 500, at(6))
     expect(full.servers).toHaveLength(2)
     for (const server of full.servers)
       expect(server).toMatchObject({
@@ -346,7 +351,7 @@ async function equalShares() {
       perRunningHourCents: null,
       perAllocatedGbMonthCents: null,
     })
-    expect((await h.app.economics.report(window, 1, at(6))).servers).toHaveLength(1)
+    expect((await economics(h).report(window, 1, at(6))).servers).toHaveLength(1)
   } finally {
     await h.close()
   }
@@ -355,7 +360,7 @@ async function emptyWindow() {
   installTuning({ ...installed, economics: null })
   const h = await startHarness()
   try {
-    const report = await h.app.economics.report(window, 500, at(-1))
+    const report = await economics(h).report(window, 500, at(-1))
     expect(report.hours).toBe(0)
     expect(report.to).toBe(report.from)
     expect(report.servers).toEqual([])
