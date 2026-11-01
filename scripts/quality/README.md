@@ -15,6 +15,20 @@ harness. Every static candidate remains available for expansion; subjects, mutan
 and incomplete-evidence failures are unchanged. Dependency comparisons keep their identical oracle
 sets and do not use this reordering.
 
+An executing module-owned suite precedes incidental consumers, so router and service tests run
+before integration suites that happen to construct them. Slow suites may run in case batches,
+ordered by measured duration. Every batch must first pass on clean source and together cover the
+complete original case inventory; otherwise the original invocation remains in use. A surviving
+mutant must execute every original case. Early termination needs an actual assertion failure;
+missing cases, unexpected skips, runner errors and timeouts remain inconclusive. Raw batch reports
+are retained, and dependency-only comparisons disable case batching on both sides.
+
+The old extra-play boundary fixture already skips one case in a month's first four hours.
+That existing condition is recognised only for its pinned complete source hash, exact test name,
+and the trusted parent's actual calendar window. Its skip remains visible in JUnit; an edited
+fixture or any other skip still fails. The corrected fixture uses a complete future-month window
+and executes every case. Test clocks and source files are never rewritten for this compatibility.
+
 Coverage's aggregate independently reconstructs its comparison from Git after downloading test
 artifacts. Existing-test and production edits retain the complete baseline ratchet. Verified test
 additions and quality-only inputs preserve the old isolated test inputs, so timing differences in
