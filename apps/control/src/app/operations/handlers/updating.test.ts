@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /** Updating a real server preserves its world, settings and usage through success and rollback. */
-import { describe, expect, test } from 'bun:test'
+import { afterAll, describe, expect, test } from 'bun:test'
 import { SECOND_MS } from '@blockly/contracts/durations'
 import { schema } from '@blockly/db'
 import { asc, eq } from 'drizzle-orm'
@@ -11,62 +11,60 @@ import type { ServerSettings } from '../../../domain/revision/revision.ts'
 import { hasDatabase, startHarness } from '../../../testing/harness.ts'
 import { loadRevision, loadRuntime } from '../../servers/persistence.ts'
 
+// Each case creates its own server; the file owns the real database and its final cleanup.
+let harness: ReturnType<typeof startHarness> | undefined
+afterAll(async () => {
+  // The case reports a setup failure; cleanup owns only a completed harness.
+  await harness?.then(
+    (h) => h.close(),
+    () => undefined,
+  )
+})
+
 async function fixture(gameVersion = '26.3') {
-  const h = await startHarness()
-  try {
-    const owner = await h.user('Steve', 'plus')
-    const created = await h.create(owner, { gameVersion })
-    const server = await h.until(created.id, 'running')
-    await h.settled(server.id)
-    const change = async (patch: Partial<ServerSettings>) => {
-      const current = await loadRevision(h.db, (await h.server(server.id)).desiredRevisionId)
-      return h.app.revisions.changeSettings(
-        owner,
-        server.id,
-        { ...current.settings, ...patch },
-        crypto.randomUUID(),
-      )
-    }
-    const applied = async () => (await h.settled(server.id)).filter((op) => op.kind === 'apply').at(-1)
-    return { h, owner, server, change, applied }
-  } catch (error) {
-    await h.close()
-    throw error
+  harness ??= startHarness()
+  const h = await harness
+  const owner = await h.user('Steve', 'plus')
+  const created = await h.create(owner, { gameVersion })
+  const server = await h.until(created.id, 'running')
+  await h.settled(server.id)
+  const change = async (patch: Partial<ServerSettings>) => {
+    const current = await loadRevision(h.db, (await h.server(server.id)).desiredRevisionId)
+    return h.app.revisions.changeSettings(
+      owner,
+      server.id,
+      { ...current.settings, ...patch },
+      crypto.randomUUID(),
+    )
   }
+  const applied = async () => (await h.settled(server.id)).filter((op) => op.kind === 'apply').at(-1)
+  return { h, owner, server, change, applied }
 }
 
 async function liveSettings() {
   const { h, server, change, applied } = await fixture()
-  try {
-    const before = h.runtime.machine(server.id)?.spec.env.DIFFICULTY
-    await change({ difficulty: 'hard', pvp: false })
-    expect((await applied())?.status).toBe('succeeded')
-    expect(h.minecraft.playing(server.id)).toMatchObject({ difficulty: 'hard', pvp: false })
-    expect(h.runtime.machine(server.id)?.spec.env.DIFFICULTY).toBe(before)
-    expect((await loadRuntime(h.db, server.id, ['fake'])).applied?.revisionId).toBe(
-      (await h.server(server.id)).desiredRevisionId,
-    )
-  } finally {
-    await h.close()
-  }
+  const before = h.runtime.machine(server.id)?.spec.env.DIFFICULTY
+  await change({ difficulty: 'hard', pvp: false })
+  expect((await applied())?.status).toBe('succeeded')
+  expect(h.minecraft.playing(server.id)).toMatchObject({ difficulty: 'hard', pvp: false })
+  expect(h.runtime.machine(server.id)?.spec.env.DIFFICULTY).toBe(before)
+  expect((await loadRuntime(h.db, server.id, ['fake'])).applied?.revisionId).toBe(
+    (await h.server(server.id)).desiredRevisionId,
+  )
 }
 
 async function settingsBoot() {
   const { h, server, change, applied } = await fixture()
-  try {
-    await change({ spawnProtection: 4 })
-    expect((await applied())?.status).toBe('succeeded')
-    expect(await h.minecraft.file(server.id, 'server.properties')).toContain('spawn-protection=4')
-    expect((await h.server(server.id)).lifecycle.status).toBe('running')
-    expect((await loadRuntime(h.db, server.id, ['fake'])).applied?.revisionId).toBe(
-      (await h.server(server.id)).desiredRevisionId,
-    )
-    expect(
-      await h.db.select().from(schema.backups).where(eq(schema.backups.serverId, server.id)),
-    ).toHaveLength(0)
-  } finally {
-    await h.close()
-  }
+  await change({ spawnProtection: 4 })
+  expect((await applied())?.status).toBe('succeeded')
+  expect(await h.minecraft.file(server.id, 'server.properties')).toContain('spawn-protection=4')
+  expect((await h.server(server.id)).lifecycle.status).toBe('running')
+  expect((await loadRuntime(h.db, server.id, ['fake'])).applied?.revisionId).toBe(
+    (await h.server(server.id)).desiredRevisionId,
+  )
+  expect(await h.db.select().from(schema.backups).where(eq(schema.backups.serverId, server.id))).toHaveLength(
+    0,
+  )
 }
 
 async function settingsRollback() {
@@ -85,28 +83,23 @@ async function settingsRollback() {
     expect(await h.minecraft.file(server.id, 'server.properties')).toContain('spawn-protection=0')
   } finally {
     h.runtime.failBootWhen(() => null)
-    await h.close()
   }
 }
 
 async function versionBoot() {
   const { h, owner, server, applied } = await fixture('26.2')
-  try {
-    await h.app.mods.changeVersion(
-      owner,
-      server.id,
-      { gameVersion: '26.3', loader: 'vanilla' },
-      [],
-      crypto.randomUUID(),
-    )
-    expect((await applied())?.status).toBe('succeeded')
-    expect((await loadRevision(h.db, (await h.server(server.id)).desiredRevisionId)).gameVersion).toBe('26.3')
-    const copies = await h.db.select().from(schema.backups).where(eq(schema.backups.serverId, server.id))
-    expect(copies.some((copy) => copy.trigger === 'pre_apply' && copy.status === 'ready')).toBe(true)
-    expect((await h.server(server.id)).lifecycle.status).toBe('running')
-  } finally {
-    await h.close()
-  }
+  await h.app.mods.changeVersion(
+    owner,
+    server.id,
+    { gameVersion: '26.3', loader: 'vanilla' },
+    [],
+    crypto.randomUUID(),
+  )
+  expect((await applied())?.status).toBe('succeeded')
+  expect((await loadRevision(h.db, (await h.server(server.id)).desiredRevisionId)).gameVersion).toBe('26.3')
+  const copies = await h.db.select().from(schema.backups).where(eq(schema.backups.serverId, server.id))
+  expect(copies.some((copy) => copy.trigger === 'pre_apply' && copy.status === 'ready')).toBe(true)
+  expect((await h.server(server.id)).lifecycle.status).toBe('running')
 }
 
 async function versionRollback() {
@@ -130,29 +123,24 @@ async function versionRollback() {
     )
   } finally {
     h.minecraft.breakOn(() => null)
-    await h.close()
   }
 }
 
 async function resizeUsage() {
   const { h, owner, server, applied } = await fixture()
-  try {
-    await h.app.revisions.resize(owner, server.id, '4g', crypto.randomUUID())
-    expect((await applied())?.status).toBe('succeeded')
-    expect((await h.server(server.id)).memoryTier).toBe('4g')
-    expect(h.runtime.machine(server.id)?.spec.resources.memoryMb).toBe(4096)
-    const intervals = await h.db
-      .select()
-      .from(schema.powerIntervals)
-      .where(eq(schema.powerIntervals.serverId, server.id))
-      .orderBy(asc(schema.powerIntervals.startedAt))
-    expect(intervals.map((interval) => [interval.memoryTier, interval.stoppedAt === null])).toEqual([
-      ['3g', false],
-      ['4g', true],
-    ])
-  } finally {
-    await h.close()
-  }
+  await h.app.revisions.resize(owner, server.id, '4g', crypto.randomUUID())
+  expect((await applied())?.status).toBe('succeeded')
+  expect((await h.server(server.id)).memoryTier).toBe('4g')
+  expect(h.runtime.machine(server.id)?.spec.resources.memoryMb).toBe(4096)
+  const intervals = await h.db
+    .select()
+    .from(schema.powerIntervals)
+    .where(eq(schema.powerIntervals.serverId, server.id))
+    .orderBy(asc(schema.powerIntervals.startedAt))
+  expect(intervals.map((interval) => [interval.memoryTier, interval.stoppedAt === null])).toEqual([
+    ['3g', false],
+    ['4g', true],
+  ])
 }
 
 describe.skipIf(!hasDatabase)('updating a running server', () => {
