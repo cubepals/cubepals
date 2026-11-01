@@ -3,9 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * CI entrypoint: one exhaustive source partition, with incremental test-aware subject selection.
- * A dependency-only update measures its subjects on the base worktree (`--base-root`, installed
- * from the base lockfile) and holds the head to those scores.
+ * CI entrypoint: changed production files on releases, exhaustive partitions on explicit audits.
  */
 import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
@@ -14,7 +12,8 @@ import { dirname, join, resolve } from 'node:path'
 import { parseArgs } from 'node:util'
 import { inventory, sourceFiles } from './inventory.mjs'
 import { runMutation } from './mutation.mjs'
-import { rotationSubjects, selectMutationScope } from './mutation-scope.mjs'
+import { selectReleaseMutationScope } from './mutation-release-scope.mjs'
+import { rotationSubjects } from './mutation-scope.mjs'
 import { orderMutationTests } from './mutation-test-order.mjs'
 import { groupOf, groups } from './shards.mjs'
 
@@ -70,7 +69,7 @@ if (anchored) {
   if (checkout !== values.head) throw new Error('The checkout does not match the authoritative --head')
 }
 const entries = inventory(root)
-let scope = selectMutationScope({
+let scope = selectReleaseMutationScope({
   root,
   productionFiles: sourceFiles(entries),
   testFiles: entries.filter((entry) => entry.kind === 'test').map((entry) => entry.path),
