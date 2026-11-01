@@ -7,9 +7,9 @@ import { expect, test } from 'bun:test'
 import { createHash } from 'node:crypto'
 import { strFromU8, unzipSync } from 'fflate'
 import { PNG } from 'pngjs'
-import { LibraryFileFormats } from '../../infra/formats/file-formats.ts'
+import { brandPackPath, buildBrandPack } from '../../app/artifacts/brand-pack.ts'
 import { BRAND_PACK } from '../../minecraft/brand-pack.ts'
-import { brandPackPath, buildBrandPack } from './brand-pack.ts'
+import { LibraryFileFormats } from './file-formats.ts'
 
 for (const origin of ['https://cubepals.test', 'https://cubepals.test/'])
   test(`the resource pack retains its files, pixels and content address from ${origin}`, () => {
