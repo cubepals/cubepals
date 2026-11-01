@@ -179,8 +179,9 @@ Each invocation pins the invoking checker's scripts and isolated tool installati
 disposable runtime. Proposed application files and later Git changes cannot replace those runner
 files mid-run. Missing execution evidence still fails the verdict.
 
-Application and workspace subjects run four independent command-runner processes against Stryker's
-disposable, instrumented sandbox. Each process activates only its own mutant.
+Application subjects use two independent command-runner processes, leaving CPU capacity for their
+real database. Workspace package subjects use four. Each process activates only its own mutant
+inside Stryker's disposable, instrumented sandbox.
 CI gives Postgres a 1 GiB shared-memory limit so concurrent real-database cases do not exhaust
 Docker's default 64 MiB segment while executing parallel queries.
 `mutation-sandbox.mjs` recreates installation links so bare workspace imports reach that sandbox's
