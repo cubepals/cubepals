@@ -9,12 +9,14 @@ import { dirname } from 'node:path'
 import { SECOND_MS } from '@blockly/contracts/durations'
 import { schema } from '@blockly/db'
 import { eq } from 'drizzle-orm'
+import { decide } from '../../../domain/server/lifecycle.ts'
 import { kickEveryone, LIST_UUIDS } from '../../../minecraft/console.ts'
 import { resetHeartsCommand } from '../../../minecraft/lifesteal.ts'
 import { Cdn } from '../../../testing/cdn.ts'
 import { hasDatabase, startHarness } from '../../../testing/harness.ts'
 import { ArtifactUnavailable } from '../../artifacts/service.ts'
 import { RuntimeRouter } from '../../runtimes/router.ts'
+import { saveLifecycle } from '../../servers/persistence.ts'
 import { NoLongerApplies, type OperationContext } from '../runner.ts'
 import { serverBinding } from './binding.ts'
 import { gameConsole } from './game-console.ts'
@@ -123,6 +125,32 @@ async function refusesBoot() {
   }
 }
 
+async function recordsPolicyStop() {
+  const { h, server, deps, ctx } = await fixture()
+  const decision = decide(server.lifecycle, { type: 'apply' })
+  if (decision.kind !== 'accept') throw new Error('The running fixture must accept its update')
+  ctx.server = await h.db.transaction((tx) => saveLifecycle(tx, server, decision.to))
+  await h.db
+    .update(schema.accountStanding)
+    .set({ status: 'terminated' })
+    .where(eq(schema.accountStanding.userId, server.ownerId))
+  ctx.op.input = { boot: true, fromFailure: true }
+  const checked = await deps.mayBoot(ctx.server, { running: true, fromFailure: true })
+  expect(checked.refusal).not.toBeNull()
+  const outcome = spyOn(h.app.transitions, 'outcome')
+  try {
+    expect(await updating(deps).run(ctx)).toEqual({
+      status: 'failed',
+      reason: `The server stayed off: ${checked.refusal}`,
+    })
+    expect(outcome).toHaveBeenCalledTimes(1)
+    expect(outcome.mock.calls[0]?.[2]).toEqual({ type: 'updated', running: false, reason: 'policy' })
+    expect((await h.server(server.id)).lifecycle).toMatchObject({ status: 'stopped', stopReason: 'policy' })
+    expect(h.runtime.machine(server.id)?.state).toBe('stopped')
+  } finally {
+    outcome.mockRestore()
+  }
+}
 async function resetsHearts() {
   const { h, server, deps, ctx } = await fixture()
   const listed = spyOn(h.minecraft, 'run')
@@ -332,6 +360,7 @@ async function replacementDuringBoot() {
 
 describe.skipIf(!hasDatabase)('updating handler guard boundaries', () => {
   test('keeps replacement handles before boot and after its recheck', replacementDuringBoot, 30 * SECOND_MS)
+  test('persists a policy refusal while an update owns the lifecycle', recordsPolicyStop, 30 * SECOND_MS)
   test('registers its lifecycle phase and abandonment states', handlerContract, 30 * SECOND_MS)
   test(
     'restores the desired configuration only for a recognized unavailable artifact',
