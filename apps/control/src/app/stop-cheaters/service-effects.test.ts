@@ -123,3 +123,45 @@ describe.skipIf(!hasDatabase)('Stop cheaters owner effects', () => {
     30 * SECOND_MS,
   )
 })
+
+test.skipIf(!hasDatabase)(
+  'non-removals and incomplete reporter identities leave no removal records',
+  async () => {
+    const { ServerJoinEvent } = await import('@blockly/contracts/join-records')
+    const { owner, id } = await stoppedWorld()
+    const at = new Date().toISOString(),
+      uuid = crypto.randomUUID()
+    const otherKind = ServerJoinEvent.shape.kind.options.find((kind) => kind !== 'removed')
+    if (!otherKind) throw new Error('The reporter must have an event other than removal')
+    const events = [
+      { kind: otherKind, at, uuid, reason: 'speed' },
+      { kind: 'removed', at, uuid, reason: 'unknown-future-reason' },
+      { kind: 'removed', at, uuid },
+      { kind: 'removed', at, reason: 'speed' },
+      { kind: 'removed', at, uuid: 'not-a-player', reason: 'speed' },
+    ].map((event) => ServerJoinEvent.parse(event))
+    await h.app.stopCheaters.recordRemovals(id, events)
+    expect(await h.app.stopCheaters.removalsOf(owner, id, uuid)).toEqual([])
+    expect(
+      await h.db.select().from(schema.serverRemovals).where(eq(schema.serverRemovals.serverId, id)),
+    ).toEqual([])
+  },
+  30 * SECOND_MS,
+)
+
+test.skipIf(!hasDatabase)(
+  'a modded server refuses enabling with the complete actionable explanation',
+  async () => {
+    const { owner, id } = await stoppedWorld()
+    await h.db
+      .update(schema.serverRevisions)
+      .set({ loader: 'fabric' })
+      .where(eq(schema.serverRevisions.id, (await h.server(id)).desiredRevisionId))
+    await expect(h.app.stopCheaters.set(owner, id, true, crypto.randomUUID())).rejects.toMatchObject({
+      code: 'invalid_choice',
+      message:
+        'Stop cheaters runs on plain Minecraft and Paper servers. Mods change how players move, so it can’t tell a cheat from a mod here.',
+    })
+  },
+  30 * SECOND_MS,
+)

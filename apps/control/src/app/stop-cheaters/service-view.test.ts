@@ -87,6 +87,10 @@ describe.skipIf(!hasDatabase)('Stop cheaters on the Players page', () => {
         today: 0,
       })
       await h.db.delete(schema.serverRuntimes).where(eq(schema.serverRuntimes.serverId, id))
+      await h.db
+        .update(schema.serverStopCheaters)
+        .set({ setting: 'on' })
+        .where(eq(schema.serverStopCheaters.serverId, id))
       expect((await h.app.stopCheaters.viewOf(owner, id)).own).toBe(false)
     },
     30 * SECOND_MS,
@@ -152,6 +156,8 @@ describe.skipIf(!hasDatabase)('Stop cheaters restart requests', () => {
       const applies = async () => (await h.operations(id)).filter((op) => op.kind === 'apply')
       await h.app.stopCheaters.set(owner, id, true, crypto.randomUUID(), 'empty')
       expect((await h.app.queries.get(owner, id)).waiting?.stopCheaters).toBe('on')
+      expect(await applies()).toHaveLength(0)
+      await h.app.stopCheaters.set(owner, id, true, crypto.randomUUID())
       expect(await applies()).toHaveLength(0)
       await h.app.stopCheaters.set(owner, id, false, crypto.randomUUID(), 'empty')
       expect((await h.app.queries.get(owner, id)).waiting).toBeNull()
