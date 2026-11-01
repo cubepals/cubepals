@@ -23,9 +23,9 @@ mutant must execute every original case. Early termination needs an actual asser
 missing cases, unexpected skips, runner errors and timeouts remain inconclusive. Raw batch reports
 are retained, and dependency-only comparisons disable case batching on both sides.
 
-The old extra-play boundary fixture already skips one case in a month's first four hours.
-That existing condition is recognised only for its pinned complete source hash, exact test name,
-and the trusted parent's actual calendar window. Its skip remains visible in JUnit; an edited
+Six old billing cases already skip in the first three to twelve hours of a month.
+Each existing condition is recognised only for its pinned complete source hash, exact test name,
+and the trusted parent's actual calendar window. Skips remain visible in JUnit; an edited
 fixture or any other skip still fails. The corrected fixture uses a complete future-month window
 and executes every case. Test clocks and source files are never rewritten for this compatibility.
 
