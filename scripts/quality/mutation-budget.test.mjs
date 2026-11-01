@@ -251,7 +251,7 @@ test('a failed native Bun case still runs fixture cleanup before later files are
   const marker = join(root, 'closed')
   writeFileSync(
     join(root, 'cleanup.test.ts'),
-    `import {afterAll,expect,test} from 'bun:test';import {writeFileSync} from 'node:fs';afterAll(()=>writeFileSync(${JSON.stringify(marker)},'closed'));test('detects a changed value',()=>expect(process.env.__STRYKER_ACTIVE_MUTANT__ ?? 'baseline').toBe('baseline'));test('another case',()=>expect(true).toBe(true))`,
+    `import {afterAll,expect,test} from 'bun:test';import {writeFileSync} from 'node:fs';import {join} from 'node:path';afterAll(()=>writeFileSync(join(import.meta.dir,'closed'),'closed'));test('detects a changed value',()=>expect(process.env.__STRYKER_ACTIVE_MUTANT__ ?? 'baseline').toBe('baseline'));test('another case',()=>expect(true).toBe(true))`,
   )
   const manifest = join(root, 'tests.json')
   writeFileSync(
