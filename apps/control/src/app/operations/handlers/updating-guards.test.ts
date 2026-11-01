@@ -3,20 +3,22 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /** Handler boundary checks use real persisted bindings, game files and provider exec results. */
-import { describe, expect, test } from 'bun:test'
+import { describe, expect, spyOn, test } from 'bun:test'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import { SECOND_MS } from '@blockly/contracts/durations'
 import { schema } from '@blockly/db'
 import { eq } from 'drizzle-orm'
+import { kickEveryone, LIST_UUIDS } from '../../../minecraft/console.ts'
 import { resetHeartsCommand } from '../../../minecraft/lifesteal.ts'
 import { hasDatabase, startHarness } from '../../../testing/harness.ts'
 import { RuntimeRouter } from '../../runtimes/router.ts'
 import { NoLongerApplies, type OperationContext } from '../runner.ts'
 import { serverBinding } from './binding.ts'
 import { gameConsole } from './game-console.ts'
-import { goingBack } from './going-back.ts'
+import { goingBack, NotPutBack } from './going-back.ts'
 import { rechecks } from './rechecks.ts'
+import { RESTARTING_FOR_A_CHANGE } from './restart-notice.ts'
 import { updating } from './updating.ts'
 import { worldCopies } from './world-copies.ts'
 
@@ -117,6 +119,8 @@ async function refusesBoot() {
 
 async function resetsHearts() {
   const { h, server, deps, ctx } = await fixture()
+  const listed = spyOn(h.minecraft, 'run')
+  const notified = spyOn(h.minecraft, 'runAll')
   try {
     const path = h.minecraft.path(server.id, 'plugins/LifeStealZ/userData.db')
     await mkdir(dirname(path), { recursive: true })
@@ -128,12 +132,16 @@ async function resetsHearts() {
     await expect(readFile(path)).rejects.toThrow()
     await expect(readFile(`${path}-wal`)).rejects.toThrow()
     expect(await readFile(`${dirname(path)}/config.yml`, 'utf8')).toBe('startHearts: 10')
+    expect(listed.mock.calls.map(([, command]) => command)).toContain(LIST_UUIDS)
+    expect(notified).toHaveBeenCalledWith(expect.anything(), kickEveryone(RESTARTING_FOR_A_CHANGE))
   } finally {
+    listed.mockRestore()
+    notified.mockRestore()
     await h.close()
   }
 }
 
-async function refusesCorruptHearts() {
+async function refusesCorruptHearts(mode: 'normal' | 'stopped' | 'fatal' | 'cancelled' = 'normal') {
   const { h, server, runtime, binding, deps, ctx, steps } = await fixture()
   try {
     const path = h.minecraft.path(server.id, 'plugins/LifeStealZ/userData.db')
@@ -142,14 +150,47 @@ async function refusesCorruptHearts() {
     if (!handle) throw new Error('The binding must remain running')
     const refused = await runtime.exec(handle, resetHeartsCommand(), 60)
     expect(refused.exitCode).not.toBe(0)
+    const problem = await readFile(path).then(
+      () => {
+        throw new Error('A directory is not a hearts database')
+      },
+      (error: unknown) => error,
+    )
+    const cancelled = new NoLongerApplies()
+    let rested = false
     let rolledBack = false
     ctx.op.input = { boot: true, resetHearts: true }
-    const result = await updating({
+    const running = updating({
       ...deps,
+      restBack: async () => {
+        rested = true
+      },
       rollBack: async () => {
         rolledBack = true
+        if (mode === 'stopped') throw new NotPutBack(problem)
+        if (mode === 'fatal') throw problem
+        if (mode === 'cancelled') throw cancelled
       },
     }).run(ctx)
+    if (mode === 'cancelled') {
+      await expect(running).rejects.toBe(cancelled)
+      expect(rested).toBe(false)
+      return
+    }
+    if (mode === 'fatal') {
+      await expect(running).rejects.toThrow('going back to the previous one failed too')
+      expect(rested).toBe(false)
+      return
+    }
+    const result = await running
+    if (mode === 'stopped') {
+      expect(result.status).toBe('failed')
+      if (result.status !== 'failed') throw new Error('A refused rollback must fail')
+      expect(result.reason).toContain("It's stopped on the one before")
+      expect(result.detail).toContain(problem instanceof Error ? problem.message : String(problem))
+      expect(rested).toBe(true)
+      return
+    }
     expect(result.status).toBe('failed')
     if (result.status !== 'failed') throw new Error('The corrupt hearts path must stop the new season')
     expect(result.detail).toContain(refused.stderr.trim())
@@ -181,10 +222,25 @@ async function cancelledBoot() {
 }
 
 describe.skipIf(!hasDatabase)('updating handler guard boundaries', () => {
+  test(
+    'rests on the previous configuration when rollback cannot start compute',
+    () => refusesCorruptHearts('stopped'),
+    30 * SECOND_MS,
+  )
+  test('reports both failures when rollback also fails', () => refusesCorruptHearts('fatal'), 30 * SECOND_MS)
+  test(
+    'lets a cancelled rollback escape without resting the server',
+    () => refusesCorruptHearts('cancelled'),
+    30 * SECOND_MS,
+  )
   test('requires a runtime handle', missingBinding, 30 * SECOND_MS)
   test('requires a previously applied configuration', missingApplied, 30 * SECOND_MS)
   test('stops compute when policy refuses another boot', refusesBoot, 30 * SECOND_MS)
   test('resets the season files and preserves plugin configuration', resetsHearts, 30 * SECOND_MS)
-  test('rolls back when the real filesystem refuses to reset hearts', refusesCorruptHearts, 30 * SECOND_MS)
+  test(
+    'rolls back when the real filesystem refuses to reset hearts',
+    () => refusesCorruptHearts(),
+    30 * SECOND_MS,
+  )
   test('lets a cancelled boot escape without rolling it back', cancelledBoot, 30 * SECOND_MS)
 })
