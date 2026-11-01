@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /** Real moderation records retain durations, history, owner policy and acknowledgement states. */
-import { afterAll, describe, expect, test } from 'bun:test'
+import { afterAll, describe, expect, spyOn, test } from 'bun:test'
 import { DEFAULT_LADDER } from '@blockly/contracts'
 import { MINUTE_MS, SECOND_MS } from '@blockly/contracts/durations'
 import { schema } from '@blockly/db'
@@ -12,6 +12,7 @@ import { CHATSENTINEL, LIBERTYBANS, LUCKPERMS } from '../../minecraft/moderation
 import { offeredVersions, supports } from '../../minecraft/versions.ts'
 import { Cdn } from '../../testing/cdn.ts'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
+import { readAccess } from '../access/persistence.ts'
 import { loadRevision } from '../servers/persistence.ts'
 import { ModerationService } from './service.ts'
 
@@ -191,38 +192,42 @@ async function escalation() {
   expect(await service.view(owner, id)).toMatchObject({ ladder: [...DEFAULT_LADDER], ownLadder: false })
 }
 
+function publishTools(h: Harness, cdn: Cdn) {
+  for (const projectId of [LIBERTYBANS, LUCKPERMS, CHATSENTINEL])
+    h.catalog.publish(
+      {
+        projectId,
+        slug: projectId,
+        name: projectId,
+        summary: 'Moderation fixture',
+        iconUrl: null,
+        environments: ['server_only'],
+        downloads: 1,
+      },
+      [
+        {
+          versionId: `${projectId}-1`,
+          projectId,
+          versionLabel: '1',
+          channel: 'release',
+          state: 'listed',
+          environment: 'server_only',
+          loaders: ['paper'],
+          gameVersions: offeredVersions().map((version) => version.id),
+          publishedAt: new Date(),
+          file: cdn.file(projectId),
+          dependencies: [],
+        },
+      ],
+    )
+}
+
 async function tools() {
   const { h, owner, id, service } = await fixture('paper')
   const cdn = new Cdn()
   try {
     await cdn.start()
-    for (const projectId of [LIBERTYBANS, LUCKPERMS, CHATSENTINEL])
-      h.catalog.publish(
-        {
-          projectId,
-          slug: projectId,
-          name: projectId,
-          summary: 'Moderation fixture',
-          iconUrl: null,
-          environments: ['server_only'],
-          downloads: 1,
-        },
-        [
-          {
-            versionId: `${projectId}-1`,
-            projectId,
-            versionLabel: '1',
-            channel: 'release',
-            state: 'listed',
-            environment: 'server_only',
-            loaders: ['paper'],
-            gameVersions: offeredVersions().map((version) => version.id),
-            publishedAt: new Date(),
-            file: cdn.file(projectId),
-            dependencies: [],
-          },
-        ],
-      )
+    publishTools(h, cdn)
     const revision = async () => loadRevision(h.db, (await h.server(id)).desiredRevisionId)
     await service.setTools(owner, id, { enabled: true, chatFilter: false }, crypto.randomUUID())
     expect(await service.view(owner, id)).toMatchObject({ available: true, enabled: true, chatFilter: false })
@@ -246,6 +251,55 @@ async function tools() {
     ).rejects.toThrow('The moderation tools run on Paper servers')
     expect((await service.view(owner, fabric.id)).available).toBe(false)
   } finally {
+    cdn.close()
+  }
+}
+
+async function punishments() {
+  const { h, owner, id, service } = await fixture('paper')
+  const cdn = new Cdn()
+  await cdn.start()
+  const published = spyOn(h.events, 'publish')
+  try {
+    publishTools(h, cdn)
+    await service.setTools(owner, id, { enabled: true, chatFilter: false }, crypto.randomUUID())
+    for (const [kind, minutes, reason] of [
+      ['warn', 12, 'Be kind'],
+      ['mute', 30, 'Repeated spam'],
+      ['ban', null, 'Griefing'],
+    ] as const)
+      await service.punish(owner, id, { ...player, kind, minutes, reason })
+    const rows = await h.db
+      .select()
+      .from(schema.serverModerationActions)
+      .where(eq(schema.serverModerationActions.serverId, id))
+    expect(
+      rows
+        .map((row) => ({ kind: row.kind, minutes: row.minutes, reason: row.reason }))
+        .sort((a, b) => a.kind.localeCompare(b.kind)),
+    ).toEqual([
+      { kind: 'ban', minutes: null, reason: 'Griefing' },
+      { kind: 'mute', minutes: 30, reason: 'Repeated spam' },
+      { kind: 'warn', minutes: null, reason: 'Be kind' },
+    ])
+    for (const row of rows)
+      expect(row).toMatchObject({
+        playerUuid: player.playerUuid.toLowerCase(),
+        playerName: player.name,
+        state: 'pending',
+        requestedBy: `user:${owner.userId}`,
+        error: null,
+      })
+    expect(published).toHaveBeenCalledWith(expect.anything(), {
+      type: 'access_changed',
+      serverId: id,
+      ownerId: owner.userId,
+      version: (await readAccess(h.db, id)).version,
+    })
+    const audit = await h.db.select().from(schema.auditLog).where(eq(schema.auditLog.subjectId, id))
+    expect(audit.filter((row) => row.action === 'moderation.punished')).toHaveLength(3)
+  } finally {
+    published.mockRestore()
     cdn.close()
   }
 }
@@ -288,6 +342,11 @@ async function missingHead() {
 }
 
 describe.skipIf(!hasDatabase)('moderation records', () => {
+  test(
+    'punishments retain player identity, duration, audit and delivery notification',
+    punishments,
+    30 * SECOND_MS,
+  )
   test('history retains the newest five hundred actions', historyLimit, 30 * SECOND_MS)
   test('missing access metadata has a readable default and refuses writes', missingHead, 30 * SECOND_MS)
   test('tool changes retain the selected plugins and configuration', tools, 30 * SECOND_MS)
