@@ -11,15 +11,25 @@ import { realtimeContract } from '@blockly/contracts/realtime'
 import { fetchRequestHandler } from '@trpc/server/adapters/fetch'
 import { act, createElement } from 'react'
 import { Client } from 'transport-io'
+import { S3ArchiveStore } from '../../infra/s3/s3-archive-store.ts'
 import { Cdn } from '../../testing/cdn.ts'
 import { hasDatabase, startHarness } from '../../testing/harness.ts'
 import { fabricJar, utf8, zipBytes } from '../../testing/uploads.ts'
 import { appRouter } from './router.ts'
 
 const quality = createRequire(new URL('../../../../../tools/quality/package.json', import.meta.url))
-function browserScope() {
+function browserScope(origin = 'http://localhost') {
   const Window = quality('happy-dom').Window
-  const browser = new Window({ url: 'http://localhost/servers/test/mods' })
+  const browser = new Window({ url: new URL('/servers/test/mods', origin).href })
+  const NativeRequest = browser.Request
+  // Happy DOM's XHR passes an existing Request as RequestInit. Use its standard clone overload
+  // so the known body length survives; the real S3 service still verifies the bytes.
+  browser.Request = class extends NativeRequest {
+    constructor(input, init) {
+      if (init instanceof NativeRequest && init.url === String(input)) super(init)
+      else super(input, init)
+    }
+  }
   const globals = {
     window: browser,
     document: browser.document,
@@ -35,6 +45,7 @@ function browserScope() {
     Node: browser.Node,
     Event: browser.Event,
     KeyboardEvent: browser.KeyboardEvent,
+    XMLHttpRequest: browser.XMLHttpRequest,
     MutationObserver: browser.MutationObserver,
     getComputedStyle: browser.getComputedStyle.bind(browser),
     requestAnimationFrame: browser.requestAnimationFrame.bind(browser),
@@ -57,14 +68,15 @@ function browserScope() {
     },
   }
 }
-async function until(ready) {
-  const deadline = Date.now() + 5 * SECOND_MS
+async function until(ready, timeout = 5 * SECOND_MS) {
+  const deadline = Date.now() + timeout
   let done = false
   while (!done && Date.now() < deadline)
     await act(async () => {
       await Bun.sleep(20)
       done = await ready()
     })
+  if (!done) console.error(document.body.textContent?.slice(-2000))
   expect(done).toBe(true)
 }
 function button(text) {
@@ -77,17 +89,18 @@ function routeApi(h, owner, browser) {
   const mutations = []
   const local = Object.assign(
     async (input, init) => {
-      const url = new URL(input instanceof Request ? input.url : String(input), 'http://localhost')
+      const url = new URL(input instanceof Request ? input.url : String(input), browser.location.origin)
       if (!url.pathname.startsWith('/api/trpc')) return original(input, init)
       const request = new Request(url, init)
       if (request.method === 'POST')
         mutations.push({ path: url.pathname, input: await request.clone().json() })
-      return fetchRequestHandler({
+      const response = await fetchRequestHandler({
         endpoint: '/api/trpc',
         req: request,
         router: appRouter,
         createContext: () => ({ actor: owner, services: h.app }),
       })
+      return response
     },
     { preconnect: original.preconnect },
   )
@@ -102,7 +115,9 @@ function routeApi(h, owner, browser) {
 }
 async function draw(id) {
   const { createRoot } = await import('react-dom/client')
-  const { TransportProvider } = await import('@transport-io/react')
+  // Resolve the browser provider from the workspace that declares and runs it.
+  const web = createRequire(new URL('../../../../web/package.json', import.meta.url))
+  const { TransportProvider } = await import(web.resolve('@transport-io/react'))
   const { AppRouterContext } = await import('next/dist/shared/lib/app-router-context.shared-runtime')
   const { PathParamsContext, PathnameContext, SearchParamsContext } = await import(
     'next/dist/shared/lib/hooks-client-context.shared-runtime'
@@ -244,15 +259,37 @@ function catalogPack(h, cdn, movesWorld) {
   return { request: { from: { kind: 'modpack', projectId: 'update-pack' } }, upgrade: () => publish(2) }
 }
 
-async function openMods({ online = true, loader = 'fabric', pack = false, movesWorld = false } = {}) {
-  const dom = browserScope()
+function archiveStore() {
+  const endpoint = process.env.S3_TEST_ENDPOINT
+  const bucket = process.env.S3_TEST_BUCKET
+  if (!endpoint || !bucket) throw new Error('The browser upload test needs the configured S3 test service')
+  return new S3ArchiveStore({
+    endpoint,
+    bucket,
+    region: 'auto',
+    accessKeyId: process.env.S3_TEST_ACCESS_KEY_ID ?? 'blockly-test',
+    secretAccessKey: process.env.S3_TEST_SECRET_ACCESS_KEY ?? 'blockly-test-secret',
+  })
+}
+
+async function openMods({
+  online = true,
+  loader = 'fabric',
+  pack = false,
+  movesWorld = false,
+  uploads = false,
+} = {}) {
+  // The in-process API and disposable storage service share this fixture's origin.
+  const dom = browserScope(uploads ? process.env.S3_TEST_ENDPOINT : undefined)
   const cdn = new Cdn()
   let h
   let root
   let api
+  let archive
   try {
     await cdn.start()
-    h = await startHarness()
+    archive = uploads ? archiveStore() : null
+    h = await startHarness(archive ? { capabilities: { archives: archive, billing: null } } : {})
     const owner = await h.user('Steve', 'plus')
     publishIris(h, cdn)
     const prepared = pack ? catalogPack(h, cdn, movesWorld) : null
@@ -267,6 +304,7 @@ async function openMods({ online = true, loader = 'fabric', pack = false, movesW
     api = routeApi(h, owner, dom.browser)
     root = await draw(server.id)
     await until(() => document.body.textContent?.includes(pack ? 'Update to 2.0' : 'Iris Shaders') === true)
+    if (uploads) await until(() => document.body.textContent.includes('Nothing uploaded yet.'))
     const running = h
     const routed = api
     return {
@@ -274,6 +312,7 @@ async function openMods({ online = true, loader = 'fabric', pack = false, movesW
       owner,
       server,
       mutations: routed.mutations,
+      browser: dom.browser,
       async plan() {
         await act(async () => button(pack ? 'Update to 2.0' : 'Add').click())
         await until(() => !button(pack ? 'Update and restart' : 'Apply and restart').disabled)
@@ -340,6 +379,42 @@ async function packMovesWorld() {
     expect(document.querySelector('input[value="empty"]').checked).toBe(true)
     await act(async () => button('Cancel').click())
     expect((await page.h.app.queries.get(page.owner, page.server.id)).gameVersion).toBe('1.21.1')
+  } finally {
+    await page.close()
+  }
+}
+
+async function uploadsItsOwnJar() {
+  const page = await openMods({ uploads: true })
+  try {
+    const ownSection = [...document.querySelectorAll('section')].find(
+      (section) => section.querySelector('h2')?.textContent === 'Your own mods',
+    )
+    expect(ownSection).toBeDefined()
+    const file = new page.browser.File([fabricJar('own', { depends: { minecraft: '26.3' } })], 'own.jar', {
+      type: 'application/java-archive',
+    })
+    const transfer = new page.browser.DataTransfer()
+    transfer.items.add(file)
+    const input = ownSection.querySelector('input[type="file"]')
+    await act(async () => {
+      input.files = transfer.files
+      input.dispatchEvent(new page.browser.Event('change', { bubbles: true }))
+    })
+    await until(() => document.body.textContent.includes('Add own.jar?'), 20 * SECOND_MS)
+    expect(document.querySelector('input[value="empty"]').checked).toBe(true)
+    await act(async () => button('Cancel').click())
+    const within = (text) =>
+      [...ownSection.querySelectorAll('button')].find((item) => item.textContent.trim() === text)
+    await until(() => within('Add') !== undefined)
+    await act(async () => within('Add').click())
+    await until(() => document.querySelector('dialog') !== null)
+    expect(document.querySelector('input[value="empty"]').checked).toBe(true)
+    await act(async () => button('Cancel').click())
+    await act(async () => within('Delete').click())
+    await until(async () => (await page.h.app.modQueries.uploads(page.owner, page.server.id)).length === 0)
+    expect(page.mutations.some((call) => call.path.endsWith('/mods.deleteUpload'))).toBe(true)
+    expect(page.mutations.filter((call) => call.path.endsWith('/mods.change'))).toHaveLength(0)
   } finally {
     await page.close()
   }
@@ -463,4 +538,9 @@ describe.skipIf(!hasDatabase)('choosing a restart from the mods page', () => {
   test('a modpack update waits for the player by default', packWaits, 40 * SECOND_MS)
   test('cancelling a modpack update retains the installed release', packCancels, 40 * SECOND_MS)
   test('a modpack moving the world explains the new Minecraft version', packMovesWorld, 40 * SECOND_MS)
+  test(
+    'an uploaded jar can be offered, cancelled, offered again and deleted',
+    uploadsItsOwnJar,
+    40 * SECOND_MS,
+  )
 })
