@@ -201,7 +201,6 @@ export class ServerQueries {
         })),
       partySizes: partySizesFor(entitlements),
       regions: [...this.#regions.list()],
-      // Keeping items on death is a choice every server has, made or not.
       takes: Object.fromEntries(
         Object.keys({ keepInventory: false, ...revision.settings }).map((setting) => [
           setting,
