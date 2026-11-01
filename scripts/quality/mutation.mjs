@@ -347,7 +347,7 @@ export function runMutation({
               // literal Next route brackets without allowing the filename to become a glob.
               mutate: [subject.replace(/[?*[\]{}()!+@]/g, (character) => `[${character}]`)],
               coverageAnalysis: 'off',
-              concurrency: isolated ? 2 : 1,
+              concurrency: isolated ? 4 : 1,
               inPlace: !isolated,
               ...(isolated
                 ? {
