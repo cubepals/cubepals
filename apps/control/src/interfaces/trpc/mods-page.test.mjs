@@ -9,12 +9,12 @@ import { SECOND_MS } from '@blockly/contracts/durations'
 import { realtimeContract } from '@blockly/contracts/realtime'
 import { act, createElement } from 'react'
 import { Client } from 'transport-io'
-import { fetchRequestHandler } from '../../../../../../../../node_modules/@trpc/server/adapters/fetch'
-import { appRouter } from '../../../../../../../control/src/interfaces/trpc/router.ts'
-import { Cdn } from '../../../../../../../control/src/testing/cdn.ts'
-import { hasDatabase, startHarness } from '../../../../../../../control/src/testing/harness.ts'
+import { fetchRequestHandler } from '../../../../../node_modules/@trpc/server/adapters/fetch'
+import { Cdn } from '../../testing/cdn.ts'
+import { hasDatabase, startHarness } from '../../testing/harness.ts'
+import { appRouter } from './router.ts'
 
-const quality = createRequire(new URL('../../../../../../../../tools/quality/package.json', import.meta.url))
+const quality = createRequire(new URL('../../../../../tools/quality/package.json', import.meta.url))
 function browserScope() {
   const Window = quality('happy-dom').Window
   const browser = new Window({ url: 'http://localhost/servers/test/mods' })
@@ -105,8 +105,8 @@ async function draw(id) {
   const { PathParamsContext, PathnameContext, SearchParamsContext } = await import(
     'next/dist/shared/lib/hooks-client-context.shared-runtime'
   )
-  const { ApiProvider } = await import('../../../../../lib/api')
-  const { default: Page } = await import('./page')
+  const { ApiProvider } = await import('../../../../web/src/lib/api')
+  const { default: Page } = await import('../../../../web/src/app/(app)/servers/[id]/mods/page')
   const client = new Client({
     contract: realtimeContract,
     connect: async () => {
