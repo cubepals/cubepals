@@ -65,7 +65,7 @@ test('real case ordering runs every survivor case and rejects an actual changed 
     const survivor = run('41')
     assert.equal(survivor.result.status, 0, survivor.result.stderr)
     assert.equal(survivor.report.passed, 6)
-    assert.equal(survivor.report.reports.length, clean.report.caseOrder.batches.length)
+    assert.equal(survivor.report.reports.length, 2)
     assert.ok(survivor.report.durationMs >= 6 * SECOND_MS, 'the slow case must still run')
     const late = clean.report.caseOrder.batches
       .slice(1)
@@ -89,7 +89,7 @@ test('real case ordering runs every survivor case and rejects an actual changed 
     const laterSurvivor = run('44')
     assert.equal(laterSurvivor.report.status, 'passed')
     assert.equal(laterSurvivor.report.passed, 6)
-    assert.equal(laterSurvivor.report.reports.length, clean.report.caseOrder.batches.length)
+    assert.equal(laterSurvivor.report.reports.length, 2)
     assert.ok(laterSurvivor.report.durationMs >= 6 * SECOND_MS)
   } finally {
     rmSync(root, { recursive: true, force: true })

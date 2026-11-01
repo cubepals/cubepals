@@ -10,6 +10,10 @@ import { SECOND_MS } from '../../packages/contracts/src/durations.ts'
 import { liveFleet } from './evidence-policy.mjs'
 import { XMLParser, XMLValidator } from './toolchain.mjs'
 
+// Exhausted local services and filesystems cannot demonstrate a source-code defect.
+const infrastructureFailure =
+  /No space left on device|\bENOSPC\b|Disk quota exceeded|could not resize shared memory segment|the database system is (?:in recovery mode|starting up|shutting down)|server closed the connection unexpectedly|connection terminated unexpectedly|\bECONNREFUSED\b/i
+
 export function readMutationJUnit(
   xml,
   expected,
@@ -41,6 +45,10 @@ export function readMutationJUnit(
         throw new Error(`Invalid test case in ${file}`)
       const id = JSON.stringify([file, test.classname ?? '', test.name])
       if ('error' in test) throw new Error(`Runner error in ${file}`)
+      if ('failure' in test && test.failure?.type === 'TimeoutError')
+        throw new Error(`Runner timeout in ${file}: ${test.name}`)
+      if ('failure' in test && infrastructureFailure.test(JSON.stringify(test.failure)))
+        throw new Error(`Infrastructure failure in ${file}: ${test.name}`)
       const status = 'skipped' in test ? 'skipped' : 'failure' in test ? 'failed' : 'passed'
       const result = { id, file, name: test.name, durationMs: Number(test.time) * SECOND_MS, status }
       if (status === 'skipped' && filteredCases.has(id)) {
