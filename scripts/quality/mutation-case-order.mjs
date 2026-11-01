@@ -115,7 +115,11 @@ export function proveCaseOrder(cases, expected, durationMs, execute) {
 }
 
 /** Every survivor runs the complete original inventory; bail needs an actual test failure. */
-export function runCaseOrder(plan, expected, execute) {
+export function caseBatchKey(batch) {
+  return JSON.stringify([batch.file, batch.cases])
+}
+
+export function runCaseOrder(plan, expected, execute, preferred = null) {
   if (plan?.version !== 1 || !Array.isArray(plan.batches) || plan.batches.length === 0)
     throw new Error('Invalid proven mutation case order')
   const known = inventory(plan.cases, expected)
@@ -133,16 +137,28 @@ export function runCaseOrder(plan, expected, execute) {
     for (const id of batch.cases) planned.add(id)
   }
   if (planned.size !== known.size) throw new Error('Mutation case order omits original cases')
+  if (preferred !== null && !plan.batches.some((batch) => caseBatchKey(batch) === preferred))
+    throw new Error('Preferred mutation batch is outside the proven case inventory')
+  const ordered = [...plan.batches].sort(
+    (a, b) => Number(caseBatchKey(b) === preferred) - Number(caseBatchKey(a) === preferred),
+  )
   const passed = new Set()
   const failed = new Set()
   const reports = []
-  for (const [index, batch] of plan.batches.entries()) {
+  for (const [index, batch] of ordered.entries()) {
     const result = execute(batch, index)
     const { outcome, executed } = readBatch(result, batch, known)
     reports.push(result.report)
     for (const item of executed) (item.status === 'passed' ? passed : failed).add(item.id)
     if (outcome.failed > 0)
-      return { passed: passed.size, failed: failed.size, skipped: 0, skippedTests: [], reports }
+      return {
+        passed: passed.size,
+        failed: failed.size,
+        skipped: 0,
+        skippedTests: [],
+        reports,
+        failedBatch: caseBatchKey(batch),
+      }
   }
   if (passed.size !== known.size) throw new Error('A surviving mutant did not execute every original case')
   return { passed: passed.size, failed: 0, skipped: 0, skippedTests: [], reports }

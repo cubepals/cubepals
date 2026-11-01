@@ -157,3 +157,22 @@ test('a handshake is read once its whole packet is there, as a ping or a join, a
   expect(handshakeOf(Uint8Array.from([0xfe, 0x01]))).toBeNull()
   expect(handshakeOf(packet(1, [1, 2, 3]))).toBeNull()
 })
+
+test('routing uses the hostname before forwarding suffixes and its root dot', async () => {
+  const { hostnameOf } = await import('./notice.ts')
+  expect(hostnameOf({ address: 'Lobby.Example.' })).toBe('lobby.example')
+  expect(hostnameOf({ address: 'Lobby.Example.\0forwarded' })).toBe('lobby.example')
+  expect(hostnameOf({ address: 'Lobby.Example.\\FML' })).toBe('lobby.example')
+  expect(hostnameOf({ address: '' })).toBe('')
+})
+
+test('only a complete server-list ping names an address to wake', async () => {
+  const { pingOf, varInt } = await import('./notice.ts')
+  expect(pingOf(statusRequest('Lobby.Example.', 25565))).toBe('Lobby.Example.')
+  expect(pingOf(handshake(2))).toBeNull()
+  expect(pingOf(handshake(1).slice(0, 6))).toBe('more')
+  expect(pingOf(new Uint8Array())).toBe('more')
+  expect(pingOf(Uint8Array.from([0xfe, 0x01]))).toBeNull()
+  expect(pingOf(Uint8Array.from(new Array(5).fill(0xff)))).toBeNull()
+  expect(pingOf(Uint8Array.from([...varInt(20_000), ...new Array(10_000).fill(0)]))).toBeNull()
+})

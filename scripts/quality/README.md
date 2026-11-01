@@ -22,6 +22,9 @@ complete original case inventory; otherwise the original invocation remains in u
 mutant must execute every original case. Early termination needs an actual assertion failure;
 missing cases, unexpected skips, runner errors and timeouts remain inconclusive. Raw batch reports
 are retained, and dependency-only comparisons disable case batching on both sides.
+The clean split proof may use up to two minutes, bounded by the existing baseline timeout and
+shared subject deadline. Each independent process pays its own startup cost, so a faster complete
+suite does not reduce the time available to prove its individual batches.
 
 Six old billing cases already skip in the first three to twelve hours of a month.
 Each existing condition is recognised only for its pinned complete source hash, exact test name,
@@ -171,6 +174,26 @@ the head. Any other changed file makes the update ineligible, so a weakened test
 request keeps the full-scope rule and its own subjects. Packages whose install holds only type
 declarations and documents are inert. The reasoning and its limits are in
 [docs/testing-quality.md](../../docs/testing-quality.md#dependency-only-updates).
+
+Each invocation pins the invoking checker's scripts and isolated tool installation in a separate
+disposable runtime. Proposed application files and later Git changes cannot replace those runner
+files mid-run. Missing execution evidence still fails the verdict.
+
+Application subjects use two independent command-runner processes, leaving CPU capacity for their
+real database. Workspace package subjects use four. Each process activates only its own mutant
+inside Stryker's disposable, instrumented sandbox.
+CI gives Postgres a 1 GiB shared-memory limit so concurrent real-database cases do not exhaust
+Docker's default 64 MiB segment while executing parallel queries.
+`mutation-sandbox.mjs` recreates installation links so bare workspace imports reach that sandbox's
+source; external libraries remain links to the existing installs. Scripts retain their single
+Git-backed workspace. The complete candidate census, test oracles, thresholds and subject time
+budget are identical in both execution modes. The real mutation self-test verifies strong and
+superficial tests through a workspace import under the parallel mode.
+
+Within a proven independent case split, a batch that actually failed is tried first for the next
+mutant. That preference changes scheduling only: it must name an existing proven batch, every
+survivor still executes every original case, and raw JUnit reports remain mandatory. Parallel
+workers publish the preference atomically; no result or kill count is reused.
 
 A subject that reaches its time budget records the remaining mutants as `budget-exhausted`: no
 kill credit, counted against the score, and named in the failure. Stryker always finishes and
