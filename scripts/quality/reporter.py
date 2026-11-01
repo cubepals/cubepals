@@ -212,36 +212,8 @@ def mutations(path, subjects):
 def scope(changed, root, full=False):
     sources = {str(path.relative_to(root)): path.read_text()
                for path in (root / SOURCE_ROOT).rglob("*.java")}
-    if full or any(path.endswith(("gradle.properties", "gradle.lockfile", "libs.versions.toml"))
-                   or path.startswith("apps/reporter/src/main/resources/")
-                   or (path.startswith("apps/reporter/src/test/") and not path.endswith(".java"))
-                   or path.startswith("apps/reporter/gradle/") for path in changed):
-        return sorted(sources)
-    names = {path: Path(path).stem for path in sources}
-
-    def references(text):
-        return {path for path, name in names.items() if re.search(r"\b" + re.escape(name) + r"\b", text)}
-
-    selected = set(changed) & set(sources)
-    for path in changed:
-        if path.startswith("apps/reporter/src/test/") and path.endswith(".java"):
-            test = root / path
-            # A removed or unfamiliar test might have held any class's only defect detector.
-            if not test.is_file():
-                return sorted(sources)
-            found = references(test.read_text())
-            if not found:
-                return sorted(sources)
-            pending = set(found)
-            visited = set()
-            while pending:
-                source = pending.pop()
-                if source in visited:
-                    continue
-                visited.add(source)
-                selected.add(source)
-                pending.update(references(sources[source]) - visited)
-    return sorted(selected)
+    # Releases mutate changed production classes. Legacy/config/test impact is audited separately.
+    return sorted(sources if full else set(changed) & set(sources))
 
 
 def main():

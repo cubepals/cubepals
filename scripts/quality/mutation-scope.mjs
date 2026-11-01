@@ -46,6 +46,7 @@ export function selectMutationScope({
   ignoredConfigFiles = new Set(),
   baseSha,
   headSha = 'HEAD',
+  allowEmpty = false,
 }) {
   if (full && productionFiles.length === 0) throw new Error('Full mutation inventory is empty')
   const impact = baseSha ? analyzeTestImpact({ root, baseSha, headSha, changedFiles }) : null
@@ -130,7 +131,11 @@ export function selectMutationScope({
     if (source.size === 0) throw new Error('Full mutation inventory is empty')
     for (const file of source) subjects.add(file)
   }
-  if (subjects.size === 0 && changedFiles.some((file) => tests.has(file) && !addedTests.has(file))) {
+  if (
+    !allowEmpty &&
+    subjects.size === 0 &&
+    changedFiles.some((file) => tests.has(file) && !addedTests.has(file))
+  ) {
     throw new Error('Changed tests have no mutation subjects; refusing an empty mutation run')
   }
   const testsByFile = {}

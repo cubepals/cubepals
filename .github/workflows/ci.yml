@@ -11,8 +11,12 @@ on:
   # The merge queue's check of a pull request on top of what is queued ahead of it; the jobs and
   # their names are the same, so `check` is the one answer there too.
   merge_group:
-  schedule:
-    - cron: '41 3 * * *'
+  workflow_call:
+    inputs:
+      full_quality:
+        description: Run the legacy mutation audit
+        type: boolean
+        default: false
   workflow_dispatch:
     inputs:
       full_quality:
@@ -39,9 +43,9 @@ jobs:
       pull-requests: read
     outputs:
       # The queue tests everything: what a merge changes is what the commits ahead of it changed too.
-      code: ${{ (github.event_name == 'merge_group' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 'true' || steps.filter.outputs.code }}
-      reporter: ${{ (github.event_name == 'merge_group' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 'true' || steps.reporter.outputs.reporter }}
-      fleet: ${{ (github.event_name == 'merge_group' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 'true' || steps.fleet.outputs.fleet }}
+      code: ${{ (inputs.full_quality == true || github.event_name == 'merge_group' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 'true' || steps.filter.outputs.code }}
+      reporter: ${{ (inputs.full_quality == true || github.event_name == 'merge_group' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 'true' || steps.reporter.outputs.reporter }}
+      fleet: ${{ (inputs.full_quality == true || github.event_name == 'merge_group' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 'true' || steps.fleet.outputs.fleet }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
