@@ -172,7 +172,9 @@ export function runCaseOrder(plan, expected, execute, preferred = null) {
         skipped: 0,
         skippedTests: [],
         reports,
-        failedBatch: caseBatchKey(batch),
+        failedBatch: caseBatchKey(
+          plan.batches.find((original) => original.cases.some((id) => failed.has(id))) ?? batch,
+        ),
       }
   }
   if (passed.size !== known.size) throw new Error('A surviving mutant did not execute every original case')
