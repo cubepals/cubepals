@@ -49,17 +49,6 @@ function browserScope() {
   }
 }
 
-async function until(ready: () => boolean | Promise<boolean>) {
-  const deadline = Date.now() + 5 * SECOND_MS
-  let done = false
-  while (!done && Date.now() < deadline)
-    await act(async () => {
-      await Bun.sleep(20)
-      done = await ready()
-    })
-  expect(done).toBe(true)
-}
-
 function button(text: string) {
   const found = [...document.querySelectorAll('button')].find((item) => item.textContent.trim() === text)
   if (!found) throw new Error(`Missing button: ${text}`)
@@ -158,11 +147,10 @@ test(
       expect(document.querySelector<HTMLInputElement>('input[value="empty"]')?.checked).toBe(true)
       await act(async () => document.querySelector<HTMLInputElement>('input[value="now"]')?.click())
       await act(async () => button('Apply second').click())
-      await until(() => second.length === 1)
       expect(second).toEqual(['now'])
       expect(opened()).toBe(true)
-      gate.resolve()
-      await until(() => !opened())
+      await act(async () => gate.resolve())
+      expect(opened()).toBe(false)
       expect(first).toEqual([])
     } finally {
       gate.resolve()
@@ -185,7 +173,6 @@ test(
       await act(async () => button('Ask first').click())
       expect(page.host.querySelector('[role="alert"]') === null).toBe(true)
       await act(async () => button('Apply first').click())
-      await until(() => page.host.textContent?.includes(refusal.message) === true)
       expect(opened()).toBe(true)
       expect(page.host.querySelector('[role="alert"]')?.textContent).toBe(refusal.message)
       expect(page.host.textContent).toContain('Didn’t go through')
