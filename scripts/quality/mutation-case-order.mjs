@@ -143,14 +143,25 @@ export function runCaseOrder(plan, expected, execute, preferred = null) {
   let ordered = [...plan.batches].sort(
     (a, b) => Number(caseBatchKey(b) === preferred) - Number(caseBatchKey(a) === preferred),
   )
-  // Splitting expensive database fixtures can cost more than the original suite. Probe the
-  // previously failing batch first, then use the original, already proven file invocation.
-  // Every original case remains required, including cases repeated by the initial probe.
+  // Splitting fixtures can cost more than the original suite. Spend at most one original
+  // invocation's clean duration on fast probes, then use full files for all remaining cases.
+  // A single probe misses failures in later cheap batches and needlessly repeats slow cases.
   if (Number.isFinite(plan.originalDurationMs) && plan.durationMs > plan.originalDurationMs) {
-    const first = ordered[0]
-    const files = [...new Set(ordered.map((batch) => batch.file))]
+    const prefix = []
+    let duration = 0
+    for (const batch of ordered) {
+      if (prefix.length > 0 && duration + batch.durationMs > plan.originalDurationMs) break
+      prefix.push(batch)
+      duration += batch.durationMs
+    }
+    const probed = new Set(prefix.flatMap((batch) => batch.cases))
+    const files = [
+      ...new Set(
+        ordered.filter((batch) => batch.cases.some((id) => !probed.has(id))).map((batch) => batch.file),
+      ),
+    ]
     ordered = [
-      first,
+      ...prefix,
       ...files.map((file) => ({
         file,
         cases: plan.cases.filter((item) => item.file === file).map((item) => item.id),
