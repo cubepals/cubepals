@@ -23,8 +23,7 @@ import { stopCheatersWaiting } from './waiting.ts'
 let h: Harness
 const cdn = new Cdn()
 
-beforeAll(async () => {
-  if (!hasDatabase) return
+async function prepare() {
   await cdn.start()
   h = await startHarness()
   h.catalog.publish(
@@ -54,13 +53,12 @@ beforeAll(async () => {
     ],
   )
   expect(await h.app.setups.compat.refresh()).toBeGreaterThan(0)
-}, 30_000)
+}
 
-afterAll(async () => {
-  if (!hasDatabase) return
+async function close() {
   await h.close()
   cdn.close()
-})
+}
 
 /** A running Paper server with Stop cheaters off, and someone playing on it. */
 const occupied = async (name: string) => {
@@ -77,7 +75,22 @@ const applies = async (id: string) => (await h.operations(id)).filter((op) => op
 const waitingOf = async (id: string) =>
   stopCheatersWaiting(h.db, await h.server(id), await loadApplied(h.db, id))
 
+/** The placement information an older boot left behind. */
+const forgetPlacement = (id: string, mark: 'ours' | null) =>
+  h.db
+    .update(schema.serverRuntimes)
+    .set({
+      applied:
+        mark === null
+          ? sql`${schema.serverRuntimes.applied} - 'placedStopCheaters' - 'stopCheaters'`
+          : sql`(${schema.serverRuntimes.applied} - 'placedStopCheaters') || '{"stopCheaters":"ours"}'::jsonb`,
+    })
+    .where(eq(schema.serverRuntimes.serverId, id))
+
 describe.skipIf(!hasDatabase)('Stop cheaters while players are on', () => {
+  beforeAll(prepare, 30_000)
+  afterAll(close)
+
   test('waits for everyone to leave, and turned back, restarts nothing', async () => {
     const { owner, id } = await occupied('Nell')
     expect(await waitingOf(id)).toBeNull()
@@ -142,20 +155,10 @@ describe.skipIf(!hasDatabase)('Stop cheaters while players are on', () => {
 
   test('a boot from before boots said what they placed is read by its mark', async () => {
     const { owner, id } = await occupied('Rue')
-    const forget = (mark: 'ours' | null) =>
-      h.db
-        .update(schema.serverRuntimes)
-        .set({
-          applied:
-            mark === null
-              ? sql`${schema.serverRuntimes.applied} - 'placedStopCheaters' - 'stopCheaters'`
-              : sql`(${schema.serverRuntimes.applied} - 'placedStopCheaters') || '{"stopCheaters":"ours"}'::jsonb`,
-        })
-        .where(eq(schema.serverRuntimes.serverId, id))
-    await forget(null)
+    await forgetPlacement(id, null)
     await h.app.stopCheaters.set(owner, id, true, randomUUID(), 'empty')
     expect(await waitingOf(id)).toBe('on')
-    await forget('ours')
+    await forgetPlacement(id, 'ours')
     expect(await waitingOf(id)).toBeNull()
   }, 60_000)
 
@@ -168,14 +171,10 @@ describe.skipIf(!hasDatabase)('Stop cheaters while players are on', () => {
     expect(await waitingOf(id)).toBeNull()
     expect(await applies(id)).toHaveLength(0)
   }, 60_000)
-})
-
-describe.skipIf(!hasDatabase)('a waiting change dropped', () => {
   test('dropping a waiting version that only made Grim available leaves the owner’s switch alone', async () => {
-    const papers = offeredVersions()
+    const [newer, older] = offeredVersions()
       .filter((offered) => supports(offered.id, 'paper'))
       .sort((a, b) => compareVersions(b.id, a.id))
-    const [newer, older] = papers
     if (newer === undefined || older === undefined) throw new Error('Two Paper releases are needed')
     const owner = await h.user('Teal', 'free')
     const { id } = await h.create(owner, { loader: 'paper', gameVersion: older.id })
