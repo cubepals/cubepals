@@ -29,6 +29,7 @@ import { tmpdir } from 'node:os'
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { MINUTE_MS, SECOND_MS } from '../../packages/contracts/src/durations.ts'
+import { mutationIdentity, mutationPatterns } from './mutation-lines.mjs'
 import { freezeMutationRuntime } from './mutation-runtime.mjs'
 import { requireQuality } from './toolchain.mjs'
 
@@ -158,7 +159,10 @@ export function mutationVerdict(
         score: null,
         threshold,
         passed: true,
-        notApplicable: 'Pinned Stryker found no mutable expressions',
+        notApplicable:
+          candidates[subject].selection != null
+            ? 'Pinned Stryker found no mutable expressions on the selected changed lines'
+            : 'Pinned Stryker found no mutable expressions',
         sha256: candidates[subject].sha256,
       })
       continue
@@ -172,6 +176,12 @@ export function mutationVerdict(
     if (candidates && entry.mutants.length !== candidates[subject]?.count) {
       throw new Error(`${subject}: mutation report omitted candidates`)
     }
+    if (
+      candidates?.[subject]?.identities &&
+      JSON.stringify(entry.mutants.map((mutant) => mutationIdentity(mutant)).sort()) !==
+        JSON.stringify(candidates[subject].identities)
+    )
+      throw new Error(`${subject}: mutation report differs from the independent candidate identities`)
     let killed = 0
     let survived = 0
     let inconclusive = 0
@@ -250,6 +260,7 @@ export function runMutation({
   subjects,
   testsByFile,
   additionalTestsByFile = {},
+  rangesByFile,
   reportDir,
   threshold = 80,
   thresholds = {},
@@ -269,7 +280,7 @@ export function runMutation({
   rmSync(join(reportDir, 'summary.json'), { force: true })
   const candidateInput = join(reportDir, 'candidate-input.json')
   const candidateOutput = join(reportDir, 'candidates.json')
-  writeFileSync(candidateInput, JSON.stringify({ root, subjects, output: candidateOutput }))
+  writeFileSync(candidateInput, JSON.stringify({ root, subjects, rangesByFile, output: candidateOutput }))
   execFileSync(node, [candidatesCommand, candidateInput], {
     env: mutationEnvironment(),
     timeout: 5 * MINUTE_MS,
@@ -357,7 +368,7 @@ export function runMutation({
               commandRunner: { command: `${quote(node)} ${quote(runtime.command)} ${quote(manifestPath)}` },
               // Backslashes are normalized as separators by Stryker. Character classes preserve
               // literal Next route brackets without allowing the filename to become a glob.
-              mutate: [subject.replace(/[?*[\]{}()!+@]/g, (character) => `[${character}]`)],
+              mutate: mutationPatterns(subject, rangesByFile?.[subject]),
               coverageAnalysis: 'off',
               concurrency: isolated ? (subject.startsWith('apps/') ? 3 : 4) : 1,
               inPlace: !isolated,

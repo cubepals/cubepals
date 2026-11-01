@@ -8,6 +8,7 @@ import { readFileSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { mutationIdentity, strykerMutationRanges } from './mutation-lines.mjs'
 import { requireQuality } from './toolchain.mjs'
 
 const coreRequire = createRequire(requireQuality.resolve('@stryker-mutator/core/package.json'))
@@ -32,8 +33,19 @@ for (const subject of input.subjects) {
     [{ name: resolve(input.root, subject), mutate: true, content }],
     { excludedMutations: [], plugins: null, ignorers: [] },
   )
+  const ranges = input.rangesByFile?.[subject]
+  const selected =
+    ranges == null
+      ? result
+      : await instrumenter.instrument(
+          [{ name: resolve(input.root, subject), mutate: strykerMutationRanges(ranges), content }],
+          { excludedMutations: [], plugins: null, ignorers: [] },
+        )
   sources[subject] = {
-    count: result.mutants.length,
+    count: selected.mutants.length,
+    wholeFileCount: result.mutants.length,
+    selection: ranges ?? null,
+    identities: selected.mutants.map((mutant) => mutationIdentity(mutant, true)).sort(),
     sha256: createHash('sha256').update(content).digest('hex'),
   }
 }
