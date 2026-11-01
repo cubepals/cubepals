@@ -6,7 +6,11 @@
 import { liveFleet } from './evidence-policy.mjs'
 import { requireQuality, XMLParser, XMLValidator } from './toolchain.mjs'
 
-export function checkJUnit(xml, expected, { allowOptionalOnly = false, allowLiveFleetSkips = true } = {}) {
+export function checkJUnit(
+  xml,
+  expected,
+  { allowOptionalOnly = false, allowLiveFleetSkips = true, allowedSkippedTests = new Set() } = {},
+) {
   if (XMLValidator.validate(xml) !== true) throw new Error('Malformed JUnit evidence')
   const data = new XMLParser({
     ignoreAttributes: false,
@@ -40,7 +44,10 @@ export function checkJUnit(xml, expected, { allowOptionalOnly = false, allowLive
       seen.add(file)
       if ('failure' in test || 'error' in test) throw new Error(`Failed test: ${file}: ${test.name}`)
       if ('skipped' in test) {
-        if (!allowLiveFleetSkips || !liveFleet.has(file))
+        if (
+          (!allowLiveFleetSkips || !liveFleet.has(file)) &&
+          !allowedSkippedTests.has(JSON.stringify([file, test.name]))
+        )
           throw new Error(`Unexpected skipped test: ${file}: ${test.name}`)
       } else executed++
     }
