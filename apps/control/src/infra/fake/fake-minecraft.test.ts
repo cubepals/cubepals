@@ -81,6 +81,15 @@ const lines = async (minecraft: FakeMinecraft, key: string) =>
 const unclocked = (text: string) => text.replace(/^\[\d\d:\d\d:\d\d\] /, '')
 
 describe('game rule startup boundaries', () => {
+  test('cleanup before a first start does not fabricate a running game', async () => {
+    const { minecraft } = fresh()
+    const m = await machine()
+    await minecraft.stop(m)
+    await minecraft.suspend(m)
+    await minecraft.resume(m)
+    expect(() => minecraft.playing(m.key)).toThrow(`No fake server ${m.key}`)
+  })
+
   test('observers see safe game defaults while the first world is still opening', async () => {
     const { minecraft } = fresh()
     const m = await machine({ VERSION: '26.2', TYPE: 'PAPER' })
