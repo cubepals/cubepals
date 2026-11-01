@@ -371,47 +371,47 @@ describe.skipIf(!hasDatabase)('what a start places', () => {
   }, 60_000)
 })
 
+/** Gives a server the moderation tools as its revision has them, as the Players page's switch does. */
+const withTools = async (id: string) => {
+  const revision = await loadRevision(h.db, (await h.server(id)).desiredRevisionId)
+  const pin = (projectId: string): PinnedMod => ({
+    source: { catalog: 'modrinth', projectId, versionId: `${projectId}-1` },
+    name: projectId,
+    versionLabel: '1',
+    artifact: {
+      ref: { kind: 'remote', url: 'https://cdn.example.test/x.jar' },
+      sha512: 'x',
+      sizeBytes: 1,
+      fileName: 'x.jar',
+    },
+    environment: 'server',
+    loaders: ['paper'],
+    gameVersions: [],
+    origin: 'user',
+    requiredBy: [],
+  })
+  await h.db
+    .update(schema.serverRevisions)
+    .set({ mods: [pin(LIBERTYBANS), pin(LUCKPERMS)] })
+    .where(eq(schema.serverRevisions.id, revision.id))
+}
+
+// Each removal a moment of its own, as a server reports them.
+let moment = Date.now()
+const removed = (uuid: string, reason: string, at = new Date(++moment)) => ({
+  kind: 'removed' as const,
+  at: at.toISOString(),
+  uuid,
+  name: 'Cheater',
+  reason,
+})
+
+const bans = (id: string) =>
+  h.db.select().from(schema.serverModerationActions).where(eq(schema.serverModerationActions.serverId, id))
+
 describe.skipIf(!hasDatabase)('removals and the ban they bring', () => {
   beforeAll(begin, 30_000)
   afterAll(end)
-
-  // Each removal a moment of its own, as a server reports them.
-  let moment = Date.now()
-  const removed = (uuid: string, reason: string, at = new Date(++moment)) => ({
-    kind: 'removed' as const,
-    at: at.toISOString(),
-    uuid,
-    name: 'Cheater',
-    reason,
-  })
-
-  /** Gives a server the moderation tools as its revision has them, as the Players page's switch does. */
-  const withTools = async (id: string) => {
-    const revision = await loadRevision(h.db, (await h.server(id)).desiredRevisionId)
-    const pin = (projectId: string): PinnedMod => ({
-      source: { catalog: 'modrinth', projectId, versionId: `${projectId}-1` },
-      name: projectId,
-      versionLabel: '1',
-      artifact: {
-        ref: { kind: 'remote', url: 'https://cdn.example.test/x.jar' },
-        sha512: 'x',
-        sizeBytes: 1,
-        fileName: 'x.jar',
-      },
-      environment: 'server',
-      loaders: ['paper'],
-      gameVersions: [],
-      origin: 'user',
-      requiredBy: [],
-    })
-    await h.db
-      .update(schema.serverRevisions)
-      .set({ mods: [pin(LIBERTYBANS), pin(LUCKPERMS)] })
-      .where(eq(schema.serverRevisions.id, revision.id))
-  }
-
-  const bans = (id: string) =>
-    h.db.select().from(schema.serverModerationActions).where(eq(schema.serverModerationActions.serverId, id))
 
   test('with the moderation tools, impossible removals reaching the rule bring one ban for the rule’s length', async () => {
     const { id } = await running('Tam')
