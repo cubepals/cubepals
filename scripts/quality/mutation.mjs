@@ -29,11 +29,10 @@ import { tmpdir } from 'node:os'
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { MINUTE_MS, SECOND_MS } from '../../packages/contracts/src/durations.ts'
+import { freezeMutationRuntime } from './mutation-runtime.mjs'
 import { requireQuality } from './toolchain.mjs'
 
-const command = fileURLToPath(new URL('./mutation-command.mjs', import.meta.url))
 const candidatesCommand = fileURLToPath(new URL('./mutation-candidates.mjs', import.meta.url))
-const sandboxCommand = fileURLToPath(new URL('./mutation-sandbox.mjs', import.meta.url))
 
 function inside(root, path) {
   const rel = relative(root, path)
@@ -267,7 +266,9 @@ export function runMutation({
   const candidates = JSON.parse(readFileSync(candidateOutput, 'utf8'))
   const snapshot = mutationSnapshot(root)
   const result = { passed: true, complete: false, files: [], failures: [] }
+  let runtime
   try {
+    runtime = freezeMutationRuntime()
     const cli = join(dirname(requireQuality.resolve('@stryker-mutator/core/package.json')), 'bin/stryker.js')
     for (const [index, subject] of subjects.entries()) {
       const required = thresholds[subject] ?? threshold
@@ -341,7 +342,7 @@ export function runMutation({
             configPath,
             JSON.stringify({
               testRunner: 'command',
-              commandRunner: { command: `${quote(node)} ${quote(command)} ${quote(manifestPath)}` },
+              commandRunner: { command: `${quote(node)} ${quote(runtime.command)} ${quote(manifestPath)}` },
               // Backslashes are normalized as separators by Stryker. Character classes preserve
               // literal Next route brackets without allowing the filename to become a glob.
               mutate: [subject.replace(/[?*[\]{}()!+@]/g, (character) => `[${character}]`)],
@@ -350,7 +351,7 @@ export function runMutation({
               inPlace: !isolated,
               ...(isolated
                 ? {
-                    buildCommand: [node, sandboxCommand, snapshot]
+                    buildCommand: [node, runtime.sandbox, snapshot]
                       .map((argument) => argument.replaceAll(' ', '\\ '))
                       .join(' '),
                   }
@@ -487,5 +488,6 @@ export function runMutation({
     return result
   } finally {
     rmSync(snapshot, { recursive: true, force: true })
+    if (runtime) rmSync(runtime.root, { recursive: true, force: true })
   }
 }
