@@ -9,7 +9,7 @@ import { schema } from '@blockly/db'
 import { eq } from 'drizzle-orm'
 import { entitlementsFor } from '../../domain/account/entitlements.ts'
 import type { MinecraftServer } from '../../domain/server/server.ts'
-import { memoryMb } from '../../domain/server/size.ts'
+import { MEMORY_TIERS, memoryMb } from '../../domain/server/size.ts'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
 import { installTuning, tuning } from '../tuning.ts'
 import { type EconomicsReport, RuntimeEconomics } from './economics.ts'
@@ -387,7 +387,126 @@ async function emptyWindow() {
     await h.close()
   }
 }
+async function machineBoundaries() {
+  figures()
+  const smallest = Math.min(...MEMORY_TIERS.map(memoryMb))
+  const base = {
+    region: 'local',
+    state: 'active',
+    monthlyCents: monthly,
+    allocatableMemoryMb: smallest * 4,
+    allocatedMemoryMb: 0,
+    placedMemoryMb: 0,
+    usedMemoryMb: 0,
+    cpus: 2,
+    allocatedCpuMillis: 1000,
+    usedCpuCores: 0,
+    servers: 0,
+  }
+  const machines = [
+    { ...base, name: 'room-for-a-server' },
+    { ...base, name: 'exactly-one-server', allocatedMemoryMb: base.allocatableMemoryMb - smallest },
+    { ...base, name: 'too-small', allocatedMemoryMb: base.allocatableMemoryMb - smallest + 1 },
+    { ...base, name: 'full-cpu', allocatedCpuMillis: 2000 },
+    { ...base, name: 'unknown-usage', usedMemoryMb: null, monthlyCents: null },
+    { ...base, name: 'no-capacity', allocatableMemoryMb: 0, cpus: 0, allocatedCpuMillis: 0 },
+  ]
+  const h = await startHarness({ otherRuntimes: [{ provider: 'measured', capacity: { machines } }] })
+  try {
+    const report = await economics(h).report(window, 500, at(6))
+    expect(
+      report.machines.map(({ name, strandedMemoryMb, observedUtilization, windowCents }) => ({
+        name,
+        strandedMemoryMb,
+        observedUtilization,
+        windowCents,
+      })),
+    ).toEqual([
+      { name: 'room-for-a-server', strandedMemoryMb: 0, observedUtilization: 0, windowCents: 6 },
+      { name: 'exactly-one-server', strandedMemoryMb: 0, observedUtilization: 0, windowCents: 6 },
+      { name: 'too-small', strandedMemoryMb: smallest - 1, observedUtilization: 0, windowCents: 6 },
+      {
+        name: 'full-cpu',
+        strandedMemoryMb: base.allocatableMemoryMb,
+        observedUtilization: 0,
+        windowCents: 6,
+      },
+      { name: 'unknown-usage', strandedMemoryMb: 0, observedUtilization: null, windowCents: null },
+      { name: 'no-capacity', strandedMemoryMb: 0, observedUtilization: null, windowCents: 6 },
+    ])
+    expect(report.servers).toEqual([])
+    expect(report.assumptions).toMatchObject({
+      paymentFee: '10% + 7¢ an order, on its total with tax',
+      backups: `ready backups at ${monthly}¢ a GB-month, whichever runtime they came from`,
+      revenue:
+        'orders in the window, after discounts and refunds, before tax; shared among each owner’s servers by the memory-hours each ran',
+      usage: 'the provider’s list prices for the hours each server ran, at the size it ran, where it is now',
+      capacity:
+        'each machine’s monthly_cost_cents label, prorated over the window, as if today’s machines were there all along',
+      idle: 'the share of each machine’s price for memory no server was counted for',
+      playedHours:
+        'minutes with anyone online, from the presence sync once a minute; missed readings count as no play',
+      bandwidth: 'not measured: neither the edge nor any runtime counts bytes yet',
+      actualUsage: 'per-server memory and CPU in use are not measured; machines report theirs',
+    })
+  } finally {
+    await h.close()
+  }
+}
+
+async function weightedSharesAndIdleServer() {
+  figures()
+  const h = await startHarness({ runtimePrices: { runningHourCents: 3, storageMonthCents: 0 } })
+  try {
+    const owner = await h.user('Ledger', 'plus')
+    const first = await stopped(h, owner)
+    const second = await stopped(h, owner)
+    const idle = await stopped(h, owner)
+    await h.db.insert(schema.powerIntervals).values([
+      {
+        serverId: first.id,
+        memoryTier: first.memoryTier,
+        provider: 'fake',
+        startedAt: at(0),
+        stoppedAt: at(4),
+      },
+      {
+        serverId: second.id,
+        memoryTier: second.memoryTier,
+        provider: 'fake',
+        startedAt: at(0),
+        stoppedAt: at(2),
+      },
+    ])
+    await order(h, owner.userId, 1200, at(2), 0)
+    const report = await economics(h).report(window, 500, at(6))
+    expect(report.servers.map(({ serverId }) => serverId)).toEqual([first.id, second.id])
+    expect(report.servers.find(({ serverId }) => serverId === idle.id)).toBeUndefined()
+    expect(report.servers[0]).toMatchObject({ runningHours: 4, infraCents: 12, revenueCents: 800 })
+    expect(report.servers[1]).toMatchObject({ runningHours: 2, infraCents: 6, revenueCents: 400 })
+    expect(report.unattributedRevenueCents).toBe(0)
+    expect(report.runtimes[0]).toMatchObject({
+      servers: 3,
+      serversRan: 2,
+      usageCents: 18,
+      revenueCents: 1200,
+    })
+  } finally {
+    await h.close()
+  }
+}
+
 describe.skipIf(!hasDatabase)('economics from recorded ledger inputs', () => {
+  test(
+    'shares receipts by unequal running history and omits a zero-cost idle server',
+    weightedSharesAndIdleServer,
+    30 * SECOND_MS,
+  )
+  test(
+    'distinguishes usable capacity, full CPUs, and unknown measurements',
+    machineBoundaries,
+    30 * SECOND_MS,
+  )
   test(
     'prices recorded usage, capacity, backups and refunded orders in the bounded window',
     recorded,
