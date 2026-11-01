@@ -24,6 +24,11 @@ import { LibraryFileFormats } from './file-formats.ts'
 import { LibraryPackArchives } from './pack-archives.ts'
 
 type Mode =
+  | 'installed'
+  | 'copyleft'
+  | 'carried'
+  | 'authored'
+  | 'unlicensed'
   | 'normal'
   | 'mirror'
   | 'archived'
@@ -39,7 +44,15 @@ type Mode =
   | 'wrong-game'
   | 'no-loader'
   | 'pin-refused'
-function archiveBytes(mode: Mode) {
+const installedModes: ReadonlySet<Mode> = new Set([
+  'installed',
+  'copyleft',
+  'carried',
+  'authored',
+  'unlicensed',
+])
+
+function archiveBytes(mode: Mode, files: unknown[] = [], entries: Record<string, Uint8Array> = {}) {
   if (mode === 'unsafe') return utf8('This is not an archive')
   if (mode === 'missing-index') return zipBytes({ 'readme.txt': utf8('No pack index') })
   return zipBytes({
@@ -49,16 +62,107 @@ function archiveBytes(mode: Mode) {
         game: mode === 'wrong-game' ? 'another-game' : 'minecraft',
         versionId: '1.0',
         name: 'Fixture pack',
-        files: [],
+        files,
         dependencies:
           mode === 'no-loader' ? { minecraft: '26.2' } : { minecraft: '26.2', 'fabric-loader': '0.16.14' },
       }),
     ),
     'overrides/config/fixture.toml': utf8('feature = true\n'),
+    ...entries,
   })
 }
+function modBytes(name: string) {
+  return zipBytes({
+    'fabric.mod.json': utf8(
+      JSON.stringify({ schemaVersion: 1, id: name, version: '1.0', name, environment: '*' }),
+    ),
+  })
+}
+
+/** Publish actual mod bytes and the catalog metadata by which ingestion recognizes them. */
+function publishedWork(h: Harness, cdn: Cdn, name: string, licence: string | null) {
+  const bytes = modBytes(name)
+  const file = cdn.file(name, bytes)
+  const projectId = `${name}-project`
+  h.catalog.publish(
+    {
+      projectId,
+      slug: name,
+      name,
+      summary: 'Fixture mod',
+      iconUrl: null,
+      environments: ['server_only'],
+      downloads: 1,
+      categories: [],
+      licence,
+    },
+    [
+      {
+        versionId: `${name}-v1`,
+        projectId,
+        versionLabel: '1.0',
+        channel: 'release',
+        state: 'listed',
+        environment: 'server_only',
+        loaders: ['fabric'],
+        gameVersions: ['26.2'],
+        publishedAt: new Date(),
+        file,
+        dependencies: [],
+      },
+    ],
+  )
+  const sha1 = createHash('sha1').update(bytes).digest('hex')
+  h.catalog.fileSha1(file.sha512, sha1)
+  return { bytes, file, projectId, sha1 }
+}
+
+/** Indexed server mods, player-only archives and, where requested, a carried replacement. */
+function installedPack(h: Harness, cdn: Cdn, mode: Mode) {
+  const first = publishedWork(
+    h,
+    cdn,
+    'library',
+    mode === 'unlicensed' ? null : mode === 'copyleft' ? 'GPL-3.0-only' : 'MIT',
+  )
+  const second = publishedWork(h, cdn, 'second', 'MIT')
+  const playerBytes = zipBytes({ 'pack.mcmeta': utf8('{}') })
+  const playerFile = cdn.file('only-players', playerBytes)
+  const files = [first, second].map((entry, index) => ({
+    path: index === 0 ? 'mods/library.jar' : 'mods/second.jar',
+    hashes: { sha512: entry.file.sha512, sha1: entry.sha1 },
+    downloads: [entry.file.url],
+    fileSize: entry.file.sizeBytes,
+    env: { client: 'optional', server: 'required' },
+  }))
+  files.push({
+    path: 'resourcepacks/only-players.zip',
+    hashes: { sha512: playerFile.sha512, sha1: createHash('sha1').update(playerBytes).digest('hex') },
+    downloads: [playerFile.url],
+    fileSize: playerFile.sizeBytes,
+    env: { client: 'required', server: 'required' },
+  })
+  const entries: Record<string, Uint8Array> = { 'overrides/shaderpacks/only-players.zip': playerBytes }
+  entries['overrides/config/start.js'] = utf8('export const fixture = true\n')
+  let replacement: ReturnType<typeof publishedWork> | null = null
+  if (mode === 'carried' || mode === 'authored') {
+    if (mode === 'authored') {
+      const bytes = modBytes('authored-library')
+      replacement = {
+        bytes,
+        file: cdn.file('authored-library', bytes),
+        projectId: 'authored-library-project',
+        sha1: createHash('sha1').update(bytes).digest('hex'),
+      }
+    } else replacement = publishedWork(h, cdn, 'carried-library', 'MIT')
+    entries['overrides/mods/library.jar'] = replacement.bytes
+  }
+  return { files, entries, first, second, replacement }
+}
+
 function reviewed(h: Harness, cdn: Cdn, mode: Mode) {
-  const bytes = archiveBytes(mode),
+  const installed = installedModes.has(mode) ? installedPack(h, cdn, mode) : null
+  const bytes = archiveBytes(mode, installed?.files, installed?.entries),
     file = cdn.file('reviewed-pack', bytes)
   const project = {
     projectId: 'reviewed-pack',
@@ -97,10 +201,10 @@ function reviewed(h: Harness, cdn: Cdn, mode: Mode) {
     blurb: 'A fixture',
     authors: 'Fixture authors',
     source: { catalog: h.catalog.id, projectId: project.projectId },
-    distribution: mode === 'mirror' ? 'mirror' : 'upstream',
+    distribution: mode === 'mirror' || installedModes.has(mode) ? 'mirror' : 'upstream',
     readings: [],
     permissions: [],
-    authored: [],
+    authored: mode === 'authored' ? ['overrides/mods/library.jar'] : [],
     review: 'records:fixture.md#provenance',
     releases: [spec],
   }
@@ -135,7 +239,7 @@ function reviewed(h: Harness, cdn: Cdn, mode: Mode) {
       break
     }
   }
-  return { pack, spec, file }
+  return { pack, spec, file, installed }
 }
 async function fixture(mode: Mode) {
   const cdn = new Cdn(),
@@ -156,7 +260,7 @@ async function fixture(mode: Mode) {
       archives: new LibraryPackArchives(),
       formats,
       contents: new PackContents({ db: h.db, formats, catalog: h.catalog, jarChecks: h.app.jarChecks }),
-      capabilities: { archives: mode === 'mirror' ? store : null },
+      capabilities: { archives: mode === 'mirror' || installedModes.has(mode) ? store : null },
       pin: async (projectId: string, versionId: string) => {
         if (mode === 'pin-refused') {
           const project = await h.catalog.project(projectId)
@@ -272,6 +376,73 @@ async function refused(mode: Mode) {
     await f.close()
   }
 }
+async function installedRelease(mode: Mode, mirror = true) {
+  const f = await fixture(mode)
+  try {
+    const installed = f.installed
+    if (!installed) throw new Error('This case needs installed server files')
+    if (!mirror) f.pack.distribution = 'upstream'
+    const firstLicence = mode === 'copyleft' ? 'GPL-3.0-only' : 'MIT'
+    const result = await checkCatalogRelease(f.deps, f.pack, f.spec, f.work)
+    expect(result.distribution).toBe(mirror ? 'mirror' : 'upstream')
+    expect(result.facts.checked.files).toBe(2)
+    expect(result.facts.checked.bytes).toBe(installed.first.bytes.length + installed.second.bytes.length)
+    expect(result.facts.checked.hosts).toEqual([new URL(installed.first.file.url).hostname])
+    expect(result.facts.mods).toBe(installed.replacement ? 3 : 2)
+    expect(result.facts.jarBytes).toBe(
+      installed.first.bytes.length +
+        installed.second.bytes.length +
+        (installed.replacement?.bytes.length ?? 0),
+    )
+    expect(result.forPlayers).toEqual([
+      'resourcepacks/only-players.zip',
+      'overrides/shaderpacks/only-players.zip',
+    ])
+    expect(result.facts.licences).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: 'library',
+          project: installed.first.projectId,
+          licence: firstLicence,
+          kind: licenceKind(firstLicence),
+        }),
+        expect.objectContaining({
+          name: 'second',
+          project: installed.second.projectId,
+          licence: 'MIT',
+          kind: 'open',
+        }),
+      ]),
+    )
+    expect(result.facts.code).toEqual(['overrides/config/start.js'])
+    if (!mirror) {
+      expect(result.pack.leaveOut).toEqual(expect.arrayContaining(result.forPlayers))
+      expect(result.stored).toBeNull()
+      return
+    }
+    if (!result.stored) throw new Error('The mirror must keep its bytes')
+    const bytes = f.store.objects.get(result.stored.key)
+    if (!bytes) throw new Error('The real store must retain the mirror')
+    const files = unzipSync(bytes)
+    expect(Array.from(files['overrides/mods/library.jar'] ?? [])).toEqual(
+      Array.from(installed.replacement?.bytes ?? installed.first.bytes),
+    )
+    expect(Array.from(files['overrides/mods/second.jar'] ?? [])).toEqual(Array.from(installed.second.bytes))
+    expect(files['overrides/shaderpacks/only-players.zip']).toBeUndefined()
+    expect(files['overrides/resourcepacks/only-players.zip']).toBeUndefined()
+    expect(result.pack.leaveOut).toBeUndefined()
+    expect(result.pack.publishedFile).toBe(f.file.url)
+    expect(result.contents?.leftOut).toEqual(
+      expect.arrayContaining(result.forPlayers.map((path) => ({ path, why: 'players' }))),
+    )
+    const notices = strFromU8(files['cubepals-notices.txt'] ?? new Uint8Array())
+    expect(notices).toContain('library:')
+    if (mode === 'copyleft') expect(notices).toContain(f.h.catalog.projectPage(installed.first.projectId))
+  } finally {
+    await f.close()
+  }
+}
+
 describe.skipIf(!hasDatabase)('catalog release provenance through real files', () => {
   for (const mode of ['normal', 'archived', 'mirror'] as const)
     test(`a ${mode} release retains its reviewed facts and bytes`, () => accepted(mode), 30 * SECOND_MS)
@@ -290,4 +461,31 @@ describe.skipIf(!hasDatabase)('catalog release provenance through real files', (
     'pin-refused',
   ] as const)
     test(`a ${mode} release is refused before anything is stored`, () => refused(mode), 30 * SECOND_MS)
+
+  describe('catalog installed works through real files', () => {
+    for (const mode of ['installed', 'copyleft', 'carried', 'authored'] as const)
+      test(
+        `${mode} works keep their bytes, licensing and player-only exclusions`,
+        () => installedRelease(mode),
+        30 * SECOND_MS,
+      )
+    test(
+      'an upstream pack retains the files a server must leave out',
+      () => installedRelease('installed', false),
+      30 * SECOND_MS,
+    )
+    test(
+      'a mirror with an unlicensed installed mod is refused before storage',
+      async () => {
+        const f = await fixture('unlicensed')
+        try {
+          await expect(checkCatalogRelease(f.deps, f.pack, f.spec, f.work)).rejects.toBeInstanceOf(Refused)
+          expect(f.store.objects.size).toBe(0)
+        } finally {
+          await f.close()
+        }
+      },
+      30 * SECOND_MS,
+    )
+  })
 })
