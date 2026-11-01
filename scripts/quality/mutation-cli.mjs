@@ -133,7 +133,7 @@ if (subjects.length === 0) {
     reportDir: output,
     thresholds,
     collectAll: true,
-    allowCaseBatches: false,
+    allowCaseBatches: true,
   })
 } else
   runMutation({
@@ -167,7 +167,7 @@ function baseScores(selected) {
     reportDir: join(output, 'base'),
     threshold: 0,
     collectAll: true,
-    allowCaseBatches: false,
+    allowCaseBatches: true,
   })
   // A mutant that timed out counts as undetected on both sides; one never run lowers nothing.
   const incomplete = base.files.filter((row) => row.unevaluated)

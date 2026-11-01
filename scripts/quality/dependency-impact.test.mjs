@@ -267,6 +267,11 @@ test('an update that weakens a test oracle falls below its base score; an equal 
   weakened.commit()
   const rejected = command(t, weakened, { baseRoot: baseWorktree(t, weakened) })
   assert.notEqual(rejected.run.status, 0)
+  const baseTests = rejected.read('base/0/tests.json')
+  const headTests = rejected.read('0/tests.json')
+  assert.deepEqual(headTests.tests, baseTests.tests, 'both sides retain the exact same oracle set')
+  assert.equal(baseTests.allowCaseBatches, true)
+  assert.equal(headTests.allowCaseBatches, true)
   const base = rejected.read('base-scores.json')['apps/source.ts']
   assert.ok(base >= 80, `the strict oracle kills most mutants on base (${base}%)`)
   const row = rejected.read('summary.json').files[0]

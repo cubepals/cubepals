@@ -63,7 +63,8 @@ try {
           'test',
           `./${file}`,
           ...(pattern ? ['--test-name-pattern', pattern] : []),
-          ...(bail ? ['--bail'] : []),
+          // Bun's bail flag skips afterAll, leaking the fixture databases. The outer loop
+          // still stops after this failing file or proven case batch, once its cleanup ran.
           '--reporter=junit',
           `--reporter-outfile=${into}`,
         ],

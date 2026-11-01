@@ -3,6 +3,11 @@
 
 # Quality policy trust boundary
 
+Next's public app-router `page.tsx` and `route.ts` files stay production entrypoints when tests
+import them. Their production dependency graphs are retained, with every changed source still
+subject to its ordinary coverage and mutation floors. Private underscore folders and modules
+that import assertion libraries retain the conservative test-support treatment.
+
 Incremental evidence distinguishes runtime inputs from structure metadata. A structure baseline
 may avoid application-wide mutation only when its existing allowances are retained, tightened or
 removed without other metadata changes. A literal JSON, CSS or HTML import is a data leaf: changes
