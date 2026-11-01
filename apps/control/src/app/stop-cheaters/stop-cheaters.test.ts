@@ -432,7 +432,20 @@ describe.skipIf(!hasDatabase)('removals and the ban they bring', () => {
         minutes: FIXTURE.ban.minutes,
         reason: BAN_REASON,
         requestedBy: STOP_CHEATERS_ACTOR,
+        playerName: 'Cheater',
+        state: 'pending',
       })
+      const audit = await h.db
+        .select()
+        .from(schema.auditLog)
+        .where(and(eq(schema.auditLog.subjectId, id), eq(schema.auditLog.action, 'moderation.punished')))
+      expect(audit).toEqual([
+        expect.objectContaining({
+          actor: STOP_CHEATERS_ACTOR,
+          subjectType: 'server',
+          data: { playerUuid: uuid, kind: 'ban', minutes: FIXTURE.ban.minutes },
+        }),
+      ])
       // On the player's history, where the owner can lift it.
       const history = await h.app.stopCheaters.view(
         await h.server(id),
@@ -441,6 +454,8 @@ describe.skipIf(!hasDatabase)('removals and the ban they bring', () => {
       expect(history.removals).toHaveLength(6)
       expect(history.removals[0]?.player).toEqual({ uuid, name: 'Cheater' })
       expect(history.today).toBe(6)
+      await h.app.stopCheaters.recordRemovals(id, [removed(uuid, 'impossible')])
+      expect(await bans(id)).toHaveLength(1)
     } finally {
       installTuning(before)
     }
@@ -483,6 +498,30 @@ describe.skipIf(!hasDatabase)('removals and the ban they bring', () => {
       installTuning(before)
     }
   }, 60_000)
+
+  test('removal history normalizes identifiers, preserves the report and belongs to the owner', async () => {
+    const { owner, id } = await running('History')
+    const uuid = randomUUID()
+    const event = removed(uuid.toUpperCase(), 'speed')
+    await h.app.stopCheaters.recordRemovals(id, [event])
+    expect(await h.app.stopCheaters.removalsOf(owner, id, uuid)).toEqual([
+      {
+        player: { uuid, name: event.name },
+        reason: event.reason,
+        at: event.at,
+      },
+    ])
+    const stranger = await h.user()
+    await expect(h.app.stopCheaters.removalsOf(stranger, id, uuid)).rejects.toThrow()
+    await expect(h.app.stopCheaters.viewOf(stranger, id)).rejects.toThrow()
+    expect((await h.app.stopCheaters.viewOf(owner, id)).removals).toEqual([
+      {
+        player: { uuid, name: event.name },
+        reason: event.reason,
+        at: event.at,
+      },
+    ])
+  }, 30_000)
 
   test('what isn’t a removal is passed over', async () => {
     const { id } = await running('Wren')
