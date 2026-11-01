@@ -390,6 +390,7 @@ jobs:
           POSTGRES_DB: blockly
         ports: ['5432:5432']
         options: >-
+          --shm-size 1g
           --health-cmd "pg_isready -U blockly"
           --health-interval 5s
           --health-timeout 5s
