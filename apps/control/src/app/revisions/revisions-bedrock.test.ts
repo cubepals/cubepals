@@ -114,12 +114,15 @@ async function persistedSettings() {
   const { h, owner, id, desired } = await fixture()
   await h.app.revisions.changeAuthentication(owner, id, false, crypto.randomUUID())
   const before = await desired()
-  await h.app.revisions.changeSettings(
-    owner,
-    id,
-    { ...before.settings, motd: '  A place to play  ' },
-    crypto.randomUUID(),
-  )
+  // The game form cannot replace choices owned by the membership requests.
+  const request = {
+    ...before.settings,
+    motd: '  A place to play  ',
+    onlineMode: !before.settings.onlineMode,
+    bedrock: before.settings.bedrock !== true,
+    otherVersions: before.settings.otherVersions === 'off' ? 'on' : 'off',
+  }
+  await h.app.revisions.changeSettings(owner, id, request, crypto.randomUUID())
   expect(await desired()).toMatchObject({
     settings: { ...before.settings, motd: 'A place to play' },
     reason: 'settings_changed',
