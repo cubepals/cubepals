@@ -151,6 +151,25 @@ async function recordsPolicyStop() {
     outcome.mockRestore()
   }
 }
+async function unchangedConfigurationStaysLive() {
+  const { h, server, deps, ctx } = await fixture()
+  const decision = decide(server.lifecycle, { type: 'apply' })
+  if (decision.kind !== 'accept') throw new Error('The running fixture must accept its update')
+  ctx.server = await h.db.transaction((tx) => saveLifecycle(tx, server, decision.to))
+  ctx.op.input = {}
+  const applied = spyOn(deps.runtime, 'apply')
+  const booted = spyOn(deps.boot, 'run')
+  try {
+    expect(await updating(deps).run(ctx)).toEqual({ status: 'succeeded' })
+    expect(applied).not.toHaveBeenCalled()
+    expect(booted).not.toHaveBeenCalled()
+    expect((await h.server(server.id)).lifecycle.status).toBe('running')
+  } finally {
+    applied.mockRestore()
+    booted.mockRestore()
+  }
+}
+
 async function persistsSuccessfulBoot() {
   const { h, server, deps, ctx } = await fixture()
   const decision = decide(server.lifecycle, { type: 'apply' })
@@ -387,6 +406,11 @@ async function replacementDuringBoot() {
 }
 
 describe.skipIf(!hasDatabase)('updating handler guard boundaries', () => {
+  test(
+    'keeps an unchanged configuration live without another boot',
+    unchangedConfigurationStaysLive,
+    30 * SECOND_MS,
+  )
   test('persists a completed boot and leaves one live usage interval', persistsSuccessfulBoot, 30 * SECOND_MS)
   test('keeps replacement handles before boot and after its recheck', replacementDuringBoot, 30 * SECOND_MS)
   test('persists a policy refusal while an update owns the lifecycle', recordsPolicyStop, 30 * SECOND_MS)
