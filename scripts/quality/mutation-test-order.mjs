@@ -28,7 +28,13 @@ function ownsSubject(source, test) {
     .split('/')
     .at(-1)
     .replace(/\.test\.[^.]+$/, '')
-  return name === owner || name.startsWith(`${owner}.`) || name.startsWith(`${owner}-`)
+  return (
+    name === owner ||
+    name.startsWith(`${owner}.`) ||
+    name.startsWith(`${owner}-`) ||
+    ((stem === 'service' || stem === 'index') &&
+      test.split('/').slice(0, -1).join('/') === parts.slice(0, -1).join('/'))
+  )
 }
 
 export function executionProfile(prepared, group) {
@@ -123,17 +129,28 @@ export function orderMutationTests(scope, profile, entries, group) {
     })
     if (!ordered.some((entry) => entry.rank === 0)) continue
     ordered.sort((a, b) => {
+      // A focused suite in another shard has no counters in this profile. Its verified
+      // static ownership still merits an early clean baseline, ahead of incidental imports.
+      const priority = (entry) => (entry.rank !== 2 && ownsSubject(subject, entry.test) ? 0 : entry.rank + 1)
+      const difference = priority(a) - priority(b)
+      if (difference) return difference
       if (a.rank !== b.rank) return a.rank - b.rank
       const own = Number(ownsSubject(subject, b.test)) - Number(ownsSubject(subject, a.test))
       if (own) return own
       for (const metric of metrics) if (a.hit[metric] !== b.hit[metric]) return b.hit[metric] - a.hit[metric]
       return directoryDistance(subject, a.test) - directoryDistance(subject, b.test) || a.index - b.index
     })
-    testsByFile[subject] = [ordered[0].test]
+    // Complementary domain suites belong in the same first attempt. Starting with just one
+    // can spend the budget proving a partial score before unrelated integration suites expand.
+    const owners = ordered.filter((entry) => entry.rank === 0 && ownsSubject(subject, entry.test))
+    const first = owners.length > 1 ? owners.slice(0, 4) : ordered.slice(0, 1)
+    testsByFile[subject] = first.map((entry) => entry.test)
+    const selected = new Set(testsByFile[subject])
+    const remaining = ordered.filter((entry) => !selected.has(entry.test))
     const batches = []
     let batch = []
-    let rank = ordered[1]?.rank
-    for (const entry of ordered.slice(1)) {
+    let rank = remaining[0]?.rank
+    for (const entry of remaining) {
       if (batch.length === 4 || entry.rank !== rank) {
         if (batch.length) batches.push(batch)
         batch = []

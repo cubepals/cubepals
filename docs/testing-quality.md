@@ -165,7 +165,7 @@ new-code floor. What the update can change is judged by what can observe it:
   reach, may assert less than before. Those tests' source closures become mutation subjects,
   measured with exactly those tests on the base worktree (installed from the base lockfile) and on
   the head, and the head must reach the base score. Base and head run the same tests against the
-  same mutants, with no expansion. A base measurement with mutants left unevaluated fails.
+  same mutants, with no expansion. Each side may use a clean-proven case order; a survivor still runs every original case. A base measurement with mutants left unevaluated fails.
 
 A package is updated if its lock record changed or anything it resolves to did. A changed package
 whose installed copy is this exact version and holds only type declarations and documents (such

@@ -161,12 +161,18 @@ function reachable(graph, starts) {
 function potentialSupport(graph, entries, changed, contents) {
   const tests = [...entries.values()].filter((entry) => entry.kind === 'test').map((entry) => entry.path)
   const testReach = reachable(graph, tests)
-  // A file reached by a non-test entry is production. Everything reached only through tests is
-  // conservatively treated as possible test support, regardless of its directory or filename.
+  // Next discovers app-router entries by filename. Importing one in a test does not turn it
+  // into test support. Private underscore folders are excluded, as Next excludes them from
+  // routing (nextjs.org/docs/app/getting-started/project-structure#private-folders).
+  const nextEntry = (path) =>
+    /^apps\/web\/src\/app\/(?:.*\/)?(?:page\.tsx|route\.ts)$/.test(path) &&
+    !path.split('/').some((part) => part.startsWith('_'))
+  // The required Worker build verifies these framework entries. Ordinary files reached only
+  // through tests remain possible test support, regardless of their directory or filename.
   const productionReach = reachable(
     graph,
     [...entries.values()]
-      .filter((entry) => entry.kind === 'source' && !testReach.has(entry.path))
+      .filter((entry) => entry.kind === 'source' && (!testReach.has(entry.path) || nextEntry(entry.path)))
       .map((entry) => entry.path),
   )
   return new Set(

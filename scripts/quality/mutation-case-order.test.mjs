@@ -197,3 +197,53 @@ test('the preferred batch still needs a real failure before execution can stop',
   assert.equal(result.reports.length, 1)
   assert.equal(result.failedBatch, preferred)
 })
+
+test('expensive splits probe once then run every original case in its full file', () => {
+  const { plan, execute } = fixture()
+  plan.originalDurationMs = 1
+  const preferred = caseBatchKey(plan.batches.at(-1))
+  const seen = []
+  const result = runCaseOrder(
+    plan,
+    [file],
+    (batch) => {
+      seen.push(batch)
+      return execute(batch)
+    },
+    preferred,
+  )
+  assert.equal(caseBatchKey(seen[0]), preferred)
+  assert.equal(seen.length, 2)
+  assert.equal(seen[1].pattern, undefined)
+  assert.deepEqual(new Set(seen[1].cases), new Set(plan.cases.map((item) => item.id)))
+  assert.equal(result.passed, names.length)
+  assert.equal(result.reports.length, 2)
+})
+
+test('the full file fallback rejects a missing original survivor case', () => {
+  const { plan, execute } = fixture()
+  plan.originalDurationMs = 1
+  assert.throws(
+    () =>
+      runCaseOrder(plan, [file], (batch) => {
+        const result = execute(batch)
+        if (batch.pattern !== undefined) return result
+        return { ...result, xml: result.xml.replace(/<testcase name="slow"[^>]*><\/testcase>/, '') }
+      }),
+    /every selected case/,
+  )
+})
+
+test('a full file failure remembers a proven batch for the following mutant', () => {
+  const { plan, execute } = fixture()
+  plan.originalDurationMs = 1
+  const result = runCaseOrder(plan, [file], (batch) => {
+    const run = execute(batch)
+    if (batch.pattern !== undefined) return run
+    return { ...run, exitCode: 1, xml: xml({ last: 'failed' }) }
+  })
+  assert.equal(result.failed, 1)
+  assert.ok(plan.batches.some((batch) => caseBatchKey(batch) === result.failedBatch))
+  const survivor = runCaseOrder(plan, [file], execute, result.failedBatch)
+  assert.equal(survivor.passed, names.length)
+})
