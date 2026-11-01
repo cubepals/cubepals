@@ -223,7 +223,7 @@ describe.skipIf(!hasDatabase)('settling pending changes in the browser', () => {
       try {
         expect(page.host.textContent).toContain('This change waits until everyone has left')
         expect(button('Cancel this change').disabled).toBe(false)
-        expect(page.host.querySelector('[role="alert"]')).toBeNull()
+        expect(page.host.querySelector('[role="alert"]') === null).toBe(true)
         await act(async () => button('Restart now').click())
         await until(() => page.changed.length === 1)
         expect(page.host.textContent).toBe('')

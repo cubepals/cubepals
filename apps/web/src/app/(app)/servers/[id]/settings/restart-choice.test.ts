@@ -56,6 +56,7 @@ describe('what waits for everyone to leave', () => {
     expect(html).toContain('<li>PvP on → off</li>')
     expect(html).toContain('Restart now')
     expect(html).toContain('Cancel this change')
+    expect(html).not.toContain('role="alert"')
   })
 
   test('several, with what went wrong', () => {
