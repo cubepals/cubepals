@@ -67,7 +67,16 @@ test('real case ordering runs every survivor case and rejects an actual changed 
     assert.equal(survivor.report.passed, 6)
     assert.equal(survivor.report.reports.length, clean.report.caseOrder.batches.length)
     assert.ok(survivor.report.durationMs >= 6 * SECOND_MS, 'the slow case must still run')
-    writeFileSync(source, 'export const work = (value: number) => value === 5 ? value - 1 : value + 1\n')
+    const late = clean.report.caseOrder.batches
+      .slice(1)
+      .findLast((batch) => batch.cases.some((id) => /^input /.test(JSON.parse(id)[2])))
+    assert.ok(late, 'a later normal-input batch must exist')
+    const failingInput = Number(JSON.parse(late.cases[0])[2].slice('input '.length))
+    assert.ok([1, 2, 3, 4, 5].includes(failingInput))
+    writeFileSync(
+      source,
+      `export const work = (value: number) => value === ${failingInput} ? value - 1 : value + 1\n`,
+    )
     const broken = run('42')
     assert.equal(broken.result.status, 1)
     assert.equal(broken.report.status, 'test-failure')
