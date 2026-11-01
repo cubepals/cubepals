@@ -221,3 +221,19 @@ test.skipIf(!hasDatabase)(
   },
   30 * SECOND_MS,
 )
+
+test.skipIf(!hasDatabase)(
+  'seeded imports record the system actor by default',
+  async () => {
+    const id = await server()
+    const imported = entry('Imported')
+    await h.db.transaction((tx) => createAccess(tx, id, { whitelistOn: false, entries: [imported] }))
+    const [row] = await h.db
+      .select()
+      .from(schema.serverAccessEntries)
+      .where(eq(schema.serverAccessEntries.playerUuid, imported.player.uuid))
+    expect(row?.requestedBy).toBe('system')
+    expect((await readAccess(h.db, id)).record.whitelistEnabledPending).toBeNull()
+  },
+  30 * SECOND_MS,
+)
