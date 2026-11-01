@@ -269,12 +269,12 @@ async function withdrawnModWhileSaving() {
     expect(page.mutations).toHaveLength(1)
     expect(Object.values(page.mutations[0].input)[0].acknowledgeRevoked).not.toBe(true)
     await act(async () => button('Run it anyway').click())
-    await until(async () => (await page.settings()).spawnProtection === 4)
     expect(page.mutations).toHaveLength(2)
     expect(Object.values(page.mutations[1].input)[0]).toMatchObject({
       acknowledgeRevoked: true,
       when: 'empty',
     })
+    await until(async () => (await page.settings()).spawnProtection === 4)
     const revision = await loadRevision(page.h.db, (await page.h.server(page.server.id)).desiredRevisionId)
     expect(revision.acknowledgedRevoked).toHaveLength(1)
     expect(page.h.runtime.machine(page.server.id).state).toBe('stopped')
