@@ -185,6 +185,11 @@ Git-backed workspace. The complete candidate census, test oracles, thresholds an
 budget are identical in both execution modes. The real mutation self-test verifies strong and
 superficial tests through a workspace import under the parallel mode.
 
+Within a proven independent case split, a batch that actually failed is tried first for the next
+mutant. That preference changes scheduling only: it must name an existing proven batch, every
+survivor still executes every original case, and raw JUnit reports remain mandatory. Parallel
+workers publish the preference atomically; no result or kill count is reused.
+
 A subject that reaches its time budget records the remaining mutants as `budget-exhausted`: no
 kill credit, counted against the score, and named in the failure. Stryker always finishes and
 reports instead of being stopped mid-run.

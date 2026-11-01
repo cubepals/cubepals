@@ -12,7 +12,7 @@
  */
 import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { SECOND_MS } from '../../packages/contracts/src/durations.ts'
 import { mergeJUnit } from './coverage-junit.mjs'
@@ -98,13 +98,28 @@ try {
       allowedSkippedTests,
     }
   }
+  const scheduling = join(manifest.evidence, 'scheduling')
+  const preference = join(scheduling, 'last-failure.json')
   if (baseline?.caseOrder) {
+    let preferred = null
+    try {
+      const prior = JSON.parse(readFileSync(preference, 'utf8'))
+      if (prior.version !== 1 || typeof prior.batch !== 'string')
+        throw new Error('Invalid mutation scheduling preference')
+      preferred = prior.batch
+    } catch (error) {
+      if (error.code !== 'ENOENT') throw error
+    }
     const directory = join(manifest.evidence, `${mutant}-cases`)
     mkdirSync(directory, { recursive: true })
     Object.assign(
       outcome,
-      runCaseOrder(baseline.caseOrder, manifest.tests, (batch, index) =>
-        execute([batch.file], join(directory, `${index}.xml`), { pattern: batch.pattern, bail: true }),
+      runCaseOrder(
+        baseline.caseOrder,
+        manifest.tests,
+        (batch, index) =>
+          execute([batch.file], join(directory, `${index}.xml`), { pattern: batch.pattern, bail: true }),
+        preferred,
       ),
     )
     outcome.status = outcome.failed > 0 ? 'test-failure' : 'passed'
@@ -136,6 +151,12 @@ try {
       outcome.status = 'passed'
       if (plan) outcome.caseOrder = plan
     }
+  }
+  if (outcome.status === 'test-failure' && outcome.failedBatch) {
+    mkdirSync(scheduling, { recursive: true })
+    const temporary = join(scheduling, `${process.pid}.json`)
+    writeFileSync(temporary, JSON.stringify({ version: 1, batch: outcome.failedBatch }))
+    renameSync(temporary, preference)
   }
 } catch (error) {
   outcome.reason = String(error)
