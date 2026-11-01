@@ -116,6 +116,8 @@ test.skipIf(!hasDatabase)(
       sleepsAt: null,
       everPlayed: true,
     })
+    await accessRecords(q, owner, server.id)
+    await operationRecords(q, owner, await h.server(server.id))
     expect(await q.setupPreview(owner, { kind: 'template', key: 'survival' })).toEqual({
       from: 'Survival',
       copying: null,
@@ -476,4 +478,128 @@ async function retainedWorlds(
   expect(await q.purgedArchives(owner)).toEqual([
     { id: server.id, name: 'Free Birch', archives: 1, keptUntil: purgeAfter.toISOString() },
   ])
+}
+
+async function accessRecords(q: ServerQueries, owner: UserActor, serverId: string) {
+  const player = { name: 'AllowedPlayer', uuid: crypto.randomUUID() }
+  await h.db
+    .insert(schema.serverAccessEntries)
+    .values({
+      serverId,
+      list: 'operator',
+      playerUuid: player.uuid,
+      playerName: player.name,
+      state: 'pending_add',
+      origin: 'blockly',
+      details: { reason: 'Owner invitation' },
+      error: 'Retry later',
+    })
+  await h.db
+    .update(schema.serverAccess)
+    .set({ whitelistEnabled: true, whitelistEnabledPending: false, syncError: 'Waiting on game', version: 7 })
+    .where(eq(schema.serverAccess.serverId, serverId))
+  expect(await q.access(owner, serverId)).toMatchObject({
+    whitelistEnabled: true,
+    pendingWhitelistEnabled: false,
+    syncError: 'Waiting on game',
+    version: 7,
+    entries: [
+      {
+        list: 'operator',
+        player,
+        state: 'pending_add',
+        origin: 'blockly',
+        error: 'Retry later',
+        reason: 'Owner invitation',
+      },
+    ],
+  })
+}
+
+async function operationRecords(q: ServerQueries, owner: UserActor, server: MinecraftServer) {
+  const [backup] = await h.db
+    .insert(schema.backups)
+    .values({
+      serverId: server.id,
+      worldId: server.activeWorldId,
+      revisionId: server.desiredRevisionId,
+      tier: 'archive',
+      trigger: 'uploaded',
+      status: 'ready',
+      archiveKey: 'fixture/restored',
+      sizeBytes: 12345,
+    })
+    .returning()
+  if (!backup) throw new Error('The restore backup must exist')
+  await h.db
+    .update(schema.worlds)
+    .set({ name: 'Brought Birch' })
+    .where(eq(schema.worlds.id, server.activeWorldId))
+  const [operation] = await h.db
+    .insert(schema.serverOperations)
+    .values({
+      id: crypto.randomUUID(),
+      serverId: server.id,
+      kind: 'restore',
+      status: 'running',
+      requestedBy: `user:${owner.userId}`,
+      idempotencyKey: crypto.randomUUID(),
+      input: { backupId: backup.id },
+      progress: { step: 'loading_world', at: new Date().toISOString() },
+      startedAt: new Date(),
+      error: 'Previous attempt',
+    })
+    .returning()
+  if (!operation) throw new Error('The tracked restore must exist')
+  const view = {
+    id: operation.id,
+    kind: 'restore' as const,
+    change: null,
+    worldBytes: 12345,
+    broughtWorld: 'Brought Birch',
+    status: 'running' as const,
+    step: 'loading_world' as const,
+    error: 'Previous attempt',
+    createdAt: operation.createdAt.toISOString(),
+    startedAt: operation.startedAt?.toISOString() ?? null,
+  }
+  expect((await q.get(owner, server.id)).activeOperation).toEqual(view)
+  await h.db
+    .update(schema.backups)
+    .set({ tier: 'snapshot', trigger: 'manual', snapshotHandle: 'fixture-snapshot' })
+    .where(eq(schema.backups.id, backup.id))
+  expect((await q.get(owner, server.id)).activeOperation).toEqual({
+    ...view,
+    worldBytes: null,
+    broughtWorld: null,
+  })
+  await h.db
+    .update(schema.serverOperations)
+    .set({ input: {}, progress: null, startedAt: null, error: null })
+    .where(eq(schema.serverOperations.id, operation.id))
+  const plain = { ...view, step: null, startedAt: null, error: null, worldBytes: null, broughtWorld: null }
+  expect((await q.get(owner, server.id)).activeOperation).toEqual(plain)
+  await h.db
+    .update(schema.serverOperations)
+    .set({ kind: 'apply' })
+    .where(eq(schema.serverOperations.id, operation.id))
+  expect((await q.get(owner, server.id)).activeOperation).toEqual({
+    ...plain,
+    kind: 'apply',
+    change: 'settings',
+  })
+  await h.db
+    .update(schema.serverRuntimes)
+    .set({ applied: null })
+    .where(eq(schema.serverRuntimes.serverId, server.id))
+  expect((await q.get(owner, server.id)).activeOperation).toEqual({ ...plain, kind: 'apply' })
+  await h.db
+    .update(schema.serverOperations)
+    .set({ kind: 'start' })
+    .where(eq(schema.serverOperations.id, operation.id))
+  expect((await q.get(owner, server.id)).activeOperation).toEqual({ ...plain, kind: 'start' })
+  await h.db
+    .update(schema.serverOperations)
+    .set({ status: 'succeeded', finishedAt: new Date() })
+    .where(eq(schema.serverOperations.id, operation.id))
 }
