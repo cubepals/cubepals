@@ -27,6 +27,9 @@ complete original case inventory; otherwise the original invocation remains in u
 mutant must execute every original case. Early termination needs an actual assertion failure;
 missing cases, unexpected skips, runner errors and timeouts remain inconclusive. Raw batch reports
 are retained, and dependency-only comparisons disable case batching on both sides.
+The clean split proof may use up to two minutes, bounded by the existing baseline timeout and
+shared subject deadline. Each independent process pays its own startup cost, so a faster complete
+suite does not reduce the time available to prove its individual batches.
 
 Six old billing cases already skip in the first three to twelve hours of a month.
 Each existing condition is recognised only for its pinned complete source hash, exact test name,
