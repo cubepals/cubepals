@@ -1,0 +1,368 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
+/** Real moderation records retain durations, history, owner policy and acknowledgement states. */
+import { afterAll, describe, expect, spyOn, test } from 'bun:test'
+import { DEFAULT_LADDER } from '@blockly/contracts'
+import { MINUTE_MS, SECOND_MS } from '@blockly/contracts/durations'
+import { schema } from '@blockly/db'
+import { eq } from 'drizzle-orm'
+import { CHATSENTINEL, LIBERTYBANS, LUCKPERMS } from '../../minecraft/moderation.ts'
+import { offeredVersions, supports } from '../../minecraft/versions.ts'
+import { Cdn } from '../../testing/cdn.ts'
+import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
+import { readAccess } from '../access/persistence.ts'
+import { loadRevision } from '../servers/persistence.ts'
+import { ModerationService } from './service.ts'
+
+const player = { playerUuid: '8667BA71-B85A-4004-AF54-457A9734EED7', name: 'Steve' }
+
+// Cases have separate servers; the file owns the real database and its final cleanup.
+let harness: ReturnType<typeof startHarness> | undefined
+afterAll(async () => {
+  // The case reports a setup failure; cleanup owns only a completed harness.
+  await harness?.then(
+    (h) => h.close(),
+    () => undefined,
+  )
+})
+
+async function fixture(loader: 'vanilla' | 'paper' = 'vanilla') {
+  harness ??= startHarness()
+  const h = await harness
+  const owner = await h.user(undefined, 'plus')
+  const created = await h.create(
+    owner,
+    loader === 'paper'
+      ? {
+          loader,
+          gameVersion: offeredVersions().find((version) => supports(version.id, 'paper'))?.id ?? '',
+        }
+      : {},
+  )
+  await h.until(created.id, 'running')
+  await h.settled(created.id)
+  await h.app.servers.stop(owner, created.id, crypto.randomUUID())
+  await h.until(created.id, 'stopped')
+  await h.settled(created.id)
+  const service = new ModerationService({
+    db: h.db,
+    policy: h.app.policy,
+    transitions: h.app.transitions,
+    events: h.events,
+    mods: h.app.mods,
+  })
+  return { h, owner, id: created.id, service }
+}
+
+async function record(
+  h: Harness,
+  serverId: string,
+  patch: Partial<typeof schema.serverModerationActions.$inferInsert> = {},
+) {
+  const [row] = await h.db
+    .insert(schema.serverModerationActions)
+    .values({
+      serverId,
+      playerUuid: player.playerUuid,
+      playerName: player.name,
+      kind: 'mute',
+      minutes: 5,
+      state: 'pending',
+      requestedBy: 'fixture',
+      ...patch,
+    })
+    .returning()
+  if (!row) throw new Error('The moderation record must persist')
+  return row
+}
+
+async function history() {
+  const { h, owner, id, service } = await fixture()
+  const now = new Date()
+  const rows = []
+  for (const [state, minutes, age] of [
+    ['pending', null, 0],
+    ['pending', 1, 2],
+    ['delivered', null, 3],
+    ['delivered', 1, 4],
+    ['lifting', 20, 5],
+    ['lifted', 20, 6],
+  ] as const)
+    rows.push(
+      await record(h, id, {
+        state,
+        minutes,
+        reason: `reason-${age}`,
+        error: age === 5 ? 'delivery failed' : null,
+        createdAt: new Date(now.getTime() - age * MINUTE_MS),
+      }),
+    )
+  const view = await service.view(owner, id, now)
+  expect(view.available).toBe(true)
+  expect(view.enabled).toBe(false)
+  expect(view.chatFilter).toBe(false)
+  expect(view.ladder).toEqual([...DEFAULT_LADDER])
+  expect(view.ownLadder).toBe(false)
+  expect(view.actions).toEqual(
+    rows.map((row, index) => {
+      const status = (['waiting', 'over', 'given', 'over', 'lifting', 'lifted'] as const)[index]
+      if (status === undefined) throw new Error('Every seeded action needs an expected state')
+      return {
+        id: row.id,
+        player: { uuid: row.playerUuid, name: row.playerName },
+        kind: row.kind,
+        reason: row.reason,
+        minutes: row.minutes,
+        status,
+        endsAt:
+          row.minutes === null
+            ? null
+            : new Date(row.createdAt.getTime() + row.minutes * MINUTE_MS).toISOString(),
+        at: row.createdAt.toISOString(),
+        error: row.error,
+      }
+    }),
+  )
+  const earlier = new Date(now.getTime() - 10 * MINUTE_MS)
+  expect((await service.view(owner, id, earlier)).actions.map((a) => a.status)).toEqual([
+    'waiting',
+    'waiting',
+    'given',
+    'given',
+    'lifting',
+    'lifted',
+  ])
+}
+
+async function lifting() {
+  const { h, owner, id, service } = await fixture()
+  const now = new Date()
+  const pending = await record(h, id)
+  const active = await record(h, id, { state: 'delivered', minutes: null })
+  const expired = await record(h, id, {
+    state: 'delivered',
+    minutes: 1,
+    createdAt: new Date(now.getTime() - 2 * MINUTE_MS),
+  })
+  const warning = await record(h, id, { kind: 'warn', minutes: null })
+  await service.lift(owner, id, pending.id, now)
+  await service.lift(owner, id, active.id, now)
+  await service.lift(owner, id, expired.id, now)
+  await service.lift(owner, id, pending.id, now)
+  await service.lift(owner, id, active.id, now)
+  await expect(service.lift(owner, id, warning.id, now)).rejects.toThrow('A warning stays in their history.')
+  await expect(service.lift(owner, id, crypto.randomUUID(), now)).rejects.toThrow('Punishment')
+  const saved = await h.db
+    .select()
+    .from(schema.serverModerationActions)
+    .where(eq(schema.serverModerationActions.serverId, id))
+  const byId = new Map(saved.map((row) => [row.id, row]))
+  expect(byId.get(pending.id)).toMatchObject({ state: 'lifted', liftedAt: now, error: null })
+  expect(byId.get(expired.id)).toMatchObject({ state: 'lifted', liftedAt: now, error: null })
+  expect(byId.get(active.id)).toMatchObject({ state: 'lifting', liftedAt: null, error: null })
+  expect(byId.get(warning.id)?.state).toBe('pending')
+  expect((await service.view(owner, id, now)).actions).toHaveLength(4)
+}
+
+async function escalation() {
+  const { h, owner, id, service } = await fixture()
+  const outsider = await h.user()
+  const ladder = [{ kind: 'mute' as const, minutes: 12 }]
+  await service.setLadder(owner, id, ladder)
+  expect(await service.view(owner, id)).toMatchObject({ ladder, ownLadder: true })
+  const audit = await h.db.select().from(schema.auditLog).where(eq(schema.auditLog.subjectId, id))
+  expect(audit).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        actor: `user:${owner.userId}`,
+        action: 'moderation.ladder_changed',
+        subjectType: 'server',
+        subjectId: id,
+      }),
+    ]),
+  )
+  await expect(service.view(outsider, id)).rejects.toThrow('Server')
+  await expect(service.setLadder(outsider, id, null)).rejects.toThrow('Server')
+  await expect(
+    service.punish(owner, id, { ...player, kind: 'warn', minutes: 12, reason: 'Be kind' }),
+  ).rejects.toThrow('Turn on the moderation tools first')
+  await service.setLadder({ kind: 'admin', userId: owner.userId }, id, null)
+  expect(await service.view(owner, id)).toMatchObject({ ladder: [...DEFAULT_LADDER], ownLadder: false })
+}
+
+function publishTools(h: Harness, cdn: Cdn) {
+  for (const projectId of [LIBERTYBANS, LUCKPERMS, CHATSENTINEL])
+    h.catalog.publish(
+      {
+        projectId,
+        slug: projectId,
+        name: projectId,
+        summary: 'Moderation fixture',
+        iconUrl: null,
+        environments: ['server_only'],
+        downloads: 1,
+      },
+      [
+        {
+          versionId: `${projectId}-1`,
+          projectId,
+          versionLabel: '1',
+          channel: 'release',
+          state: 'listed',
+          environment: 'server_only',
+          loaders: ['paper'],
+          gameVersions: offeredVersions().map((version) => version.id),
+          publishedAt: new Date(),
+          file: cdn.file(projectId),
+          dependencies: [],
+        },
+      ],
+    )
+}
+
+async function tools() {
+  const { h, owner, id, service } = await fixture('paper')
+  const cdn = new Cdn()
+  try {
+    await cdn.start()
+    publishTools(h, cdn)
+    const revision = async () => loadRevision(h.db, (await h.server(id)).desiredRevisionId)
+    await service.setTools(owner, id, { enabled: true, chatFilter: false }, crypto.randomUUID())
+    expect(await service.view(owner, id)).toMatchObject({ available: true, enabled: true, chatFilter: false })
+    expect(
+      (await revision()).mods.map((mod) => ('projectId' in mod.source ? mod.source.projectId : '')).sort(),
+    ).toEqual([LIBERTYBANS, LUCKPERMS].sort())
+    const enabled = (await revision()).id
+    await service.setTools(owner, id, { enabled: true, chatFilter: false }, crypto.randomUUID())
+    expect((await revision()).id).toBe(enabled)
+    await service.setTools(owner, id, { enabled: true, chatFilter: true }, crypto.randomUUID())
+    expect(await service.view(owner, id)).toMatchObject({ enabled: true, chatFilter: true })
+    expect((await revision()).mods).toHaveLength(3)
+    expect((await revision()).files.some((file) => file.path.includes('ChatSentinel'))).toBe(true)
+    await service.setTools(owner, id, { enabled: false, chatFilter: true }, crypto.randomUUID())
+    expect(await service.view(owner, id)).toMatchObject({ enabled: false, chatFilter: false })
+    expect((await revision()).mods).toEqual([])
+    expect((await revision()).files).toEqual([])
+    const fabric = await h.create(owner, { loader: 'fabric' })
+    await expect(
+      service.setTools(owner, fabric.id, { enabled: true, chatFilter: false }, crypto.randomUUID()),
+    ).rejects.toThrow('The moderation tools run on Paper servers')
+    expect((await service.view(owner, fabric.id)).available).toBe(false)
+  } finally {
+    cdn.close()
+  }
+}
+
+async function punishments() {
+  const { h, owner, id, service } = await fixture('paper')
+  const cdn = new Cdn()
+  await cdn.start()
+  const published = spyOn(h.events, 'publish')
+  try {
+    publishTools(h, cdn)
+    await service.setTools(owner, id, { enabled: true, chatFilter: false }, crypto.randomUUID())
+    for (const [kind, minutes, reason] of [
+      ['warn', 12, 'Be kind'],
+      ['mute', 30, 'Repeated spam'],
+      ['ban', null, 'Griefing'],
+    ] as const)
+      await service.punish(owner, id, { ...player, kind, minutes, reason })
+    const rows = await h.db
+      .select()
+      .from(schema.serverModerationActions)
+      .where(eq(schema.serverModerationActions.serverId, id))
+    expect(
+      rows
+        .map((row) => ({ kind: row.kind, minutes: row.minutes, reason: row.reason }))
+        .sort((a, b) => a.kind.localeCompare(b.kind)),
+    ).toEqual([
+      { kind: 'ban', minutes: null, reason: 'Griefing' },
+      { kind: 'mute', minutes: 30, reason: 'Repeated spam' },
+      { kind: 'warn', minutes: null, reason: 'Be kind' },
+    ])
+    for (const row of rows)
+      expect(row).toMatchObject({
+        playerUuid: player.playerUuid.toLowerCase(),
+        playerName: player.name,
+        state: 'pending',
+        requestedBy: `user:${owner.userId}`,
+        error: null,
+      })
+    expect(published).toHaveBeenCalledWith(expect.anything(), {
+      type: 'access_changed',
+      serverId: id,
+      ownerId: owner.userId,
+      version: (await readAccess(h.db, id)).version,
+    })
+    const audit = await h.db.select().from(schema.auditLog).where(eq(schema.auditLog.subjectId, id))
+    expect(audit.filter((row) => row.action === 'moderation.punished')).toHaveLength(3)
+  } finally {
+    published.mockRestore()
+    cdn.close()
+  }
+}
+
+async function historyLimit() {
+  const { h, owner, id, service } = await fixture()
+  const now = new Date()
+  const rows = await h.db
+    .insert(schema.serverModerationActions)
+    .values(
+      Array.from({ length: 501 }, (_, index) => ({
+        serverId: id,
+        playerUuid: player.playerUuid,
+        playerName: player.name,
+        kind: 'warn' as const,
+        minutes: null,
+        state: 'pending' as const,
+        requestedBy: `fixture-${index}`,
+        reason: `record-${index}`,
+        createdAt: new Date(now.getTime() - index * SECOND_MS),
+      })),
+    )
+    .returning()
+  const view = await service.view(owner, id, now)
+  expect(view.actions).toHaveLength(500)
+  expect(view.actions[0]?.id).toBe(rows[0]?.id)
+  expect(view.actions.at(-1)?.id).toBe(rows[499]?.id)
+  expect(view.actions.some((action) => action.id === rows[500]?.id)).toBe(false)
+}
+
+async function missingHead() {
+  const { h, owner, id, service } = await fixture()
+  await h.db.delete(schema.serverAccess).where(eq(schema.serverAccess.serverId, id))
+  expect(await service.view(owner, id)).toMatchObject({
+    ladder: [...DEFAULT_LADDER],
+    ownLadder: false,
+    actions: [],
+  })
+  await expect(service.setLadder(owner, id, null)).rejects.toThrow(`Server ${id} has no access record`)
+}
+
+describe.skipIf(!hasDatabase)('moderation records', () => {
+  test(
+    'punishments retain player identity, duration, audit and delivery notification',
+    punishments,
+    30 * SECOND_MS,
+  )
+  test('history retains the newest five hundred actions', historyLimit, 30 * SECOND_MS)
+  test('missing access metadata has a readable default and refuses writes', missingHead, 30 * SECOND_MS)
+  test('tool changes retain the selected plugins and configuration', tools, 30 * SECOND_MS)
+  test(
+    'history distinguishes waiting, delivered, expired and lifted actions at the requested time',
+    history,
+    30 * SECOND_MS,
+  )
+  test(
+    'lifting acknowledges pending and expired actions, requests delivery for active ones and refuses warnings',
+    lifting,
+    30 * SECOND_MS,
+  )
+  test(
+    'owner changes persist the custom ladder and audit, while outsiders cannot read or write',
+    escalation,
+    30 * SECOND_MS,
+  )
+})
