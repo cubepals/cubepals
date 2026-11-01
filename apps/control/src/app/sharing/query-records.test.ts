@@ -90,7 +90,12 @@ test.skipIf(!hasDatabase)(
       preview: false,
       yours: false,
     }
-    for (const viewer of [null, stranger, { kind: 'system' as const, reason: 'policy' as const }, { kind: 'operator' as const, name: 'Fixture operator' }]) {
+    for (const viewer of [
+      null,
+      stranger,
+      { kind: 'system' as const, reason: 'policy' as const },
+      { kind: 'operator' as const, name: 'Fixture operator' },
+    ]) {
       expect(await q.page(server.slug, viewer)).toEqual(published)
     }
     expect(await q.page(server.slug, owner)).toEqual({ ...published, yours: true })
