@@ -73,6 +73,7 @@ import {
   SetPublicInput,
   SetStopCheatersInput,
   SetTimeZoneInput,
+  SettleWaitingInput,
   SetupRef,
   StarInput,
   SuggestAddressInput,
@@ -188,6 +189,7 @@ const servers = router({
     await ctx.services.revisions.changeSettings(ctx.actor, input.serverId, input.settings, input.requestId, {
       acknowledgeRevoked: input.acknowledgeRevoked,
       version: input.version,
+      when: input.when,
     })
     return ctx.services.queries.get(ctx.actor, input.serverId)
   }),
@@ -198,7 +200,7 @@ const servers = router({
       input.serverId,
       input.onlineMode,
       input.requestId,
-      { version: input.version },
+      { version: input.version, when: input.when },
     )
     return ctx.services.queries.get(ctx.actor, input.serverId)
   }),
@@ -209,7 +211,7 @@ const servers = router({
       input.serverId,
       input.otherVersions,
       input.requestId,
-      { version: input.version },
+      { version: input.version, when: input.when },
     )
     return ctx.services.queries.get(ctx.actor, input.serverId)
   }),
@@ -217,6 +219,7 @@ const servers = router({
   changeBedrock: authedProcedure.input(ChangeBedrockInput).mutation(async ({ ctx, input }) => {
     await ctx.services.revisions.changeBedrock(ctx.actor, input.serverId, input.bedrock, input.requestId, {
       version: input.version,
+      when: input.when,
     })
     return ctx.services.queries.get(ctx.actor, input.serverId)
   }),
@@ -236,7 +239,7 @@ const servers = router({
       { gameVersion: input.gameVersion, loader: input.loader, onPaper: input.onPaper },
       input.expected,
       input.requestId,
-      { acknowledgeRevoked: input.acknowledgeRevoked, version: input.version },
+      { acknowledgeRevoked: input.acknowledgeRevoked, version: input.version, when: input.when },
     )
     return ctx.services.queries.get(ctx.actor, input.serverId)
   }),
@@ -244,6 +247,7 @@ const servers = router({
     await ctx.services.revisions.resize(ctx.actor, input.serverId, input.partySize, input.requestId, {
       acknowledgeRevoked: input.acknowledgeRevoked,
       version: input.version,
+      when: input.when,
     })
     return ctx.services.queries.get(ctx.actor, input.serverId)
   }),
@@ -251,10 +255,16 @@ const servers = router({
     await ctx.services.servers.relocate(ctx.actor, input.serverId, input.regionKey, input.requestId)
     return ctx.services.queries.get(ctx.actor, input.serverId)
   }),
+  /** A running server's changes that wait for everyone to leave: taken now, or dropped. */
+  settleWaiting: authedProcedure.input(SettleWaitingInput).mutation(async ({ ctx, input }) => {
+    await ctx.services.stopCheaters.waiting.settle(ctx.actor, input.serverId, input.settle, input.requestId)
+    return ctx.services.queries.get(ctx.actor, input.serverId)
+  }),
   rollback: authedProcedure.input(RollbackInput).mutation(async ({ ctx, input }) => {
     await ctx.services.revisions.rollback(ctx.actor, input.serverId, input.revisionId, input.requestId, {
       acknowledgeRevoked: input.acknowledgeRevoked,
       version: input.version,
+      when: input.when,
     })
     return ctx.services.queries.get(ctx.actor, input.serverId)
   }),
@@ -391,6 +401,7 @@ const mods = router({
   change: authedProcedure.input(ApplyModChangeInput).mutation(async ({ ctx, input }) => {
     await ctx.services.mods.apply(ctx.actor, input.serverId, input, input.expected, input.requestId, {
       acknowledgeRevoked: input.acknowledgeRevoked,
+      when: input.when,
     })
     return ctx.services.queries.get(ctx.actor, input.serverId)
   }),
@@ -415,6 +426,7 @@ const mods = router({
     await ctx.services.packChanges.change(ctx.actor, input.serverId, input.to, input.requestId, {
       version: input.version,
       acknowledgeRevoked: input.acknowledgeRevoked,
+      when: input.when,
     })
     return ctx.services.queries.get(ctx.actor, input.serverId)
   }),
@@ -545,12 +557,12 @@ const moderation = router({
     .mutation(({ ctx, input }) => ctx.services.moderation.setLadder(ctx.actor, input.serverId, input.ladder)),
   /** Stop cheaters on or off, which restarts a running server. */
   setStopCheaters: authedProcedure.input(SetStopCheatersInput).mutation(async ({ ctx, input }) => {
-    await ctx.services.stopCheaters.set(ctx.actor, input.serverId, input.on, input.requestId)
+    await ctx.services.stopCheaters.set(ctx.actor, input.serverId, input.on, input.requestId, input.when)
     return ctx.services.queries.get(ctx.actor, input.serverId)
   }),
   /** Cubepals' punishments in place of the owner's own Grim settings. */
   useOurStopCheaters: authedProcedure.input(UseOurStopCheatersInput).mutation(async ({ ctx, input }) => {
-    await ctx.services.stopCheaters.useOurs(ctx.actor, input.serverId, input.requestId)
+    await ctx.services.stopCheaters.useOurs(ctx.actor, input.serverId, input.requestId, input.when)
     return ctx.services.queries.get(ctx.actor, input.serverId)
   }),
   /** One player's removals on the server, newest first, for their page. */

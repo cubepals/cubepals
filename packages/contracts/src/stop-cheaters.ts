@@ -7,6 +7,7 @@
  * it on, and the players it removed, each with what a removed player reads.
  */
 import { z } from 'zod'
+import { RestartWhen } from './restart-when.ts'
 import { ServerId } from './server.ts'
 
 /** Why a player was removed, as Grim's punishments name it to the reporter's command. */
@@ -48,7 +49,16 @@ export interface StopCheatersView {
   today: number
 }
 
-export const SetStopCheatersInput = z.object({ serverId: ServerId, on: z.boolean(), requestId: z.uuid() })
+export const SetStopCheatersInput = z.object({
+  serverId: ServerId,
+  on: z.boolean(),
+  requestId: z.uuid(),
+  when: RestartWhen.optional(),
+})
 
 /** Put Cubepals' punishments back in place of the owner's own Grim settings. */
-export const UseOurStopCheatersInput = z.object({ serverId: ServerId, requestId: z.uuid() })
+export const UseOurStopCheatersInput = z.object({
+  serverId: ServerId,
+  requestId: z.uuid(),
+  when: RestartWhen.optional(),
+})

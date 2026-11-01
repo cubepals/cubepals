@@ -203,6 +203,11 @@ export interface AppliedConfigJson {
    * where Stop cheaters isn't on, and before the sync read it.
    */
   stopCheaters?: 'ours' | 'own'
+  /**
+   * Whether its boot placed Stop cheaters, as the start worked it out: what an owner's switch is
+   * compared with while the server runs. Absent before a boot said so.
+   */
+  placedStopCheaters?: boolean
 }
 
 export interface ObservedJson {

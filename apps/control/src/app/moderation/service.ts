@@ -18,6 +18,7 @@ import {
   type ModerationKind,
   type ModerationStep,
   type ModerationView,
+  type RestartWhen,
 } from '@blockly/contracts'
 import { type Db, schema, type Tx } from '@blockly/db'
 import { and, desc, eq } from 'drizzle-orm'
@@ -106,7 +107,7 @@ export class ModerationService {
   async setTools(
     actor: Actor,
     serverId: string,
-    wanted: { enabled: boolean; chatFilter: boolean },
+    wanted: { enabled: boolean; chatFilter: boolean; when?: RestartWhen | undefined },
     requestId: string,
   ): Promise<void> {
     const server = authorize(actor, await findServer(this.#db, serverId))
@@ -139,6 +140,7 @@ export class ModerationService {
       change,
       plan.mods.map((mod) => mod.artifact.sha512),
       requestId,
+      { when: wanted.when },
     )
   }
 
