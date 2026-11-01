@@ -271,11 +271,19 @@ describe.skipIf(!hasDatabase)('Bedrock settings in the browser', () => {
       const page = await openBedrock()
       try {
         expect(toggle().getAttribute('aria-checked')).toBe('true')
+        expect(page.host.textContent).not.toContain('Didn’t change.')
+        expect(page.host.textContent).not.toContain('Saved.')
+        expect(page.host.textContent).toContain(
+          'Friends on phones, tablets and Windows join the same server.',
+        )
         expect(page.host.textContent).toContain('Play, Servers, Add Server')
         expect(page.host.textContent).toContain(page.view.joinAddress)
         await act(async () => toggle().click())
         expect(opened()).toBe(true)
-        expect(page.host.textContent).toContain('Java players are not affected')
+        expect(document.querySelector('dialog h2').textContent).toBe('Stop Bedrock players joining?')
+        expect(page.host.textContent).toContain(
+          'Players on Bedrock won’t be able to join. Java players are not affected.',
+        )
         await act(async () => button('Cancel').click())
         expect(opened()).toBe(false)
         expect(page.calls).toHaveLength(0)
@@ -293,7 +301,15 @@ describe.skipIf(!hasDatabase)('Bedrock settings in the browser', () => {
       const page = await openBedrock({ enabled: false })
       try {
         expect(toggle().getAttribute('aria-checked')).toBe('false')
+        expect(page.host.textContent).toContain(
+          'Friends on phones, tablets and Windows can’t join this server.',
+        )
+        expect(page.host.textContent).not.toContain('Didn’t change.')
         await act(async () => toggle().click())
+        expect(document.querySelector('dialog h2').textContent).toBe('Let Bedrock players join?')
+        expect(page.host.textContent).toContain(
+          'Players on phones, tablets and Windows can join with the same address.',
+        )
         await act(async () => button('Let them join').click())
         await until(() => !opened())
         expect((await page.h.app.queries.get(page.owner, page.server.id)).bedrock.on).toBe(true)
@@ -354,7 +370,14 @@ describe.skipIf(!hasDatabase)('Bedrock settings in the browser', () => {
       const page = await openBedrock({ loader: 'vanilla', legacy: true })
       try {
         expect(page.view.bedrock.moves).toBe(true)
+        expect(opened()).toBe(false)
+        expect(page.host.textContent).toContain(
+          'Friends on phones, tablets and Windows can’t join this server yet.',
+        )
+        expect(page.host.textContent).not.toContain('Didn’t change.')
         await act(async () => button('Let Bedrock friends in').click())
+        expect(opened()).toBe(true)
+        expect(document.querySelector('dialog h2').textContent).toBe('Let Bedrock friends in?')
         expect(page.host.textContent).toContain('a backup is made first')
         await act(async () => button('Cancel').click())
         expect(opened()).toBe(false)
