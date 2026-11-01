@@ -11,7 +11,9 @@ import { schema } from '@blockly/db'
 import { eq } from 'drizzle-orm'
 import { kickEveryone, LIST_UUIDS } from '../../../minecraft/console.ts'
 import { resetHeartsCommand } from '../../../minecraft/lifesteal.ts'
+import { Cdn } from '../../../testing/cdn.ts'
 import { hasDatabase, startHarness } from '../../../testing/harness.ts'
+import { ArtifactUnavailable } from '../../artifacts/service.ts'
 import { RuntimeRouter } from '../../runtimes/router.ts'
 import { NoLongerApplies, type OperationContext } from '../runner.ts'
 import { serverBinding } from './binding.ts'
@@ -100,15 +102,25 @@ async function missingApplied() {
 
 async function refusesBoot() {
   const { h, server, deps, ctx } = await fixture()
-  const result = await updating({
-    ...deps,
-    mayBoot: async () => ({ up: false, refusal: 'The owner may not run this server.' }),
-  }).run(ctx)
-  expect(result).toEqual({
-    status: 'failed',
-    reason: 'The server stayed off: The owner may not run this server.',
-  })
-  expect(h.runtime.machine(server.id)?.state).toBe('stopped')
+  const outcome = spyOn(h.app.transitions, 'outcome')
+  try {
+    const result = await updating({
+      ...deps,
+      mayBoot: async (checked, flags) => {
+        expect(checked).toEqual(server)
+        expect(flags).toEqual({ running: true, fromFailure: false })
+        return { up: false, refusal: 'The owner may not run this server.' }
+      },
+    }).run(ctx)
+    expect(result).toEqual({
+      status: 'failed',
+      reason: 'The server stayed off: The owner may not run this server.',
+    })
+    expect(h.runtime.machine(server.id)?.state).toBe('stopped')
+    expect(outcome).not.toHaveBeenCalled()
+  } finally {
+    outcome.mockRestore()
+  }
 }
 
 async function resetsHearts() {
@@ -171,6 +183,11 @@ async function refusesCorruptHearts(mode: 'normal' | 'stopped' | 'fatal' | 'canc
   }
   if (mode === 'fatal') {
     await expect(running).rejects.toThrow('going back to the previous one failed too')
+    await expect(running).rejects.toMatchObject({
+      cause: {
+        message: expect.stringContaining(problem instanceof Error ? problem.message : String(problem)),
+      },
+    })
     expect(rested).toBe(false)
     return
   }
@@ -206,7 +223,122 @@ async function cancelledBoot() {
   ).rejects.toBeInstanceOf(NoLongerApplies)
 }
 
+async function handlerContract() {
+  const { deps } = await fixture()
+  const abandoned = spyOn(deps, 'stopWhatFailed')
+  try {
+    expect(updating(deps)).toMatchObject({ kind: 'apply', phase: 'updating', runsWhen: ['updating'] })
+    expect(abandoned).toHaveBeenCalledWith(['updating'])
+  } finally {
+    abandoned.mockRestore()
+  }
+}
+
+async function unavailableArtifact() {
+  const { server, binding, deps, ctx } = await fixture()
+  const cdn = new Cdn()
+  await cdn.start()
+  const problem = new ArtifactUnavailable(cdn.publish('A removed mod'), 'revoked')
+  const restored = spyOn(deps, 'putBack')
+  const applied = spyOn(deps.runtime, 'apply')
+  try {
+    const previous = (await binding.bindingOf(server.id)).applied
+    const result = await updating({
+      ...deps,
+      artifacts: {
+        preflight: async () => {
+          throw problem
+        },
+      },
+    }).run(ctx)
+    expect(result).toEqual({ status: 'failed', reason: `Nothing changed: ${problem.message}` })
+    expect(restored).toHaveBeenCalledWith(server, previous)
+    expect(applied).not.toHaveBeenCalled()
+    const unexpected = new Error('The artifact service did not answer')
+    await expect(
+      updating({
+        ...deps,
+        artifacts: {
+          preflight: async () => {
+            throw unexpected
+          },
+        },
+      }).run(ctx),
+    ).rejects.toBe(unexpected)
+  } finally {
+    applied.mockRestore()
+    restored.mockRestore()
+    cdn.close()
+  }
+}
+
+async function recoveryBoot() {
+  const { h, server, deps, ctx } = await fixture()
+  const started = spyOn(deps, 'startCompute')
+  const notified = spyOn(h.minecraft, 'runAll')
+  ctx.op.input = { boot: true, fromFailure: true }
+  try {
+    const result = await updating({ ...deps, boot: { run: async () => {} } }).run(ctx)
+    expect(result).toEqual({ status: 'succeeded' })
+    expect(started).toHaveBeenCalledWith(server.id, expect.anything())
+    expect(notified).not.toHaveBeenCalled()
+  } finally {
+    notified.mockRestore()
+    started.mockRestore()
+  }
+}
+
+async function replacementDuringBoot() {
+  const { h, server, runtime, binding, deps, ctx } = await fixture()
+  const expected = await h.app.specs.desired(h.db, server)
+  const desired = spyOn(h.app.specs, 'desired')
+  let attempts = 0
+  try {
+    const result = await updating({
+      ...deps,
+      runtime: {
+        ...runtime,
+        stop: (handle) => runtime.stop(handle),
+        exec: (handle, command, timeout) => runtime.exec(handle, command, timeout),
+        apply: async (handle, spec) => {
+          attempts++
+          // A real adapter issues a new handle when it replaces this machine.
+          return runtime.relocate(handle, { regionKey: server.regionKey }, spec, {
+            step: async () => {},
+            handle: async () => {},
+          })
+        },
+      },
+      boot: {
+        run: async (_context, booting, handle, revision, retry, options) => {
+          expect(booting.id).toBe(server.id)
+          expect(revision).toEqual(expected.revision)
+          expect(options).toEqual({ startAgainOnHang: false })
+          expect((await binding.bindingOf(server.id)).handle).toBe(handle)
+          if (!retry) throw new Error('An update boot must offer its configuration recheck')
+          const next = await retry()
+          expect(next).not.toBe(handle)
+          expect((await binding.bindingOf(server.id)).handle).toBe(next)
+        },
+      },
+    }).run(ctx)
+    expect(result).toEqual({ status: 'succeeded' })
+    expect(attempts).toBe(2)
+    expect(desired).toHaveBeenCalledTimes(2)
+  } finally {
+    desired.mockRestore()
+  }
+}
+
 describe.skipIf(!hasDatabase)('updating handler guard boundaries', () => {
+  test('keeps replacement handles before boot and after its recheck', replacementDuringBoot, 30 * SECOND_MS)
+  test('registers its lifecycle phase and abandonment states', handlerContract, 30 * SECOND_MS)
+  test(
+    'restores the desired configuration only for a recognized unavailable artifact',
+    unavailableArtifact,
+    30 * SECOND_MS,
+  )
+  test('starts recovery compute without notifying an already failed game', recoveryBoot, 30 * SECOND_MS)
   test(
     'rests on the previous configuration when rollback cannot start compute',
     () => refusesCorruptHearts('stopped'),
