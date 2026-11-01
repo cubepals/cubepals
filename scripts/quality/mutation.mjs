@@ -296,9 +296,10 @@ export function runMutation({
         }
         const attempts = []
         const started = Date.now()
-        // Mutants that start after this point are recorded as not evaluated, leaving one test
-        // timeout and a minute for Stryker to finish and write its report inside the budget.
-        const deadline = started + Math.max(subjectTimeoutMs / 2, subjectTimeoutMs - timeoutMs - MINUTE_MS)
+        // Mutants that start after this point are recorded as not evaluated, leaving a
+        // minute for Stryker to finish its census and report. Each Bun command is itself capped
+        // at this shared deadline, so a full test-timeout reserve would leave usable time idle.
+        const deadline = started + Math.max(subjectTimeoutMs / 2, subjectTimeoutMs - MINUTE_MS)
         let verdict
         let runStatus
         let expansionStopped = false
