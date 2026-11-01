@@ -30,6 +30,7 @@ import { writeRuntimeManifest } from './coverage-cache.mjs'
 import { createFragmentCollector } from './coverage-fragments.mjs'
 import { assertInputsUnchanged, partitionTests, snapshotInputs, testManifest } from './coverage-inputs.mjs'
 import { checkJUnit, mergeJUnit } from './coverage-junit.mjs'
+import { legacyCalendarSkips } from './legacy-calendar-case.mjs'
 import { executionProfile, recordExecution } from './mutation-test-order.mjs'
 import { groupOf, groups } from './shards.mjs'
 
@@ -110,6 +111,7 @@ export function runShard({ root, group, reportDir, baseManifest }) {
     const phases = partitionTests(prepared.tests, base)
     const reports = []
     const documents = []
+    const allowedSkippedTests = new Set()
     let executed = 0
     for (const phase of phases) {
       const phaseName = `${group}:${phase.name}`
@@ -119,6 +121,7 @@ export function runShard({ root, group, reportDir, baseManifest }) {
         const parts = join(temporary, identity)
         const fileJUnit = join(temporary, `${identity}.xml`)
         mkdirSync(parts)
+        const startedAt = new Date()
         const result = spawnSync(
           process.env.QUALITY_BUN ?? 'bun',
           [
@@ -151,7 +154,13 @@ export function runShard({ root, group, reportDir, baseManifest }) {
         if (result.status !== 0)
           throw new Error(`Test file ${testPath} failed (${result.status ?? result.error ?? result.signal})`)
         const xml = readFileSync(fileJUnit, 'utf8')
-        executed += checkJUnit(xml, [testPath], { allowOptionalOnly: true })
+        const legacy = legacyCalendarSkips(
+          prepared.tests.find((test) => test.path === testPath),
+          startedAt,
+          new Date(),
+        )
+        for (const identity of legacy) allowedSkippedTests.add(identity)
+        executed += checkJUnit(xml, [testPath], { allowOptionalOnly: true, allowedSkippedTests: legacy })
         const fragments = readdirSync(parts)
           .sort()
           .map((name) => {
@@ -177,7 +186,8 @@ export function runShard({ root, group, reportDir, baseManifest }) {
     combined.shards = [group]
     validateReport(combined)
     const xml = mergeJUnit(documents)
-    if (checkJUnit(xml, tests) !== executed) throw new Error('Merged JUnit execution count differs')
+    if (checkJUnit(xml, tests, { allowedSkippedTests }) !== executed)
+      throw new Error('Merged JUnit execution count differs')
     assertInputsUnchanged(root, inputs)
     writeFileSync(report, `${JSON.stringify(combined)}\n`)
     writeFileSync(junit, xml)

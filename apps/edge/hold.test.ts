@@ -95,3 +95,73 @@ test('a held join that sends more packets than a login takes is let go', () => {
   expect(taken.slice(0, 60).every(Boolean)).toBe(true)
   expect(held.refused).toBe(true)
 })
+
+test('a negative frame refuses both a new hold and one already waiting', () => {
+  const negative = Uint8Array.from([0xfb, 0xff, 0xff, 0xff, 0x0f])
+  const first = new Held({ ...join(), bytes: Uint8Array.from([...join().bytes, ...negative]) })
+  expect(first.refused).toBe(true)
+  expect(first.settled).toBe(false)
+  expect(first.receive(login)).toBe(false)
+  const later = new Held(join())
+  expect(later.refused).toBe(false)
+  expect(later.receive(negative)).toBe(false)
+  expect(later.refused).toBe(true)
+  expect(later.settled).toBe(false)
+})
+
+test('a login name must be present, complete and bounded in bytes', () => {
+  for (const fields of [[], [0], [5, 65], string('x'.repeat(100))]) {
+    const held = new Held({ ...join(), bytes: Uint8Array.from([...handshake, ...packet(0, fields)]) })
+    expect(held.name).toBeNull()
+  }
+  for (const name of ['A', 'é'.repeat(16)]) {
+    const held = new Held({ ...join(), bytes: Uint8Array.from([...handshake, ...packet(0, string(name))]) })
+    expect(held.name).toBe(name)
+  }
+})
+
+test('only answers to queries the hold actually sent are removed from replay', () => {
+  const held = new Held(join())
+  const unsolicited = answer(1)
+  expect(held.receive(unsolicited)).toBe(true)
+  expect(held.settled).toBe(true)
+  expect(held.replay()).toEqual(Uint8Array.from([...join().bytes, ...unsolicited]))
+  held.ask()
+  expect(held.settled).toBe(false)
+  expect(held.receive(answer(1))).toBe(true)
+  expect(held.settled).toBe(true)
+  expect(held.replay()).toEqual(Uint8Array.from([...join().bytes, ...unsolicited]))
+})
+
+test('turning a connection away sends its disconnect before closing, once', async () => {
+  const { createServer, connect } = await import('node:net')
+  const { sendAway } = await import('./hold.ts')
+  const listener = createServer()
+  let client: import('node:net').Socket | undefined
+  let peer: import('node:net').Socket | undefined
+  try {
+    const listening = new Promise<void>((resolve) => listener.once('listening', resolve))
+    listener.listen(0, '127.0.0.1')
+    await listening
+    const address = listener.address()
+    if (address === null || typeof address === 'string') throw new Error('No TCP listener')
+    const accepted = new Promise<import('node:net').Socket>((resolve) => listener.once('connection', resolve))
+    peer = connect(address.port, '127.0.0.1')
+    const connected = await accepted
+    client = connected
+    const chunks: Buffer[] = []
+    peer.on('data', (chunk) => chunks.push(chunk))
+    const remote = peer
+    const closed = new Promise<void>((resolve) => remote.once('close', resolve))
+    const finished = new Promise<void>((resolve) => connected.once('finish', resolve))
+    sendAway(client, 'Try again')
+    await finished
+    sendAway(client, 'Another message')
+    await closed
+    expect(Buffer.concat(chunks)).toEqual(Buffer.from(turnAway('Try again')))
+  } finally {
+    client?.destroy()
+    peer?.destroy()
+    listener.close()
+  }
+})

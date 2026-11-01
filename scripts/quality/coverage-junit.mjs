@@ -6,7 +6,11 @@
 import { liveFleet } from './evidence-policy.mjs'
 import { requireQuality, XMLParser, XMLValidator } from './toolchain.mjs'
 
-export function checkJUnit(xml, expected, { allowOptionalOnly = false, allowLiveFleetSkips = true } = {}) {
+export function checkJUnit(
+  xml,
+  expected,
+  { allowOptionalOnly = false, allowLiveFleetSkips = true, allowedSkippedTests = new Set() } = {},
+) {
   if (XMLValidator.validate(xml) !== true) throw new Error('Malformed JUnit evidence')
   const data = new XMLParser({
     ignoreAttributes: false,
@@ -40,14 +44,21 @@ export function checkJUnit(xml, expected, { allowOptionalOnly = false, allowLive
       seen.add(file)
       if ('failure' in test || 'error' in test) throw new Error(`Failed test: ${file}: ${test.name}`)
       if ('skipped' in test) {
-        if (!allowLiveFleetSkips || !liveFleet.has(file))
+        if (
+          (!allowLiveFleetSkips || !liveFleet.has(file)) &&
+          !allowedSkippedTests.has(JSON.stringify([file, test.name]))
+        )
           throw new Error(`Unexpected skipped test: ${file}: ${test.name}`)
       } else executed++
     }
     for (const child of suite.testsuite ?? []) visit(child, file)
   }
   for (const suite of suites) visit(suite)
-  if (executed === 0 && !(allowOptionalOnly && expected.every((file) => liveFleet.has(file))))
+  const optionalFiles = new Set([...allowedSkippedTests].map((identity) => JSON.parse(identity)[0]))
+  if (
+    executed === 0 &&
+    !(allowOptionalOnly && expected.every((file) => liveFleet.has(file) || optionalFiles.has(file)))
+  )
     throw new Error('No tests executed')
   for (const file of expected) if (!seen.has(file)) throw new Error(`Test file did not report: ${file}`)
   return executed
