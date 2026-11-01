@@ -10,6 +10,7 @@ import { eq, sql } from 'drizzle-orm'
 import { GRIM } from '../../minecraft/stop-cheaters.ts'
 import { Cdn } from '../../testing/cdn.ts'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
+import { pluginJar } from '../../testing/uploads.ts'
 import { loadRevision } from '../servers/persistence.ts'
 
 let h: Harness
@@ -49,14 +50,12 @@ describe.skipIf(!hasDatabase)('Stop cheaters on the Players page', () => {
         removals: [],
         today: 0,
       })
-      await h.db
-        .insert(schema.compatPlugins)
-        .values({
-          gameVersion: revision.gameVersion,
-          projectId: GRIM,
-          pinned: cdn.publish('Grim'),
-          pinnedAt: new Date(),
-        })
+      await h.db.insert(schema.compatPlugins).values({
+        gameVersion: revision.gameVersion,
+        projectId: GRIM,
+        pinned: cdn.publish('Grim'),
+        pinnedAt: new Date(),
+      })
       await h.app.stopCheaters.set(owner, id, true, crypto.randomUUID())
       await h.db
         .update(schema.serverRuntimes)
@@ -119,14 +118,62 @@ describe.skipIf(!hasDatabase)('Stop cheaters on the Players page', () => {
       )
       expect(view.today).toBe(2)
       expect(view.removals).toEqual(
-        events
-          .toReversed()
-          .map((event) => ({
-            player: { uuid: event.uuid, name: event.name },
-            reason: event.reason,
-            at: event.at,
-          })),
+        events.toReversed().map((event) => ({
+          player: { uuid: event.uuid, name: event.name },
+          reason: event.reason,
+          at: event.at,
+        })),
       )
+    },
+    30 * SECOND_MS,
+  )
+})
+
+describe.skipIf(!hasDatabase)('Stop cheaters restart requests', () => {
+  test(
+    'an occupied server waits, a reversal cancels it, and a restart keeps its request',
+    async () => {
+      const owner = await h.user('Waiting owner', 'plus')
+      const { id } = await h.create(owner, { from: { kind: 'template', key: 'smooth' } })
+      await h.until(id, 'running', 3 * SECOND_MS)
+      await h.settled(id, 3 * SECOND_MS)
+      const revision = await loadRevision(h.db, (await h.server(id)).desiredRevisionId)
+      const pinned = { ...cdn.publish('Grim', Buffer.from(pluginJar('Grim', 21))), loaders: ['paper'] }
+      await h.db
+        .insert(schema.compatPlugins)
+        .values({ gameVersion: revision.gameVersion, projectId: GRIM, pinned, pinnedAt: new Date() })
+        .onConflictDoUpdate({
+          target: [schema.compatPlugins.gameVersion, schema.compatPlugins.projectId],
+          set: { pinned },
+        })
+      const player = { uuid: crypto.randomUUID(), name: 'Alex' }
+      h.minecraft.join(id, player)
+      await h.app.schedules.presenceSync()
+      const applies = async () => (await h.operations(id)).filter((op) => op.kind === 'apply')
+      await h.app.stopCheaters.set(owner, id, true, crypto.randomUUID(), 'empty')
+      expect((await h.app.queries.get(owner, id)).waiting?.stopCheaters).toBe('on')
+      expect(await applies()).toHaveLength(0)
+      await h.app.stopCheaters.set(owner, id, false, crypto.randomUUID(), 'empty')
+      expect((await h.app.queries.get(owner, id)).waiting).toBeNull()
+      expect(await applies()).toHaveLength(0)
+      const requestId = crypto.randomUUID()
+      await h.app.stopCheaters.set(owner, id, true, requestId, 'now')
+      const [applied] = await applies()
+      expect(applied?.input).toEqual({ boot: true })
+      const [request] = await h.db
+        .select()
+        .from(schema.serverOperations)
+        .where(eq(schema.serverOperations.id, applied?.id ?? crypto.randomUUID()))
+      expect(request).toMatchObject({
+        idempotencyKey: `apply:${requestId}`,
+        requestedBy: `user:${owner.userId}`,
+      })
+      await h.settled(id)
+      h.minecraft.join(id, player)
+      await h.app.schedules.presenceSync()
+      await h.app.stopCheaters.useOurs(owner, id, crypto.randomUUID(), 'empty')
+      expect((await h.app.queries.get(owner, id)).waiting?.stopCheaters).toBe('ours')
+      expect(await applies()).toHaveLength(1)
     },
     30 * SECOND_MS,
   )
