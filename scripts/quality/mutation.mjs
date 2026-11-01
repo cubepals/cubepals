@@ -234,6 +234,17 @@ export function mutationVerdict(
 
 const quote = (value) => `'${value.replaceAll("'", "'\\''")}'`
 
+/** Larger complete candidate censuses receive proportionate time, bounded to one hour. */
+export function mutationTimeBudget(candidateCount, requested) {
+  if (!Number.isSafeInteger(candidateCount) || candidateCount < 0)
+    throw new Error('Invalid mutation candidate count')
+  if (requested !== undefined) {
+    if (!Number.isFinite(requested) || requested <= 0) throw new Error('Invalid mutation time budget')
+    return requested
+  }
+  return Math.min(60, Math.ceil(20 * Math.max(1, candidateCount / 150))) * MINUTE_MS
+}
+
 export function runMutation({
   root,
   subjects,
@@ -245,7 +256,7 @@ export function runMutation({
   bun = 'bun',
   node = 'node',
   timeoutMs = 5 * MINUTE_MS,
-  subjectTimeoutMs = 20 * MINUTE_MS,
+  subjectTimeoutMs,
   collectAll = false,
   allowCaseBatches = true,
 }) {
@@ -296,11 +307,12 @@ export function runMutation({
           for (const test of batch) planned.add(test)
         }
         const attempts = []
+        const budgetMs = mutationTimeBudget(candidates[subject].count, subjectTimeoutMs)
         const started = Date.now()
         // Mutants that start after this point are recorded as not evaluated, leaving a
         // minute for Stryker to finish its census and report. Each Bun command is itself capped
         // at this shared deadline, so a full test-timeout reserve would leave usable time idle.
-        const deadline = started + Math.max(subjectTimeoutMs / 2, subjectTimeoutMs - MINUTE_MS)
+        const deadline = started + Math.max(budgetMs / 2, budgetMs - MINUTE_MS)
         let verdict
         let runStatus
         let expansionStopped = false
@@ -370,7 +382,7 @@ export function runMutation({
               cleanTempDir: 'always',
             }),
           )
-          const remainingMs = subjectTimeoutMs - (Date.now() - started)
+          const remainingMs = budgetMs - (Date.now() - started)
           if (remainingMs <= 0) throw new Error(`${subject}: mutation expansion exhausted its time budget`)
           const run = spawnSync(node, [cli, 'run', configPath], {
             cwd: snapshot,
@@ -458,7 +470,7 @@ export function runMutation({
             ? `${subject}: ${row.notApplicable}; baseline passed\n`
             : `${subject}: ${row.killed}/${row.total} killed (${row.score.toFixed(1)}%, required ${required.toFixed(1)}%; ${row.inconclusive} inconclusive)\n`,
         )
-        const minutes = Number((subjectTimeoutMs / MINUTE_MS).toFixed(1))
+        const minutes = Number((budgetMs / MINUTE_MS).toFixed(1))
         const budget = row.unevaluated
           ? `; ${row.unevaluated} of ${row.total} mutants were not evaluated within the ${minutes}-minute budget`
           : expansionStopped

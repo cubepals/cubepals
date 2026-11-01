@@ -13,9 +13,25 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
-import { SECOND_MS } from '../../packages/contracts/src/durations.ts'
-import { mutationVerdict, runMutation } from './mutation.mjs'
+import { MINUTE_MS, SECOND_MS } from '../../packages/contracts/src/durations.ts'
+import { mutationTimeBudget, mutationVerdict, runMutation } from './mutation.mjs'
 import { readMutationJUnit } from './mutation-evidence.mjs'
+
+test('complete candidate counts scale default budgets without changing explicit deadlines', () => {
+  for (const [count, minutes] of [
+    [0, 20],
+    [150, 20],
+    [152, 21],
+    [173, 24],
+    [234, 32],
+    [425, 57],
+    [1000, 60],
+  ])
+    assert.equal(mutationTimeBudget(count), minutes * MINUTE_MS)
+  assert.equal(mutationTimeBudget(425, 30 * SECOND_MS), 30 * SECOND_MS)
+  for (const count of [-1, 1.5, NaN, Infinity]) assert.throws(() => mutationTimeBudget(count))
+  for (const requested of [0, -1, NaN, Infinity]) assert.throws(() => mutationTimeBudget(425, requested))
+})
 
 const commandScript = fileURLToPath(new URL('./mutation-command.mjs', import.meta.url))
 
