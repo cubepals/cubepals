@@ -5,7 +5,7 @@
 /** Case ordering preserves every survivor's oracle and rejects incomplete or misleading evidence. */
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { proveCaseOrder, runCaseOrder } from './mutation-case-order.mjs'
+import { caseBatchKey, proveCaseOrder, runCaseOrder } from './mutation-case-order.mjs'
 import { readMutationJUnit } from './mutation-evidence.mjs'
 
 const file = 'apps/example.test.ts'
@@ -148,4 +148,52 @@ test('missing, duplicate, or unmeasured case identities keep the original invoca
     null,
   )
   assert.equal(proveCaseOrder(cases, [file], 1, execute), null)
+})
+
+test('a previous failing batch runs first without removing any survivor oracle', () => {
+  const { plan, execute } = fixture()
+  const preferred = caseBatchKey(plan.batches.at(-1))
+  const seen = []
+  const result = runCaseOrder(
+    plan,
+    [file],
+    (batch) => {
+      seen.push(caseBatchKey(batch))
+      return execute(batch)
+    },
+    preferred,
+  )
+  assert.equal(seen[0], preferred)
+  assert.equal(result.passed, names.length)
+  assert.equal(result.reports.length, plan.batches.length)
+})
+
+test('an unknown preference cannot introduce an unproven test pattern', () => {
+  const { plan, execute } = fixture()
+  assert.throws(() => runCaseOrder(plan, [file], execute, 'invented'), /outside the proven case inventory/)
+})
+
+test('the preferred batch still needs a real failure before execution can stop', () => {
+  const { plan, execute } = fixture()
+  const preferred = caseBatchKey(plan.batches.at(-1))
+  const result = runCaseOrder(
+    plan,
+    [file],
+    (batch) => {
+      const run = execute(batch)
+      if (caseBatchKey(batch) !== preferred) return run
+      const name = JSON.parse(batch.cases[0])[2]
+      const states = Object.fromEntries(
+        names.map((item) => [
+          item,
+          item === name ? 'failed' : new RegExp(batch.pattern).test(item) ? 'passed' : 'filtered',
+        ]),
+      )
+      return { ...run, exitCode: 1, xml: xml(states) }
+    },
+    preferred,
+  )
+  assert.equal(result.failed, 1)
+  assert.equal(result.reports.length, 1)
+  assert.equal(result.failedBatch, preferred)
 })
