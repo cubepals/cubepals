@@ -14,7 +14,7 @@ import { Client } from 'transport-io'
 import { S3ArchiveStore } from '../../infra/s3/s3-archive-store.ts'
 import { Cdn } from '../../testing/cdn.ts'
 import { hasDatabase, startHarness } from '../../testing/harness.ts'
-import { fabricJar, utf8, zipBytes } from '../../testing/uploads.ts'
+import { fabricJar, pluginJar, utf8, zipBytes } from '../../testing/uploads.ts'
 import { appRouter } from './router.ts'
 
 const quality = createRequire(new URL('../../../../../tools/quality/package.json', import.meta.url))
@@ -169,7 +169,7 @@ async function draw(id) {
   )
   return root
 }
-function publishIris(h, cdn, needsNewer = false) {
+function publishIris(h, cdn, needsNewer = false, loader = 'fabric') {
   if (needsNewer)
     h.catalog.publish(
       {
@@ -189,7 +189,7 @@ function publishIris(h, cdn, needsNewer = false) {
           channel: 'release',
           state: 'listed',
           environment: 'server_only',
-          loaders: ['fabric'],
+          loaders: [loader],
           gameVersions: ['26.3'],
           publishedAt: new Date(),
           file: cdn.file('foundation-1'),
@@ -204,8 +204,8 @@ function publishIris(h, cdn, needsNewer = false) {
       name: 'Iris Shaders',
       summary: 'Iris, for tests',
       iconUrl: null,
-      environments: ['server_only'],
-      downloads: 1,
+      environments: ['client_and_server'],
+      downloads: loader === 'paper' ? 1200 : 1,
     },
     [
       {
@@ -214,18 +214,18 @@ function publishIris(h, cdn, needsNewer = false) {
         versionLabel: '1.0',
         channel: 'release',
         state: 'listed',
-        environment: 'server_only',
-        loaders: ['fabric'],
-        gameVersions: needsNewer ? ['26.2', '26.3'] : ['26.3'],
+        environment: 'client_and_server',
+        loaders: [loader],
+        gameVersions: needsNewer ? ['26.2', '26.3'] : [loader === 'paper' ? '26.2' : '26.3'],
         publishedAt: new Date(),
-        file: cdn.file('iris-1'),
+        file: cdn.file('iris-1', loader === 'paper' ? pluginJar('Iris', 25) : undefined),
         dependencies: needsNewer ? [{ projectId: 'foundation', versionId: null, kind: 'required' }] : [],
       },
     ],
   )
 }
 
-function catalogPack(h, cdn, movesWorld) {
+function catalogPack(h, cdn, movesWorld, leftOut = 0) {
   const versions = []
   const publish = (number) => {
     const gameVersion = movesWorld && number > 1 ? '26.3' : '1.21.1'
@@ -253,6 +253,12 @@ function catalogPack(h, cdn, movesWorld) {
           }),
         ),
         'overrides/config/farm.toml': utf8(`version = ${number}\n`),
+        ...Object.fromEntries(
+          Array.from({ length: leftOut }, (_, index) => [
+            `overrides/mods/client-${String.fromCharCode(97 + index)}.jar`,
+            fabricJar(`client-${String.fromCharCode(97 + index)}`, { environment: 'client' }),
+          ]),
+        ),
       }),
     )
     versions.unshift({
@@ -309,6 +315,8 @@ async function openMods({
   failure = null,
   revoked = false,
   needsNewer = false,
+  leftOut = 0,
+  stopped = false,
 } = {}) {
   // The in-process API and disposable storage service share this fixture's origin.
   const dom = browserScope(uploads ? process.env.S3_TEST_ENDPOINT : undefined)
@@ -322,11 +330,11 @@ async function openMods({
     archive = uploads ? archiveStore() : null
     h = await startHarness(archive ? { capabilities: { archives: archive, billing: null } } : {})
     const owner = await h.user('Steve', 'plus')
-    publishIris(h, cdn, needsNewer)
-    const prepared = pack ? catalogPack(h, cdn, movesWorld) : null
+    publishIris(h, cdn, needsNewer, loader === 'paper' ? 'paper' : 'fabric')
+    const prepared = pack ? catalogPack(h, cdn, movesWorld, leftOut) : null
     const server = await h.create(
       owner,
-      prepared?.request ?? { loader, ...(needsNewer ? { gameVersion: '26.2' } : {}) },
+      prepared?.request ?? { loader, ...(needsNewer || loader === 'paper' ? { gameVersion: '26.2' } : {}) },
     )
     await h.until(server.id, 'running')
     await h.settled(server.id)
@@ -375,6 +383,11 @@ async function openMods({
     if (online) {
       h.minecraft.join(server.id, { uuid: crypto.randomUUID(), name: 'Alex' })
       await h.app.schedules.presenceSync()
+    }
+    if (stopped) {
+      await h.app.servers.stop(owner, server.id, crypto.randomUUID())
+      await h.until(server.id, 'stopped')
+      await h.settled(server.id)
     }
     prepared?.upgrade()
     api = routeApi(h, owner, dom.browser)
@@ -601,6 +614,24 @@ async function offersMinecraftForDependency() {
   }
 }
 
+async function explainsClientFiles() {
+  for (const leftOut of [1, 3, 5]) {
+    const page = await openMods({ pack: true, leftOut, stopped: true, online: false })
+    try {
+      expect(document.body.textContent).toContain('Left to players’ games')
+      expect(document.body.textContent).toContain('client a')
+      if (leftOut === 5) expect(document.body.textContent).toContain('2 more')
+      await act(async () => button('Update to 2.0').click())
+      await until(() => document.querySelector('dialog') !== null)
+      expect(document.body.textContent).toContain('It installs the next time the server starts')
+      expect(button('Update').disabled).toBe(false)
+      await act(async () => button('Cancel').click())
+    } finally {
+      await page.close()
+    }
+  }
+}
+
 async function waitsByDefault() {
   const page = await openMods()
   try {
@@ -676,22 +707,24 @@ async function restartsNow() {
 }
 
 async function nobodyOn() {
-  const page = await openMods({ online: false })
-  try {
-    await page.plan()
-    expect(document.querySelector('input[name="restart-when"]')).toBeNull()
-    await act(async () => button('Apply and restart').click())
-    await until(async () => (await page.h.operations(page.server.id)).some((op) => op.kind === 'apply'))
-    await act(async () => {
-      await page.h.settled(page.server.id)
-    })
-    await until(() => document.querySelector('dialog') === null)
-    expect((await page.h.app.queries.get(page.owner, page.server.id)).waiting).toBeNull()
-    expect(
-      (await page.h.app.modQueries.list(page.owner, page.server.id)).mods.map((mod) => mod.name),
-    ).toEqual(['Iris Shaders'])
-  } finally {
-    await page.close()
+  for (const loader of ['fabric', 'paper']) {
+    const page = await openMods({ online: false, loader })
+    try {
+      await page.plan()
+      expect(document.querySelector('input[name="restart-when"]')).toBeNull()
+      await act(async () => button('Apply and restart').click())
+      await until(async () => (await page.h.operations(page.server.id)).some((op) => op.kind === 'apply'))
+      await act(async () => {
+        await page.h.settled(page.server.id)
+      })
+      await until(() => document.querySelector('dialog') === null)
+      expect((await page.h.app.queries.get(page.owner, page.server.id)).waiting).toBeNull()
+      expect(
+        (await page.h.app.modQueries.list(page.owner, page.server.id)).mods.map((mod) => mod.name),
+      ).toEqual(['Iris Shaders'])
+    } finally {
+      await page.close()
+    }
   }
 }
 
@@ -711,6 +744,7 @@ async function movesVanilla() {
 }
 
 describe.skipIf(!hasDatabase)('choosing a restart from the mods page', () => {
+  test('a stopped pack explains short and long lists of client files', explainsClientFiles, 30 * SECOND_MS)
   test('a catalog takedown requires an explicit choice', keepsTakenDownChoiceExplicit, 30 * SECOND_MS)
   test(
     'a newer Minecraft is offered for an incompatible dependency',
