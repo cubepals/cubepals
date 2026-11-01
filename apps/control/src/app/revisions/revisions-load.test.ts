@@ -60,14 +60,14 @@ async function membership(
   desired: () => ReturnType<typeof loadRevision>,
 ) {
   await h.app.revisions.changeAuthentication(owner, serverId, false, crypto.randomUUID())
-  expect((await desired()).settings.onlineMode).toBe(false)
+  expect(await desired()).toMatchObject({ settings: { onlineMode: false }, reason: 'settings_changed' })
   const offline = (await desired()).id
   await h.app.revisions.changeAuthentication(owner, serverId, false, crypto.randomUUID())
   expect((await desired()).id).toBe(offline)
   await h.app.revisions.changeAuthentication(owner, serverId, true, crypto.randomUUID())
   expect((await desired()).settings.onlineMode).toBe(true)
   await h.app.revisions.changeOtherVersions(owner, serverId, 'off', crypto.randomUUID())
-  expect((await desired()).settings.otherVersions).toBe('off')
+  expect(await desired()).toMatchObject({ settings: { otherVersions: 'off' }, reason: 'settings_changed' })
   const closed = (await desired()).id
   await h.app.revisions.changeOtherVersions(owner, serverId, 'off', crypto.randomUUID())
   expect((await desired()).id).toBe(closed)
@@ -125,7 +125,10 @@ async function changes() {
   const saved = (await desired()).id
   await change({ difficulty: 'hard', pvp: false })
   expect((await desired()).id).toBe(saved)
-  await expect(change({ viewDistance: 99 })).rejects.toThrow(/View distance/)
+  await expect(change({ viewDistance: 99 })).rejects.toMatchObject({
+    code: 'invalid_settings',
+    message: expect.stringMatching(/View distance/),
+  })
   await expect(
     h.app.revisions.changeSettings(
       owner,
@@ -140,8 +143,10 @@ async function changes() {
     h.app.revisions.changeSettings(stranger, server.id, (await desired()).settings, crypto.randomUUID()),
   ).rejects.toThrow()
   await membership(h, owner, server.id, desired)
+  const beforeLargerSize = (await desired()).id
   await h.app.revisions.resize(owner, server.id, '4g', crypto.randomUUID())
   expect((await h.server(server.id)).memoryTier).toBe('4g')
+  expect((await desired()).id).toBe(beforeLargerSize)
   await change({ maxPlayers: 10 })
   await h.app.revisions.resize(owner, server.id, '3g', crypto.randomUUID())
   expect((await desired()).settings.maxPlayers).toBe(
@@ -158,6 +163,13 @@ async function changes() {
     settings: { ...first.settings, onlineMode: true },
   })
   await audit(h, owner, server.id, 'server.rolled_back', { to: first.number, changes: expect.any(Array) })
+  const restored = (await desired()).id
+  await h.app.revisions.rollback(owner, server.id, first.id, crypto.randomUUID())
+  expect((await desired()).id).toBe(restored)
+  const foreign = await h.create(owner, { name: 'Another world' })
+  await expect(
+    h.app.revisions.rollback(owner, server.id, foreign.desiredRevisionId, crypto.randomUUID()),
+  ).rejects.toThrow(/Revision/)
   await expect(
     h.app.revisions.rollback(owner, server.id, crypto.randomUUID(), crypto.randomUUID()),
   ).rejects.toThrow(/Revision/)
@@ -184,7 +196,8 @@ async function changes() {
     [],
     crypto.randomUUID(),
   )
-  expect((await desired()).gameVersion).toBe('26.3')
+  expect(await desired()).toMatchObject({ gameVersion: '26.3', reason: 'version_changed' })
+  await audit(h, owner, server.id, 'server.version_changed', { changes: expect.any(Array) })
   const newer = (await desired()).id
   await h.app.mods.changeVersion(
     owner,

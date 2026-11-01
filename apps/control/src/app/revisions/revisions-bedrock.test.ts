@@ -4,6 +4,7 @@
 
 /** Bedrock requests retain explicit choices and migrate only an eligible plain server to Paper. */
 import { afterAll, describe, expect, test } from 'bun:test'
+import { ONLINE_MODE_KEPT } from '@blockly/contracts'
 import { SECOND_MS } from '@blockly/contracts/durations'
 import { schema } from '@blockly/db'
 import { eq } from 'drizzle-orm'
@@ -139,6 +140,19 @@ async function persistedSettings() {
       }),
     ]),
   )
+  await h.app.revisions.changeAuthentication(owner, id, true, crypto.randomUUID())
+  const checked = (await desired()).id
+  await h.db
+    .update(schema.accountStanding)
+    .set({ plan: 'free' })
+    .where(eq(schema.accountStanding.userId, owner.userId))
+  await expect(
+    h.app.revisions.changeAuthentication(owner, id, false, crypto.randomUUID()),
+  ).rejects.toMatchObject({
+    code: 'not_entitled',
+    message: ONLINE_MODE_KEPT,
+  })
+  expect((await desired()).id).toBe(checked)
 }
 
 describe.skipIf(!hasDatabase)('membership and persisted settings', () => {
