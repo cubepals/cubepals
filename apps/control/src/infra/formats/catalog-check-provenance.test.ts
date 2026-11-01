@@ -336,7 +336,21 @@ async function accepted(mode: 'normal' | 'archived' | 'mirror') {
     expect(result.contents?.sha512).toBe(result.stored.sha512)
     expect(result.facts.obligations.length).toBeGreaterThan(0)
     const files = unzipSync(bytes)
-    expect(JSON.parse(strFromU8(files[INDEX_FILE] ?? new Uint8Array())).files).toEqual([])
+    const originalIndex = JSON.parse(strFromU8(unzipSync(archiveBytes(mode))[INDEX_FILE] ?? new Uint8Array()))
+    expect(JSON.parse(strFromU8(files[INDEX_FILE] ?? new Uint8Array()))).toEqual({
+      ...originalIndex,
+      summary: `Cubepals' copy of ${f.pack.name} ${f.spec.version}, for servers.`,
+      files: [],
+    })
+    expect(result.pack.artifact.fileName).toBe(`${f.pack.key}-${f.spec.version}.mrpack`)
+    expect(strFromU8(files['cubepals-notices.txt'] ?? new Uint8Array()).split('\n')).toEqual([
+      `${f.pack.name} ${f.spec.version}, by ${f.pack.authors}.`,
+      'Cubepals made this copy for its own servers, file for file as its authors published them.',
+      'Every work in it keeps its own licence, and its authors own it.',
+      '',
+      `- ${f.pack.name}: MIT.`,
+      '',
+    ])
     expect(strFromU8(files['overrides/config/fixture.toml'] ?? new Uint8Array())).toBe('feature = true\n')
     expect(Object.keys(files).some((name) => /notices/i.test(name))).toBe(true)
   } finally {
