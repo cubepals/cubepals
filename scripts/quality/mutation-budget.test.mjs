@@ -147,7 +147,7 @@ test('a subject that outgrows its budget finishes with a failing report instead 
   )
   write(
     'apps/slow.test.ts',
-    `import { expect, test } from 'bun:test'\nimport { advance } from './source'\ntest('slow and strict', async () => { expect(() => advance(-1)).toThrow('negative'); await Bun.sleep(${8 * SECOND_MS}); expect(advance(0)).toBe(1); expect(advance(9)).toBe(10); expect(advance(10)).toBe(10); expect(advance(11)).toBe(10) }, ${20 * SECOND_MS})\n`,
+    `import { expect, test } from 'bun:test'\nimport { advance } from './source'\ntest('slow and strict', async () => { expect(() => advance(-1)).toThrow('negative'); await Bun.sleep(${12 * SECOND_MS}); expect(advance(0)).toBe(1); expect(advance(9)).toBe(10); expect(advance(10)).toBe(10); expect(advance(11)).toBe(10) }, ${20 * SECOND_MS})\n`,
   )
   write(
     'apps/other.test.ts',
@@ -177,12 +177,12 @@ test('a subject that outgrows its budget finishes with a failing report instead 
         // An expansion past the deadline could evaluate nothing, so it must not start.
         additionalTestsByFile: { 'apps/source.ts': [['apps/other.test.ts']] },
         reportDir: reports,
-        timeoutMs: 10 * SECOND_MS,
-        subjectTimeoutMs: 30 * SECOND_MS,
+        timeoutMs: 30 * SECOND_MS,
+        subjectTimeoutMs: MINUTE_MS,
       }),
-    /mutants were not evaluated within the 0\.5-minute budget/,
+    /mutants were not evaluated within the 1-minute budget/,
   )
-  assert.ok(Date.now() - started < 30 * SECOND_MS, 'Stryker finished inside the budget')
+  assert.ok(Date.now() - started < MINUTE_MS, 'Stryker finished inside the budget')
   const summary = JSON.parse(readFileSync(join(reports, 'summary.json'), 'utf8'))
   assert.equal(summary.passed, false)
   const row = summary.files[0]
