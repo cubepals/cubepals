@@ -140,10 +140,7 @@ try {
     if (!baseline && outcome.status === 'passed' && manifest.allowCaseBatches !== false) {
       const directory = join(manifest.evidence, 'baseline-cases')
       mkdirSync(directory, { recursive: true })
-      const until = Math.min(
-        started + manifest.timeoutMs - 3 * SECOND_MS,
-        Date.now() + Math.min(2 * run.durationMs, 120 * SECOND_MS),
-      )
+      const until = Math.min(started + manifest.timeoutMs - 3 * SECOND_MS, Date.now() + 120 * SECOND_MS)
       const plan = proveCaseOrder(cases, manifest.tests, run.durationMs, (batch, index) =>
         execute([batch.file], join(directory, `${index}.xml`), { pattern: batch.pattern, until }),
       )
