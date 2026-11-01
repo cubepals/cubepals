@@ -36,7 +36,7 @@
     "dot-properties": "1.1.2",
     "drizzle-orm": "0.45.4",
     "fflate": "0.8.3",
-    "hono": "4.13.13",
+    "hono": "4.13.14",
     "jose": "6.2.13",
     "nodemailer": "10.2.1",
     "openapi-fetch": "0.17.0",
