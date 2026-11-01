@@ -22,7 +22,7 @@ const punishment = {
   playerUuid: crypto.randomUUID(),
   name: '  Player  ',
   reason: '  Spam  ',
-  kind: 'mute',
+  kind: 'mute' as const,
   minutes: HOUR_MS / MINUTE_MS,
 }
 
@@ -86,16 +86,20 @@ test('an owner can reset the ladder or supply one through ten validated steps', 
 })
 
 test('only offences that have not been lifted advance the ladder, whose last step repeats', () => {
-  expect(nextStep(DEFAULT_LADDER, [])).toEqual(DEFAULT_LADDER[0]!)
+  expect(nextStep(DEFAULT_LADDER, [])).toEqual({ kind: 'warn', minutes: null })
   for (const status of ['waiting', 'given', 'over'] as const) {
-    expect(nextStep(DEFAULT_LADDER, [{ status }])).toEqual(DEFAULT_LADDER[1]!)
+    expect(nextStep(DEFAULT_LADDER, [{ status }])).toEqual({ kind: 'mute', minutes: HOUR_MS / MINUTE_MS })
   }
   for (const status of ['lifting', 'lifted'] as const) {
-    expect(nextStep(DEFAULT_LADDER, [{ status }])).toEqual(DEFAULT_LADDER[0]!)
+    expect(nextStep(DEFAULT_LADDER, [{ status }])).toEqual({ kind: 'warn', minutes: null })
   }
-  expect(nextStep(DEFAULT_LADDER, [{ status: 'given' }, { status: 'over' }, { status: 'lifted' }])).toEqual(
-    DEFAULT_LADDER[2]!,
-  )
-  expect(nextStep(DEFAULT_LADDER, Array(20).fill({ status: 'given' }))).toEqual(DEFAULT_LADDER.at(-1)!)
+  expect(nextStep(DEFAULT_LADDER, [{ status: 'given' }, { status: 'over' }, { status: 'lifted' }])).toEqual({
+    kind: 'mute',
+    minutes: DAY_MS / MINUTE_MS,
+  })
+  expect(nextStep(DEFAULT_LADDER, Array(20).fill({ status: 'given' }))).toEqual({
+    kind: 'ban',
+    minutes: null,
+  })
   expect(nextStep([], [])).toEqual({ kind: 'warn', minutes: null })
 })
