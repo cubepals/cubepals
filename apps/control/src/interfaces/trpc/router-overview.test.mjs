@@ -7,6 +7,7 @@ import { afterAll, describe, expect, test } from 'bun:test'
 import { DAY_MS, SECOND_MS } from '@blockly/contracts/durations'
 import { schema } from '@blockly/db'
 import { addMonths } from '../../app/billing/years.ts'
+import { LIST_UUIDS } from '../../minecraft/console.ts'
 import { hasDatabase, startHarness } from '../../testing/harness.ts'
 import { appRouter } from './router.ts'
 
@@ -93,7 +94,20 @@ async function checkAccount(mode) {
     expect(offered.entitlements.sizeLabels).toEqual(plan.sizeLabels)
   }
 }
+async function consoleReply() {
+  harness ??= startHarness()
+  const h = await harness,
+    owner = await h.user('Steve', 'plus'),
+    server = await h.create(owner)
+  await h.until(server.id, 'running')
+  await h.settled(server.id)
+  const output = await h.app.console.run(owner, server.id, LIST_UUIDS)
+  const caller = appRouter.createCaller({ actor: owner, services: h.app })
+  expect(await caller.console.run({ serverId: server.id, command: LIST_UUIDS })).toEqual({ output })
+}
+
 describe.skipIf(!hasDatabase)('account overview on the wire', () => {
+  test('console replies retain the game’s actual output', consoleReply, 30 * SECOND_MS)
   test(
     'an account with no purchases retains its null plan history and real entitlements',
     () => checkAccount('none'),
