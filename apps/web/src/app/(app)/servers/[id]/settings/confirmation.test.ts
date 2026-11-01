@@ -79,8 +79,13 @@ test('confirmation waits for prerequisites and submits the chosen restart timing
       calls.push({ requestId, when })
     },
   }
-  const save = () =>
-    [...document.querySelectorAll('button')].find((button) => button.textContent?.trim() === 'Save')!
+  const save = () => {
+    const button = [...document.querySelectorAll('button')].find(
+      (button) => button.textContent?.trim() === 'Save',
+    )
+    if (!button) throw new Error('The confirmation must offer a Save button')
+    return button
+  }
   try {
     await act(async () => root.render(createElement(ConfirmChange, { ...props, disabled: true })))
     expect(save().disabled).toBe(true)
@@ -88,8 +93,10 @@ test('confirmation waits for prerequisites and submits the chosen restart timing
     expect(calls).toEqual([])
     await act(async () => root.render(createElement(ConfirmChange, { ...props, disabled: false })))
     expect(save().disabled).toBe(false)
-    await act(async () => document.querySelector<HTMLInputElement>('input[value="now"]')!.click())
-    expect(document.querySelector<HTMLInputElement>('input[value="now"]')!.checked).toBe(true)
+    const now = document.querySelector<HTMLInputElement>('input[value="now"]')
+    if (!now) throw new Error('An occupied server must offer restarting now')
+    await act(async () => now.click())
+    expect(now.checked).toBe(true)
     await act(async () => save().click())
     expect(calls).toEqual([{ requestId: expect.any(String), when: 'now' }])
   } finally {

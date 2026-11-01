@@ -218,6 +218,7 @@ async function openPlayers({
   loader = 'paper',
   tools = false,
   filter = false,
+  cheaters,
 } = {}) {
   const dom = browserScope(),
     cdn = new Cdn()
@@ -240,6 +241,10 @@ async function openPlayers({
     })
     if (tools) {
       await moderation.setTools(owner, server.id, { enabled: true, chatFilter: filter }, crypto.randomUUID())
+      await h.settled(server.id)
+    }
+    if (cheaters !== undefined) {
+      await h.app.stopCheaters.set(owner, server.id, cheaters, crypto.randomUUID())
       await h.settled(server.id)
     }
     if (online || away) {
@@ -389,10 +394,15 @@ async function escalationLimits() {
 async function refusedTools(online) {
   const page = await openPlayers({ online })
   try {
+    expect(document.body.textContent).toContain('Turning these on or off restarts the server.')
     page.h.catalog.outage(true)
     await act(async () => switchButton('Moderation tools').click())
     if (online) {
       await until(() => openDialog()?.open)
+      expect(openDialog().querySelector('h2').textContent).toBe('Change the moderation tools?')
+      expect(document.body.textContent).toContain(
+        'Someone is playing, so you choose whether it waits for everyone to leave.',
+      )
       await act(async () => insideButton('Save', openDialog()).click())
     }
     await until(() => document.querySelector('.bk-note--danger') !== null)
@@ -410,13 +420,28 @@ async function refusedTools(online) {
     await page.close()
   }
 }
-async function stopCheaters(on) {
-  const page = await openPlayers({ stopped: true })
+async function stopCheaters(on, online = false) {
+  const page = await openPlayers({ stopped: !online, online, cheaters: !on })
   try {
     await page.h.app.stopCheaters.set(page.owner, page.server.id, !on, crypto.randomUUID())
     await page.reload()
     expect(switchButton('Stop cheaters').getAttribute('aria-checked')).toBe(String(!on))
+    if (!online) expect(document.body.textContent).toContain('They arrive when the server next starts.')
     await act(async () => switchButton('Stop cheaters').click())
+    if (online) {
+      expect(openDialog()?.open).toBe(true)
+      expect(openDialog().querySelector('h2').textContent).toBe(
+        on ? 'Turn on Stop cheaters?' : 'Turn off Stop cheaters?',
+      )
+      expect(document.querySelector('input[value="empty"]').checked).toBe(true)
+      await act(async () => insideButton('Cancel', openDialog()).click())
+      expect((await loadStopCheaters(page.h.db, page.server.id)).setting).toBe(on ? 'off' : 'on')
+      await act(async () => switchButton('Stop cheaters').click())
+      await act(async () => insideButton(on ? 'Turn it on' : 'Turn it off', openDialog()).click())
+      await until(() => page.mutations.some((call) => call.path.includes('moderation.setStopCheaters')))
+      const submitted = page.mutations.findLast((call) => call.path.includes('moderation.setStopCheaters'))
+      expect(Object.values(submitted.input)[0]).toMatchObject({ on, when: 'empty' })
+    }
     await until(
       async () => (await loadStopCheaters(page.h.db, page.server.id)).setting === (on ? 'on' : 'off'),
     )
@@ -425,8 +450,8 @@ async function stopCheaters(on) {
     await page.close()
   }
 }
-async function ownCheaters(refused = false) {
-  const page = await openPlayers({ stopped: true })
+async function ownCheaters(refused = false, online = false) {
+  const page = await openPlayers({ stopped: !online, online })
   try {
     await saveStopCheaters(page.h.db, page.server.id, { setting: 'on' })
     const [row] = await page.h.db
@@ -446,6 +471,15 @@ async function ownCheaters(refused = false) {
         .set({ status: 'terminated' })
         .where(eq(schema.accountStanding.userId, page.owner.userId))
     await act(async () => button('Use Cubepals’ settings').click())
+    if (online) {
+      expect(openDialog()?.open).toBe(true)
+      expect(openDialog().querySelector('h2').textContent).toBe('Use Cubepals’ Stop cheaters settings?')
+      expect((await loadStopCheaters(page.h.db, page.server.id)).takeOver).toBe(false)
+      await act(async () => insideButton('Use Cubepals’ settings', openDialog()).click())
+      await until(() => page.mutations.some((call) => call.path.includes('moderation.useOurStopCheaters')))
+      const submitted = page.mutations.findLast((call) => call.path.includes('moderation.useOurStopCheaters'))
+      expect(Object.values(submitted.input)[0].when).toBe('empty')
+    }
     if (refused) {
       await until(() => document.body.textContent.includes('This account is closed.'))
       expect((await loadStopCheaters(page.h.db, page.server.id)).takeOver).toBe(false)
@@ -523,7 +557,57 @@ async function removals(count) {
     await page.close()
   }
 }
+async function occupiedChatFilter() {
+  const page = await openPlayers({ online: true, tools: true })
+  const appliesBefore = (await page.h.operations(page.server.id)).filter(
+    (operation) => operation.kind === 'apply',
+  ).length
+  try {
+    await act(async () => switchButton('Filter chat').click())
+    expect(openDialog()?.open).toBe(true)
+    expect(openDialog().querySelector('h2').textContent).toBe('Change the chat filter?')
+    expect(document.querySelector('input[value="empty"]').checked).toBe(true)
+    await act(async () => insideButton('Cancel', openDialog()).click())
+    expect((await page.moderation.view(page.owner, page.server.id)).chatFilter).toBe(false)
+    expect(page.mutations.filter((call) => call.path.includes('moderation.setTools'))).toHaveLength(0)
+    await act(async () => switchButton('Filter chat').click())
+    await act(async () => insideButton('Save', openDialog()).click())
+    await until(() => page.mutations.some((call) => call.path.includes('moderation.setTools')))
+    const submitted = page.mutations.findLast((call) => call.path.includes('moderation.setTools'))
+    expect(Object.values(submitted.input)[0]).toMatchObject({
+      enabled: true,
+      chatFilter: true,
+      when: 'empty',
+    })
+    await until(async () => (await page.moderation.view(page.owner, page.server.id)).chatFilter)
+    expect(
+      (await page.h.operations(page.server.id)).filter((operation) => operation.kind === 'apply'),
+    ).toHaveLength(appliesBefore)
+  } finally {
+    await page.close()
+  }
+}
 describe.skipIf(!hasDatabase)('moderation controls in the browser', () => {
+  test(
+    'an occupied server confirms a chat filter change and retains the choice after cancel',
+    occupiedChatFilter,
+    30 * SECOND_MS,
+  )
+  test(
+    'an occupied server can choose when Stop cheaters turns on',
+    () => stopCheaters(true, true),
+    30 * SECOND_MS,
+  )
+  test(
+    'an occupied server can choose when Stop cheaters turns off',
+    () => stopCheaters(false, true),
+    30 * SECOND_MS,
+  )
+  test(
+    'an occupied server confirms replacing its own Grim configuration',
+    () => ownCheaters(false, true),
+    30 * SECOND_MS,
+  )
   test('a refused Grim settings replacement can be retried', () => ownCheaters(true), 30 * SECOND_MS)
   test('the escalation edits kinds and permanent durations', () => changeEscalation(false), 30 * SECOND_MS)
   test('the owner can return to Cubepals’ escalation', () => changeEscalation(true), 30 * SECOND_MS)
