@@ -186,6 +186,8 @@ files mid-run. Missing execution evidence still fails the verdict.
 
 Application and workspace subjects run four independent command-runner processes against Stryker's
 disposable, instrumented sandbox. Each process activates only its own mutant.
+CI gives Postgres a 1 GiB shared-memory limit so concurrent real-database cases do not exhaust
+Docker's default 64 MiB segment while executing parallel queries.
 `mutation-sandbox.mjs` recreates installation links so bare workspace imports reach that sandbox's
 source; external libraries remain links to the existing installs. Scripts retain their single
 Git-backed workspace. The complete candidate census, test oracles, thresholds and subject time
