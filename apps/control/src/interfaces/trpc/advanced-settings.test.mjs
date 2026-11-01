@@ -10,6 +10,7 @@ import { SECOND_MS } from '@blockly/contracts/durations'
 import { fetchRequestHandler } from '@trpc/server/adapters/fetch'
 import { act, createElement } from 'react'
 import { loadRevision } from '../../app/servers/persistence.ts'
+import { Cdn } from '../../testing/cdn.ts'
 import { hasDatabase, startHarness } from '../../testing/harness.ts'
 import { appRouter } from './router.ts'
 
@@ -107,6 +108,8 @@ async function openSettings({
   authentication = true,
   paper = true,
   otherVersions,
+  beforeView,
+  beforePlaying,
 } = {}) {
   const dom = browserScope(),
     native = globalThis.fetch,
@@ -137,6 +140,7 @@ async function openSettings({
       await h.app.revisions.changeOtherVersions(owner, server.id, otherVersions, crypto.randomUUID())
       await h.settled(server.id)
     }
+    if (beforePlaying) await beforePlaying({ h, owner, server })
     if (online) {
       h.minecraft.join(server.id, { uuid: crypto.randomUUID(), name: 'Alex' })
       await h.app.schedules.presenceSync()
@@ -146,6 +150,7 @@ async function openSettings({
       await h.until(server.id, 'stopped')
       await h.settled(server.id)
     }
+    if (beforeView) await beforeView({ h, owner, server })
     const view = await h.app.queries.get(owner, server.id),
       options = await h.app.queries.settingsOptions(owner, server.id)
     const routed = Object.assign(
@@ -364,7 +369,163 @@ async function changeSize() {
     await page.close()
   }
 }
+async function versionFallback() {
+  const page = await openSettings({ kind: 'version', loader: 'paper', stopped: true })
+  try {
+    await fill(page.browser, 'Minecraft version', '26.3')
+    expect([...document.querySelectorAll('select')][1].value).toBe('vanilla')
+    await act(async () => button('Change version').click())
+    await until(() => dialog()?.open)
+    await until(() => !button('Change version', dialog()).disabled)
+    await act(async () => button('Cancel', dialog()).click())
+    expect(dialog()).toBeUndefined()
+    expect(await page.revision()).toMatchObject({ gameVersion: '26.2', loader: 'paper' })
+  } finally {
+    await page.close()
+  }
+}
+async function versionConflict(mode = 'conflict') {
+  const cdn = new Cdn()
+  await cdn.start()
+  let page
+  try {
+    page = await openSettings({
+      kind: 'version',
+      loader: 'fabric',
+      stopped: true,
+      beforeView: async ({ h, owner, server }) => {
+        h.catalog.publish(
+          {
+            projectId: 'version-probe',
+            slug: 'version-probe',
+            name: 'Version Probe',
+            summary: 'An installed mod without a newer release',
+            iconUrl: null,
+            environments: ['server_only'],
+            downloads: 1,
+          },
+          [
+            {
+              versionId: 'version-probe-1',
+              projectId: 'version-probe',
+              versionLabel: '1',
+              channel: 'release',
+              state: 'listed',
+              environment: 'server_only',
+              loaders: ['fabric'],
+              gameVersions: mode === 'conflict' ? ['26.2'] : ['26.2', '26.3'],
+              publishedAt: new Date(),
+              file: cdn.file('version-probe-1'),
+              dependencies: [],
+            },
+          ],
+        )
+        const requested = { add: [{ projectId: 'version-probe' }] }
+        const plan = await h.app.mods.plan(owner, server.id, requested)
+        if (plan.kind !== 'ok') throw new Error('The fixture mod must fit the current version')
+        await h.app.mods.apply(
+          owner,
+          server.id,
+          requested,
+          plan.mods.map((mod) => mod.artifact.sha512),
+          crypto.randomUUID(),
+        )
+        await h.settled(server.id)
+      },
+    })
+    if (mode === 'revoked') {
+      page.h.catalog.setProjectState('version-probe', 'withheld')
+      await page.h.app.catalog.refresh()
+    }
+    if (mode === 'outage') page.h.catalog.outage(true)
+    await fill(page.browser, 'Minecraft version', '26.3')
+    await act(async () => button('Change version').click())
+    if (mode === 'revoked') {
+      await until(() => dialog()?.querySelector('[role="switch"]') != null)
+      expect(button('Change version', dialog()).disabled).toBe(true)
+      await act(async () => dialog().querySelector('[role="switch"]').click())
+      await until(() => !button('Change version', dialog()).disabled)
+      await confirm('Change version')
+      await until(async () => (await page.revision()).gameVersion === '26.3')
+      expect((await page.revision()).acknowledgedRevoked.length).toBeGreaterThan(0)
+      return
+    }
+    if (mode === 'outage') {
+      await until(() => dialog()?.querySelector('.bk-note--danger') != null)
+      expect(dialog().querySelector('.bk-note--danger').textContent.length).toBeGreaterThan(0)
+      expect(button('Change version', dialog()).disabled).toBe(true)
+      expect(page.mutations).toHaveLength(0)
+      return
+    }
+    await until(() => document.body.textContent.includes('Your mods can’t all come along'))
+    expect(dialog().querySelectorAll('li').length).toBeGreaterThan(0)
+    expect(button('Change version', dialog()).disabled).toBe(true)
+    expect(dialog().textContent).toContain('Mods page')
+    await act(async () => button('Cancel', dialog()).click())
+    expect((await page.revision()).gameVersion).toBe('26.2')
+  } finally {
+    page?.h.catalog.outage(false)
+    await page?.close()
+    cdn.close()
+  }
+}
+async function smallerSizeWhilePlaying() {
+  const page = await openSettings({
+    kind: 'size',
+    online: true,
+    beforePlaying: async ({ h, owner, server }) => {
+      const options = await h.app.queries.settingsOptions(owner, server.id)
+      const bigger = options.partySizes
+        .filter((size) => size.allowed)
+        .sort((a, b) => b.maxPlayers - a.maxPlayers)[0]
+      if (!bigger) throw new Error('The real plan must offer a group size')
+      await h.app.revisions.resize(owner, server.id, bigger.value, crypto.randomUUID())
+      await h.settled(server.id)
+      const revision = await loadRevision(h.db, (await h.server(server.id)).desiredRevisionId)
+      await h.app.revisions.changeSettings(
+        owner,
+        server.id,
+        { ...revision.settings, maxPlayers: bigger.maxPlayers },
+        crypto.randomUUID(),
+      )
+      await h.settled(server.id)
+    },
+  })
+  try {
+    const choice = page.options.partySizes.find(
+      (size) => size.allowed && size.maxPlayers < page.view.settings.maxPlayers,
+    )
+    if (!choice) throw new Error('The fixture must offer a smaller group')
+    await act(async () => document.querySelector(`input[name="party-size"][value="${choice.value}"]`).click())
+    await act(async () => button('Change size').click())
+    await until(() => dialog()?.open)
+    expect(dialog().textContent).toContain(`Max players goes down to ${choice.maxPlayers}`)
+    expect(button('Resize and restart', dialog()).disabled).toBe(false)
+    await act(async () => button('Cancel', dialog()).click())
+    expect((await page.h.app.queries.get(page.owner, page.server.id)).partySize).toBe(page.view.partySize)
+    expect(page.mutations).toHaveLength(0)
+  } finally {
+    await page.close()
+  }
+}
 describe.skipIf(!hasDatabase)('advanced settings in the browser', () => {
+  test(
+    'a taken-down mod requires acknowledgement before a version upgrade',
+    () => versionConflict('revoked'),
+    30 * SECOND_MS,
+  )
+  test(
+    'a catalog outage leaves the version change blocked with its real error',
+    () => versionConflict('outage'),
+    30 * SECOND_MS,
+  )
+  test('a missing server type on the next version selects an available type', versionFallback, 30 * SECOND_MS)
+  test('an installed mod without an update blocks the version change', versionConflict, 30 * SECOND_MS)
+  test(
+    'a smaller size warns about player capacity before the owner cancels',
+    smallerSizeWhilePlaying,
+    30 * SECOND_MS,
+  )
   test('Free explains why authentication stays on', freeAuthentication, 30 * SECOND_MS)
   test('authentication can be restored while the server sleeps', () => authentication(true), 30 * SECOND_MS)
   test(
