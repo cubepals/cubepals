@@ -280,3 +280,51 @@ test('real isolated Bun runs identify the exercising test despite a shared impor
   assert.deepEqual(ordered.testsByFile[subject], [direct])
   assert.deepEqual(retained(ordered).sort(), [direct, imported].sort())
 })
+
+test('a focused owning test in another shard precedes an incidental measured importer', () => {
+  const owner = 'apps/edge/source.test.ts'
+  const { entries, profile, scope } = setup([imported, owner])
+  profile.tests[imported].files[subject] = hit(0, 0, 12)
+  const ordered = orderMutationTests(scope, profile, entries, 'rest')
+  assert.deepEqual(ordered.testsByFile[subject], [owner])
+  assert.deepEqual(retained(ordered).sort(), [imported, owner].sort())
+  assert.deepEqual(ordered.subjects, scope.subjects)
+})
+
+test('a measured owning suite that does not execute the source cannot displace a real consumer', () => {
+  const owner = 'apps/source.test.ts'
+  const { entries, profile, scope } = setup([imported, owner])
+  profile.tests[imported].files[subject] = hit(2, 4, 8)
+  const ordered = orderMutationTests(scope, profile, entries, 'rest')
+  assert.deepEqual(ordered.testsByFile[subject], [imported])
+  assert.deepEqual(retained(ordered).sort(), [imported, owner].sort())
+})
+
+test('a service includes complementary recorded-input tests in its own domain directory', () => {
+  const source = 'apps/control/src/app/stop-cheaters/service.ts'
+  const paths = [
+    'apps/control/src/app/stop-cheaters/stop-cheaters.test.ts',
+    'apps/control/src/app/stop-cheaters/removal-records.test.ts',
+    'apps/control/src/app/platform/integration.test.ts',
+  ]
+  const entries = [
+    { path: source, kind: 'source', sha256: hash(source) },
+    ...paths.map((path) => ({ path, kind: 'test', sha256: hash(path) })),
+  ]
+  const profile = executionProfile(
+    { inventory: entries, tests: entries.filter((entry) => entry.kind === 'test') },
+    'access',
+  )
+  for (const [index, path] of paths.entries()) profile.tests[path].files = { [source]: hit(8 - index, 5, 10) }
+  const scope = {
+    subjects: [source],
+    testsByFile: { [source]: [paths[2]] },
+    additionalTestsByFile: { [source]: [[paths[0], paths[1]]] },
+  }
+  const ordered = orderMutationTests(scope, profile, entries, 'access')
+  assert.deepEqual(ordered.testsByFile[source], paths.slice(0, 2))
+  assert.deepEqual(
+    [...ordered.testsByFile[source], ...ordered.additionalTestsByFile[source].flat()].sort(),
+    paths.sort(),
+  )
+})

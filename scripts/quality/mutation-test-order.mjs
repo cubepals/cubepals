@@ -28,7 +28,13 @@ function ownsSubject(source, test) {
     .split('/')
     .at(-1)
     .replace(/\.test\.[^.]+$/, '')
-  return name === owner || name.startsWith(`${owner}.`) || name.startsWith(`${owner}-`)
+  return (
+    name === owner ||
+    name.startsWith(`${owner}.`) ||
+    name.startsWith(`${owner}-`) ||
+    ((stem === 'service' || stem === 'index') &&
+      test.split('/').slice(0, -1).join('/') === parts.slice(0, -1).join('/'))
+  )
 }
 
 export function executionProfile(prepared, group) {
@@ -123,6 +129,11 @@ export function orderMutationTests(scope, profile, entries, group) {
     })
     if (!ordered.some((entry) => entry.rank === 0)) continue
     ordered.sort((a, b) => {
+      // A focused suite in another shard has no counters in this profile. Its verified
+      // static ownership still merits an early clean baseline, ahead of incidental imports.
+      const priority = (entry) => (entry.rank !== 2 && ownsSubject(subject, entry.test) ? 0 : entry.rank + 1)
+      const difference = priority(a) - priority(b)
+      if (difference) return difference
       if (a.rank !== b.rank) return a.rank - b.rank
       const own = Number(ownsSubject(subject, b.test)) - Number(ownsSubject(subject, a.test))
       if (own) return own
