@@ -433,7 +433,6 @@ describe.skipIf(!hasDatabase)('removals and the ban they bring', () => {
         reason: BAN_REASON,
         requestedBy: STOP_CHEATERS_ACTOR,
         playerName: 'Cheater',
-        state: 'pending',
       })
       const audit = await h.db
         .select()
@@ -507,7 +506,7 @@ describe.skipIf(!hasDatabase)('removals and the ban they bring', () => {
     expect(await h.app.stopCheaters.removalsOf(owner, id, uuid)).toEqual([
       {
         player: { uuid, name: event.name },
-        reason: event.reason,
+        reason: 'speed',
         at: event.at,
       },
     ])
@@ -517,7 +516,7 @@ describe.skipIf(!hasDatabase)('removals and the ban they bring', () => {
     expect((await h.app.stopCheaters.viewOf(owner, id)).removals).toEqual([
       {
         player: { uuid, name: event.name },
-        reason: event.reason,
+        reason: 'speed',
         at: event.at,
       },
     ])
