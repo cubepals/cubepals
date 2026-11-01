@@ -213,7 +213,7 @@ async function keepsItems() {
     expect(toggle.getAttribute('aria-checked')).toBe('false')
     await act(async () => toggle.click())
     await act(async () => button('Save changes').click())
-    await until(() => document.querySelector('dialog')?.open === true)
+    expect(document.querySelector('dialog')?.open).toBe(true)
     expect(document.body.textContent).toContain('nobody is sent away')
     expect(document.querySelector('dialog input[value="empty"]')).toBeNull()
     await act(async () => button('Save changes', document.querySelector('dialog')).click())
@@ -231,7 +231,7 @@ async function turnsKeepingOff() {
     expect(toggle.getAttribute('aria-checked')).toBe('true')
     await act(async () => toggle.click())
     await act(async () => button('Save changes').click())
-    await until(() => document.querySelector('dialog')?.open === true)
+    expect(document.querySelector('dialog')?.open).toBe(true)
     await act(async () => button('Save changes', document.querySelector('dialog')).click())
     await until(async () => (await page.settings()).keepInventory === false)
   } finally {
@@ -243,7 +243,7 @@ async function cancels() {
   try {
     await act(async () => document.querySelector('[aria-label="Keep items when you die"]').click())
     await act(async () => button('Save changes').click())
-    await until(() => document.querySelector('dialog')?.open === true)
+    expect(document.querySelector('dialog')?.open).toBe(true)
     await act(async () => button('Cancel').click())
     await until(() => document.querySelector('dialog')?.open === false)
     expect(document.querySelector('dialog').open).toBe(false)
@@ -276,7 +276,7 @@ async function liveRules() {
     await fill(page.browser, 'Game mode', 'Creative')
     await act(async () => document.querySelector('[aria-label="PvP"]').click())
     await act(async () => button('Save changes').click())
-    await until(() => document.querySelector('dialog')?.open === true)
+    expect(document.querySelector('dialog')?.open).toBe(true)
     expect(document.body.textContent).toContain('The game takes the change as people play')
     await act(async () => button('Save changes', document.querySelector('dialog')).click())
     await until(async () => (await page.settings()).difficulty === 'hard')
@@ -327,7 +327,7 @@ async function changesWhileStopped() {
   try {
     await fill(page.browser, 'Spawn protection', '4')
     await act(async () => button('Save changes').click())
-    await until(() => document.querySelector('dialog')?.open === true)
+    expect(document.querySelector('dialog')?.open).toBe(true)
     expect(document.body.textContent).toContain('The change applies the next time the server starts')
     await act(async () => button('Save changes', document.querySelector('dialog')).click())
     await until(async () => (await page.settings()).spawnProtection === 4)
@@ -337,7 +337,64 @@ async function changesWhileStopped() {
   }
 }
 
+async function restartSummary(many) {
+  const page = await openGame()
+  try {
+    const before = await page.settings()
+    await fill(page.browser, 'Spawn protection', '4')
+    if (many) {
+      for (const [label, key] of [
+        ['View distance', 'viewDistance'],
+        ['Simulation distance', 'simulationDistance'],
+      ]) {
+        const bound = page.options.bounds[key]
+        const next = before[key] === bound.min ? bound.min + 1 : bound.min
+        await fill(page.browser, label, String(next))
+      }
+    }
+    await act(async () => button('Save changes').click())
+    expect(document.querySelector('dialog')?.open).toBe(true)
+    const modal = document.querySelector('dialog')
+    expect(modal.textContent).toContain(
+      many
+        ? 'View distance, spawn protection, and simulation distance need a restart.'
+        : 'Spawn protection needs a restart.',
+    )
+    expect(button('Save and restart', modal).disabled).toBe(false)
+    await act(async () => button('Cancel', modal).click())
+    expect(await page.settings()).toEqual(before)
+    expect(page.mutations).toHaveLength(0)
+  } finally {
+    await page.close()
+  }
+}
+async function messageSummary(live) {
+  const page = await openGame()
+  try {
+    const before = await page.settings()
+    await fill(page.browser, 'Server message', 'Ready to play')
+    if (live) await fill(page.browser, 'Difficulty', 'Hard')
+    await act(async () => button('Save changes').click())
+    expect(document.querySelector('dialog')?.open).toBe(true)
+    const modal = document.querySelector('dialog')
+    expect(modal.textContent).toContain(
+      live
+        ? 'The game takes the change as people play, and nobody is sent away. The new server message shows from the server’s next start.'
+        : 'Nobody is sent away. The new server message shows from the server’s next start.',
+    )
+    expect(button('Save changes', modal).disabled).toBe(false)
+    await act(async () => button('Cancel', modal).click())
+    expect(await page.settings()).toEqual(before)
+    expect(page.mutations).toHaveLength(0)
+  } finally {
+    await page.close()
+  }
+}
 describe.skipIf(!hasDatabase)('editing game settings in the browser', () => {
+  test('one startup change describes its singular restart', () => restartSummary(false), 30 * SECOND_MS)
+  test('multiple startup changes name every restarting setting', () => restartSummary(true), 30 * SECOND_MS)
+  test('a server message alone waits for the next start', () => messageSummary(false), 30 * SECOND_MS)
+  test('a message and a live rule explain both effects', () => messageSummary(true), 30 * SECOND_MS)
   test('keeping items is off by default and can be enabled without a restart', keepsItems, 30 * SECOND_MS)
   test('keeping items can be disabled again', turnsKeepingOff, 30 * SECOND_MS)
   test('cancelling keeps the recorded settings', cancels, 30 * SECOND_MS)
