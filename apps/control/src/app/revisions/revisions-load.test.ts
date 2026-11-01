@@ -21,11 +21,14 @@ let harness: ReturnType<typeof startHarness> | undefined
 let acknowledgementFixture: Promise<Awaited<ReturnType<typeof acknowledgementRecords>>> | undefined
 let acknowledgementCdn: Cdn | undefined
 afterAll(async () => {
-  acknowledgementCdn?.close()
-  await harness?.then(
-    (h) => h.close(),
-    () => undefined,
-  )
+  try {
+    await harness?.then(
+      (h) => h.close(),
+      () => undefined,
+    )
+  } finally {
+    acknowledgementCdn?.close()
+  }
 })
 
 async function audit(
@@ -370,6 +373,8 @@ async function acknowledgementRecords() {
   await acknowledgementCdn.start()
   return {
     h,
+    owner,
+    server,
     revision: await loadRevision(h.db, (await h.server(server.id)).desiredRevisionId),
     cdn: acknowledgementCdn,
   }
@@ -481,7 +486,41 @@ async function downgradedSize() {
   })
 }
 
+async function recordedModChange() {
+  acknowledgementFixture ??= acknowledgementRecords()
+  const { h, owner, server, cdn } = await acknowledgementFixture
+  const before = await loadRevision(h.db, (await h.server(server.id)).desiredRevisionId)
+  const mod = cdn.publish(`New-mod-${crypto.randomUUID()}`)
+  await h.app.revisions.changeMods(owner, server.id, { basedOn: before.id, mods: [mod] }, crypto.randomUUID())
+  await h.until(server.id, 'running', 3 * SECOND_MS)
+  await h.settled(server.id, 3 * SECOND_MS)
+  const saved = await loadRevision(h.db, (await h.server(server.id)).desiredRevisionId)
+  expect(saved.id).not.toBe(before.id)
+  expect(saved).toMatchObject({ reason: 'mods_changed', basedOnRevisionId: before.id })
+  expect(saved.mods.map((entry) => entry.artifact.sha512)).toEqual([mod.artifact.sha512])
+  expect(saved.mods[0]?.name).toBe(mod.name)
+  await audit(h, owner, server.id, 'server.mods_changed', {
+    changes: [{ field: 'mods', added: [mod.name], removed: [], changed: [] }],
+  })
+  const audits = await h.db.select().from(schema.auditLog).where(eq(schema.auditLog.subjectId, server.id))
+  await h.app.revisions.changeMods(
+    owner,
+    server.id,
+    { basedOn: saved.id, mods: saved.mods },
+    crypto.randomUUID(),
+  )
+  expect((await h.server(server.id)).desiredRevisionId).toBe(saved.id)
+  expect(
+    await h.db.select().from(schema.auditLog).where(eq(schema.auditLog.subjectId, server.id)),
+  ).toHaveLength(audits.length)
+}
+
 describe.skipIf(!hasDatabase)('revision service requests through a real composition', () => {
+  test(
+    'records a real pinned mod change and leaves its repeated choice alone',
+    recordedModChange,
+    30 * SECOND_MS,
+  )
   test('moves an obsolete plan size only after the player limit fits', downgradedSize, 30 * SECOND_MS)
   for (const mode of ['single', 'plural', 'accept', 'kept', 'mixed', 'removed'] as const)
     test(
