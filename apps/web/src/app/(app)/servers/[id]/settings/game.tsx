@@ -7,7 +7,6 @@
 import {
   DIFFICULTIES,
   GAME_MODES,
-  type RevisionChangeView,
   type ServerSettingsView,
   type ServerView,
   type SettingsOptions,
@@ -17,8 +16,18 @@ import { type SubmitEvent, useState } from 'react'
 import { useTRPC } from '../../../../../lib/api'
 import { busyFor } from '../../../../../lib/button-busy'
 import { type Outcome, said, useOutcome } from '../../../../../lib/outcome'
-import { presentChange, settingLabel } from '../../../../../lib/present'
+import { presentChange } from '../../../../../lib/present'
 import { Button, FormRow, FormSection, Select, TextField, Toggle } from '../../../../../ui'
+import {
+  differences,
+  FIELDS,
+  type Field,
+  type NumberSetting,
+  named,
+  onRunning,
+  type Takes,
+  typedFrom,
+} from './game-fields'
 import { messageProblem, ServerMessage } from './server-message'
 import { ConfirmChange, changeable, planLines, useChanged, whatHappens } from './shared'
 
@@ -33,50 +42,6 @@ const MODE_LABELS: Record<(typeof GAME_MODES)[number], string> = {
   creative: 'Creative',
   adventure: 'Adventure',
   spectator: 'Spectator',
-}
-
-type NumberSetting = 'maxPlayers' | 'viewDistance' | 'simulationDistance' | 'spawnProtection'
-
-/** The form's settings, in the order it shows them. */
-const FIELDS = [
-  'difficulty',
-  'defaultGameMode',
-  'pvp',
-  'motd',
-  'maxPlayers',
-  'spawnProtection',
-  'viewDistance',
-  'simulationDistance',
-] as const
-
-type Field = (typeof FIELDS)[number]
-type Takes = SettingsOptions['takes'][Field]
-
-const LIST = new Intl.ListFormat('en', { type: 'conjunction' })
-
-/** "Difficulty, game mode, and PvP": settings as a sentence names them, opening it or not. */
-const named = (fields: readonly string[], opening = true) =>
-  LIST.format(
-    fields.map((field, i) => {
-      const label = settingLabel(field)
-      return (opening && i === 0) || label === 'PvP' ? label : label.charAt(0).toLowerCase() + label.slice(1)
-    }),
-  )
-
-/** What saving does to a running server: which changes restart it, and which it takes as people play. */
-function onRunning(view: ServerView, fields: readonly string[], takes: SettingsOptions['takes']): string {
-  // Moving to the size the plan offers restarts it, whatever else changes.
-  if (view.movesToSize !== null) return whatHappens(view)
-  const how = (field: string) => takes[field as Field]
-  const restarting = fields.filter((field) => how(field) === 'restart')
-  if (restarting.length > 0)
-    return `${named(restarting)} ${restarting.length === 1 ? 'needs' : 'need'} a restart. ${whatHappens(view)}`
-  const later = fields.some((field) => how(field) === 'next_start')
-    ? 'The new server message shows from the server’s next start.'
-    : ''
-  return fields.some((field) => how(field) === 'now')
-    ? `The game takes the change as people play, and nobody is sent away. ${later}`.trim()
-    : `Nobody is sent away. ${later}`.trim()
 }
 
 /**
@@ -99,7 +64,9 @@ function GameForm({
 }) {
   const trpc = useTRPC()
   const changed = useChanged(view.id)
-  const [draft, setDraft] = useState<ServerSettingsView>(view.settings)
+  // A server that never chose keeps nothing on death, as Minecraft has it.
+  const current = { ...view.settings, keepInventory: view.settings.keepInventory === true }
+  const [draft, setDraft] = useState<ServerSettingsView>(current)
   // Numbers are typed as text so a half-typed "1" on the way to "12" isn't fought over.
   const [typed, setTyped] = useState(() => typedFrom(view.settings))
   const [confirming, setConfirming] = useState(false)
@@ -136,7 +103,7 @@ function GameForm({
     simulationDistance: Number(typed.simulationDistance),
     spawnProtection: Number(typed.spawnProtection),
   }
-  const changes = valid ? differences(view.settings, next) : []
+  const changes = valid ? differences(current, next) : []
   const allowed = changeable(view)
   const taking = (how: Takes) => FIELDS.filter((field) => options.takes[field] === how)
   const restarts =
@@ -210,13 +177,7 @@ function GameForm({
             }
           />
         </div>
-        <FormRow
-          label="PvP"
-          description="Players can hurt each other."
-          control={
-            <Toggle checked={draft.pvp} ariaLabel="PvP" onChange={(pvp) => setDraft({ ...draft, pvp })} />
-          }
-        />
+        <Rules draft={draft} onChange={setDraft} />
         <ServerMessage
           view={view}
           value={draft.motd}
@@ -270,15 +231,34 @@ function GameForm({
   )
 }
 
-const typedFrom = (settings: ServerSettingsView): Record<NumberSetting, string> => ({
-  maxPlayers: String(settings.maxPlayers),
-  viewDistance: String(settings.viewDistance),
-  simulationDistance: String(settings.simulationDistance),
-  spawnProtection: String(settings.spawnProtection),
-})
-
-function differences(from: ServerSettingsView, to: ServerSettingsView): RevisionChangeView[] {
-  return (Object.keys(to) as (keyof ServerSettingsView)[])
-    .filter((key) => from[key] !== to[key])
-    .map((key) => ({ field: key, from: from[key], to: to[key] }))
+/** The game's rules that are on or off: PvP, and whether players keep their items when they die. */
+function Rules({
+  draft,
+  onChange,
+}: {
+  draft: ServerSettingsView
+  onChange: (next: ServerSettingsView) => void
+}) {
+  return (
+    <>
+      <FormRow
+        label="PvP"
+        description="Players can hurt each other."
+        control={
+          <Toggle checked={draft.pvp} ariaLabel="PvP" onChange={(pvp) => onChange({ ...draft, pvp })} />
+        }
+      />
+      <FormRow
+        label="Keep items when you die"
+        description="Players keep their items and experience when they die, wherever they are."
+        control={
+          <Toggle
+            checked={draft.keepInventory === true}
+            ariaLabel="Keep items when you die"
+            onChange={(keepInventory) => onChange({ ...draft, keepInventory })}
+          />
+        }
+      />
+    </>
+  )
 }

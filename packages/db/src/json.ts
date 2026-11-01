@@ -16,6 +16,7 @@ export interface ServerSettingsJson {
   motd: string
   spawnProtection: number
   onlineMode: boolean
+  keepInventory?: boolean
 }
 
 export type ArtifactRefJson = { kind: 'remote'; url: string } | { kind: 'stored'; key: string }

@@ -1,0 +1,425 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
+/** Game settings are edited in a real DOM and submitted through the real router and database. */
+import { afterAll, describe, expect, test } from 'bun:test'
+import { createRequire } from 'node:module'
+import { SECOND_MS } from '@blockly/contracts/durations'
+import { fetchRequestHandler } from '@trpc/server/adapters/fetch'
+import { act, createElement } from 'react'
+import { loadRevision } from '../../app/servers/persistence.ts'
+import { hasDatabase, startHarness } from '../../testing/harness.ts'
+import { appRouter } from './router.ts'
+
+const quality = createRequire(new URL('../../../../../tools/quality/package.json', import.meta.url))
+// Browser cases have separate servers; the file owns the database and final cleanup.
+let harness
+afterAll(async () => {
+  await harness?.then(
+    (h) => h.close(),
+    () => undefined,
+  )
+})
+function browserScope() {
+  const Window = quality('happy-dom').Window
+  const browser = new Window({ url: 'http://localhost/settings' })
+  const globals = {
+    window: browser,
+    document: browser.document,
+    navigator: browser.navigator,
+    HTMLElement: browser.HTMLElement,
+    HTMLInputElement: browser.HTMLInputElement,
+    SVGElement: browser.SVGElement,
+    Element: browser.Element,
+    Node: browser.Node,
+    Event: browser.Event,
+    MutationObserver: browser.MutationObserver,
+    getComputedStyle: browser.getComputedStyle.bind(browser),
+    requestAnimationFrame: browser.requestAnimationFrame.bind(browser),
+    cancelAnimationFrame: browser.cancelAnimationFrame.bind(browser),
+    IS_REACT_ACT_ENVIRONMENT: true,
+  }
+  const previous = new Map(
+    Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]),
+  )
+  for (const [key, value] of Object.entries(globals))
+    Object.defineProperty(globalThis, key, { value, writable: true, configurable: true })
+  return {
+    browser,
+    async close() {
+      await browser.happyDOM.close()
+      for (const [key, value] of previous) {
+        if (value) Object.defineProperty(globalThis, key, value)
+        else Reflect.deleteProperty(globalThis, key)
+      }
+    },
+  }
+}
+async function until(ready) {
+  const deadline = Date.now() + 5 * SECOND_MS
+  let done = false
+  while (!done && Date.now() < deadline)
+    await act(async () => {
+      await Bun.sleep(20)
+      done = await ready()
+    })
+  if (!done) console.error(document.body.textContent)
+  expect(done).toBe(true)
+}
+function button(text, within = document) {
+  const found = [...within.querySelectorAll('button')].find((item) => item.textContent.trim() === text)
+  if (!found) throw new Error(`Missing button: ${text}`)
+  return found
+}
+function field(label) {
+  const found = [...document.querySelectorAll('label')].find((item) => item.textContent.trim() === label)
+  if (!found) throw new Error(`Missing field: ${label}`)
+  return document.getElementById(found.htmlFor)
+}
+async function fill(browser, label, value) {
+  const target = field(label)
+  const prototype =
+    target.localName === 'select' ? browser.HTMLSelectElement.prototype : browser.HTMLInputElement.prototype
+  await act(async () => {
+    if (target.localName === 'select') {
+      const option = [...target.options].find((item) => item.textContent === value)
+      if (!option) throw new Error(`Missing visible choice: ${value}`)
+      value = option.value
+    }
+    Object.getOwnPropertyDescriptor(prototype, 'value').set.call(target, value)
+    target.dispatchEvent(
+      new browser.Event(target.localName === 'select' ? 'change' : 'input', { bubbles: true }),
+    )
+  })
+}
+async function openGame({ online = false, stopped = false, keeps = false } = {}) {
+  const dom = browserScope()
+  const native = globalThis.fetch
+  let h, root
+  const mutations = []
+  try {
+    harness ??= startHarness()
+    h = await harness
+    const owner = await h.user('Steve', 'plus')
+    const server = await h.create(owner)
+    await h.until(server.id, 'running')
+    await h.settled(server.id)
+    if (keeps) {
+      const revision = await loadRevision(h.db, (await h.server(server.id)).desiredRevisionId)
+      await h.app.revisions.changeSettings(
+        owner,
+        server.id,
+        { ...revision.settings, keepInventory: true },
+        crypto.randomUUID(),
+      )
+      await h.settled(server.id)
+    }
+    if (online) {
+      h.minecraft.join(server.id, { uuid: crypto.randomUUID(), name: 'Alex' })
+      await h.app.schedules.presenceSync()
+    }
+    if (stopped) {
+      await h.app.servers.stop(owner, server.id, crypto.randomUUID())
+      await h.until(server.id, 'stopped')
+      await h.settled(server.id)
+    }
+    const view = await h.app.queries.get(owner, server.id),
+      options = await h.app.queries.settingsOptions(owner, server.id)
+    const routed = Object.assign(
+      async (input, init) => {
+        const url = new URL(input instanceof Request ? input.url : String(input), 'http://localhost')
+        if (!url.pathname.startsWith('/api/trpc')) return native(input, init)
+        const request = new Request(url, init)
+        if (request.method === 'POST')
+          mutations.push({ path: url.pathname, input: await request.clone().json() })
+        return fetchRequestHandler({
+          endpoint: '/api/trpc',
+          req: request,
+          router: appRouter,
+          createContext: () => ({ actor: owner, services: h.app }),
+        })
+      },
+      { preconnect: native.preconnect },
+    )
+    globalThis.fetch = routed
+    Object.defineProperty(dom.browser, 'fetch', { value: routed, writable: true, configurable: true })
+    const { createRoot } = await import('react-dom/client')
+    const { ApiProvider } = await import('../../../../web/src/lib/api')
+    const { GameSettings } = await import('../../../../web/src/app/(app)/servers/[id]/settings/game')
+    const host = document.createElement('div')
+    document.body.append(host)
+    root = createRoot(host)
+    await act(async () =>
+      root.render(createElement(ApiProvider, null, createElement(GameSettings, { view, options }))),
+    )
+    return {
+      h,
+      owner,
+      server,
+      options,
+      mutations,
+      browser: dom.browser,
+      async settings() {
+        return (await loadRevision(h.db, (await h.server(server.id)).desiredRevisionId)).settings
+      },
+      async close() {
+        await until(() => !document.querySelector('button[aria-busy="true"], button.bk-btn--danger'))
+        // A completed save may have replaced its form while its button finishes working.
+        await act(async () => {
+          await Bun.sleep(SECOND_MS)
+        })
+        await act(async () => root.unmount())
+        globalThis.fetch = native
+        await dom.close()
+      },
+    }
+  } catch (error) {
+    await act(async () => root?.unmount())
+    globalThis.fetch = native
+    await dom.close()
+    throw error
+  }
+}
+
+async function initialAndGuardedSubmit() {
+  const page = await openGame()
+  try {
+    const { FIELDS, named } = await import('../../../../web/src/app/(app)/servers/[id]/settings/game-fields')
+    const taking = (how) => FIELDS.filter((field) => page.options.takes[field] === how)
+    expect(document.body.textContent).toContain(
+      `How your world plays. ${named(taking('now'))} change as people play; ${named(taking('restart'), false)} restart the server.`,
+    )
+    expect(document.querySelector('dialog')?.open).toBe(false)
+    expect(
+      [...document.querySelectorAll('button')].some((item) => item.textContent.trim() === 'Undo changes'),
+    ).toBe(false)
+    expect(button('Save changes').disabled).toBe(true)
+    const submit = async () => {
+      const event = new page.browser.Event('submit', { bubbles: true, cancelable: true })
+      await act(async () => document.querySelector('form').dispatchEvent(event))
+      expect(event.defaultPrevented).toBe(true)
+      expect(document.querySelector('dialog')?.open).toBe(false)
+    }
+    await submit()
+    await fill(page.browser, 'Server message', '')
+    expect(button('Save changes').disabled).toBe(true)
+    expect(document.body.textContent).toContain('Write something to show under the name.')
+    await submit()
+    expect(page.mutations).toHaveLength(0)
+  } finally {
+    await page.close()
+  }
+}
+
+async function keepsItems() {
+  const page = await openGame()
+  try {
+    const current = await page.settings()
+    expect([...field('Difficulty').options].map((option) => option.textContent)).toEqual([
+      'Peaceful',
+      'Easy',
+      'Normal',
+      'Hard',
+    ])
+    expect([...field('Game mode').options].map((option) => option.textContent)).toEqual([
+      'Survival',
+      'Creative',
+      'Adventure',
+      'Spectator',
+    ])
+    for (const [label, key] of [
+      ['Max players', 'maxPlayers'],
+      ['Spawn protection', 'spawnProtection'],
+      ['View distance', 'viewDistance'],
+      ['Simulation distance', 'simulationDistance'],
+    ]) {
+      expect(field(label).value).toBe(String(current[key]))
+      expect(field(label).inputMode).toBe('numeric')
+    }
+    expect(field('Difficulty').selectedOptions[0].textContent).toBe('Normal')
+    expect(field('Game mode').selectedOptions[0].textContent).toBe('Survival')
+    const toggle = document.querySelector('[aria-label="Keep items when you die"]')
+    expect(toggle.getAttribute('aria-checked')).toBe('false')
+    await act(async () => toggle.click())
+    await act(async () => button('Save changes').click())
+    expect(document.querySelector('dialog')?.open).toBe(true)
+    expect(document.body.textContent).toContain('nobody is sent away')
+    expect(document.querySelector('dialog input[value="empty"]')).toBeNull()
+    await act(async () => button('Save changes', document.querySelector('dialog')).click())
+    await until(async () => (await page.settings()).keepInventory === true)
+    await until(() => document.querySelector('dialog')?.open === false)
+    await page.h.settled(page.server.id)
+    expect(page.mutations.some((call) => call.path.endsWith('/servers.changeSettings'))).toBe(true)
+  } finally {
+    await page.close()
+  }
+}
+async function turnsKeepingOff() {
+  const page = await openGame({ keeps: true })
+  try {
+    const toggle = document.querySelector('[aria-label="Keep items when you die"]')
+    expect(toggle.getAttribute('aria-checked')).toBe('true')
+    await act(async () => toggle.click())
+    await act(async () => button('Save changes').click())
+    expect(document.querySelector('dialog')?.open).toBe(true)
+    await act(async () => button('Save changes', document.querySelector('dialog')).click())
+    await until(async () => (await page.settings()).keepInventory === false)
+    await until(() => document.querySelector('dialog')?.open === false)
+  } finally {
+    await page.close()
+  }
+}
+async function cancels() {
+  const page = await openGame()
+  try {
+    await act(async () => document.querySelector('[aria-label="Keep items when you die"]').click())
+    await act(async () => button('Save changes').click())
+    expect(document.querySelector('dialog')?.open).toBe(true)
+    await act(async () => button('Cancel').click())
+    await until(() => document.querySelector('dialog')?.open === false)
+    expect(document.querySelector('dialog').open).toBe(false)
+    expect((await page.settings()).keepInventory ?? false).toBe(false)
+    expect(page.mutations).toHaveLength(0)
+  } finally {
+    await page.close()
+  }
+}
+async function undoes() {
+  const page = await openGame()
+  try {
+    await act(async () => document.querySelector('[aria-label="Keep items when you die"]').click())
+    await fill(page.browser, 'Spawn protection', '4')
+    await act(async () => button('Undo changes').click())
+    expect(
+      document.querySelector('[aria-label="Keep items when you die"]').getAttribute('aria-checked'),
+    ).toBe('false')
+    expect(field('Spawn protection').value).toBe('0')
+    expect(button('Save changes').disabled).toBe(true)
+    expect(page.mutations).toHaveLength(0)
+  } finally {
+    await page.close()
+  }
+}
+async function liveRules() {
+  const page = await openGame()
+  try {
+    await fill(page.browser, 'Difficulty', 'Hard')
+    await fill(page.browser, 'Game mode', 'Creative')
+    await act(async () => document.querySelector('[aria-label="PvP"]').click())
+    await act(async () => button('Save changes').click())
+    expect(document.querySelector('dialog')?.open).toBe(true)
+    expect(document.body.textContent).toContain('The game takes the change as people play')
+    await act(async () => button('Save changes', document.querySelector('dialog')).click())
+    await until(async () => (await page.settings()).difficulty === 'hard')
+    await page.h.settled(page.server.id)
+    expect(page.h.minecraft.playing(page.server.id)).toMatchObject({
+      difficulty: 'hard',
+      defaultGameMode: 'creative',
+      pvp: false,
+    })
+  } finally {
+    await page.close()
+  }
+}
+async function bounds() {
+  const page = await openGame()
+  try {
+    for (const value of ['', '1.5', String(page.options.bounds.maxPlayers + 1)]) {
+      await fill(page.browser, 'Max players', value)
+      expect(button('Save changes').disabled).toBe(true)
+      expect(document.body.textContent).toContain(`Choose 1 to ${page.options.bounds.maxPlayers}.`)
+    }
+    await fill(page.browser, 'Max players', '1')
+    expect(button('Save changes').disabled).toBe(false)
+    expect(page.mutations).toHaveLength(0)
+  } finally {
+    await page.close()
+  }
+}
+async function changesWhileStopped() {
+  const page = await openGame({ stopped: true })
+  try {
+    await fill(page.browser, 'Spawn protection', '4')
+    await act(async () => button('Save changes').click())
+    expect(document.querySelector('dialog')?.open).toBe(true)
+    expect(document.body.textContent).toContain('The change applies the next time the server starts')
+    await act(async () => button('Save changes', document.querySelector('dialog')).click())
+    await until(async () => (await page.settings()).spawnProtection === 4)
+    expect(page.h.runtime.machine(page.server.id).state).toBe('stopped')
+  } finally {
+    await page.close()
+  }
+}
+
+async function restartSummary(many) {
+  const page = await openGame()
+  try {
+    const before = await page.settings()
+    await fill(page.browser, 'Spawn protection', '4')
+    if (many) {
+      for (const [label, key] of [
+        ['View distance', 'viewDistance'],
+        ['Simulation distance', 'simulationDistance'],
+      ]) {
+        const bound = page.options.bounds[key]
+        const next = before[key] === bound.min ? bound.min + 1 : bound.min
+        await fill(page.browser, label, String(next))
+      }
+    }
+    await act(async () => button('Save changes').click())
+    expect(document.querySelector('dialog')?.open).toBe(true)
+    const modal = document.querySelector('dialog')
+    expect(modal.textContent).toContain(
+      many
+        ? 'View distance, spawn protection, and simulation distance need a restart.'
+        : 'Spawn protection needs a restart.',
+    )
+    expect(button('Save and restart', modal).disabled).toBe(false)
+    await act(async () => button('Cancel', modal).click())
+    expect(await page.settings()).toEqual(before)
+    expect(page.mutations).toHaveLength(0)
+  } finally {
+    await page.close()
+  }
+}
+async function messageSummary(live) {
+  const page = await openGame()
+  try {
+    const before = await page.settings()
+    await fill(page.browser, 'Server message', 'Ready to play')
+    if (live) await fill(page.browser, 'Difficulty', 'Hard')
+    await act(async () => button('Save changes').click())
+    expect(document.querySelector('dialog')?.open).toBe(true)
+    const modal = document.querySelector('dialog')
+    expect(modal.textContent).toContain(
+      live
+        ? 'The game takes the change as people play, and nobody is sent away. The new server message shows from the server’s next start.'
+        : 'Nobody is sent away. The new server message shows from the server’s next start.',
+    )
+    expect(button('Save changes', modal).disabled).toBe(false)
+    await act(async () => button('Cancel', modal).click())
+    expect(await page.settings()).toEqual(before)
+    expect(page.mutations).toHaveLength(0)
+  } finally {
+    await page.close()
+  }
+}
+describe.skipIf(!hasDatabase)('editing game settings in the browser', () => {
+  test(
+    'describes timing and prevents unchanged or invalid form submissions',
+    initialAndGuardedSubmit,
+    30 * SECOND_MS,
+  )
+  test('one startup change describes its singular restart', () => restartSummary(false), 30 * SECOND_MS)
+  test('multiple startup changes name every restarting setting', () => restartSummary(true), 30 * SECOND_MS)
+  test('a server message alone waits for the next start', () => messageSummary(false), 30 * SECOND_MS)
+  test('a message and a live rule explain both effects', () => messageSummary(true), 30 * SECOND_MS)
+  test('keeping items is off by default and can be enabled without a restart', keepsItems, 30 * SECOND_MS)
+  test('keeping items can be disabled again', turnsKeepingOff, 30 * SECOND_MS)
+  test('cancelling keeps the recorded settings', cancels, 30 * SECOND_MS)
+  test('undo restores both switches and typed numbers', undoes, 30 * SECOND_MS)
+  test('live game rules reach the real running game', liveRules, 30 * SECOND_MS)
+  test('blank, fractional and out-of-bounds numbers cannot be saved', bounds, 30 * SECOND_MS)
+  test('a stopped server keeps startup settings for its next start', changesWhileStopped, 30 * SECOND_MS)
+})

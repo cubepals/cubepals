@@ -324,6 +324,8 @@ export const ServerSettingsInput = z.object({
   maxPlayers: z.number().int(),
   motd: z.string().max(200),
   spawnProtection: z.number().int(),
+  /** Players keep what they carry when they die. Left out, the server keeps what it had. */
+  keepInventory: z.boolean().optional(),
 })
 /**
  * A server's settings as its pages show them: the game settings the form edits, and whether the
