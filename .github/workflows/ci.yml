@@ -503,7 +503,7 @@ jobs:
           GROUP: ${{ matrix.quality }}
         run: |
           git worktree add --detach "$RUNNER_TEMP/quality-base" "$BASE"
-          (cd "$RUNNER_TEMP/quality-base" && bun install --frozen-lockfile && bun run openapi:install && bun run labels:install)
+          (cd "$RUNNER_TEMP/quality-base" && bun install --frozen-lockfile && bun run quality:install && bun run openapi:install && bun run labels:install)
           node scripts/quality/run-shard.mjs "$RUNNER_TEMP/quality-base" "$GROUP" "$GITHUB_WORKSPACE/coverage/quality/base"
       - name: Test ${{ matrix.group }} with branch coverage
         env:
