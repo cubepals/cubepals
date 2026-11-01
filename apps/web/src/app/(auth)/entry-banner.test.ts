@@ -9,6 +9,7 @@ import {
   type AppRouterInstance,
 } from 'next/dist/shared/lib/app-router-context.shared-runtime'
 import { PathnameContext } from 'next/dist/shared/lib/hooks-client-context.shared-runtime'
+import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { EntryBanner } from './entry-banner'
 
@@ -24,11 +25,11 @@ const router: AppRouterInstance = {
 
 function render(path: string) {
   return renderToStaticMarkup(
-    <AppRouterContext.Provider value={router}>
-      <PathnameContext.Provider value={path}>
-        <EntryBanner />
-      </PathnameContext.Provider>
-    </AppRouterContext.Provider>,
+    createElement(
+      AppRouterContext.Provider,
+      { value: router },
+      createElement(PathnameContext.Provider, { value: path }, createElement(EntryBanner)),
+    ),
   )
 }
 
