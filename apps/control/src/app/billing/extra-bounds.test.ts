@@ -62,9 +62,8 @@ const monthRow = async (owner: UserActor, month: Date) => {
 }
 
 const today = new Date()
-const thisMonth = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1))
-// Runs written in this month, ending now: four hours of room behind them.
-const monthRoom = Date.now() - thisMonth.getTime()
+// A complete fixture window in next month excludes the server's real setup interval.
+const countingMonth = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() + 1, 1))
 
 /** A Plus subscriber with an hour included a month and 20 extra allowed, and a stopped server. */
 const playing = async (name: string) => {
@@ -79,10 +78,10 @@ const playing = async (name: string) => {
   return { owner, sub, server: await stoppedServer(owner) }
 }
 
-test.skipIf(!hasDatabase || monthRoom < 4 * HOUR_MS)(
+test.skipIf(!hasDatabase)(
   'extra play is counted up to the moment a cancel or a failed renewal stopped it',
   async () => {
-    const now = new Date()
+    const now = new Date(countingMonth.getTime() + 12 * HOUR_MS)
     const start = new Date(now.getTime() - 3 * HOUR_MS)
     const stop = new Date(start.getTime() + 2 * HOUR_MS)
     // Three hours played; the account counted nothing in between (the sweep was behind).
@@ -94,7 +93,7 @@ test.skipIf(!hasDatabase || monthRoom < 4 * HOUR_MS)(
       canceled_at: stop.toISOString(),
     })
     expect(await w.h.app.billing.usage.count(cancelled.owner.userId, now)).toBe(true)
-    expect((await monthRow(cancelled.owner, thisMonth))?.accruedMilli).toBe(1000)
+    expect((await monthRow(cancelled.owner, countingMonth))?.accruedMilli).toBe(1000)
     // Counted again later, still to that moment.
     expect(await w.h.app.billing.usage.count(cancelled.owner.userId, new Date(now.getTime() + HOUR_MS))).toBe(
       false,
@@ -109,7 +108,7 @@ test.skipIf(!hasDatabase || monthRoom < 4 * HOUR_MS)(
     )
     await w.standing(failed.owner, failed.sub, {}, false)
     expect(await w.h.app.billing.usage.count(failed.owner.userId, now)).toBe(true)
-    expect((await monthRow(failed.owner, thisMonth))?.accruedMilli).toBe(1000)
+    expect((await monthRow(failed.owner, countingMonth))?.accruedMilli).toBe(1000)
   },
   60_000,
 )

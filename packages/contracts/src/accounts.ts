@@ -350,6 +350,8 @@ export const UPGRADE_REASONS = [
   'backups',
   'account',
   'pricing',
+  /** A server resting because its owner's free trial is used up: its page, or the email saying so. */
+  'trial_over',
 ] as const
 export type UpgradeReason = (typeof UPGRADE_REASONS)[number]
 

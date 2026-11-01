@@ -54,6 +54,22 @@ export interface JoinNeeds {
   mods: Array<{ name: string; url: string | null }>
 }
 
+/**
+ * A server resting because its owner's free trial is used up, as its page reads it by its play
+ * address's slug: the address the game shows anyone it turns away. It says no more than the game
+ * already did, its name, so it answers for a private server too. The owner, signed in, also gets
+ * its id, for the way back to it after paying.
+ */
+export type RestingView = { name: string; yours: false } | { name: string; yours: true; serverId: string }
+
+/**
+ * The page people open by a server's slug: its public page, with `resting` where it rests, or for
+ * a private server resting, only that it does.
+ */
+export type OpenedPage =
+  | (PublicServerView & { resting?: RestingView })
+  | { kind: 'resting'; resting: RestingView }
+
 /** A server as the people it is shared with see it. Nothing here is about machines. */
 export interface PublicServerView {
   slug: string
