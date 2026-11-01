@@ -33,6 +33,19 @@ test('complete candidate counts scale default budgets without changing explicit 
   for (const requested of [0, -1, NaN, Infinity]) assert.throws(() => mutationTimeBudget(425, requested))
 })
 
+test('a real PostgreSQL disk-full failure cannot become a killed mutant', () => {
+  const xml = readFileSync(new URL('./evidence-fixtures/postgres-disk-full.xml', import.meta.url), 'utf8')
+  const file = 'apps/control/src/app/revisions/revisions-load.test.ts'
+  const filteredCases = new Set([
+    JSON.stringify([
+      file,
+      'revision service requests through a real composition',
+      'moves an obsolete plan size only after the player limit fits',
+    ]),
+  ])
+  assert.throws(() => readMutationJUnit(xml, [file], { bail: true, filteredCases }), /Infrastructure failure/)
+})
+
 const commandScript = fileURLToPath(new URL('./mutation-command.mjs', import.meta.url))
 
 const junit = (suites) =>
@@ -228,4 +241,55 @@ test('a running Bun command is capped by the shared deadline, not its longer tes
   assert.equal(outcome.status, 'timeout')
   assert.equal(outcome.passed + outcome.failed, 0)
   assert.ok(Date.now() - began < 5 * SECOND_MS)
+})
+
+test('a failed native Bun case still runs fixture cleanup before later files are skipped', (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'mutation-cleanup-command-'))
+  t.after(() => rmSync(root, { recursive: true, force: true }))
+  const evidence = join(root, 'evidence')
+  mkdirSync(evidence)
+  const marker = join(root, 'closed')
+  writeFileSync(
+    join(root, 'cleanup.test.ts'),
+    `import {afterAll,expect,test} from 'bun:test';import {writeFileSync} from 'node:fs';afterAll(()=>writeFileSync(${JSON.stringify(marker)},'closed'));test('detects a changed value',()=>expect(process.env.__STRYKER_ACTIVE_MUTANT__ ?? 'baseline').toBe('baseline'));test('another case',()=>expect(true).toBe(true))`,
+  )
+  const manifest = join(root, 'tests.json')
+  writeFileSync(
+    manifest,
+    JSON.stringify({ tests: ['cleanup.test.ts'], evidence, bun: 'bun', timeoutMs: 10 * SECOND_MS }),
+  )
+  const baselineEnv = { ...process.env }
+  delete baselineEnv.__STRYKER_ACTIVE_MUTANT__
+  const clean = spawnSync(process.execPath, [commandScript, manifest], {
+    cwd: root,
+    env: baselineEnv,
+    encoding: 'utf8',
+  })
+  assert.equal(clean.status, 0, clean.stderr)
+  rmSync(marker)
+  const changed = spawnSync(process.execPath, [commandScript, manifest], {
+    cwd: root,
+    env: { ...baselineEnv, __STRYKER_ACTIVE_MUTANT__: '0' },
+    encoding: 'utf8',
+  })
+  assert.equal(changed.status, 1, changed.stderr)
+  assert.equal(JSON.parse(readFileSync(join(evidence, '0.json'), 'utf8')).status, 'test-failure')
+  assert.equal(readFileSync(marker, 'utf8'), 'closed')
+})
+
+test('a real native Bun timeout is inconclusive rather than a detected source defect', (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'mutation-native-timeout-'))
+  t.after(() => rmSync(root, { recursive: true, force: true }))
+  writeFileSync(
+    join(root, 'timeout.test.ts'),
+    `import{test}from'bun:test';test('never answers',()=>new Promise(()=>{}),${SECOND_MS / 40})`,
+  )
+  const xml = join(root, 'timeout.xml')
+  const run = spawnSync(
+    'bun',
+    ['test', './timeout.test.ts', '--reporter=junit', '--reporter-outfile=' + xml],
+    { cwd: root, encoding: 'utf8', timeout: 5 * SECOND_MS },
+  )
+  assert.equal(run.status, 1, run.stderr)
+  assert.throws(() => readMutationJUnit(readFileSync(xml, 'utf8'), ['timeout.test.ts']), /Runner timeout/)
 })
