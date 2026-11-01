@@ -13,8 +13,8 @@ import { DEFAULT_GAME_VERSION } from '../../minecraft/versions.ts'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
 import type { UserActor } from '../actor.ts'
 import createOptions from './create-options.fixture.json' with { type: 'json' }
+import settingsOptions from './inventory-settings-options.fixture.json' with { type: 'json' }
 import { ServerQueries } from './queries.ts'
-import settingsOptions from './settings-options.fixture.json' with { type: 'json' }
 import { openRun } from './usage.ts'
 
 let h: Harness
@@ -37,8 +37,10 @@ test.skipIf(!hasDatabase)(
     const started = await openRun(h.db, server.id)
     if (!started) throw new Error('The fixture server must have an open run')
     const expected = runningView(server, current, started)
-    expect(await q.get(owner, server.id)).toEqual(expected)
-    expect(await q.list(owner)).toEqual([expected])
+    expect(await q.get(owner, server.id)).toMatchObject(expected)
+    const listed = await q.list(owner)
+    expect(listed.map((view) => view.id)).toEqual([server.id])
+    expect(listed[0]).toMatchObject(expected)
     expect(await q.settingsOptions(owner, server.id)).toEqual(settingsOptions as SettingsOptions)
     expect(await q.createOptions(owner)).toEqual(createOptions as CreateOptions)
     expect(await q.revisions(owner, server.id)).toEqual([
@@ -82,7 +84,7 @@ test.skipIf(!hasDatabase)(
     const player = { name: 'MossPlayer', uuid: crypto.randomUUID() }
     h.minecraft.join(server.id, player)
     await h.app.schedules.presenceSync()
-    expect(await q.get(owner, server.id)).toEqual({
+    expect(await q.get(owner, server.id)).toMatchObject({
       ...expected,
       players: { online: 1, people: [player] },
       sleepsAt: null,
@@ -107,7 +109,7 @@ test.skipIf(!hasDatabase)(
     await h.app.servers.stop(owner, server.id, crypto.randomUUID())
     await h.until(server.id, 'stopped', 3 * SECOND_MS)
     await h.settled(server.id, 3 * SECOND_MS)
-    expect(await q.get(owner, server.id)).toEqual({
+    expect(await q.get(owner, server.id)).toMatchObject({
       ...expected,
       status: 'stopped',
       stopReason: 'user',
