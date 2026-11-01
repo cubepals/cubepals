@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SPDX-FileCopyrightText: 2026 The Cubepals Authors -->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+<testsuites name="bun test" tests="2" assertions="0" failures="1" skipped="1" time="2.137320624">
+  <testsuite name="apps/control/src/app/revisions/revisions-load.test.ts" file="apps/control/src/app/revisions/revisions-load.test.ts" tests="2" assertions="0" failures="1" skipped="1" time="2.131975549" hostname="ea73baefe9c1">
+    <testsuite name="revision service requests through a real composition" file="apps/control/src/app/revisions/revisions-load.test.ts" line="484" tests="2" assertions="0" failures="1" skipped="1" time="0.025" hostname="ea73baefe9c1">
+      <testcase name="moves an obsolete plan size only after the player limit fits" classname="revision service requests through a real composition" time="0" file="apps/control/src/app/revisions/revisions-load.test.ts" line="485" assertions="0">
+        <skipped />
+      </testcase>
+      <testcase name="revoked mod acknowledgements preserve the single owner choice" classname="revision service requests through a real composition" time="0.025349" file="apps/control/src/app/revisions/revisions-load.test.ts" line="488" assertions="0">
+        <failure type="error" message="could not create directory &quot;base/11213133&quot;: No space left on device">error: could not create directory &quot;base/11213133&quot;: No space left on device&#10;      at ../../../../workspace/restart-takeover/node_modules/pg/lib/client.js:694:17&#10;      at processTicksAndRejections (native:7:39)&#10;</failure>
+      </testcase>
+    </testsuite>
+  </testsuite>
+</testsuites>
