@@ -9,16 +9,15 @@ subject to its ordinary coverage and mutation floors. Private underscore folders
 that import assertion libraries retain the conservative test-support treatment.
 
 Incremental evidence distinguishes runtime inputs from structure metadata. A structure baseline
-may avoid application-wide mutation only when its existing allowances are retained, tightened or
+retains conservative coverage treatment only when its existing allowances are retained, tightened or
 removed without other metadata changes. A literal JSON, CSS or HTML import is a data leaf: changes
-retain the base and head importing code, its consumers and affected tests. Unmapped data or an
-ambiguous loader still requires the full inventory.
+retain coverage comparisons for the base and head importing code, its consumers and affected tests. Unmapped data or an
+ambiguous loader still requires the full coverage comparison.
 
 Each isolated test's validated counters also produce a source- and test-hashed execution profile.
 Mutation runs try tests that actually execute the subject before tests that merely import a shared
-harness. Every static candidate remains available for expansion; subjects, mutants, score floors
-and incomplete-evidence failures are unchanged. Dependency comparisons keep their identical oracle
-sets and do not use this reordering.
+harness. Every static candidate remains available for expansion; selected-subject mutants, score floors
+and incomplete-evidence failures are unchanged.
 
 An executing module-owned suite precedes incidental consumers, so router and service tests run
 before integration suites that happen to construct them. Slow suites may run in case batches,
@@ -26,7 +25,7 @@ ordered by measured duration. Every batch must first pass on clean source and to
 complete original case inventory; otherwise the original invocation remains in use. A surviving
 mutant must execute every original case. Early termination needs an actual assertion failure;
 missing cases, unexpected skips, runner errors and timeouts remain inconclusive. Raw batch reports
-are retained, and dependency-only comparisons disable case batching on both sides.
+are retained.
 The clean split proof may use up to two minutes, bounded by the existing baseline timeout and
 shared subject deadline. Each independent process pays its own startup cost, so a faster complete
 suite does not reduce the time available to prove its individual batches.
@@ -144,25 +143,18 @@ can skip Fleet; merge-queue, scheduled, and manual CI runs always execute it. Th
 places live Fleet failures inside the existing required `check` and trusted CI workflow rather
 than depending on an optional external check name.
 
-The classification never removes independent obligations. Changed production remains a mutation
-subject. Dependency and runner-configuration changes retain conservative scope, except when
-`config-impact.mjs` proves application dependency resolution unchanged. Renaming, deleting, or
-replacing an existing test cannot claim addition status. Edited tests retain the union of their
-base and proposed dependencies, so deleting an import cannot erase its original subject.
-A removed test with a complete, unambiguous, nonempty base dependency map retains those mutation
-subjects without expanding to the entire repository. Empty or ambiguous maps retain full scope.
-Any test deletion disables additive exemptions for newly named tests, so a renamed replacement
-also contributes its proposed dependencies and must still meet the mutation floor.
-Changed modules reached only through tests are conservatively treated as potential test support:
-their affected tests retain both dependency closures. Assertion-library imports receive the same
-treatment. Ambiguous dependency mappings and changed fixture/data inputs expand scope instead
-of trusting an unproved mapping. Adding or changing production source retains full scope when
-any test dependency remains unresolved: new modules can change dynamic-loader fallback behavior,
-and even modules with production importers and direct tests can also be test oracles.
-The base view also holds the committed JSON, CSS and HTML files under `apps`, `packages`, `scripts`
-and `tools`, read from Git and never executed, so static data imports resolve in both revisions
-without relaxing the fallback for genuinely unknown imports. No directory name exempts executable test
-helpers from coverage or mutation. Scheduled runs audit the complete source inventory in stable partitions.
+Release mutation selection lives in `mutation-release-scope.mjs`: only new and changed production
+paths are subjects, each retaining the full census and 80% floor. Test edits, deletions, fixture,
+configuration and dependency updates do not trigger mutation audits of unchanged legacy imports.
+All dependent tests remain available for selected source. Git comparisons and inventories are
+still verified, and changed source without detecting tests still fails.
+
+Coverage remains independent. `mutation-scope.mjs` retains its conservative legacy impact analysis
+for `coverage-impact.mjs`, including base/head test dependencies, deletions, ambiguous imports and
+configuration. The coverage baseline ratchet and changed-source floors are unchanged.
+The separately named **Mutation audit** workflow calls CI with full mutation enabled. Its daily
+rotation visits the complete legacy inventory over seven days and reports failures independently
+of ordinary release CI. Explicit full audits remain available by hand.
 
 An existing test file that only gained plain cases after every existing one (`test-appends.mjs`),
 with everything else byte-for-byte as before except names added to an existing import, counts as an
@@ -170,15 +162,11 @@ addition. Any other edit keeps the edited-test rule. The policy lets a new contr
 carry exactly `describe.skipIf(!hasDatabase)` when it starts the database harness. Every other new
 skip is refused, and CI's JUnit evidence still refuses a skipped case.
 
-A dependency-only update (`dependency-impact.mjs`: only `bun.lock`, manifests whose registry
-versions moved, and `.github/dependabot.yml`) owes no new-code floor, because no source or test
-byte changed. The whole suite and the coverage ratchet still run. Tests that load an updated
-package themselves, or through a module only tests reach, are its possible weaker oracles: their
-source closures are measured with those tests on the base worktree and must reach the same score on
-the head. Any other changed file makes the update ineligible, so a weakened test in the same pull
-request keeps the full-scope rule and its own subjects. Packages whose install holds only type
-declarations and documents are inert. The reasoning and its limits are in
-[docs/testing-quality.md](../../docs/testing-quality.md#dependency-only-updates).
+Dependency-only updates run the full functional suite, coverage ratchet, builds and applicable
+live Fleet checks. They do not run paired base/head mutation audits of unchanged source.
+Dependency-impact classification still controls coverage comparisons. Any changed production
+file remains a mutation subject even when it accompanies a dependency update.
+See [docs/testing-quality.md](../../docs/testing-quality.md#dependency-only-updates).
 
 Each invocation pins the invoking checker's scripts and isolated tool installation in a separate
 disposable runtime. Proposed application files and later Git changes cannot replace those runner
