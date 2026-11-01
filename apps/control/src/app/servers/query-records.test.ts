@@ -39,7 +39,7 @@ test.skipIf(!hasDatabase)(
     const expected = runningView(server, current, started)
     expect(await q.get(owner, server.id)).toEqual(expected)
     expect(await q.list(owner)).toEqual([expected])
-    expect(await q.settingsOptions(owner, server.id)).toMatchObject(settingsOptions as SettingsOptions)
+    expect(await q.settingsOptions(owner, server.id)).toEqual(settingsOptions as SettingsOptions)
     expect(await q.createOptions(owner)).toEqual(createOptions as CreateOptions)
     expect(await q.revisions(owner, server.id)).toEqual([
       {
