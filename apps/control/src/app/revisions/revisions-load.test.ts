@@ -183,23 +183,7 @@ async function changes() {
   const resized = (await desired()).id
   await h.app.revisions.resize(owner, server.id, '3g', crypto.randomUUID())
   expect((await desired()).id).toBe(resized)
-  await h.app.revisions.rollback(owner, server.id, first.id, crypto.randomUUID())
-  expect(await desired()).toMatchObject({
-    reason: 'rollback',
-    basedOnRevisionId: first.id,
-    settings: { ...first.settings, onlineMode: true },
-  })
-  await audit(h, owner, server.id, 'server.rolled_back', { to: first.number, changes: expect.any(Array) })
-  const restored = (await desired()).id
-  await h.app.revisions.rollback(owner, server.id, first.id, crypto.randomUUID())
-  expect((await desired()).id).toBe(restored)
-  const foreign = await h.create(owner, { name: 'Another world' })
-  await expect(
-    h.app.revisions.rollback(owner, server.id, foreign.desiredRevisionId, crypto.randomUUID()),
-  ).rejects.toThrow(/Revision/)
-  await expect(
-    h.app.revisions.rollback(owner, server.id, crypto.randomUUID(), crypto.randomUUID()),
-  ).rejects.toThrow(/Revision/)
+  await restoredRevision(h, owner, server.id, first)
   const current = await desired()
   await h.app.revisions.changeMods(
     owner,
@@ -245,6 +229,32 @@ async function changes() {
   ).rejects.toThrow()
   expect((await h.server(server.id)).lifecycle.status).toBe('stopped')
   await waitsForPlayers(h, owner, server.id)
+}
+
+async function restoredRevision(
+  h: Harness,
+  owner: UserActor,
+  serverId: string,
+  first: Awaited<ReturnType<typeof loadRevision>>,
+) {
+  const desired = async () => loadRevision(h.db, (await h.server(serverId)).desiredRevisionId)
+  await h.app.revisions.rollback(owner, serverId, first.id, crypto.randomUUID())
+  expect(await desired()).toMatchObject({
+    reason: 'rollback',
+    basedOnRevisionId: first.id,
+    settings: { ...first.settings, onlineMode: true },
+  })
+  await audit(h, owner, serverId, 'server.rolled_back', { to: first.number, changes: expect.any(Array) })
+  const restored = (await desired()).id
+  await h.app.revisions.rollback(owner, serverId, first.id, crypto.randomUUID())
+  expect((await desired()).id).toBe(restored)
+  const foreign = await h.create(owner, { name: 'Another world' })
+  await expect(
+    h.app.revisions.rollback(owner, serverId, foreign.desiredRevisionId, crypto.randomUUID()),
+  ).rejects.toThrow(/Revision/)
+  await expect(
+    h.app.revisions.rollback(owner, serverId, crypto.randomUUID(), crypto.randomUUID()),
+  ).rejects.toThrow(/Revision/)
 }
 
 function catalogFixture(h: Harness, cdn: Cdn) {
