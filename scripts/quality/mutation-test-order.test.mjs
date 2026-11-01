@@ -129,6 +129,20 @@ test('a service uses its domain suite before an incidental consumer', () => {
   )
 })
 
+test('complementary domain suites share a bounded first attempt without dropping other tests', () => {
+  const owners = Array.from({ length: 6 }, (_, index) => `apps/source-${index}.test.ts`)
+  const paths = [imported, ...owners, unknown]
+  const { entries, profile, scope } = setup(paths)
+  for (const [index, path] of owners.entries()) profile.tests[path].files[subject] = hit(8 - index, 5, 10)
+  profile.tests[imported].files[subject] = hit(20, 50, 100)
+  const ordered = orderMutationTests(scope, profile, entries, 'rest')
+  assert.deepEqual(ordered.testsByFile[subject], owners.slice(0, 4))
+  assert.deepEqual(retained(ordered).sort(), paths.sort())
+  assert.deepEqual(ordered.subjects, scope.subjects)
+  assert.ok(ordered.additionalTestsByFile[subject].every((batch) => batch.length > 0 && batch.length <= 4))
+  assert.ok(ordered.additionalTestsByFile[subject].flat().includes(unknown))
+})
+
 test('absent execution does not turn a static dependency into an exemption', () => {
   const { entries, profile, scope } = setup()
   assert.deepEqual(orderMutationTests(scope, profile, entries, 'rest'), scope)
