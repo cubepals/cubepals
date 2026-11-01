@@ -177,6 +177,14 @@ request keeps the full-scope rule and its own subjects. Packages whose install h
 declarations and documents are inert. The reasoning and its limits are in
 [docs/testing-quality.md](../../docs/testing-quality.md#dependency-only-updates).
 
+Application and workspace subjects run two independent command-runner processes against Stryker's
+disposable, instrumented sandbox. Each process activates only its own mutant.
+`mutation-sandbox.mjs` recreates installation links so bare workspace imports reach that sandbox's
+source; external libraries remain links to the existing installs. Scripts retain their single
+Git-backed workspace. The complete candidate census, test oracles, thresholds and subject time
+budget are identical in both execution modes. The real mutation self-test verifies strong and
+superficial tests through a workspace import under the parallel mode.
+
 A subject that reaches its time budget records the remaining mutants as `budget-exhausted`: no
 kill credit, counted against the score, and named in the failure. Stryker always finishes and
 reports instead of being stopped mid-run.
