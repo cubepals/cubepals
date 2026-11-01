@@ -118,7 +118,7 @@ test('a subject that outgrows its budget finishes with a failing report instead 
   )
   write(
     'apps/slow.test.ts',
-    "import { expect, test } from 'bun:test'\nimport { advance } from './source'\ntest('slow and strict', async () => { await Bun.sleep(3000); expect(() => advance(-1)).toThrow('negative'); expect(advance(0)).toBe(1); expect(advance(9)).toBe(10); expect(advance(10)).toBe(10); expect(advance(11)).toBe(10) }, 20000)\n",
+    `import { expect, test } from 'bun:test'\nimport { advance } from './source'\ntest('slow and strict', async () => { expect(() => advance(-1)).toThrow('negative'); await Bun.sleep(${8 * SECOND_MS}); expect(advance(0)).toBe(1); expect(advance(9)).toBe(10); expect(advance(10)).toBe(10); expect(advance(11)).toBe(10) }, ${20 * SECOND_MS})\n`,
   )
   write(
     'apps/other.test.ts',
