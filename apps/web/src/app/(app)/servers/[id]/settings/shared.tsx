@@ -4,7 +4,7 @@
 
 'use client'
 
-import type { ServerView } from '@blockly/contracts'
+import type { RestartWhen, ServerView } from '@blockly/contracts'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, Check } from 'lucide-react'
 import { type ReactNode, useEffect, useRef, useState } from 'react'
@@ -17,6 +17,9 @@ import { BootLine } from '../boot-line'
 import { requestId } from '../use-server'
 import { useWakeRequest } from '../wake'
 import { useWake, WakeLog } from '../wake-log'
+import { RestartChoice } from './restart-choice'
+import { occupied } from './restart-lines'
+import { WaitingChanges } from './waiting-changes'
 
 /**
  * Whether the server takes a configuration change now. A running server restarts into it, a
@@ -30,8 +33,12 @@ export function changeable(view: ServerView): { ok: boolean } {
   return { ok: view.status === 'running' || view.status === 'stopped' }
 }
 
-/** What saving a boot change does to this server right now, in one sentence. */
+/**
+ * What saving a boot change does to this server right now, in one sentence. With players on, when
+ * it restarts is the owner's choice (`RestartChoice`), which says what each does.
+ */
 export function whatHappens(view: ServerView): string {
+  if (occupied(view)) return 'If the change doesn’t start, the server goes back to how it was.'
   return view.status === 'running'
     ? 'The server saves the world and restarts with the change. Anyone online is back in about half a minute. If the change doesn’t start, the server goes back to how it was.'
     : 'The change applies the next time the server starts.'
@@ -73,6 +80,7 @@ export function ConfirmChange({
   onConfirm,
   onAcknowledge,
   disabled,
+  view,
 }: {
   open: boolean
   onClose: () => void
@@ -87,13 +95,20 @@ export function ConfirmChange({
   /** What the button says while the change is going through: "Saving your changes". */
   working: string
   error: unknown
-  /** The change itself, given a request id that stays the same however often it is clicked. */
-  onConfirm: (requestId: string) => Promise<unknown>
-  onAcknowledge?: (requestId: string) => Promise<unknown>
+  /**
+   * The change itself, given a request id that stays the same however often it is clicked, and,
+   * with players on, when the owner chose it restarts the server.
+   */
+  onConfirm: (requestId: string, when: RestartWhen) => Promise<unknown>
+  onAcknowledge?: (requestId: string, when: RestartWhen) => Promise<unknown>
   /** Nothing to confirm yet, or something in the way. */
   disabled?: boolean
+  /** The server, for a change that restarts it: with players on, the owner chooses when. */
+  view?: Pick<ServerView, 'status' | 'players'>
 }) {
   const takenDown = codeOf(error) === 'revoked_artifacts' && onAcknowledge !== undefined
+  // Waiting for everyone to leave first: nobody is sent away unless the owner says so.
+  const [when, setWhen] = useState<RestartWhen>('empty')
   return (
     <Modal
       open={open}
@@ -114,7 +129,7 @@ export function ConfirmChange({
                 working,
                 failed: 'Didn’t go through',
                 variant: tone,
-                run: onConfirm,
+                run: (id: string) => onConfirm(id, when),
               },
               anyway: {
                 icon: <AlertTriangle {...ICON} aria-hidden />,
@@ -122,7 +137,7 @@ export function ConfirmChange({
                 working,
                 failed: 'Didn’t go through',
                 variant: 'danger',
-                run: onAcknowledge ?? onConfirm,
+                run: (id: string) => (onAcknowledge ?? onConfirm)(id, when),
               },
             }}
             now={takenDown ? 'anyway' : 'confirm'}
@@ -143,6 +158,7 @@ export function ConfirmChange({
           </ul>
         )}
         {children}
+        {view && <RestartChoice view={view} when={when} onChange={setWhen} />}
         {error ? <Note tone="danger">{messageOf(error)}</Note> : null}
       </div>
     </Modal>
@@ -217,6 +233,7 @@ function useLanded(view: ServerView): string | null {
 /** Where the last change is: applying now, waiting for a start, or undone because it didn't start. */
 export function ChangeState({ view }: { view: ServerView }) {
   const trpc = useTRPC()
+  const changed = useChanged(view.id)
   const now = useNow(1_000)
   const landed = useLanded(view)
   // A wake shows where it is, here as under the server page's button, and how far it got if it failed.
@@ -259,6 +276,7 @@ export function ChangeState({ view }: { view: ServerView }) {
       <WakeLog server={view} wake={wake} section="var(--space-40)" />
       {landed !== null && <Note tone="success">{landed}</Note>}
       {view.pendingRestart && <Note tone="info">Your changes apply the next time the server starts.</Note>}
+      <WaitingChanges view={view} changed={changed} />
       {view.lastChange?.status === 'failed' && (
         <Note tone="danger">
           Last change, {timeAgo(view.lastChange.at, now)}: {view.lastChange.error}
