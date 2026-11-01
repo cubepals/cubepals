@@ -74,6 +74,11 @@ async function fill(browser, label, value) {
   const prototype =
     target.localName === 'select' ? browser.HTMLSelectElement.prototype : browser.HTMLInputElement.prototype
   await act(async () => {
+    if (target.localName === 'select') {
+      const option = [...target.options].find((item) => item.textContent === value)
+      if (!option) throw new Error(`Missing visible choice: ${value}`)
+      value = option.value
+    }
     Object.getOwnPropertyDescriptor(prototype, 'value').set.call(target, value)
     target.dispatchEvent(
       new browser.Event(target.localName === 'select' ? 'change' : 'input', { bubbles: true }),
@@ -168,6 +173,8 @@ async function openGame({ online = false, stopped = false, keeps = false } = {})
 async function keepsItems() {
   const page = await openGame()
   try {
+    expect(field('Difficulty').selectedOptions[0].textContent).toBe('Normal')
+    expect(field('Game mode').selectedOptions[0].textContent).toBe('Survival')
     const toggle = document.querySelector('[aria-label="Keep items when you die"]')
     expect(toggle.getAttribute('aria-checked')).toBe('false')
     await act(async () => toggle.click())
@@ -231,8 +238,8 @@ async function undoes() {
 async function liveRules() {
   const page = await openGame()
   try {
-    await fill(page.browser, 'Difficulty', 'hard')
-    await fill(page.browser, 'Game mode', 'creative')
+    await fill(page.browser, 'Difficulty', 'Hard')
+    await fill(page.browser, 'Game mode', 'Creative')
     await act(async () => document.querySelector('[aria-label="PvP"]').click())
     await act(async () => button('Save changes').click())
     await until(() => document.querySelector('dialog')?.open === true)
