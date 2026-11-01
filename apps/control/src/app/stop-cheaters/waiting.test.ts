@@ -7,7 +7,7 @@
  * to, shows as waiting, and is taken now or dropped; a press that ends where the server already runs
  * restarts nothing; a boot from before boots said what they placed is read by its mark.
  */
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
+import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test'
 import { randomUUID } from 'node:crypto'
 import { schema } from '@blockly/db'
 import { and, eq, sql } from 'drizzle-orm'
@@ -17,7 +17,7 @@ import { Cdn } from '../../testing/cdn.ts'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
 import { loadRevision } from '../servers/persistence.ts'
 import { loadApplied } from '../servers/restart-wait.ts'
-import { loadStopCheaters } from './persistence.ts'
+import { loadStopCheaters, saveStopCheaters } from './persistence.ts'
 import { stopCheatersWaiting } from './waiting.ts'
 
 let h: Harness
@@ -203,4 +203,45 @@ describe.skipIf(!hasDatabase)('Stop cheaters while players are on', () => {
     expect(await waitingOf(id)).toBeNull()
     await h.app.setups.compat.refresh()
   }, 90_000)
+
+  test(
+    'held anticheat switches settle their real records before a boot is executed',
+    recordedAnticheat,
+    30_000,
+  )
 })
+
+/** Inspect persisted intent with the queue port held; the existing boot cases execute it. */
+async function recordedAnticheat() {
+  const { owner, id } = await occupied('Recorded anticheat')
+  await h.app.stopCheaters.set(owner, id, true, randomUUID(), 'empty')
+  await h.app.stopCheaters.waiting.settle(owner, id, 'cancel', randomUUID())
+  expect(await loadStopCheaters(h.db, id)).toMatchObject({ setting: 'off', takeOver: false, reason: null })
+  const applied = await loadApplied(h.db, id)
+  if (!applied) throw new Error('The fixture must have booted')
+  await h.db
+    .update(schema.serverRuntimes)
+    .set({ applied: { ...applied, placedStopCheaters: true } })
+    .where(eq(schema.serverRuntimes.serverId, id))
+  await saveStopCheaters(h.db, id, { setting: 'off', reason: 'browse', takeOver: true })
+  await h.app.stopCheaters.waiting.settle(owner, id, 'cancel', randomUUID())
+  expect(await loadStopCheaters(h.db, id)).toMatchObject({ setting: 'on', takeOver: false, reason: null })
+  await saveStopCheaters(h.db, id, { setting: 'on', reason: 'browse', takeOver: true })
+  expect(await waitingOf(id)).toBe('ours')
+  await h.app.stopCheaters.waiting.settle(owner, id, 'cancel', randomUUID())
+  expect(await loadStopCheaters(h.db, id)).toMatchObject({
+    setting: 'on',
+    takeOver: false,
+    reason: 'browse',
+  })
+  await saveStopCheaters(h.db, id, { setting: 'off' })
+  const queued = spyOn(h.jobs, 'enqueue').mockResolvedValue()
+  try {
+    await h.app.stopCheaters.waiting.settle(owner, id, 'now', randomUUID())
+    const [operation] = await applies(id)
+    expect(operation?.input).toEqual({ revisionId: (await h.server(id)).desiredRevisionId, boot: true })
+    expect(queued).toHaveBeenCalledTimes(1)
+  } finally {
+    queued.mockRestore()
+  }
+}

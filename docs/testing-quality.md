@@ -95,7 +95,7 @@ aggregate verifies the explicit classification. Merge-queue, scheduled, and manu
 always execute Fleet. The standalone Fleet workflow retains weekly and manual runs, while PR
 and main-push execution comes through CI to avoid duplicate runs.
 
-Mutation testing requires **80% killed mutants per selected file**, rather than a project average.
+Mutation testing requires **80% killed mutants per selected file’s changed code**, rather than a project average.
 Timeouts, compilation errors, missing reports, skipped-away tests, and runner failures cannot count
 as detected defects. A clean test baseline must pass first. Stryker uses its maintained mutators
 and built-in command runner, including condition boundaries, removed blocks, changed operators,
@@ -104,21 +104,28 @@ import cannot accidentally resolve to the original unmutated checkout.
 Files with no independently generated mutation candidates report that condition explicitly;
 they still require a clean baseline and their applicable coverage metrics.
 
-PR mutation scope always includes new and changed production files. For JavaScript/TypeScript,
-edits to existing tests retain the union of their base and proposed source dependencies. A
-deleted test retains its completely mapped, nonempty base dependencies; empty or ambiguous
-maps expand to the full inventory. Changed test-support modules also retain affected tests'
-dependencies. Runtime configuration and dependency changes expand scope unless the verifier
-proves that only isolated quality tooling changed, or that the change is a dependency-only update
-(below). Comparison metadata must match the base and
-head SHAs supplied directly by the protected workflow.
+PR mutation scope includes the added/replaced lines of changed executable production files,
+held to the 80% mutation floor independently for each file. New and renamed files retain their
+whole-file census. A deletion-only hunk conservatively retains the full affected file. A changed integration test, test deletion, fixture, dependency or runtime
+configuration does not impose that floor on unchanged legacy files. Changed executable helpers
+remain subjects when the inventory classifies them as source. All dependent tests remain
+available for each selected subject, including ambiguous possible dependents.
 
-An unresolved test dependency retains conservative full scope when production source is added or
-changed. An added module can alter an unchanged dynamic loader's fallback behavior, and a module
-used by production can also serve as a test oracle. Static reachability cannot prove either case
-harmless. Base resolution preserves the existence of committed regular JSON, CSS, and other
-assets without executing them, so static resource imports do not become artificial unknown
-dependencies. Genuine unresolved imports still expand scope.
+`mutation-release-scope.mjs` verifies the complete Git comparison through the existing test-impact
+verifier, then selects changed production paths. `mutation-lines.mjs` derives native Stryker ranges
+from zero-context Git hunks and verifies each source against the committed blob. Independent
+enumeration records both the whole-file and selected candidate counts, source hash and every
+selected candidate identity. The actual report must match that exact selected census. Import, type
+or comment changes with no mutable expressions say so explicitly, rather than claiming a full-file pass.
+Missing tests for changed source still fail;
+callers cannot omit a source edit from the supplied diff. Comparison metadata remains bound to
+the authoritative base and head SHAs from the protected workflow.
+
+Coverage has its own unchanged conservative impact analysis and baseline ratchet. Functional
+suites, coverage floors, test-policy checks, builds and live Fleet E2E remain release gates.
+Legacy mutation debt is checked in the separate **Mutation audit** workflow: scheduled runs use
+seven daily partitions covering the whole inventory each week; manual full audits remain available.
+These audits report real failures independently of ordinary release CI.
 
 ### Test files that only gained cases
 
@@ -135,8 +142,8 @@ an addition, like a new test file (`test-appends.mjs`). This holds only when:
   anything but cleanup methods such as `close` or `stop`, since it runs after the new cases.
 
 Any other edit, such as a changed or removed case, a weakened helper, a new hook, a new skip or a new
-import, leaves the file an edited test, which keeps its base and head dependencies as mutation
-subjects. A deleted test withdraws the treatment, as it does for new files.
+import, leaves the file an edited test for conservative coverage-impact analysis. Mutation
+subjects still come from changed production paths.
 
 ### Database skips in new test files
 
@@ -154,49 +161,20 @@ dependency-only when every changed file is `bun.lock`, a `package.json`, or the 
 declare; lock settings, overrides, patches and workspaces are unchanged; each workspace entry in
 the lock agrees with its manifest; and every changed lock record is a registry tarball with an
 integrity hash. Anything else in the diff, or anything the module cannot prove, leaves the
-conservative full-scope rule in force.
+conservative full coverage comparison in force.
 
-Source and tests are then byte-identical to the base, so there is no new code to hold to the
-new-code floor. What the update can change is judged by what can observe it:
-
-- **Runtime behavior.** Every test group still runs its whole suite on the head, and the coverage
-  check still holds every unchanged file to its measured base percentages.
-- **Test oracles.** A test that loads an updated package itself, or through a module only tests
-  reach, may assert less than before. Those tests' source closures become mutation subjects,
-  measured with exactly those tests on the base worktree (installed from the base lockfile) and on
-  the head, and the head must reach the base score. Base and head run the same tests against the
-  same mutants, with no expansion. Each side may use a clean-proven case order; a survivor still runs every original case. A base measurement with mutants left unevaluated fails.
-
-A package is updated if its lock record changed or anything it resolves to did. A changed package
-whose installed copy is this exact version and holds only type declarations and documents (such
-as `@types/bun` and `bun-types`) cannot run, so it affects nothing. A module counts as production
-when a production entry reaches it; Next's App Router files (`page`, `layout`, `route` and the
-other special files) are entries because Next loads them by name. A relative dynamic import such as
-``import(`./guides/${slug}/page.tsx`)`` names only local files, so the analysis follows the files
-it can match; any other unresolved load counts as loading an updated package. The live Fleet suites
-are left out of oracle tests because they skip in every mutation run on both sides; the required
-Fleet jobs run them against the real daemon.
-
-**Why a weakened test cannot ride along.** A dependency-only update changes no test, helper,
-fixture or source byte: the test-impact verifier compares the complete Git trees, and a single
-other file makes the change ineligible. A weakened test in the same pull request therefore puts
-the change back under the full rules: the lockfile still expands scope to the full inventory at
-the 80% floor, and the edited test's own subjects keep their base and head dependencies.
-Weakening an oracle through the update itself (a package whose new version asserts less) is what
-the base-score comparison measures, and it fails as a score below the base. Pointing a package at
-a Git URL, a tarball elsewhere, a local path, an override or a patch is refused before any of
-this applies. Dependency updates belong in their own pull request.
-
-On the update that prompted this (#341: the AWS SDK, nodemailer, PostHog, lucide-react, the MCP
-SDK and Bun's types), the rule selects two oracle tests (the S3 archive store's, which imports the
-S3 client, and `scripts/ops.test.ts`, which imports the MCP client) and four subjects, instead of
-every source file in every group.
+Dependency-only releases run the complete functional suites, coverage comparisons and applicable
+build/Fleet checks. Because application source is unchanged, they do not run paired base/head
+mutation audits of unchanged code. Dependency-impact classification still determines conservative
+coverage comparisons. If source changes accompany an update, every changed production file remains
+a mutation subject at the normal 80% threshold. Protected policy checks still apply to dependency
+and test configuration changes.
 
 ### Mutation time budget
 
-Each subject has a 20-minute budget. Mutant runs stop at their first failing test (`bun test
---bail`): a kill needs one failure, while a survivor still runs every selected test, and a kill may
-skip fewer cases than the baseline but never new ones. A mutant that would start after the
+Each subject has a budget scaled from 20 minutes by its mutant count, capped at 60 minutes.
+A kill needs a real assertion failure; the runner stops after the failing file or clean-proven
+case batch, allowing cleanup hooks to finish. A survivor runs every original selected case. A mutant that would start after the
 subject's deadline is recorded as `budget-exhausted` instead of running. It gets no kill credit,
 counts against the score, and is reported by number, so Stryker always finishes and writes its
 report inside the budget rather than being stopped mid-run. The deadline leaves one test timeout
@@ -204,20 +182,13 @@ and a minute for Stryker to finish. A subject that runs out of time fails, with 
 mutants left unevaluated in its message. An expansion to more dependent tests never starts past
 the deadline; the last full census stands, and it fails with its own score.
 
-Verified new test files can be classified separately. Their tests still execute and contribute
-coverage, but importing an integration harness does not retroactively impose the mutation floor
-on every legacy module it imports. This classification never waives changes to production,
-existing tests, helpers, dependencies, or configuration. Test deletions disable this treatment
-for newly named tests, preventing a renamed weak replacement from hiding its original subject.
-The Java reporter retains its class-based PIT scope for production and test changes.
-
-A standalone superficial test addition can pass when production and original tests are unchanged.
-That is not a claim that every new test is useful. A subsequent production change must meet the
-production coverage and mutation gates; editing or replacing an existing test retains mutation
-obligations. No unmeasured legacy mutation result is treated as a passing cache entry.
+Test-addition classification continues to protect baseline coverage evidence. No unmeasured legacy
+mutation result is represented as passing. Java PIT follows the same release rule: changed production
+classes are run in full by PIT, but release scores use their changed lines. The raw complete
+PIT report and selected-line counts are retained. Full audits score all legacy classes and lines.
 
 Mutation runs begin with small dependent test suites and expand to other proven dependents when
-the full per-file mutant census does not meet the threshold. Each attempt keeps the same census;
+the complete selected per-file mutant census does not meet the threshold. Each attempt keeps the same census;
 kills are not combined across different attempts. The full ordinary test suite still runs.
 Scheduled JavaScript/TypeScript mutations rotate through seven stable source partitions, visiting
 the complete executable inventory over a successful week; manual full runs cover every partition.
@@ -246,7 +217,7 @@ The proofs execute the real gate entrypoints in disposable repositories or copie
 clean controls pass, then reject removed negative-path tests, never-imported source, covered-code
 padding, malformed/missing evidence, threshold/exclusion/workflow edits, strong tests replaced
 by superficial assertions, and deliberate defects. They also prove that renamed weak tests
-retain their original mutation obligations and that forged comparison metadata fails. Production
+retain their coverage obligations and that forged comparison metadata fails. Production
 source in the working checkout is not mutated. The policy proofs also reject install lifecycle
 hooks that could rewrite the coverage controller, changes to Lefthook configuration and its
 dependencies, trusted install dependency changes, and executable-name shadowing. All package
