@@ -223,7 +223,6 @@ async function openSettings({
       browser: dom.browser,
       revision: async () => loadRevision(h.db, (await h.server(server.id)).desiredRevisionId),
       async close() {
-        await until(() => !document.querySelector('button[aria-busy="true"]'))
         await act(async () => {
           await Bun.sleep(SECOND_MS)
         })
@@ -440,6 +439,27 @@ async function versionConflict(mode = 'conflict') {
     if (mode === 'outage') page.h.catalog.outage(true)
     await fill(page.browser, 'Minecraft version', '26.3')
     await act(async () => button('Change version').click())
+    if (mode === 'race') {
+      await until(() => dialog()?.open && !button('Change version', dialog()).disabled)
+      page.h.catalog.setProjectState('version-probe', 'withheld')
+      await page.h.app.catalog.refresh()
+      await act(async () => button('Change version', dialog()).click())
+      await until(() =>
+        [...document.querySelectorAll('button')].some((item) => item.textContent.trim() === 'Run it anyway'),
+      )
+      expect((await page.revision()).gameVersion).toBe('26.2')
+      expect(page.mutations).toHaveLength(1)
+      expect(Object.values(page.mutations[0].input)[0].acknowledgeRevoked).toBe(false)
+      await act(async () => button('Run it anyway', dialog()).click())
+      await until(async () => (await page.revision()).gameVersion === '26.3')
+      expect(page.mutations).toHaveLength(2)
+      expect(Object.values(page.mutations[1].input)[0]).toMatchObject({
+        acknowledgeRevoked: true,
+        when: 'empty',
+      })
+      expect((await page.revision()).acknowledgedRevoked.length).toBeGreaterThan(0)
+      return
+    }
     if (mode === 'revoked') {
       await until(() => dialog()?.querySelector('[role="switch"]') != null)
       expect(button('Change version', dialog()).disabled).toBe(true)
@@ -509,6 +529,11 @@ async function smallerSizeWhilePlaying() {
   }
 }
 describe.skipIf(!hasDatabase)('advanced settings in the browser', () => {
+  test(
+    'a mod withdrawn after the version preview asks again before upgrading',
+    () => versionConflict('race'),
+    30 * SECOND_MS,
+  )
   test(
     'a taken-down mod requires acknowledgement before a version upgrade',
     () => versionConflict('revoked'),

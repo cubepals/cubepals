@@ -9,6 +9,7 @@ import { SECOND_MS } from '@blockly/contracts/durations'
 import { fetchRequestHandler } from '@trpc/server/adapters/fetch'
 import { act, createElement } from 'react'
 import { loadRevision } from '../../app/servers/persistence.ts'
+import { Cdn } from '../../testing/cdn.ts'
 import { hasDatabase, startHarness } from '../../testing/harness.ts'
 import { appRouter } from './router.ts'
 
@@ -93,7 +94,13 @@ async function fill(browser, label, value) {
     )
   })
 }
-async function openGame({ online = false, stopped = false, keeps = false } = {}) {
+async function openGame({
+  online = false,
+  stopped = false,
+  keeps = false,
+  loader = 'vanilla',
+  beforeView,
+} = {}) {
   const dom = browserScope()
   const native = globalThis.fetch
   let h, root
@@ -102,7 +109,7 @@ async function openGame({ online = false, stopped = false, keeps = false } = {})
     harness ??= startHarness()
     h = await harness
     const owner = await h.user('Steve', 'plus')
-    const server = await h.create(owner)
+    const server = await h.create(owner, { loader })
     await h.until(server.id, 'running')
     await h.settled(server.id)
     if (keeps) {
@@ -124,6 +131,7 @@ async function openGame({ online = false, stopped = false, keeps = false } = {})
       await h.until(server.id, 'stopped')
       await h.settled(server.id)
     }
+    await beforeView?.({ h, owner, server })
     const view = await h.app.queries.get(owner, server.id),
       options = await h.app.queries.settingsOptions(owner, server.id)
     const routed = Object.assign(
@@ -164,7 +172,6 @@ async function openGame({ online = false, stopped = false, keeps = false } = {})
         return (await loadRevision(h.db, (await h.server(server.id)).desiredRevisionId)).settings
       },
       async close() {
-        await until(() => !document.querySelector('button[aria-busy="true"], button.bk-btn--danger'))
         // A completed save may have replaced its form while its button finishes working.
         await act(async () => {
           await Bun.sleep(SECOND_MS)
@@ -422,7 +429,89 @@ async function messageSummary(live) {
     await page.close()
   }
 }
+async function withdrawnModWhileSaving() {
+  const cdn = new Cdn()
+  await cdn.start()
+  let page
+  try {
+    page = await openGame({
+      loader: 'fabric',
+      stopped: true,
+      beforeView: async ({ h, owner, server }) => {
+        h.catalog.publish(
+          {
+            projectId: 'version-probe',
+            slug: 'version-probe',
+            name: 'Version Probe',
+            summary: 'An installed mod without a newer release',
+            iconUrl: null,
+            environments: ['server_only'],
+            downloads: 1,
+          },
+          [
+            {
+              versionId: 'version-probe-1',
+              projectId: 'version-probe',
+              versionLabel: '1',
+              channel: 'release',
+              state: 'listed',
+              environment: 'server_only',
+              loaders: ['fabric'],
+              gameVersions: [
+                (await loadRevision(h.db, (await h.server(server.id)).desiredRevisionId)).gameVersion,
+              ],
+              publishedAt: new Date(),
+              file: cdn.file('version-probe-1'),
+              dependencies: [],
+            },
+          ],
+        )
+        const requested = { add: [{ projectId: 'version-probe' }] }
+        const plan = await h.app.mods.plan(owner, server.id, requested)
+        if (plan.kind !== 'ok') throw new Error('The fixture mod must fit the current version')
+        await h.app.mods.apply(
+          owner,
+          server.id,
+          requested,
+          plan.mods.map((mod) => mod.artifact.sha512),
+          crypto.randomUUID(),
+        )
+        await h.settled(server.id)
+      },
+    })
+    page.h.catalog.setProjectState('version-probe', 'withheld')
+    await page.h.app.catalog.refresh()
+    const before = await page.settings()
+    await fill(page.browser, 'Spawn protection', '4')
+    await act(async () => button('Save changes').click())
+    await act(async () => button('Save changes', document.querySelector('dialog')).click())
+    await until(() =>
+      [...document.querySelectorAll('button')].some((item) => item.textContent.trim() === 'Run it anyway'),
+    )
+    expect(await page.settings()).toEqual(before)
+    expect(page.mutations).toHaveLength(1)
+    expect(Object.values(page.mutations[0].input)[0].acknowledgeRevoked).not.toBe(true)
+    await act(async () => button('Run it anyway').click())
+    await until(async () => (await page.settings()).spawnProtection === 4)
+    expect(page.mutations).toHaveLength(2)
+    expect(Object.values(page.mutations[1].input)[0]).toMatchObject({
+      acknowledgeRevoked: true,
+      when: 'empty',
+    })
+    const revision = await loadRevision(page.h.db, (await page.h.server(page.server.id)).desiredRevisionId)
+    expect(revision.acknowledgedRevoked).toHaveLength(1)
+    expect(page.h.runtime.machine(page.server.id).state).toBe('stopped')
+  } finally {
+    await page?.close()
+    cdn.close()
+  }
+}
 describe.skipIf(!hasDatabase)('editing game settings in the browser', () => {
+  test(
+    'saving settings asks again before running an installed mod that was withdrawn',
+    withdrawnModWhileSaving,
+    30 * SECOND_MS,
+  )
   test(
     'describes timing and prevents unchanged or invalid form submissions',
     initialAndGuardedSubmit,
