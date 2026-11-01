@@ -216,6 +216,10 @@ async function openBedrock({
         )
       },
       async close() {
+        // Let the real action button finish its minimum busy display before removing browser globals.
+        await act(async () => {
+          await Bun.sleep(SECOND_MS)
+        })
         await act(async () => root.unmount())
         globalThis.fetch = native
         await dom.close()

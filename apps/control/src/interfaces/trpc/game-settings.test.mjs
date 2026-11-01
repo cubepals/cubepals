@@ -337,23 +337,6 @@ async function bounds() {
     await page.close()
   }
 }
-async function waitsForPlayers() {
-  const page = await openGame({ online: true })
-  try {
-    await fill(page.browser, 'Spawn protection', '4')
-    await act(async () => button('Save changes').click())
-    await until(() => document.querySelector('dialog')?.open === true)
-    expect(document.querySelector('input[value="empty"]').checked).toBe(true)
-    await act(async () => document.querySelector('input[value="now"]').click())
-    await act(async () => document.querySelector('input[value="empty"]').click())
-    await act(async () => button('Save and restart', document.querySelector('dialog')).click())
-    await until(async () => (await page.h.app.queries.get(page.owner, page.server.id)).waiting !== null)
-    expect(JSON.stringify(page.mutations.at(-1).input)).toContain('"when":"empty"')
-    expect((await page.h.operations(page.server.id)).filter((op) => op.kind === 'apply')).toHaveLength(0)
-  } finally {
-    await page.close()
-  }
-}
 async function changesWhileStopped() {
   const page = await openGame({ stopped: true })
   try {
@@ -438,6 +421,5 @@ describe.skipIf(!hasDatabase)('editing game settings in the browser', () => {
   test('undo restores both switches and typed numbers', undoes, 30 * SECOND_MS)
   test('live game rules reach the real running game', liveRules, 30 * SECOND_MS)
   test('blank, fractional and out-of-bounds numbers cannot be saved', bounds, 30 * SECOND_MS)
-  test('a startup setting submits the last chosen player-safe timing', waitsForPlayers, 30 * SECOND_MS)
   test('a stopped server keeps startup settings for its next start', changesWhileStopped, 30 * SECOND_MS)
 })

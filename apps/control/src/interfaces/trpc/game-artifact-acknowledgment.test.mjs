@@ -189,6 +189,23 @@ async function openGame({
   }
 }
 
+async function waitsForPlayers() {
+  const page = await openGame({ online: true })
+  try {
+    await fill(page.browser, 'Spawn protection', '4')
+    await act(async () => button('Save changes').click())
+    await until(() => document.querySelector('dialog')?.open === true)
+    expect(document.querySelector('input[value="empty"]').checked).toBe(true)
+    await act(async () => document.querySelector('input[value="now"]').click())
+    await act(async () => document.querySelector('input[value="empty"]').click())
+    await act(async () => button('Save and restart', document.querySelector('dialog')).click())
+    await until(async () => (await page.h.app.queries.get(page.owner, page.server.id)).waiting !== null)
+    expect(JSON.stringify(page.mutations.at(-1).input)).toContain('"when":"empty"')
+    expect((await page.h.operations(page.server.id)).filter((op) => op.kind === 'apply')).toHaveLength(0)
+  } finally {
+    await page.close()
+  }
+}
 async function withdrawnModWhileSaving() {
   const cdn = new Cdn()
   await cdn.start()
@@ -267,6 +284,7 @@ async function withdrawnModWhileSaving() {
   }
 }
 describe.skipIf(!hasDatabase)('game settings with withdrawn artifacts', () => {
+  test('a startup setting submits the last chosen player-safe timing', waitsForPlayers, 30 * SECOND_MS)
   test(
     'saving settings asks again before running an installed mod that was withdrawn',
     withdrawnModWhileSaving,
