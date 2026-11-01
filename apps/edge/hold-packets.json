@@ -1,0 +1,117 @@
+{
+  "source": "server.jar --reports",
+  "protocols": [
+    {
+      "protocol": 777,
+      "release": "26.3",
+      "jar": "33680f5f2ac32864d6d7cf5e56a705fdb3e05f4c",
+      "login": {
+        "finished": 2,
+        "acknowledged": 3
+      },
+      "configuration": {
+        "disconnect": 2,
+        "keepAlive": 4,
+        "showDialog": 19,
+        "transfer": 12,
+        "keepAliveAnswer": 4
+      }
+    },
+    {
+      "protocol": 776,
+      "release": "26.2",
+      "jar": "823e2250d24b3ddac457a60c92a6a941943fcd6a",
+      "login": {
+        "finished": 2,
+        "acknowledged": 3
+      },
+      "configuration": {
+        "disconnect": 2,
+        "keepAlive": 4,
+        "showDialog": 18,
+        "transfer": 11,
+        "keepAliveAnswer": 4
+      }
+    },
+    {
+      "protocol": 775,
+      "release": "26.1.2",
+      "jar": "97ccd4c0ed3f81bbb7bfacddd1090b0c56f9bc51",
+      "login": {
+        "finished": 2,
+        "acknowledged": 3
+      },
+      "configuration": {
+        "disconnect": 2,
+        "keepAlive": 4,
+        "showDialog": 18,
+        "transfer": 11,
+        "keepAliveAnswer": 4
+      }
+    },
+    {
+      "protocol": 774,
+      "release": "1.21.11",
+      "jar": "64bb6d763bed0a9f1d632ec347938594144943ed",
+      "login": {
+        "finished": 2,
+        "acknowledged": 3
+      },
+      "configuration": {
+        "disconnect": 2,
+        "keepAlive": 4,
+        "showDialog": 18,
+        "transfer": 11,
+        "keepAliveAnswer": 4
+      }
+    },
+    {
+      "protocol": 773,
+      "release": "1.21.10",
+      "jar": "95495a7f485eedd84ce928cef5e223b757d2f764",
+      "login": {
+        "finished": 2,
+        "acknowledged": 3
+      },
+      "configuration": {
+        "disconnect": 2,
+        "keepAlive": 4,
+        "showDialog": 18,
+        "transfer": 11,
+        "keepAliveAnswer": 4
+      }
+    },
+    {
+      "protocol": 772,
+      "release": "1.21.8",
+      "jar": "6bce4ef400e4efaa63a13d5e6f6b500be969ef81",
+      "login": {
+        "finished": 2,
+        "acknowledged": 3
+      },
+      "configuration": {
+        "disconnect": 2,
+        "keepAlive": 4,
+        "showDialog": 18,
+        "transfer": 11,
+        "keepAliveAnswer": 4
+      }
+    },
+    {
+      "protocol": 771,
+      "release": "1.21.6",
+      "jar": "6e64dcabba3c01a7271b4fa6bd898483b794c59b",
+      "login": {
+        "finished": 2,
+        "acknowledged": 3
+      },
+      "configuration": {
+        "disconnect": 2,
+        "keepAlive": 4,
+        "showDialog": 18,
+        "transfer": 11,
+        "keepAliveAnswer": 4
+      }
+    }
+  ]
+}
