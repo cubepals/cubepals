@@ -20,6 +20,17 @@ function directoryDistance(source, test) {
   return left.length + right.length - 2 * common
 }
 
+function ownsSubject(source, test) {
+  const parts = source.split('/')
+  const stem = parts.at(-1).replace(/\.[^.]+$/, '')
+  const owner = stem === 'service' || stem === 'index' ? parts.at(-2) : stem
+  const name = test
+    .split('/')
+    .at(-1)
+    .replace(/\.test\.[^.]+$/, '')
+  return name === owner || name.startsWith(`${owner}.`) || name.startsWith(`${owner}-`)
+}
+
 export function executionProfile(prepared, group) {
   return {
     version: 1,
@@ -113,6 +124,8 @@ export function orderMutationTests(scope, profile, entries, group) {
     if (!ordered.some((entry) => entry.rank === 0)) continue
     ordered.sort((a, b) => {
       if (a.rank !== b.rank) return a.rank - b.rank
+      const own = Number(ownsSubject(subject, b.test)) - Number(ownsSubject(subject, a.test))
+      if (own) return own
       for (const metric of metrics) if (a.hit[metric] !== b.hit[metric]) return b.hit[metric] - a.hit[metric]
       return directoryDistance(subject, a.test) - directoryDistance(subject, b.test) || a.index - b.index
     })

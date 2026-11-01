@@ -2,6 +2,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
+import { SECOND_MS } from '../../packages/contracts/src/durations.ts'
 /**
  * Validate every requested test file and distinguish assertion failures from invalid runner output.
  * Under `bail`, files after the first failure may be absent, but only when a test case failed.
@@ -9,7 +10,11 @@
 import { liveFleet } from './evidence-policy.mjs'
 import { XMLParser, XMLValidator } from './toolchain.mjs'
 
-export function readMutationJUnit(xml, expected, { bail = false } = {}) {
+export function readMutationJUnit(
+  xml,
+  expected,
+  { bail = false, filteredCases = new Set(), caseResults = null, allowedSkippedTests = new Set() } = {},
+) {
   if (XMLValidator.validate(xml) !== true) throw new Error('Malformed mutation JUnit evidence')
   const data = new XMLParser({
     ignoreAttributes: false,
@@ -34,11 +39,20 @@ export function readMutationJUnit(xml, expected, { bail = false } = {}) {
     for (const test of cases) {
       if (!test || typeof test !== 'object' || typeof test.name !== 'string' || !test.name)
         throw new Error(`Invalid test case in ${file}`)
+      const id = JSON.stringify([file, test.classname ?? '', test.name])
       if ('error' in test) throw new Error(`Runner error in ${file}`)
+      const status = 'skipped' in test ? 'skipped' : 'failure' in test ? 'failed' : 'passed'
+      const result = { id, file, name: test.name, durationMs: Number(test.time) * SECOND_MS, status }
+      if (status === 'skipped' && filteredCases.has(id)) {
+        caseResults?.push({ ...result, status: 'filtered' })
+        continue
+      }
+      caseResults?.push(result)
       if ('skipped' in test) {
-        if (!liveFleet.has(file)) throw new Error(`Unexpected skipped mutation test: ${file}: ${test.name}`)
+        if (!liveFleet.has(file) && !allowedSkippedTests.has(JSON.stringify([file, test.name])))
+          throw new Error(`Unexpected skipped mutation test: ${file}: ${test.name}`)
         outcome.skipped++
-        outcome.skippedTests.push(JSON.stringify([file, test.classname ?? '', test.name]))
+        outcome.skippedTests.push(id)
       } else if ('failure' in test) outcome.failed++
       else outcome.passed++
     }

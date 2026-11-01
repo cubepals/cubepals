@@ -89,6 +89,46 @@ test('equal construction coverage prefers the owning domain over unrelated harne
   assert.deepEqual(retained(ordered).sort(), paths.sort())
 })
 
+test('an executing subject-owned suite precedes incidental higher-count integration coverage', () => {
+  const paths = [imported, 'apps/source.test.ts']
+  const { entries, profile, scope } = setup(paths)
+  profile.tests[imported].files[subject] = hit(4, 12, 20)
+  profile.tests[paths[1]].files[subject] = hit(3, 9, 15)
+  const ordered = orderMutationTests(scope, profile, entries, 'rest')
+  assert.deepEqual(ordered.testsByFile[subject], [paths[1]])
+  assert.deepEqual(retained(ordered).sort(), paths.sort())
+  assert.deepEqual(ordered.subjects, scope.subjects)
+})
+
+test('a service uses its domain suite before an incidental consumer', () => {
+  const source = 'apps/control/src/app/revisions/service.ts'
+  const paths = [
+    'apps/control/src/app/backups/backups.test.ts',
+    'apps/control/src/app/revisions/revisions.test.ts',
+  ]
+  const entries = [
+    { path: source, kind: 'source', sha256: hash(source) },
+    ...paths.map((path) => ({ path, kind: 'test', sha256: hash(path) })),
+  ]
+  const profile = executionProfile(
+    { inventory: entries, tests: entries.filter((entry) => entry.kind === 'test') },
+    'worlds',
+  )
+  profile.tests[paths[0]].files = { [source]: hit(16, 53, 85) }
+  profile.tests[paths[1]].files = { [source]: hit(14, 79, 93) }
+  const scope = {
+    subjects: [source],
+    testsByFile: { [source]: [paths[0]] },
+    additionalTestsByFile: { [source]: [[paths[1]]] },
+  }
+  const ordered = orderMutationTests(scope, profile, entries, 'worlds')
+  assert.deepEqual(ordered.testsByFile[source], [paths[1]])
+  assert.deepEqual(
+    [...ordered.testsByFile[source], ...ordered.additionalTestsByFile[source].flat()].sort(),
+    paths.sort(),
+  )
+})
+
 test('absent execution does not turn a static dependency into an exemption', () => {
   const { entries, profile, scope } = setup()
   assert.deepEqual(orderMutationTests(scope, profile, entries, 'rest'), scope)
