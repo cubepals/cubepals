@@ -54,7 +54,11 @@ export function checkJUnit(
     for (const child of suite.testsuite ?? []) visit(child, file)
   }
   for (const suite of suites) visit(suite)
-  if (executed === 0 && !(allowOptionalOnly && expected.every((file) => liveFleet.has(file))))
+  const optionalFiles = new Set([...allowedSkippedTests].map((identity) => JSON.parse(identity)[0]))
+  if (
+    executed === 0 &&
+    !(allowOptionalOnly && expected.every((file) => liveFleet.has(file) || optionalFiles.has(file)))
+  )
     throw new Error('No tests executed')
   for (const file of expected) if (!seen.has(file)) throw new Error(`Test file did not report: ${file}`)
   return executed
