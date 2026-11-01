@@ -64,8 +64,11 @@ export async function answered(q: Queryable, nodeId: string, view: WorkloadView)
     q,
     sql`UPDATE fleet_observations SET state = ${view.state}, state_changed_at = now(), observed_at = now(),
           report = jsonb_set(report, '{state}', to_jsonb(${view.state}::text))
+            || jsonb_strip_nulls(jsonb_build_object('changedAt', ${view.changedAt ?? null}::text))
         WHERE node_id = ${nodeId} AND workload = ${view.id} AND epoch IS NOT DISTINCT FROM ${view.epoch}
-          AND state <> ${view.state}`,
+          AND state <> ${view.state}
+          AND COALESCE(${view.changedAt ?? null}::timestamptz >=
+                       (report->>'changedAt')::timestamptz, true)`,
   )
   return written > 0
 }
