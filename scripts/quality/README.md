@@ -172,6 +172,10 @@ request keeps the full-scope rule and its own subjects. Packages whose install h
 declarations and documents are inert. The reasoning and its limits are in
 [docs/testing-quality.md](../../docs/testing-quality.md#dependency-only-updates).
 
+Each invocation pins the invoking checker's scripts and isolated tool installation in a separate
+disposable runtime. Proposed application files and later Git changes cannot replace those runner
+files mid-run. Missing execution evidence still fails the verdict.
+
 Application and workspace subjects run two independent command-runner processes against Stryker's
 disposable, instrumented sandbox. Each process activates only its own mutant.
 `mutation-sandbox.mjs` recreates installation links so bare workspace imports reach that sandbox's
