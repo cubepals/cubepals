@@ -171,11 +171,12 @@ def compare_coverage(head_path, base_path, changed, root):
     return failures, deficits
 
 
-def mutations(path, subjects):
+def mutations(path, subjects, ranges=None, selection_report=None):
     root = read_xml(path)
     if root.tag != "mutations":
         raise ValueError("expected a PIT mutations report")
     counts = {}
+    full_counts = {}
     failures = []
     identities = set()
     for mutant in root.findall("mutation"):
@@ -192,21 +193,53 @@ def mutations(path, subjects):
             raise ValueError("duplicate PIT mutation identity")
         identities.add(identity)
         name = str(SOURCE_ROOT / class_name.rsplit(".", 1)[0].replace(".", "/") / source)
+        full_counts[name] = full_counts.get(name, 0) + 1
+        selected = None if ranges is None else ranges[name]
+        line = int(mutant.findtext("lineNumber"))
+        if selected is not None and not any(item["start"] <= line <= item["end"] for item in selected):
+            continue
         status = mutant.attrib.get("status")
         if status not in {"KILLED", "SURVIVED", "NO_COVERAGE"}:
             failures.append(f"{name}: inconclusive PIT outcome {status}")
         killed, total = counts.get(name, (0, 0))
         counts[name] = (killed + int(status == "KILLED"), total + 1)
-    if set(counts) != set(subjects):
-        failures.append(f"mutation inventory mismatch: missing={sorted(set(subjects) - set(counts))}; "
-                        f"unexpected={sorted(set(counts) - set(subjects))}")
-    if not counts:
+    if set(full_counts) != set(subjects):
+        failures.append(f"mutation inventory mismatch: missing={sorted(set(subjects) - set(full_counts))}; "
+                        f"unexpected={sorted(set(full_counts) - set(subjects))}")
+    if not full_counts:
         failures.append("PIT produced no mutants")
     for name, counter in counts.items():
         score = percent(counter)
         if score < MUTATION_FLOOR:
             failures.append(f"{name} mutation: {score:.2f}% < {MUTATION_FLOOR}%")
+    if selection_report is not None:
+        for name in subjects:
+            killed, total = counts.get(name, (0, 0))
+            selection_report[name] = {"ranges": None if ranges is None else ranges[name],
+                                      "wholeFileTotal": full_counts.get(name, 0),
+                                      "selectedTotal": total, "killed": killed,
+                                      "score": percent((killed, total)) if total else None}
     return failures
+
+
+def mutation_ranges(root, base, head, subjects):
+    """The verified comparison selects added lines; new files and pure deletions keep full scope."""
+    selections = {}
+    for name in subjects:
+        if not git(root, "--literal-pathspecs", "ls-tree", "--name-only", base, "--", name).strip():
+            selections[name] = None
+            continue
+        patch = git(root, "--literal-pathspecs", "diff", "--no-ext-diff", "--no-textconv",
+                    "--no-renames", "--no-color", "--unified=0", base, head, "--", name)
+        selected = []
+        for match in re.finditer(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@", patch, re.MULTILINE):
+            start, count = int(match[1]), int(match[2] or 1)
+            if count == 0:
+                selected = None
+                break
+            selected.append({"start": start, "end": start + count - 1})
+        selections[name] = selected
+    return selections
 
 
 def scope(changed, root, full=False):
@@ -255,7 +288,11 @@ def main():
             if (not isinstance(supplied, list) or any(not isinstance(path, str) for path in supplied)
                     or len(set(supplied)) != len(supplied) or sorted(supplied) != expected):
                 raise ValueError("mutation subjects differ from authoritative Git scope")
-            failures = mutations(args.report, expected)
+            ranges = None if args.full else mutation_ranges(args.root, args.base_sha, args.head_sha, expected)
+            selection_report = {}
+            failures = mutations(args.report, expected, ranges, selection_report)
+            Path(args.subjects).with_name("mutation-selection.json").write_text(
+                json.dumps(selection_report, indent=2) + "\n")
         for failure in failures:
             print(f"FAIL {failure}", file=sys.stderr)
         return int(bool(failures))

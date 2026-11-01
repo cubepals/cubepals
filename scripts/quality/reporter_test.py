@@ -108,6 +108,27 @@ class ReporterEvidenceTest(unittest.TestCase):
             ["apps/reporter/src/test/resources/junit-platform.properties"], self.root))
         self.assertEqual([str(dependency.relative_to(self.root)), self.name], reporter.scope([], self.root, full=True))
 
+    def test_release_scores_only_selected_lines_but_keeps_the_full_pit_inventory(self):
+        path = self.root / "mutations.xml"
+        def record(line, status):
+            return (f'<mutation status="{status}"><sourceFile>Queue.java</sourceFile>'
+                    '<mutatedClass>blockly.reporter.Queue</mutatedClass>'
+                    '<mutatedMethod>offer</mutatedMethod><methodDescription>()Z</methodDescription>'
+                    f'<lineNumber>{line}</lineNumber><mutator>BooleanReturn</mutator>'
+                    '<indexes><index>0</index></indexes></mutation>')
+        path.write_text('<mutations>' + record(1, 'SURVIVED') + record(2, 'KILLED') + '</mutations>')
+        selected = {self.name: [{"start": 2, "end": 2}]}
+        report = {}
+        self.assertEqual([], reporter.mutations(path, [self.name], selected, report))
+        self.assertEqual(2, report[self.name]["wholeFileTotal"])
+        self.assertEqual(1, report[self.name]["selectedTotal"])
+        self.assertTrue(reporter.mutations(path, [self.name]))
+        self.assertTrue(reporter.mutations(path, [self.name], {self.name: [{"start": 1, "end": 1}]}))
+        self.assertEqual([], reporter.mutations(path, [self.name], {self.name: [{"start": 3, "end": 3}]}, report))
+        self.assertIsNone(report[self.name]["score"])
+        self.assertEqual(0, report[self.name]["selectedTotal"])
+
+
 
 class ReporterProvenanceTest(unittest.TestCase):
     """The real CLI cannot borrow mutable evidence to omit committed source changes."""
@@ -263,6 +284,20 @@ class ReporterProvenanceTest(unittest.TestCase):
         result = self.run_cli("mutation")
         self.assertNotEqual(0, result.returncode)
         self.assertIn("mutation subjects differ from authoritative Git scope", result.stderr)
+
+    def test_git_ranges_cover_replacements_new_files_and_pure_deletions(self):
+        self.source.write_text("class Queue {\n int first() { return 1; }\n int second() { return 2; }\n}\n")
+        base = self.commit()
+        self.source.write_text(self.source.read_text().replace('return 1', 'return 3'))
+        head = self.commit()
+        self.assertEqual({self.name: [{"start": 2, "end": 2}]}, reporter.mutation_ranges(self.root, base, head, [self.name]))
+        self.source.write_text(self.source.read_text().replace(' int first() { return 3; }\n', ''))
+        deleted = self.commit()
+        self.assertEqual({self.name: None}, reporter.mutation_ranges(self.root, head, deleted, [self.name]))
+        new_name = self.name.replace('Queue.java', 'New.java')
+        (self.root / new_name).write_text('class New {}\n')
+        added = self.commit()
+        self.assertEqual({new_name: None}, reporter.mutation_ranges(self.root, deleted, added, [new_name]))
 
 
 if __name__ == "__main__":
