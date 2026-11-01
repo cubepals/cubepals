@@ -79,7 +79,7 @@ const routeOf = async (slug: string) =>
 
 /** The emails telling `userId` who came by, as their inbox holds them. */
 const toldOf = (userId: string) =>
-  h.mail.to(`${userId}@example.test`).filter((m) => m.notice && m.subject.includes(' tried to join '))
+  h.mail.to(`${userId}@example.test`).filter((m) => m.subject.includes(' tried to join '))
 
 /** Plays `id` through the rest of the free trial, as the session check finds it, and waits for it to rest. */
 async function playOutTrial(id: string) {
@@ -245,7 +245,7 @@ describe.skipIf(!hasDatabase)('a friend at a server out of free hours', () => {
     ])
     // The owner is emailed why it rests: the free trial's hours, played.
     expect(toldOf(actor.userId).map((m) => m.text.split('\n')[0])).toEqual([
-      'Alex tried to join Sunset Valley, but it’s resting: you’ve played the 20 hours of your free trial. Cubepals told them it’s resting for now. Your world is kept.',
+      'Alex tried to join Sunset Valley, but it’s resting: you’ve played the 20 hours of your free trial. Cubepals told them it’s resting for now. Your world is kept, and nothing is charged.',
     ])
 
     // On Plus it is a sleeping server like any other: the next join wakes it.
@@ -321,12 +321,15 @@ describe.skipIf(!hasDatabase)('the owner emailed about a friend turned away', ()
     await reach(slug, OWNER, 'connect')
     expect(toldOf(actor.userId)).toEqual([])
 
-    // A friend comes: one email, from the address nobody reads, with the way to the server's page.
+    // A friend comes: one email, from the address replies reach, with the way to keep playing.
     await reach(slug, FRIEND, 'connect')
     const told = toldOf(actor.userId)
     expect(told.map((m) => m.subject)).toEqual(['Alex tried to join Sunset Valley'])
     expect(told[0]?.text).toContain('you’ve played the 20 hours of your free trial.')
-    expect(told[0]?.text).toContain(`http://localhost:3000/servers/${id}`)
+    expect(told[0]?.text).toContain(
+      `http://localhost:3000/checkout?plan=core&reason=trial_over&next=%2Fservers%2F${id}`,
+    )
+    expect(told[0]?.notice).toBeUndefined()
 
     // The same friend again, and another: on the page, not in another email.
     await reach(slug, FRIEND, 'connect')
@@ -363,4 +366,54 @@ describe.skipIf(!hasDatabase)('the owner emailed about a friend turned away', ()
     expect((await h.app.queries.get(actor, id)).cameBy.map((p) => p.name)).toEqual(['Alex'])
     expect(toldOf(actor.userId)).toEqual([])
   }, 60_000)
+  describe('the page the game sends people to while a server rests', () => {
+    /** What the page people open says of a server resting, as `viewer` opens it. */
+    const opened = async (slug: string, viewer: UserActor | null) => {
+      const page = await h.app.sharingQueries.page(slug, viewer, { reactions: true })
+      return page === null ? null : (page.resting ?? 'not resting')
+    }
+
+    test('says it rests, private or not, and whose it is only to its owner, until a paid plan wakes it', async () => {
+      const actor = await h.user('Steve', 'free')
+      const { id, slug } = await running(actor)
+      const stranger: UserActor = { kind: 'user', userId: (await h.user('Alex')).userId }
+      // A private server playing on its trial has no page, and its owner's preview says nothing of rest.
+      expect(await opened(slug, null)).toBeNull()
+      expect(await opened(slug, actor)).toBe('not resting')
+
+      await playOutTrial(id)
+      // Private still: nobody else gets its page, only that it rests, as the game already said.
+      expect(await h.app.sharingQueries.page(slug, stranger, { reactions: true })).toEqual({
+        kind: 'resting',
+        resting: { name: 'Sunset Valley', yours: false },
+      })
+      expect(await opened(slug, null)).toEqual({ name: 'Sunset Valley', yours: false })
+      // Its owner gets their preview, with the way back to it after paying.
+      expect(await h.app.sharingQueries.page(slug, actor, { reactions: true })).toMatchObject({
+        preview: true,
+        resting: { name: 'Sunset Valley', yours: true, serverId: id },
+      })
+      // The status, badge and card bots read say nothing of it: a private server has none.
+      expect(await h.app.sharingQueries.page(slug, null)).toBeNull()
+      expect(await opened('no-such-server', null)).toBeNull()
+
+      // Public, its page says it rests above everything else on it.
+      await h.app.listings.setPublic(actor, id, true)
+      expect(await h.app.sharingQueries.page(slug, null, { reactions: true })).toMatchObject({
+        name: 'Sunset Valley',
+        public: true,
+        resting: { name: 'Sunset Valley', yours: false },
+      })
+      expect(await h.app.sharingQueries.page(slug, null)).not.toHaveProperty('resting')
+
+      // Paid for, it no longer rests: its next join starts it.
+      await h.db
+        .update(schema.accountStanding)
+        .set({ plan: 'plus' })
+        .where(eq(schema.accountStanding.userId, actor.userId))
+      await playedNothing(id)
+      expect(await opened(slug, actor)).toBe('not resting')
+      expect(await opened(slug, null)).toBe('not resting')
+    }, 60_000)
+  })
 })

@@ -67,7 +67,8 @@ describe.skipIf(!hasDatabase)('what a server’s life counts', () => {
     expect(counted.wakeAnswered).toContainEqual(['denied', 'unknown'])
 
     const joinId = crypto.randomUUID()
-    const at = (offsetMs: number) => new Date(Date.now() + offsetMs).toISOString()
+    const joinedAt = Date.now()
+    const at = (offsetMs: number) => new Date(joinedAt + offsetMs).toISOString()
     await h.app.joins.recordVisits([
       {
         joinId,

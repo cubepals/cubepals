@@ -7,8 +7,8 @@
  * trial, played:
  * once a rest, for the first friend it kept away (`turned-away.ts` says which), after the session
  * that kept them is stored. Anyone after is on the server's page, not in another email. It comes
- * from the address nobody reads (MAIL_NOTICE_FROM). Not for whether the server rests, or for what
- * the friend is told (the edge's).
+ * from the address replies reach (MAIL_FROM), so the owner can answer it. Not for whether the
+ * server rests, or for what the friend is told (the edge's).
  */
 import type { Db } from '@blockly/db'
 import { entitlementsFor, entitlementsOf, planName } from '../../domain/account/entitlements.ts'
@@ -57,7 +57,6 @@ export class CameByNotice {
         subject: email.subject,
         text: email.text,
         html: email.html,
-        notice: true,
       })
     } catch (error) {
       console.error(`came-by notice for ${server.id} failed`, error)
