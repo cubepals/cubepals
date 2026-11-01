@@ -92,7 +92,7 @@ class ReporterEvidenceTest(unittest.TestCase):
         failures, _ = reporter.compare_coverage(current, baseline, [self.name], self.root)
         self.assertTrue(any("uncovered elements increased" in failure for failure in failures))
 
-    def test_test_only_changes_include_their_production_dependencies(self):
+    def test_releases_mutate_changed_classes_and_full_audits_keep_legacy_classes(self):
         dependency = (self.root / self.name).with_name("Events.java")
         dependency.write_text("class Events {}")
         (self.root / self.name).write_text("class Queue { Events events; }")
@@ -100,13 +100,13 @@ class ReporterEvidenceTest(unittest.TestCase):
         test = self.root / test_path
         test.parent.mkdir(parents=True)
         test.write_text("class QueueTest { Queue queue; }")
-        self.assertEqual([str(dependency.relative_to(self.root)), self.name], reporter.scope([test_path], self.root))
-        self.assertEqual([str(dependency.relative_to(self.root)), self.name],
-                         reporter.scope([self.name, test_path], self.root))
+        self.assertEqual([], reporter.scope([test_path], self.root))
+        self.assertEqual([self.name], reporter.scope([self.name, test_path], self.root))
         test.unlink()
-        self.assertEqual([str(dependency.relative_to(self.root)), self.name], reporter.scope([test_path], self.root))
-        self.assertEqual([str(dependency.relative_to(self.root)), self.name], reporter.scope(
+        self.assertEqual([], reporter.scope([test_path], self.root))
+        self.assertEqual([], reporter.scope(
             ["apps/reporter/src/test/resources/junit-platform.properties"], self.root))
+        self.assertEqual([str(dependency.relative_to(self.root)), self.name], reporter.scope([], self.root, full=True))
 
 
 class ReporterProvenanceTest(unittest.TestCase):
