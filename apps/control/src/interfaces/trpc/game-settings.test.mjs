@@ -164,7 +164,11 @@ async function openGame({ online = false, stopped = false, keeps = false } = {})
         return (await loadRevision(h.db, (await h.server(server.id)).desiredRevisionId)).settings
       },
       async close() {
-        await until(() => !document.querySelector('button[aria-busy="true"]'))
+        await until(() => !document.querySelector('button[aria-busy="true"], button.bk-btn--danger'))
+        // A completed save may have replaced its form while its button finishes working.
+        await act(async () => {
+          await Bun.sleep(SECOND_MS)
+        })
         await act(async () => root.unmount())
         globalThis.fetch = native
         await dom.close()
@@ -181,6 +185,28 @@ async function openGame({ online = false, stopped = false, keeps = false } = {})
 async function keepsItems() {
   const page = await openGame()
   try {
+    const current = await page.settings()
+    expect([...field('Difficulty').options].map((option) => option.textContent)).toEqual([
+      'Peaceful',
+      'Easy',
+      'Normal',
+      'Hard',
+    ])
+    expect([...field('Game mode').options].map((option) => option.textContent)).toEqual([
+      'Survival',
+      'Creative',
+      'Adventure',
+      'Spectator',
+    ])
+    for (const [label, key] of [
+      ['Max players', 'maxPlayers'],
+      ['Spawn protection', 'spawnProtection'],
+      ['View distance', 'viewDistance'],
+      ['Simulation distance', 'simulationDistance'],
+    ]) {
+      expect(field(label).value).toBe(String(current[key]))
+      expect(field(label).inputMode).toBe('numeric')
+    }
     expect(field('Difficulty').selectedOptions[0].textContent).toBe('Normal')
     expect(field('Game mode').selectedOptions[0].textContent).toBe('Survival')
     const toggle = document.querySelector('[aria-label="Keep items when you die"]')
