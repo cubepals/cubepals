@@ -6,9 +6,13 @@ import { describe, expect, test } from 'bun:test'
 import type { PinnedMod } from '../mods/artifact.ts'
 import { playerCapacity } from '../server/size.ts'
 import {
+  bedrockOf,
+  type ChangeFacts,
   changeKind,
   defaultSettings,
   describeChanges,
+  isPlain,
+  otherVersionsOf,
   type RevisionDraft,
   rewritesWorld,
   runsOnPaper,
@@ -175,4 +179,93 @@ describe('what a change is', () => {
       ),
     ).toBe('pack')
   })
+})
+
+test('compatibility defaults and explicit choices preserve each loader’s owner choice', () => {
+  for (const loader of ['vanilla', 'paper', 'fabric', 'quilt', 'forge', 'neoforge'] as const) {
+    const base = draft({ loader })
+    expect(otherVersionsOf(base)).toBe(loader === 'vanilla' ? 'off' : 'on')
+    expect(bedrockOf(base)).toBe(loader !== 'vanilla')
+    for (const bedrock of [true, false])
+      expect(bedrockOf({ ...base, settings: { ...base.settings, bedrock } })).toBe(bedrock)
+    for (const otherVersions of ['off', 'on', 'oldest'] as const)
+      expect(otherVersionsOf({ ...base, settings: { ...base.settings, otherVersions } })).toBe(otherVersions)
+  }
+})
+
+test('absent keep inventory means off; both changes are described once', () => {
+  const base = draft()
+  const off = draft({ settings: { ...base.settings, keepInventory: false } })
+  const on = draft({ settings: { ...base.settings, keepInventory: true } })
+  expect(describeChanges(base, off)).toEqual([])
+  expect(describeChanges(off, base)).toEqual([])
+  expect(describeChanges(base, on)).toEqual([{ field: 'keepInventory', from: false, to: true }])
+  expect(describeChanges(on, base)).toEqual([{ field: 'keepInventory', from: true, to: false }])
+  expect(describeChanges(on, off)).toEqual([{ field: 'keepInventory', from: true, to: false }])
+  expect(changeKind(describeChanges(base, on), true)).toBe('settings')
+  expect(defaultSettings({ name: '  Moss  ', gameMode: 'creative', maxPlayers: 17 })).toEqual({
+    difficulty: 'normal',
+    defaultGameMode: 'creative',
+    pvp: true,
+    viewDistance: 10,
+    simulationDistance: 10,
+    maxPlayers: 17,
+    motd: '"Moss", a server created by Cubepals',
+    spawnProtection: 0,
+    onlineMode: true,
+  })
+})
+
+test('settings accept exact limits, all modes, and refuse fractional or invalid choices', () => {
+  const base = draft().settings
+  for (const difficulty of ['peaceful', 'easy', 'normal', 'hard'] as const)
+    expect(settingsProblems({ ...base, difficulty }, 4)).toEqual([])
+  for (const defaultGameMode of ['survival', 'creative', 'adventure', 'spectator'] as const)
+    expect(settingsProblems({ ...base, defaultGameMode }, 4)).toEqual([])
+  for (const value of [3, 32])
+    expect(settingsProblems({ ...base, viewDistance: value, simulationDistance: value }, 4)).toEqual([])
+  for (const spawnProtection of [0, 64]) expect(settingsProblems({ ...base, spawnProtection }, 4)).toEqual([])
+  for (const maxPlayers of [1, 4]) expect(settingsProblems({ ...base, maxPlayers }, 4)).toEqual([])
+  expect(
+    settingsProblems({ ...base, difficulty: 'invalid', defaultGameMode: 'invalid' } as never, 4),
+  ).toEqual(['Pick a difficulty.', 'Pick a game mode.'])
+  for (const maxPlayers of [0, -1, 1.5, Number.NaN])
+    expect(settingsProblems({ ...base, maxPlayers }, 4)).toEqual([
+      'This size holds up to 4 players. Pick a bigger size for more.',
+    ])
+  expect(
+    settingsProblems({ ...base, viewDistance: 3.5, simulationDistance: 2, spawnProtection: 65 }, 4),
+  ).toEqual([
+    'View distance goes from 3 to 32 chunks.',
+    'Simulation distance goes from 3 to 32 chunks.',
+    'Spawn protection goes from 0 to 64 blocks.',
+  ])
+})
+
+test('pack labels, uploaded identities and datapacks retain their world meaning', () => {
+  const base = draft()
+  const pack = { catalog: 'modrinth', versionId: 'pack-v1', name: 'Moss Pack', versionLabel: '1.2' }
+  const packed: ChangeFacts = { ...base, modpack: pack }
+  expect(describeChanges(base, packed)).toEqual([{ field: 'modpack', from: null, to: 'Moss Pack 1.2' }])
+  expect(describeChanges(packed, base)).toEqual([{ field: 'modpack', from: 'Moss Pack 1.2', to: null }])
+  expect(
+    describeChanges(packed, { ...packed, modpack: { ...pack, versionId: 'pack-v2', versionLabel: '2.0' } }),
+  ).toEqual([{ field: 'modpack', from: 'Moss Pack 1.2', to: 'Moss Pack 2.0' }])
+  const uploaded = {
+    ...mod('x', 'Uploaded Moss', 'old'),
+    source: { catalog: 'upload' as const, uploadId: 'mine' },
+  }
+  expect(
+    describeChanges(
+      draft({ mods: [uploaded] }),
+      draft({ mods: [{ ...uploaded, artifact: { ...uploaded.artifact, sha512: 'new' } }] }),
+    ),
+  ).toEqual([{ field: 'mods', added: [], removed: [], changed: ['Uploaded Moss'] }])
+  expect(isPlain({ loader: 'vanilla' })).toBe(true)
+  expect(isPlain({ loader: 'vanilla', mods: [{ loaders: ['datapack'] }] })).toBe(true)
+  expect(isPlain({ loader: 'vanilla', modpack: {} })).toBe(false)
+  expect(isPlain({ loader: 'vanilla', mods: [{ loaders: ['fabric'] }] })).toBe(false)
+  expect(runsOnPaper({ loader: 'vanilla', loaderVersion: '132', mods: [{ loaders: ['datapack'] }] })).toBe(
+    true,
+  )
 })
