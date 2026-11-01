@@ -179,7 +179,7 @@ Each invocation pins the invoking checker's scripts and isolated tool installati
 disposable runtime. Proposed application files and later Git changes cannot replace those runner
 files mid-run. Missing execution evidence still fails the verdict.
 
-Application and workspace subjects run two independent command-runner processes against Stryker's
+Application and workspace subjects run four independent command-runner processes against Stryker's
 disposable, instrumented sandbox. Each process activates only its own mutant.
 `mutation-sandbox.mjs` recreates installation links so bare workspace imports reach that sandbox's
 source; external libraries remain links to the existing installs. Scripts retain their single
