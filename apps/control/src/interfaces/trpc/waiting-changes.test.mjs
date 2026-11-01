@@ -223,6 +223,7 @@ describe.skipIf(!hasDatabase)('settling pending changes in the browser', () => {
       try {
         expect(page.host.textContent).toContain('This change waits until everyone has left')
         expect(button('Cancel this change').disabled).toBe(false)
+        expect(page.host.querySelector('[role="alert"]')).toBeNull()
         await act(async () => button('Restart now').click())
         await until(() => page.changed.length === 1)
         expect(page.host.textContent).toBe('')
@@ -260,6 +261,7 @@ describe.skipIf(!hasDatabase)('settling pending changes in the browser', () => {
         expect(refusal).toBeInstanceOf(Error)
         await act(async () => button('Cancel this change').click())
         await until(() => page.host.textContent.includes(refusal.message))
+        expect(page.host.querySelector('[role="alert"]')?.textContent).toBe(refusal.message)
         expect(page.host.textContent).toContain('This change waits until everyone has left')
         expect(button('Restart now').disabled).toBe(false)
         expect(button('Cancel this change').disabled).toBe(false)
