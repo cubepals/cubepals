@@ -1,0 +1,23 @@
+# SPDX-FileCopyrightText: 2026 The Cubepals Authors
+#
+# SPDX-License-Identifier: AGPL-3.0-only
+
+name: Mutation audit
+
+# The seven daily partitions audit all legacy source over a week. The reusable CI workflow
+# retains the caller's schedule event, including its UTC rotation, in a distinct check context.
+on:
+  schedule:
+    - cron: '41 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  audit:
+    name: Legacy mutation audit
+    uses: ./.github/workflows/ci.yml
+    with:
+      full_quality: true

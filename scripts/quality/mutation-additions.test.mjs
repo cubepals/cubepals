@@ -220,7 +220,7 @@ test('the actual CLI records verified scope rather than claiming all legacy muta
   const scope = probe.read('scope.json')
   assert.equal(summary.passed, true)
   assert.deepEqual(summary.files, [])
-  assert.match(summary.reason, /standalone new test strength is not certified/)
+  assert.match(summary.reason, /No changed production files/)
   assert.deepEqual(scope.testImpact.verifiedAddedTests, ['apps/new.test.ts'])
   assert.equal(scope.full, false)
 })
@@ -282,12 +282,13 @@ test('a forged changed-file list is checked against the authoritative Git compar
   assert.match(run.stderr, /complete base-to-head Git diff/)
 })
 
-test('renaming a strong test to weak assertions retains its old subject and the real CLI rejects it', (t) => {
+test('renaming a test cannot waive mutation checks for changed production source', (t) => {
   const source =
     "export function advance(value: number) { if (value < 0) throw new RangeError('negative'); if (value >= 10) return 10; return value + 1 }\n"
   const strong =
     "import {expect, test} from 'bun:test'; import {advance} from './source'; test('bounds and refusal', () => { expect(() => advance(-1)).toThrow('negative'); expect(advance(0)).toBe(1); expect(advance(9)).toBe(10); expect(advance(10)).toBe(10); expect(advance(11)).toBe(10) })\n"
   const repo = repository(t, { 'apps/source.ts': source, 'apps/existing.test.ts': strong })
+  repo.write('apps/source.ts', source.replace('return value + 1', 'return 1 + value'))
   rmSync(join(repo.root, 'apps/existing.test.ts'))
   repo.write(
     'apps/renamed.test.ts',

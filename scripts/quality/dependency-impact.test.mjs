@@ -182,10 +182,11 @@ test('a lockfile-only update holds no unchanged file to the new-code floor', (t)
   assert.deepEqual(probe.read('summary.json').files, [])
 })
 
-test('a weakened test alongside a dependency bump keeps full scope and the real CLI rejects it', (t) => {
+test('changed production alongside a dependency bump still rejects weak assertions', (t) => {
   const repo = repository(t, { entry: false })
   repo.pin({ clock: '1.1.0' })
   repo.write('apps/existing.test.ts', weakTest)
+  repo.write('apps/source.ts', source.replace('return value + 1', 'return 1 + value'))
   repo.commit()
   const scope = repo.scope()
   assert.equal(scope.testImpact.dependencyOnly.eligible, false)
@@ -202,7 +203,7 @@ test('a weakened test alongside a dependency bump keeps full scope and the real 
   assert.ok(row.score < 80)
 })
 
-test('updating a package a test loads holds its subjects to their base scores', (t) => {
+test('dependency coverage scope is preserved while release mutations stay empty', (t) => {
   const repo = repository(t)
   repo.pin({ checker: '1.1.0' })
   repo.commit()
@@ -213,8 +214,9 @@ test('updating a package a test loads holds its subjects to their base scores', 
   assert.deepEqual(scope.testsByFile['apps/source.ts'], ['apps/existing.test.ts'])
   assert.deepEqual(scope.additionalTestsByFile['apps/source.ts'], [])
   const probe = command(t, repo)
-  assert.notEqual(probe.run.status, 0, 'base scores cannot be skipped')
-  assert.match(probe.run.stderr, /needs --base-root/)
+  assert.equal(probe.run.status, 0, probe.run.stderr)
+  assert.deepEqual(probe.read('summary.json').files, [])
+  assert.equal(probe.read('scope.json').baseScore, null)
 })
 
 test('dependency coverage comparisons retain affected oracles without unrelated timing samples', (t) => {
@@ -260,39 +262,28 @@ test('dependency oracles do not parse imported runtime JSON as executable source
   assert.deepEqual(comparison.files, ['apps/source.ts'])
 })
 
-test('an update that weakens a test oracle falls below its base score; an equal one passes', (t) => {
-  const weakened = repository(t)
-  weakened.pin({ checker: '1.1.0' })
-  install(weakened.root, { checker: vacuousChecker, checkerVersion: '1.1.0' })
-  weakened.commit()
-  const rejected = command(t, weakened, { baseRoot: baseWorktree(t, weakened) })
-  assert.notEqual(rejected.run.status, 0)
-  const baseTests = rejected.read('base/0/tests.json')
-  const headTests = rejected.read('0/tests.json')
-  assert.deepEqual(headTests.tests, baseTests.tests, 'both sides retain the exact same oracle set')
-  assert.equal(baseTests.allowCaseBatches, true)
-  assert.equal(headTests.allowCaseBatches, true)
-  const base = rejected.read('base-scores.json')['apps/source.ts']
-  assert.ok(base >= 80, `the strict oracle kills most mutants on base (${base}%)`)
-  const row = rejected.read('summary.json').files[0]
-  assert.equal(row.threshold, base)
-  assert.ok(row.score < base)
-  assert.match(rejected.run.stderr, /below \d+\.\d%/)
-  t.diagnostic(`Weakened oracle rejected: ${row.score.toFixed(1)}% against a base of ${base.toFixed(1)}%`)
-
-  const equal = repository(t)
-  equal.pin({ checker: '1.1.0' })
-  install(equal.root, { checkerVersion: '1.1.0' })
-  equal.commit()
-  const accepted = command(t, equal, { baseRoot: baseWorktree(t, equal) })
-  assert.equal(accepted.run.status, 0, accepted.run.stderr)
-  assert.equal(
-    accepted.read('summary.json').files[0].score,
-    accepted.read('base-scores.json')['apps/source.ts'],
-  )
+test('changed production rejects a weakened dependency oracle and accepts a detecting one', (t) => {
+  for (const weak of [true, false]) {
+    const repo = repository(t)
+    repo.pin({ checker: '1.1.0' })
+    install(repo.root, { checker: weak ? vacuousChecker : strictChecker, checkerVersion: '1.1.0' })
+    repo.write('apps/source.ts', source.replace('return value + 1', 'return 1 + value'))
+    repo.commit()
+    const result = command(t, repo)
+    const row = result.read('summary.json').files[0]
+    assert.equal(row.file, 'apps/source.ts')
+    assert.equal(row.threshold, 80)
+    if (weak) {
+      assert.notEqual(result.run.status, 0)
+      assert.ok(row.score < 80)
+    } else {
+      assert.equal(result.run.status, 0, result.run.stderr)
+      assert.ok(row.score >= 80)
+    }
+  }
 })
 
-test('a base checkout of another commit cannot supply base scores', (t) => {
+test('unchanged production does not require a mutation baseline checkout', (t) => {
   const repo = repository(t)
   repo.pin({ checker: '1.1.0' })
   repo.commit()
@@ -301,8 +292,8 @@ test('a base checkout of another commit cannot supply base scores', (t) => {
   repo.git('worktree', 'add', '--quiet', '--detach', elsewhere, 'HEAD')
   t.after(() => rmSync(elsewhere, { recursive: true, force: true }))
   const probe = command(t, repo, { baseRoot: elsewhere })
-  assert.notEqual(probe.run.status, 0)
-  assert.match(probe.run.stderr, /not a checkout of the authoritative --base/)
+  assert.equal(probe.run.status, 0, probe.run.stderr)
+  assert.deepEqual(probe.read('summary.json').files, [])
 })
 
 test('a package whose install is only declarations affects nothing, even a test oracle', (t) => {
