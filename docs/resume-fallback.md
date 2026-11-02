@@ -54,7 +54,9 @@ Each rung has a bound. The player is never left in silence: the edge's waiting r
 for up to 3 minutes and asks again every few seconds, the server list says "Starting up · try again
 in a moment", and a plain message ends the hold.
 
-1. **Resume.** The machine has 30 s to reach `started` (nine times the slowest resume measured,
+1. **Resume.** Minecraft status pings run alongside the provider state wait. A valid game answer
+   ends that wait immediately and cancels the outstanding observation; a provider status update
+   cannot hold an already answering game. The machine has 30 s to reach `started` (nine times the slowest resume measured,
    and still short of a cold boot's answer). Once it runs, it has 10 s to answer a ping. The wait
    ends at the bound, not when Fly's long poll next returns.
 2. **Snapshot dropped, so Fly cold boots.** It runs and prints its boot, but doesn't answer yet.
@@ -97,7 +99,7 @@ in a moment", and a plain message ends the hold.
 
 | Failure | How it shows | Response | Bound | On the fleet |
 | --- | --- | --- | --- | --- |
-| Normal resume | `started`, answers a ping | Lets players in | 30 s to run, 10 s to answer | blocklyd resumes the frozen container; the start answers `resumed: true` |
+| Normal resume | Answers a valid ping, even while provider status lags | Lets players in | 30 s to run, 10 s to answer | blocklyd resumes the frozen container; the start answers `resumed: true` |
 | Snapshot dropped (deploy, migration, maintenance) | Runs, prints a boot, doesn't answer yet | Goes on as a boot | Boot's waits (2 min to run, 10 min to answer) | A host restart drops the frozen process: the copy reads `stopped` and boots on its data |
 | Resume stuck in `starting` | Not `started` by 30 s | Kill, cold start on the same volume | 30 s, then the kill's 60 s at most | blocklyd kills it after `resume_timeout_seconds` (10 s) and starts it afresh; the start answers `resumed: false` and goes on as a boot |
 | Resume `started` but frozen | No answer and no output by 30 s, and 10 s after running | Kill, cold start on the same volume | 30 s, or running + 10 s | Ladder as on Fly, after blocklyd's own 10 s |
@@ -120,3 +122,10 @@ in a moment", and a plain message ends the hold.
   itself. A start takes the volume the server's machine mounts, then the one its handle names,
   and never one recorded as kept. With only kept storage left it boots nothing and makes nothing,
   for an admin to decide. The inventory names no world volume when an app holds two.
+
+
+The operation retains `resume_observing` when the runtime's start request has returned,
+`resume_running` when the provider reports running first, and `resume_answered` when Minecraft
+answers. Their timestamps separate the provider's start call from the readiness wait without
+changing the progress shown to players. A wake admitted before a delayed provider observation
+has `resume_answered` without `resume_running`.

@@ -107,9 +107,15 @@ export async function machineOnVolume(
   return machines.find((m) => m.config?.mounts?.some((mount) => mount.volume === volumeId)) ?? null
 }
 
-export async function readMachine(fly: FlyClient, app: string, machineId: string): Promise<Machine | null> {
+export async function readMachine(
+  fly: FlyClient,
+  app: string,
+  machineId: string,
+  signal?: AbortSignal,
+): Promise<Machine | null> {
   const found = await fly.GET('/v1/apps/{app_name}/machines/{machine_id}', {
     params: { path: { app_name: app, machine_id: machineId } },
+    signal,
   })
   if (found.response.status === 404) return null
   const machine = must(found, 'reading the machine')
@@ -124,12 +130,21 @@ export async function readMachine(fly: FlyClient, app: string, machineId: string
  * lists it, and is looked for again for `GONE_SECONDS` while it lists it nowhere, unless the app
  * lists another server machine instead.
  */
-async function readUnlessGone(fly: FlyClient, app: string, machineId: string): Promise<Machine | null> {
+async function readUnlessGone(
+  fly: FlyClient,
+  app: string,
+  machineId: string,
+  signal?: AbortSignal,
+): Promise<Machine | null> {
   const deadline = Date.now() + GONE_SECONDS * 1000
   for (;;) {
-    const machine = await readMachine(fly, app, machineId)
+    signal?.throwIfAborted()
+    const machine = await readMachine(fly, app, machineId, signal)
     if (machine !== null) return machine
-    const listed = await fly.GET('/v1/apps/{app_name}/machines', { params: { path: { app_name: app } } })
+    const listed = await fly.GET('/v1/apps/{app_name}/machines', {
+      params: { path: { app_name: app } },
+      signal,
+    })
     if (listed.response.status === 404) return null
     const live = must(listed, 'listing machines').filter((m) => !MACHINE_GONE.has(m.state ?? ''))
     const found = live.find((m) => m.id === machineId)
@@ -508,7 +523,7 @@ export async function untilStarted(
 ): Promise<void> {
   const since = Date.now()
   while (!signal.aborted) {
-    const machine = await readUnlessGone(fly, app, machineId)
+    const machine = await readUnlessGone(fly, app, machineId, signal)
     if (machine === null) throw new Error('The machine is gone')
     if (machine.state === 'started') return
     const exit = lastExit(machine)

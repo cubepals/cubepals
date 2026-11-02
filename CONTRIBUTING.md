@@ -23,6 +23,17 @@ bun run dev:accounts   # one signed-up account per plan, with `bun run dev` runn
 
 The design is in [docs/architecture.md](docs/architecture.md). Read it before changing a boundary.
 
+## Signed commits
+
+Run `git config --local commit.gpgsign true` and configure your existing GPG or SSH signing key.
+Hooks reject disabled signing and unverified commits before push. CI checks every commit in a
+pull request, including changes that do not run the code tests, through the required `check`.
+Without a local signing key, stage the files and run
+`bun scripts/quality/signed-commit.mjs "Subject"` with authenticated GitHub CLI access. This creates a
+verified GitHub signature as the authenticated user, checks that the tree matches the index,
+and updates the existing remote branch with an expected-head check. It publishes immediately.
+It supports ordinary files and deletions; executable files and symlinks need a local signing key.
+
 ## Tests
 
 ```sh

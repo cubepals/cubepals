@@ -104,7 +104,12 @@ describe.skipIf(!hasDatabase)('which stops put a server to sleep', () => {
 
       const steps = await start(owner, id)
       expect(resumed(steps)).toBe(true)
-      expect(steps).toEqual(['resuming', 'access'])
+      expect(steps.filter((step) => step !== 'resume_running')).toEqual([
+        'resuming',
+        'resume_observing',
+        'resume_answered',
+        'access',
+      ])
       expect(h.minecraft.playing(id).difficulty).toBe('hard')
     }
     // Each wake is kept as a resume, apart from the boots before them.
@@ -338,7 +343,7 @@ describe.skipIf(!hasDatabase)('a sleep or a wake that doesn’t go as planned', 
     expect(await h.app.edge.wake(`${slug}.play.test`)).toMatchObject({ outcome: 'ready' })
 
     const steps = await stepsOfLast(h, id)
-    expect(steps.slice(0, 3)).toEqual(['resuming', 'resume_hung', 'booting'])
+    expect(steps.slice(0, 4)).toEqual(['resuming', 'resume_observing', 'resume_hung', 'booting'])
     expect(resumed(steps)).toBe(false)
     expect(h.runtime.machine(id)?.state).toBe('running')
     expect(await h.minecraft.file(id, 'world/built.txt')).toBe('built before the sleep')
@@ -426,7 +431,13 @@ describe.skipIf(!hasDatabase)('a wake that only another computer can serve', () 
     const { owner, id } = await asleepWithSnapshot()
     h.runtime.sleeps.freeze(id)
     const steps = await start(owner, id)
-    expect(steps.slice(0, 3)).toEqual(['resuming', 'resume_hung', 'booting'])
+    expect(steps.slice(0, 5)).toEqual([
+      'resuming',
+      'resume_observing',
+      'resume_running',
+      'resume_hung',
+      'booting',
+    ])
     expect(await h.minecraft.file(id, 'world/built.txt')).toBe('built before the sleep')
     expect(await kinds(id)).not.toContain('relocate')
   }, 60_000)

@@ -40,6 +40,8 @@ export type OperationStep =
 
 /**
  * What an operation's record keeps for the platform beside its steps, never shown as one:
+ * `resume_observing`, the start request finished and readiness checks began; `resume_running`,
+ * the provider reported running; `resume_answered`, the game answered its status ping;
  * `resume_hung`, a resume given up on and started fresh (`resume.ts`); `host_refused`, a start its
  * server's own host couldn't serve; `no_room`, one its runtime had no room for, which went back to
  * sleep (both `handlers/host-refused.ts`). The rest say why a wake booted (`RuntimeMark`, and
@@ -48,6 +50,9 @@ export type OperationStep =
  * restore's snapshot of the world it replaces was kept, as the backup came meanwhile (`saved`).
  */
 type OperationMark =
+  | 'resume_observing'
+  | 'resume_running'
+  | 'resume_answered'
   | 'resume_hung'
   | 'host_refused'
   | 'no_room'
