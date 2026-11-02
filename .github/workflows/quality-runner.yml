@@ -195,9 +195,7 @@ jobs:
           args=()
           if [ "$FULL_QUALITY" = true ]; then args+=(--full); fi
           if [ "$EVENT_NAME" = schedule ]; then args+=(--rotation "$(( $(date -u +%u) - 1 ))"); fi
-          for group in lifecycle providers worlds mods access web rest; do
-            node scripts/quality/mutation-cli.mjs --base "$QUALITY_EXPECTED_BASE" --head "$QUALITY_EXPECTED_HEAD" --changed coverage/quality/changed.json --group "$group" --partition "$PARTITION" --output "coverage/quality/mutation/$PARTITION/$group" "${args[@]}"
-          done
+          node scripts/quality/mutation-cli.mjs --base "$QUALITY_EXPECTED_BASE" --head "$QUALITY_EXPECTED_HEAD" --changed coverage/quality/changed.json --all-groups --partition "$PARTITION" --output "coverage/quality/mutation/$PARTITION" "${args[@]}"
       - name: Concurrent wake contracts reject shared denial
         if: inputs.kind == 'native' && inputs.group == 'access' && inputs.partition == 0
         run: node scripts/quality/behavior-proof.mjs "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/coverage/quality/service-proof" services

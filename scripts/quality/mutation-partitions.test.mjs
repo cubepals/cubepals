@@ -100,6 +100,34 @@ test('every empty mutation runner must still provide complete, independently che
   try {
     const args = { root: f.root, directory: f.reports, comparison: f.comparison }
     assert.equal(verifyMutationPartitions(args).subjects, 0)
+    const changed = join(f.directory, 'changed.json'),
+      comparison = join(f.directory, 'comparison.json')
+    writeFileSync(changed, JSON.stringify(['README.md']))
+    writeFileSync(comparison, JSON.stringify(f.comparison))
+    const batch = join(f.directory, 'batch')
+    execFileSync(process.execPath, [
+      fileURLToPath(new URL('./mutation-cli.mjs', import.meta.url)),
+      '--root',
+      f.root,
+      '--base',
+      f.comparison.base,
+      '--head',
+      f.comparison.head,
+      '--changed',
+      changed,
+      '--all-groups',
+      '--partition',
+      '1',
+      '--output',
+      batch,
+    ])
+    for (const group of Object.keys(groups)) {
+      const summary = JSON.parse(readFileSync(join(batch, group, 'summary.json')))
+      assert.equal(summary.complete, true)
+      assert.deepEqual(summary.files, [])
+      assert.deepEqual(summary.partition, { index: 1, count: 4 })
+      assert.equal(summary.group, group)
+    }
     rmSync(join(f.reports, '3/web/summary.json'))
     assert.throws(() => verifyMutationPartitions(args), /ENOENT/)
   } finally {
