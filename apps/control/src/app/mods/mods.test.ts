@@ -57,6 +57,7 @@ const publish = (projectId: string, name: string, releases: Release[]) =>
     ),
   )
 
+/** Plans a change, then applies exactly what the plan showed, and waits for it to land. */
 const change = async (owner: UserActor, id: string, requested: ModChange) => {
   const plan = await h.app.mods.plan(owner, id, requested)
   if (plan.kind !== 'ok') throw new Error(`Conflicts: ${JSON.stringify(plan.conflicts)}`)
@@ -80,26 +81,19 @@ const pinned = async (id: string) =>
     m.requiredBy,
   ])
 
-beforeAll(async () => {
-  await cdn.start()
-  h = await startHarness()
-}, 30_000)
-
-afterAll(async () => {
-  await h.close()
-  cdn.close()
-})
+const server = async (request: { loader?: 'fabric' | 'vanilla'; gameVersion?: string } = {}) => {
+  const owner = await h.user('Steve', 'plus')
+  const created = await h.create(owner, { loader: 'fabric', ...request })
+  await h.until(created.id, 'running')
+  await h.settled(created.id)
+  return { owner, id: created.id }
+}
 
 // Mods end to end (§15.5): search, resolution through the catalog, the plan, the revision it applies.
 describe.skipIf(!hasDatabase)('mods', () => {
-  const server = async (request: { loader?: 'fabric' | 'vanilla'; gameVersion?: string } = {}) => {
-    const owner = await h.user('Steve', 'plus')
-    const created = await h.create(owner, { loader: 'fabric', ...request })
-    await h.until(created.id, 'running')
-    await h.settled(created.id)
-    return { owner, id: created.id }
-  }
-  /** Plans a change, then applies exactly what the plan showed, and waits for it to land. */
+  beforeAll(startMods, 30_000)
+  afterAll(stopMods)
+
   test('a mod that needs a newer Minecraft offers the move, and installs in the same change', async () => {
     publish('newer-only', 'Newer Only', [{ id: 'newer-1', gameVersions: ['26.3'] }])
     const { owner, id } = await server({ gameVersion: '26.2' })
@@ -316,19 +310,7 @@ describe.skipIf(!hasDatabase)('mods', () => {
     ])
   })
 
-  test('the catalog being down stops a change with nothing written', async () => {
-    publish('noisium', 'Noisium', [{ id: 'noisium-1' }])
-    const { owner, id } = await server()
-    h.catalog.outage(true)
-    try {
-      await expect(h.app.mods.plan(owner, id, { add: [{ projectId: 'noisium' }] })).rejects.toThrow(
-        "Modrinth isn't answering right now",
-      )
-    } finally {
-      h.catalog.outage(false)
-    }
-    expect(await pinned(id)).toEqual([])
-  })
+  test('the catalog being down stops a change with nothing written', catalogOutagePreservesRevision)
 
   test('catalog-refresh: withheld at once, absent only after two refreshes, everything pinned followed', async () => {
     publish('moonlight', 'Moonlight', [{ id: 'moon-1' }])
@@ -362,9 +344,17 @@ describe.skipIf(!hasDatabase)('mods', () => {
     expect(plan.kind === 'ok' && plan.revoked.map(identity)).toEqual(['moonlight', 'spark'])
     expect(await h.app.catalog.staleSince()).toBeNull()
   })
+
+  test('an expanding dependency chain cannot publish completed proof', boundedCompilation)
+
+  test(
+    'editing a failed first configuration starts its corrected revision',
+    failedConfigurationRecovery,
+    30_000,
+  )
 })
 
-test.skipIf(!hasDatabase)('an expanding dependency chain cannot publish completed proof', async () => {
+async function boundedCompilation() {
   for (let i = 0; i < 20; i++)
     publish(`bounded-${i}`, `Bounded ${i}`, [
       { id: `bounded-v${i}`, requires: i < 19 ? [`bounded-${i + 1}`] : [] },
@@ -376,27 +366,47 @@ test.skipIf(!hasDatabase)('an expanding dependency chain cannot publish complete
   const rows = await h.db.select().from(schema.modCompilations)
   expect(rows).toEqual(before)
   for (let i = 0; i < 20; i++) h.catalog.setProjectState(`bounded-${i}`, 'archived')
-})
+}
 
-test.skipIf(!hasDatabase)(
-  'editing a failed first configuration starts its corrected revision',
-  async () => {
-    const owner = await h.user('Corrected configuration', 'plus')
-    h.minecraft.breakOn(() => 'This first configuration could not load')
-    let id: string
-    try {
-      ;({ id } = await h.create(owner, { loader: 'fabric' }))
-      await h.until(id, 'failed')
-      await h.settled(id)
-    } finally {
-      h.minecraft.breakOn(() => null)
-    }
-    publish('corrected-mod', 'Corrected Mod', [{ id: 'corrected-version' }])
-    await change(owner, id, { add: [{ projectId: 'corrected-mod' }] })
-    expect((await h.server(id)).lifecycle.status).toBe('running')
-    expect(
-      (await loadRevision(h.db, (await h.server(id)).desiredRevisionId)).mods.map((mod) => mod.name),
-    ).toContain('Corrected Mod')
-  },
-  30_000,
-)
+async function failedConfigurationRecovery() {
+  const owner = await h.user('Corrected configuration', 'plus')
+  h.minecraft.breakOn(() => 'This first configuration could not load')
+  let id: string
+  try {
+    ;({ id } = await h.create(owner, { loader: 'fabric' }))
+    await h.until(id, 'failed')
+    await h.settled(id)
+  } finally {
+    h.minecraft.breakOn(() => null)
+  }
+  publish('corrected-mod', 'Corrected Mod', [{ id: 'corrected-version' }])
+  await change(owner, id, { add: [{ projectId: 'corrected-mod' }] })
+  expect((await h.server(id)).lifecycle.status).toBe('running')
+  expect(
+    (await loadRevision(h.db, (await h.server(id)).desiredRevisionId)).mods.map((mod) => mod.name),
+  ).toContain('Corrected Mod')
+}
+
+async function startMods() {
+  await cdn.start()
+  h = await startHarness()
+}
+
+async function stopMods() {
+  await h.close()
+  cdn.close()
+}
+
+async function catalogOutagePreservesRevision() {
+  publish('noisium', 'Noisium', [{ id: 'noisium-1' }])
+  const { owner, id } = await server()
+  h.catalog.outage(true)
+  try {
+    await expect(h.app.mods.plan(owner, id, { add: [{ projectId: 'noisium' }] })).rejects.toThrow(
+      "Modrinth isn't answering right now",
+    )
+  } finally {
+    h.catalog.outage(false)
+  }
+  expect(await pinned(id)).toEqual([])
+}
