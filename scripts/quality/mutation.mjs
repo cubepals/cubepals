@@ -293,6 +293,10 @@ export function runMutation({
     runtime = freezeMutationRuntime()
     const cli = join(dirname(requireQuality.resolve('@stryker-mutator/core/package.json')), 'bin/stryker.js')
     for (const [index, subject] of subjects.entries()) {
+      const beganSubject = Date.now()
+      process.stdout.write(
+        `Mutation ${index + 1}/${subjects.length}: starting ${subject} (${candidates[subject].count} candidates)\n`,
+      )
       const required = thresholds[subject] ?? threshold
       try {
         if (!testsByFile[subject]?.length) throw new Error(`No tests depend on mutation subject ${subject}`)
@@ -469,6 +473,7 @@ export function runMutation({
         result.files.push(
           ...verdict.files.map((row) => ({
             ...row,
+            durationMs: Date.now() - beganSubject,
             attempts: attempts.length,
             testCount: selectedTests.length,
           })),

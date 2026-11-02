@@ -12,6 +12,8 @@ export function verifyJobs(needs) {
     'static',
     'test',
     'quality',
+    'mutation',
+    'mutation_quality',
     'worker',
     'images',
     'reporter',
@@ -25,7 +27,17 @@ export function verifyJobs(needs) {
   if ([code, reporter, fleet].some((value) => !['true', 'false'].includes(value)))
     throw new Error('Missing change classification')
   const classifications = { reporter, fleet }
-  for (const name of ['static', 'test', 'quality', 'worker', 'images', 'reporter', 'fleet']) {
+  for (const name of [
+    'static',
+    'test',
+    'quality',
+    'mutation',
+    'mutation_quality',
+    'worker',
+    'images',
+    'reporter',
+    'fleet',
+  ]) {
     const expected = (classifications[name] ?? code) === 'true' ? 'success' : 'skipped'
     if (needs[name].result !== expected)
       throw new Error(`${name}: expected ${expected}, received ${needs[name].result}`)

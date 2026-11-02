@@ -15,6 +15,7 @@ import { runMutation } from './mutation.mjs'
 import { selectReleaseMutationScope } from './mutation-release-scope.mjs'
 import { rotationSubjects } from './mutation-scope.mjs'
 import { orderMutationTests } from './mutation-test-order.mjs'
+import { costs, mutationAssignment, mutationPartitions } from './partition-plan.mjs'
 import { groupOf, groups } from './shards.mjs'
 
 const { values } = parseArgs({
@@ -24,16 +25,17 @@ const { values } = parseArgs({
     base: { type: 'string' },
     head: { type: 'string' },
     group: { type: 'string' },
+    'all-groups': { type: 'boolean', default: false },
     full: { type: 'boolean', default: false },
     rotation: { type: 'string' },
     output: { type: 'string' },
     root: { type: 'string', default: process.cwd() },
     'base-root': { type: 'string' },
+    partition: { type: 'string' },
   },
 })
 if (
-  !values.group ||
-  !Object.hasOwn(groups, values.group) ||
+  (values['all-groups'] ? values.group !== undefined : !Object.hasOwn(groups, values.group)) ||
   !values.output ||
   (!values.changed && !values.full)
 ) {
@@ -47,7 +49,7 @@ const anchored = !values.full || values.base !== undefined || values.head !== un
 if (anchored && (!/^[a-f0-9]{40}$/.test(values.base ?? '') || !/^[a-f0-9]{40}$/.test(values.head ?? '')))
   throw new Error('Incremental mutation requires authoritative --base and --head commit SHAs')
 const root = resolve(values.root)
-const output = resolve(values.output)
+const outputRoot = resolve(values.output)
 const changed = values.changed ? JSON.parse(readFileSync(resolve(values.changed), 'utf8')) : []
 if (!Array.isArray(changed) || changed.some((file) => typeof file !== 'string'))
   throw new Error('Changed files must be a JSON string array')
@@ -69,7 +71,7 @@ if (anchored) {
   if (checkout !== values.head) throw new Error('The checkout does not match the authoritative --head')
 }
 const entries = inventory(root)
-let scope = selectReleaseMutationScope({
+const initialScope = selectReleaseMutationScope({
   root,
   productionFiles: sourceFiles(entries),
   testFiles: entries.filter((entry) => entry.kind === 'test').map((entry) => entry.path),
@@ -78,75 +80,91 @@ let scope = selectReleaseMutationScope({
   baseSha: anchored ? values.base : undefined,
   headSha: anchored ? values.head : 'HEAD',
 })
-const executionPath = values.changed
-  ? join(dirname(resolve(values.changed)), 'head', 'test-execution', `${values.group}.json`)
-  : null
-if (executionPath && existsSync(executionPath)) {
-  const bytes = readFileSync(executionPath)
-  scope = orderMutationTests(scope, JSON.parse(bytes), entries, values.group)
-  scope.testOrdering = {
-    kind: 'isolated-execution',
-    sha256: createHash('sha256').update(bytes).digest('hex'),
+function runGroup(group) {
+  let scope = initialScope
+  const output = values['all-groups'] ? join(outputRoot, group) : outputRoot
+  const executionPath = values.changed
+    ? join(dirname(resolve(values.changed)), 'head', 'test-execution', `${group}.json`)
+    : null
+  if (executionPath && existsSync(executionPath)) {
+    const bytes = readFileSync(executionPath)
+    scope = orderMutationTests(scope, JSON.parse(bytes), entries, group)
+    scope.testOrdering = {
+      kind: 'isolated-execution',
+      sha256: createHash('sha256').update(bytes).digest('hex'),
+    }
   }
-}
-const groupSubjects = scope.subjects.filter((subject) => groupOf(subject) === values.group)
-const rotation = values.rotation === undefined ? null : Number(values.rotation)
-const subjects = rotation === null ? groupSubjects : rotationSubjects(groupSubjects, rotation)
-const selection = {
-  group: values.group,
-  rotation,
-  rotations: rotation === null ? null : 7,
-  totalInGroup: groupSubjects.length,
-  selectedCount: subjects.length,
-}
-mkdirSync(output, { recursive: true })
-writeFileSync(
-  resolve(output, 'scope.json'),
-  JSON.stringify(
-    {
-      ...scope,
-      ...selection,
-      selected: subjects,
-      verifiedQualityOnlyConfigs: scope.testImpact?.verifiedQualityOnlyConfigs ?? [],
-    },
-    null,
-    2,
-  ),
-)
-if (subjects.length === 0) {
-  const reason = scope.subjects.length
-    ? 'No mutation subjects in this partition and rotation'
-    : scope.noMutationReason
+  const groupSubjects = scope.subjects.filter((subject) => groupOf(subject) === group)
+  const rotation = values.rotation === undefined ? null : Number(values.rotation)
+  let subjects = rotation === null ? groupSubjects : rotationSubjects(groupSubjects, rotation)
+  let partition = null
+  if (values.partition !== undefined) {
+    const index = Number(values.partition)
+    if (!/^[0-3]$/.test(values.partition) || index >= mutationPartitions)
+      throw new Error('Mutation partition must be 0 through 3')
+    const wanted = new Set(mutationAssignment(scope.subjects, costs(root).mutations, index, rotation))
+    subjects = subjects.filter((subject) => wanted.has(subject))
+    partition = { index, count: mutationPartitions }
+  }
+  const selection = {
+    group,
+    rotation,
+    rotations: rotation === null ? null : 7,
+    totalInGroup: groupSubjects.length,
+    selectedCount: subjects.length,
+    partition,
+  }
+  mkdirSync(output, { recursive: true })
   writeFileSync(
-    resolve(output, 'summary.json'),
-    JSON.stringify({ passed: true, complete: true, files: [], reason, ...selection }, null, 2),
+    resolve(output, 'scope.json'),
+    JSON.stringify(
+      {
+        ...scope,
+        ...selection,
+        selected: subjects,
+        verifiedQualityOnlyConfigs: scope.testImpact?.verifiedQualityOnlyConfigs ?? [],
+      },
+      null,
+      2,
+    ),
   )
-  process.stdout.write(`${reason}; scope evidence: ${resolve(output, 'scope.json')}\n`)
-} else if (scope.baseScore) {
-  const thresholds = baseScores(subjects)
-  runMutation({
-    root,
-    subjects,
-    testsByFile: scope.testsByFile,
-    additionalTestsByFile: {},
-    reportDir: output,
-    thresholds,
-    collectAll: true,
-    allowCaseBatches: true,
-  })
-} else
-  runMutation({
-    root,
-    subjects,
-    testsByFile: scope.testsByFile,
-    additionalTestsByFile: scope.additionalTestsByFile,
-    rangesByFile: scope.rangesByFile,
-    reportDir: output,
-    collectAll: values.full,
-  })
+  if (subjects.length === 0) {
+    const reason = scope.subjects.length
+      ? 'No mutation subjects in this partition and rotation'
+      : scope.noMutationReason
+    writeFileSync(
+      resolve(output, 'summary.json'),
+      JSON.stringify({ passed: true, complete: true, files: [], reason, ...selection }, null, 2),
+    )
+    process.stdout.write(`${reason}; scope evidence: ${resolve(output, 'scope.json')}\n`)
+  } else if (scope.baseScore) {
+    const thresholds = baseScores(subjects, scope, output)
+    runMutation({
+      root,
+      subjects,
+      testsByFile: scope.testsByFile,
+      additionalTestsByFile: {},
+      reportDir: output,
+      thresholds,
+      collectAll: true,
+      allowCaseBatches: true,
+    })
+  } else
+    runMutation({
+      root,
+      subjects,
+      testsByFile: scope.testsByFile,
+      additionalTestsByFile: scope.additionalTestsByFile,
+      rangesByFile: scope.rangesByFile,
+      reportDir: output,
+      collectAll: values.full,
+    })
+}
+
+for (const group of values['all-groups'] ? Object.keys(groups) : [values.group]) runGroup(group)
 
 /** The same tests against the same mutants on the base revision; incomplete evidence fails. */
-function baseScores(selected) {
+function baseScores(selected, scope, output) {
   if (!values['base-root'])
     throw new Error('A dependency-only update needs --base-root to measure base scores')
   const baseRoot = resolve(values['base-root'])
