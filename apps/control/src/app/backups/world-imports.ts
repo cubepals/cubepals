@@ -66,7 +66,7 @@ import {
   worldImportReady,
   worldImportRefused,
 } from './world-import-records.ts'
-import { playedWithOf, type WorldMods } from './world-mods.ts'
+import { type ModdedWorldFacts, playedWithOf, type WorldMods } from './world-mods.ts'
 import { accessFrom } from './world-people.ts'
 import {
   type Accounts,
@@ -100,7 +100,7 @@ export class WorldImports {
   readonly #mods: Pick<WorldMods, 'found' | 'current'>
   readonly #compatibility: (
     serverId: string,
-    facts: import('@blockly/db').UploadedWorldFactsJson,
+    facts: ModdedWorldFacts,
   ) => Promise<import('@blockly/contracts').ModValidationView | null>
 
   constructor(
@@ -114,7 +114,7 @@ export class WorldImports {
       mods: Pick<WorldMods, 'found' | 'current'>
       compatibility: (
         serverId: string,
-        facts: import('@blockly/db').UploadedWorldFactsJson,
+        facts: ModdedWorldFacts,
       ) => Promise<import('@blockly/contracts').ModValidationView | null>
     },
   ) {
@@ -187,7 +187,7 @@ export class WorldImports {
     const compatibility =
       facts?.mods === undefined || record.serverId === null
         ? null
-        : await this.#compatibility(record.serverId, facts)
+        : await this.#compatibility(record.serverId, { ...facts, mods: facts.mods })
     return viewOf(record, (ready) => ({
       backupId: ready.backupId as string,
       people: ready.people,

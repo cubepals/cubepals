@@ -33,6 +33,9 @@ import type { ModCatalog } from '../ports/catalog.ts'
 import type { FileFormats } from '../ports/formats.ts'
 import type { Read } from './world-reading.ts'
 
+/** World facts whose mod set was established by the import reader. */
+export type ModdedWorldFacts = UploadedWorldFactsJson & { mods: BroughtModsJson }
+
 /** How many jars of a mods folder are read: more than the largest packs hold. */
 const MOST_JARS = 500
 

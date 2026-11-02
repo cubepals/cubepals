@@ -8,13 +8,14 @@
  * a new server's own machine is refused at once, so placement can look elsewhere.
  */
 
-import { describe, expect, test } from 'bun:test'
+import { describe, expect, spyOn, test } from 'bun:test'
 import {
   type ProgressSink,
   RuntimeAtLimit,
   RuntimeFull,
   type RuntimeKey,
   type RuntimeSpec,
+  RuntimeUnsupported,
 } from '../../app/ports/runtime.ts'
 import { recordingTarget } from '../../testing/archive-target.ts'
 import { flyClient } from './client.ts'
@@ -129,3 +130,33 @@ describe('FlyRuntime at the organization’s machine limit', () => {
     expect(steps).not.toContain('waiting_for_room')
   })
 })
+
+test('validation runtime ownership and a refused archive restore preserve the original world', async () => {
+  const { fake, runtime, handle, progress, steps } = await atTheLimit(100)
+  const { snapshot } = await runtime.snapshot(handle)
+  expect(runtime.owns(handle)).toBe(true)
+  expect(runtime.ownsSnapshot(snapshot)).toBe(true)
+  expect(await runtime.capacity()).toBeNull()
+  expect(await runtime.hasRoom({ regionKey: 'eu-central' }, { memoryMb: 2048, storageGb: 5 })).toBe(true)
+  expect(await runtime.hasRoom({ regionKey: 'missing' }, { memoryMb: 2048, storageGb: 5 })).toBe(false)
+  expect(runtime.owns(await runtime.adopt(OTHER, { regionKey: 'eu-central' }, spec))).toBe(true)
+  await expect(runtime.deleteSnapshot(snapshot)).rejects.toBeInstanceOf(RuntimeUnsupported)
+  expect((await runtime.exec(handle, ['echo', 'validation'], 30)).exitCode).toBe(0)
+  const stop = spyOn(runtime, 'stop').mockRejectedValueOnce(new Error('graceful stop unavailable'))
+  try {
+    await runtime.restart(handle)
+  } finally {
+    stop.mockRestore()
+  }
+  await expect(
+    runtime.restore(
+      handle,
+      { kind: 'archive', download: { url: 'https://archive.test/world.tar.gz' } },
+      spec,
+      progress,
+    ),
+  ).rejects.toBeInstanceOf(RuntimeAtLimit)
+  expect(steps).toContain('waiting_for_room')
+  expect(fake.volumes.get(APP)?.map((volume) => volume.id)).toEqual([decodeHandle(handle).volumeId as string])
+  expect((await runtime.observe(handle)).state).toBe('running')
+}, 15_000)

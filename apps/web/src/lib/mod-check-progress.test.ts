@@ -56,3 +56,9 @@ test('a completed check adds its measured time to the existing estimate', () => 
   expect(completed?.expectedSeconds).toBe((without?.expectedSeconds ?? 0) + 91)
   expect(etaLine(null, null, 0)).toBe('0s elapsed')
 })
+
+test('a queued check without a worker start time counts from its actual creation', () => {
+  const waiting = { ...operation, startedAt: null }
+  const now = Date.parse(waiting.createdAt) + 60 * SECOND_MS
+  expect(wakeLine({ ...server, activeOperation: waiting }, now)).toContain('60s elapsed')
+})

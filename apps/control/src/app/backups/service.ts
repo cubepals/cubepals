@@ -61,7 +61,7 @@ import {
 } from './persistence.ts'
 import { type WithMods, withWorldMods } from './restored-mods.ts'
 import { WorldImports } from './world-imports.ts'
-import { WorldMods } from './world-mods.ts'
+import { type ModdedWorldFacts, WorldMods } from './world-mods.ts'
 import { MAX_WORLD_BYTES, refusedByName, worldUploadLimit } from './world-reading.ts'
 
 /** Snapshots taken before a change, a restore or a move: the latest few, apart from the owner's own. */
@@ -508,8 +508,8 @@ export class BackupService {
   }
 
   /** Same compiler and verifier as Play; importing files never asserts that an unchecked set runs. */
-  async #compatibility(serverId: string, facts: import('@blockly/db').UploadedWorldFactsJson) {
-    if (facts.mods === undefined) return null
+  async #compatibility(serverId: string, facts: ModdedWorldFacts) {
+    const { gameVersion, mods } = facts
     try {
       const server = await findServer(this.#db, serverId)
       if (server === null) throw new NotFound('Server')
@@ -517,7 +517,7 @@ export class BackupService {
       const compiled = await withWorldMods(
         { mods: this.#mods, builds: this.#builds, worldMods: this.#worldMods },
         desired,
-        { gameVersion: facts.gameVersion, mods: facts.mods },
+        { gameVersion, mods },
         true,
       )
       return this.#configuration.request({ ...desired, ...compiled.draft })
