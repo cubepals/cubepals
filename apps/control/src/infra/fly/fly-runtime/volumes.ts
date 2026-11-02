@@ -43,7 +43,12 @@ export async function ensureVolume(
   region: string,
   sizeGb: number,
   retentionDays: number,
-  known: { mounted?: string; held?: string | null; kept?: readonly string[] } = {},
+  known: {
+    mounted?: string
+    held?: string | null
+    kept?: readonly string[]
+    compute?: CreateVolumeRequest['compute']
+  } = {},
 ): Promise<Volume> {
   const kept = new Set(known.kept ?? [])
   const existing =
@@ -56,7 +61,12 @@ export async function ensureVolume(
   }
   if (kept.size > 0 && (await dataVolume(fly, app)) !== null)
     throw new Error(`${app} holds only the storage kept from before a rebuild, which it doesn't boot`)
-  return createVolume(fly, app, { name: VOLUME_NAME, region, size_gb: sizeGb }, retentionDays)
+  return createVolume(
+    fly,
+    app,
+    { name: VOLUME_NAME, region, size_gb: sizeGb, compute: known.compute },
+    retentionDays,
+  )
 }
 
 /** The volume, where it is there and not going away. */

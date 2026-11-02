@@ -112,7 +112,7 @@ import {
   isFlySnapshot,
   locationOf,
 } from './handle.ts'
-import { asleepOn, heldTags, META, machineConfig, portsOf, startStep } from './machine-config.ts'
+import { asleepOn, guestFor, heldTags, META, machineConfig, portsOf, startStep } from './machine-config.ts'
 
 export { keyFromApp } from './fly-runtime/apps.ts'
 export { exportJob, partBatches, partsJob, partsPut, restoreJob } from './fly-runtime/helper-jobs.ts'
@@ -287,7 +287,11 @@ export class FlyRuntime implements MinecraftRuntime {
       region,
       spec.storage.sizeGb,
       this.snapshotLifetimeDays,
-      { mounted: existing?.config?.mounts?.[0]?.volume, ...volumesOf(storage) },
+      {
+        compute: guestFor(spec.resources.memoryMb),
+        mounted: existing?.config?.mounts?.[0]?.volume,
+        ...volumesOf(storage),
+      },
     )
     return provisionMachine(this.#fly, {
       deployment: this.#deployment,
@@ -417,6 +421,7 @@ export class FlyRuntime implements MinecraftRuntime {
         ref.app,
         {
           name: VOLUME_NAME,
+          compute: guestFor(spec.resources.memoryMb),
           region: ref.region,
           size_gb: Math.max(snapshot.sizeGb, spec.storage.sizeGb),
           snapshot_id: snapshot.snapshotId,
@@ -429,6 +434,7 @@ export class FlyRuntime implements MinecraftRuntime {
         ref.app,
         {
           name: VOLUME_NAME,
+          compute: guestFor(spec.resources.memoryMb),
           region: ref.region,
           size_gb: spec.storage.sizeGb,
         },
@@ -478,6 +484,7 @@ export class FlyRuntime implements MinecraftRuntime {
         ref.app,
         {
           name: VOLUME_NAME,
+          compute: guestFor(spec.resources.memoryMb),
           region,
           size_gb: Math.max(snapshot.sizeGb, spec.storage.sizeGb),
           snapshot_id: snapshot.snapshotId,
@@ -498,6 +505,7 @@ export class FlyRuntime implements MinecraftRuntime {
       ref.app,
       {
         name: VOLUME_NAME,
+        compute: guestFor(spec.resources.memoryMb),
         region,
         size_gb: Math.max(source?.size_gb ?? 0, spec.storage.sizeGb),
         source_volume_id: volumeId,
