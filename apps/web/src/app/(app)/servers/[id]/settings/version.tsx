@@ -4,7 +4,7 @@
 
 'use client'
 
-import type { Loader, PartySize, ServerView, SettingsOptions } from '@blockly/contracts'
+import type { Loader, PartySize, RestartWhen, ServerView, SettingsOptions } from '@blockly/contracts'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { type SubmitEvent, useEffect, useState } from 'react'
 import { messageOf, useTRPC } from '../../../../../lib/api'
@@ -100,7 +100,7 @@ function VersionForm({
     retype && `Server type ${loaderLabel(view.loader)} → ${loaderLabel(loader)}`,
     paper.line,
   ].filter((line): line is string => typeof line === 'string')
-  const change = (requestId: string, acknowledgeRevoked: boolean) =>
+  const change = (requestId: string, acknowledgeRevoked: boolean, when: RestartWhen) =>
     save.mutateAsync({
       serverId: view.id,
       requestId,
@@ -108,6 +108,7 @@ function VersionForm({
       gameVersion,
       loader,
       expected: planned?.expected ?? [],
+      when,
       acknowledgeRevoked,
     })
 
@@ -162,6 +163,7 @@ function VersionForm({
         </div>
       </FormSection>
       <ConfirmChange
+        view={view}
         open={confirming}
         onClose={() => setConfirming(false)}
         title={upgrade ? `Move this world to Minecraft ${gameVersion}?` : `Switch to ${loaderLabel(loader)}?`}
@@ -170,8 +172,8 @@ function VersionForm({
         working="Changing the version"
         error={save.error}
         disabled={planned === null || (planned.revoked.length > 0 && !acknowledged)}
-        onConfirm={(requestId) => change(requestId, acknowledged)}
-        onAcknowledge={(requestId) => change(requestId, true)}
+        onConfirm={(requestId, when) => change(requestId, acknowledged, when)}
+        onAcknowledge={(requestId, when) => change(requestId, true, when)}
       >
         {plan.isPending && <Skeleton width="60%" />}
         {plan.isError && <Note tone="danger">{messageOf(plan.error)}</Note>}
@@ -304,19 +306,21 @@ function SizeForm({
         )}
       </FormSection>
       <ConfirmChange
+        view={view}
         open={confirming}
         onClose={() => setConfirming(false)}
         title={`Resize to hold up to ${chosen?.maxPlayers ?? partySize} players?`}
         confirmLabel={view.status === 'running' ? 'Resize and restart' : 'Change size'}
         working="Changing the size"
         error={save.error}
-        onConfirm={(requestId) =>
-          save.mutateAsync({ serverId: view.id, requestId, version: view.version, partySize })
+        onConfirm={(requestId, when) =>
+          save.mutateAsync({ serverId: view.id, requestId, when, version: view.version, partySize })
         }
-        onAcknowledge={(requestId) =>
+        onAcknowledge={(requestId, when) =>
           save.mutateAsync({
             serverId: view.id,
             requestId,
+            when,
             version: view.version,
             partySize,
             acknowledgeRevoked: true,

@@ -16,6 +16,7 @@ import { messageOf, useTRPC } from '../../../../../lib/api'
 import { timeAgo } from '../../../../../lib/present'
 import { Button, Note, PlayerRow, Toggle } from '../../../../../ui'
 import { useChanged } from '../settings/shared'
+import type { useRestartAsk } from './restart-ask'
 
 /** What the page says of a removal: what the player read, without the part that is only theirs. */
 export const removalLine = (reason: RemovalReason) => REMOVAL_MESSAGES[reason].replace(' You can rejoin.', '')
@@ -33,11 +34,14 @@ export function StopCheaters({
   serverId,
   view,
   tools,
+  ask,
 }: {
   serverId: string
   view: StopCheatersView
   /** Whether the moderation tools are on, which add the ban. */
   tools: boolean
+  /** Runs a change that restarts the server, asking first when someone plays (`restart-ask.tsx`). */
+  ask: ReturnType<typeof useRestartAsk>['ask']
 }) {
   const trpc = useTRPC()
   const queries = useQueryClient()
@@ -64,7 +68,13 @@ export function StopCheaters({
         label="Stop cheaters"
         checked={view.effective}
         disabled={set.isPending}
-        onChange={(on) => set.mutate({ serverId, on, requestId: crypto.randomUUID() })}
+        onChange={(on) =>
+          ask({
+            title: on ? 'Turn on Stop cheaters?' : 'Turn off Stop cheaters?',
+            confirmLabel: on ? 'Turn it on' : 'Turn it off',
+            run: (when) => set.mutateAsync({ serverId, on, when, requestId: crypto.randomUUID() }),
+          })
+        }
       />
       {available.kind === 'release' ? (
         <p className="bk-field__help">Arrives when it runs on Minecraft {available.release}.</p>
@@ -84,7 +94,13 @@ export function StopCheaters({
             variant="ghost"
             size="sm"
             disabled={ours.isPending}
-            onClick={() => ours.mutate({ serverId, requestId: crypto.randomUUID() })}
+            onClick={() =>
+              ask({
+                title: 'Use Cubepals’ Stop cheaters settings?',
+                confirmLabel: 'Use Cubepals’ settings',
+                run: (when) => ours.mutateAsync({ serverId, when, requestId: crypto.randomUUID() }),
+              })
+            }
           >
             Use Cubepals’ settings
           </Button>
