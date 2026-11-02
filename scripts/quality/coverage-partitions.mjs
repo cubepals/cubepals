@@ -97,7 +97,12 @@ export function mergeNativePartitions({ root, baseRoot, directory, base, cachedB
         const xml = readFileSync(join(input, `${id}.xml`), 'utf8')
         const started = new Date(manifest.startedAt),
           completed = new Date(manifest.completedAt)
-        intervals.push({ started, completed, fingerprint: manifest.fingerprint })
+        intervals.push({
+          started,
+          completed,
+          fingerprint: manifest.fingerprint,
+          runnerImageVersion: manifest.runnerImageVersion,
+        })
         if (
           !Number.isFinite(+started) ||
           !Number.isFinite(+completed) ||
@@ -122,6 +127,9 @@ export function mergeNativePartitions({ root, baseRoot, directory, base, cachedB
         tests: tests.sort((a, b) => a.path.localeCompare(b.path)),
         startedAt: new Date(Math.min(...intervals.map((interval) => +interval.started))).toISOString(),
         completedAt: new Date(Math.max(...intervals.map((interval) => +interval.completed))).toISOString(),
+        runnerImageVersions: [
+          ...new Set(intervals.map((interval) => interval.runnerImageVersion ?? '')),
+        ].sort(),
         fingerprint:
           new Set(intervals.map((interval) => interval.fingerprint)).size === 1
             ? intervals[0].fingerprint

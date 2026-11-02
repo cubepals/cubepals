@@ -12,7 +12,7 @@ import { after, before, test } from 'node:test'
 import { DAY_MS, HOUR_MS, SECOND_MS } from '../../packages/contracts/src/durations.ts'
 import { revalidateBaseline } from './baseline-cache.mjs'
 import { packBaseline, validateBaseline } from './baseline-evidence.mjs'
-import { baselineIdentity, cacheAllowed, trustedProducer } from './baseline-identity.mjs'
+import { baselineIdentity, cacheAllowed, runtimeIdentity, trustedProducer } from './baseline-identity.mjs'
 import { runShard } from './run-shard.mjs'
 import { groups } from './shards.mjs'
 
@@ -256,4 +256,24 @@ test('conservative clock boundaries use fresh measurements', () => {
   assert.equal(cacheAllowed(new Date(Date.UTC(2026, 0, 1, 12))), false)
   assert.equal(cacheAllowed(new Date(Date.UTC(2026, 0, 2, 23))), false)
   assert.equal(cacheAllowed(at), true)
+})
+
+test('rolling host-image builds preserve pinned runtime identity and remain diagnostic metadata', () => {
+  const previous = process.env.ImageVersion
+  try {
+    process.env.ImageVersion = 'host-build-one'
+    const first = baselineIdentity(f.root, f.identity.source, at)
+    process.env.ImageVersion = 'host-build-two'
+    assert.deepEqual(baselineIdentity(f.root, f.identity.source, at), first)
+    const runtime = runtimeIdentity()
+    for (const changed of [
+      { ...runtime, bun: 'different' },
+      { ...runtime, node: 'different' },
+      { ...runtime, imageOS: 'different' },
+    ])
+      assert.notEqual(baselineIdentity(f.root, f.identity.source, at, changed).fingerprint, first.fingerprint)
+  } finally {
+    if (previous === undefined) delete process.env.ImageVersion
+    else process.env.ImageVersion = previous
+  }
 })

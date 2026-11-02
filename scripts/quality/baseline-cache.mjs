@@ -144,9 +144,9 @@ export function publishBaselines({ root, baseRoot, directory, outputDirectory, c
       notice(
         `Validated ${side} baseline publication: ${source}. This artifact is eligible only after the entire main CI run succeeds.`,
       )
-    } catch {
+    } catch (error) {
       notice(
-        `::warning::The ${side} measurement was not eligible for baseline reuse; future runs will measure it fresh.`,
+        `::warning::The ${side} measurement was not eligible for baseline reuse: ${error.message}. Future runs will measure it fresh.`,
       )
     }
   }

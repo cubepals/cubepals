@@ -23,6 +23,8 @@ export function calendarKey(at = new Date()) {
 export const cacheAllowed = (at = new Date()) =>
   Number.isFinite(+at) && at.getUTCDate() !== 1 && at.getUTCHours() !== 23
 
+// GitHub may mix host-image builds in one run. Match the pinned execution runtime and OS
+// family; retain image build numbers in measurement manifests as diagnostic provenance.
 export function runtimeIdentity() {
   return {
     node: process.version,
@@ -30,7 +32,6 @@ export function runtimeIdentity() {
     platform: platform(),
     arch: arch(),
     imageOS: process.env.ImageOS ?? '',
-    imageVersion: process.env.ImageVersion ?? '',
     lang: process.env.LANG ?? '',
     timezone: process.env.TZ ?? '',
   }
