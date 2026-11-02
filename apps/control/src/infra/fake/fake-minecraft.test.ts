@@ -119,52 +119,54 @@ describe('game rule startup boundaries', () => {
   })
 })
 
-describe('a start', () => {
-  test('writes the properties, keeps white-list once set, and logs as the image does', async () => {
-    const { minecraft } = fresh()
-    const m = await machine({
-      DIFFICULTY: 'hard',
-      MOTD: 'Hi',
-      ONLINE_MODE: 'FALSE',
-      ENFORCE_WHITELIST: 'TRUE',
-    })
-    await minecraft.start(m)
-    expect(await minecraft.file(m.key, 'server.properties')).toBe(
-      [
-        'difficulty=hard',
-        'gamemode=survival',
-        'pvp=true',
-        'view-distance=10',
-        'simulation-distance=10',
-        'max-players=20',
-        'motd=Hi',
-        'spawn-protection=16',
-        'level-name=world',
-        'online-mode=false',
-        'enforce-whitelist=true',
-        'white-list=false',
-        '',
-      ].join('\n'),
-    )
-    expect(await minecraft.run(target(m), 'whitelist on')).toBe('Whitelist is now turned on')
-    await minecraft.stop(m)
-    await minecraft.start(m)
-    expect(await minecraft.file(m.key, 'server.properties')).toContain('white-list=true\n')
-    const log = await lines(minecraft, m.key)
-    expect(log[0]).toBe('[init] Starting the Minecraft server...')
-    expect(log.map(unclocked)).toEqual([
-      '[init] Starting the Minecraft server...',
-      '[Server thread/INFO]: Starting minecraft server version unknown',
-      '[Server thread/INFO]: Done (0.100s)! For help, type "help"',
-      '[Server thread/INFO]: [Rcon: Whitelist is now turned on]',
-      '[Server thread/INFO]: Stopping server',
-      '[init] Starting the Minecraft server...',
-      '[Server thread/INFO]: Starting minecraft server version unknown',
-      '[Server thread/INFO]: Done (0.100s)! For help, type "help"',
-    ])
-    expect(log[2]).toMatch(/^\[\d\d:\d\d:\d\d\] \[Server thread\/INFO\]: Done/)
-    expect(await minecraft.file(m.key, 'world/level.dat')).toBe('opened by unknown\nopened by unknown\n')
+async function restartProperties() {
+  const { minecraft } = fresh()
+  const m = await machine({
+    DIFFICULTY: 'hard',
+    MOTD: 'Hi',
+    ONLINE_MODE: 'FALSE',
+    ENFORCE_WHITELIST: 'TRUE',
   })
+  await minecraft.start(m)
+  expect(await minecraft.file(m.key, 'server.properties')).toBe(
+    [
+      'difficulty=hard',
+      'gamemode=survival',
+      'pvp=true',
+      'view-distance=10',
+      'simulation-distance=10',
+      'max-players=20',
+      'motd=Hi',
+      'spawn-protection=16',
+      'level-name=world',
+      'online-mode=false',
+      'enforce-whitelist=true',
+      'white-list=false',
+      '',
+    ].join('\n'),
+  )
+  expect(await minecraft.run(target(m), 'whitelist on')).toBe('Whitelist is now turned on')
+  await minecraft.stop(m)
+  await minecraft.start(m)
+  expect(await minecraft.file(m.key, 'server.properties')).toContain('white-list=true\n')
+  const log = await lines(minecraft, m.key)
+  expect(log[0]).toBe('[init] Starting the Minecraft server...')
+  expect(log.map(unclocked)).toEqual([
+    '[init] Starting the Minecraft server...',
+    '[Server thread/INFO]: Starting minecraft server version unknown',
+    '[Server thread/INFO]: Done (0.100s)! For help, type "help"',
+    '[Server thread/INFO]: [Rcon: Whitelist is now turned on]',
+    '[Server thread/INFO]: Stopping server',
+    '[init] Starting the Minecraft server...',
+    '[Server thread/INFO]: Starting minecraft server version unknown',
+    '[Server thread/INFO]: Done (0.100s)! For help, type "help"',
+  ])
+  expect(log[2]).toMatch(/^\[\d\d:\d\d:\d\d\] \[Server thread\/INFO\]: Done/)
+  expect(await minecraft.file(m.key, 'world/level.dat')).toBe('opened by unknown\nopened by unknown\n')
+}
+
+describe('a start', () => {
+  test('writes the properties, keeps white-list once set, and logs as the image does', restartProperties)
 
   test('creates each missing list empty, and loads the lists and the name cache from their files', async () => {
     const { minecraft } = fresh()
