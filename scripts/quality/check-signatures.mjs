@@ -8,48 +8,49 @@
  * its public signing key is absent locally. API failures never count as verified signatures.
  * Historical commits already on main are outside a pull request's signing boundary.
  */
+
 import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 
-function git(...args: string[]): string {
+import { pathToFileURL } from 'node:url'
+
+function git(...args) {
   return execFileSync('git', args, { encoding: 'utf8' }).trim()
 }
-
-function requireVerified(
-  commits: { sha: string; commit: { verification?: { verified?: boolean } } }[],
-): void {
+function requireVerified(commits) {
   for (const commit of commits) {
     if (commit.commit.verification?.verified !== true) {
       throw new Error(`Commit ${commit.sha} has no verified signature. Sign it before pushing.`)
     }
   }
 }
-
-function api(path: string): unknown {
+function api(path) {
   return JSON.parse(execFileSync('gh', ['api', path], { encoding: 'utf8' }))
 }
-
-function beforePush(): void {
-  const commits = new Set<string>()
-  for (const line of readFileSync(0, 'utf8').trim().split('\n')) {
+function beforePush() {
+  const commits = new Set()
+  for (const line of readFileSync(0, 'utf8')
+    .trim()
+    .split(`
+`)) {
     if (!line) continue
     const [, local, , remote] = line.split(/\s+/)
     if (/^0+$/.test(local)) continue
     const base = /^0+$/.test(remote) ? 'refs/remotes/origin/main' : remote
-    for (const sha of git('rev-list', local, `^${base}`).split('\n').filter(Boolean)) commits.add(sha)
+    for (const sha of git('rev-list', local, `^${base}`)
+      .split(`
+`)
+      .filter(Boolean))
+      commits.add(sha)
   }
   for (const sha of commits) {
     const status = git('show', '-s', '--format=%G?', sha)
     if (['G', 'U'].includes(status)) continue
     if (status !== 'E') throw new Error(`Commit ${sha} has no valid signature. Sign it before pushing.`)
-    // Missing keys are not evidence of an invalid signature. Ask the signing authority instead.
-    requireVerified([
-      api(`repos/cubepals/cubepals/commits/${sha}`) as Parameters<typeof requireVerified>[0][number],
-    ])
+    requireVerified([api(`repos/cubepals/cubepals/commits/${sha}`)])
   }
 }
-
-if (import.meta.main) {
+if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) {
   try {
     const [mode, number] = process.argv.slice(2)
     if (mode === '--pre-push') beforePush()
@@ -59,9 +60,7 @@ if (import.meta.main) {
       }
     } else if (mode === '--pr' && /^\d+$/.test(number)) {
       for (let page = 1; ; page++) {
-        const commits = api(
-          `repos/cubepals/cubepals/pulls/${number}/commits?per_page=100&page=${page}`,
-        ) as Parameters<typeof requireVerified>[0]
+        const commits = api(`repos/cubepals/cubepals/pulls/${number}/commits?per_page=100&page=${page}`)
         requireVerified(commits)
         if (commits.length < 100) break
       }

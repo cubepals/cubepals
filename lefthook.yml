@@ -7,12 +7,12 @@
 pre-commit:
   commands:
     signing:
-      run: bun run scripts/check-signatures.ts --config
+      run: bun run scripts/quality/check-signatures.mjs --config
 pre-push:
   commands:
     signatures:
       use_stdin: true
-      run: bun run scripts/check-signatures.ts --pre-push
+      run: bun run scripts/quality/check-signatures.mjs --pre-push
 commit-msg:
   commands:
     subject:

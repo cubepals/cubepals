@@ -7,29 +7,33 @@
  * this machine has no private key. The current branch must already exist remotely at HEAD.
  * Expected-head locking rejects concurrent edits. Validate the signature and complete tree
  * before moving the local branch; unstaged edits stay in the working tree.
- * Usage: GH_TOKEN=... bun scripts/signed-commit.ts "Subject" ["Body"]
+ * Usage: GH_TOKEN=... bun scripts/quality/signed-commit.mjs "Subject" ["Body"]
  */
-import { execFileSync } from 'node:child_process'
-import { subjectProblem } from './check-subject'
 
-function git(...args: string[]): string {
+import { execFileSync } from 'node:child_process'
+import { subjectProblem } from '../check-subject.ts'
+
+function git(...args) {
   return execFileSync('git', args, { encoding: 'utf8' }).trim()
 }
-
 const [headline, body = ''] = process.argv.slice(2)
 const problem = subjectProblem(headline ?? '')
-if (problem || `${headline}\n${body}`.includes('@'))
+if (
+  problem ||
+  `${headline}
+${body}`.includes('@')
+)
   throw new Error(problem ?? 'Commit messages cannot contain mentions')
 const branchName = git('symbolic-ref', '--short', 'HEAD')
 const expectedHeadOid = git('rev-parse', 'HEAD')
 const tree = git('write-tree')
 if (tree === git('rev-parse', 'HEAD^{tree}')) throw new Error('No staged changes')
-const additions: { path: string; contents: string }[] = []
-const deletions: { path: string }[] = []
+const additions = []
+const deletions = []
 for (const entry of git('diff', '--cached', '--name-status', '--no-renames', '-z')
-  .split('\0')
+  .split('\x00')
   .filter(Boolean)
-  .reduce<string[][]>((rows, item, i) => {
+  .reduce((rows, item, i) => {
     if (i % 2 === 0) rows.push([item])
     else rows[rows.length - 1].push(item)
     return rows

@@ -92,7 +92,7 @@ A change isn't done when its PR is green. It is done when the runs it starts on 
 
 **Every new commit is signed.** Enable `git config --local commit.gpgsign true` before committing.
 Never disable signing or create an unsigned interim commit. If this machine has no signing key,
-use `bun scripts/signed-commit.ts "Subject"` with authenticated GitHub access; it signs as the
+use `bun scripts/quality/signed-commit.mjs "Subject"` with authenticated GitHub access; it signs as the
 authenticated account and verifies the complete staged tree. Never generate a replacement user
 key. Before pushing, verify every PR commit. Rewrite published history only with explicit user
 authorization and an expected-head check; leave merged history alone.

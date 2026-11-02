@@ -29,7 +29,7 @@ Run `git config --local commit.gpgsign true` and configure your existing GPG or 
 Hooks reject disabled signing and unverified commits before push. CI checks every commit in a
 pull request, including changes that do not run the code tests, through the required `check`.
 Without a local signing key, stage the files and run
-`bun scripts/signed-commit.ts "Subject"` with authenticated GitHub CLI access. This creates a
+`bun scripts/quality/signed-commit.mjs "Subject"` with authenticated GitHub CLI access. This creates a
 verified GitHub signature as the authenticated user, checks that the tree matches the index,
 and updates the existing remote branch with an expected-head check. It publishes immediately.
 It supports ordinary files and deletions; executable files and symlinks need a local signing key.
