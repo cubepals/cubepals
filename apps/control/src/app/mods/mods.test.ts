@@ -80,18 +80,18 @@ const pinned = async (id: string) =>
     m.requiredBy,
   ])
 
-beforeAll(async () => {
-  await cdn.start()
-  h = await startHarness()
-}, 30_000)
-
-afterAll(async () => {
-  await h.close()
-  cdn.close()
-})
-
 // Mods end to end (§15.5): search, resolution through the catalog, the plan, the revision it applies.
 describe.skipIf(!hasDatabase)('mods', () => {
+  beforeAll(async () => {
+    await cdn.start()
+    h = await startHarness()
+  }, 30_000)
+
+  afterAll(async () => {
+    await h.close()
+    cdn.close()
+  })
+
   const server = async (request: { loader?: 'fabric' | 'vanilla'; gameVersion?: string } = {}) => {
     const owner = await h.user('Steve', 'plus')
     const created = await h.create(owner, { loader: 'fabric', ...request })
@@ -362,25 +362,22 @@ describe.skipIf(!hasDatabase)('mods', () => {
     expect(plan.kind === 'ok' && plan.revoked.map(identity)).toEqual(['moonlight', 'spark'])
     expect(await h.app.catalog.staleSince()).toBeNull()
   })
-})
 
-test.skipIf(!hasDatabase)('an expanding dependency chain cannot publish completed proof', async () => {
-  for (let i = 0; i < 20; i++)
-    publish(`bounded-${i}`, `Bounded ${i}`, [
-      { id: `bounded-v${i}`, requires: i < 19 ? [`bounded-${i + 1}`] : [] },
-    ])
-  const before = await h.db.select().from(schema.modCompilations)
-  await expect(
-    h.app.mods.resolveNew({ gameVersion: '26.3', loader: 'fabric' }, [{ projectId: 'bounded-0' }]),
-  ).rejects.toThrow('Resolving mods did not settle')
-  const rows = await h.db.select().from(schema.modCompilations)
-  expect(rows).toEqual(before)
-  for (let i = 0; i < 20; i++) h.catalog.setProjectState(`bounded-${i}`, 'archived')
-})
+  test('an expanding dependency chain cannot publish completed proof', async () => {
+    for (let i = 0; i < 20; i++)
+      publish(`bounded-${i}`, `Bounded ${i}`, [
+        { id: `bounded-v${i}`, requires: i < 19 ? [`bounded-${i + 1}`] : [] },
+      ])
+    const before = await h.db.select().from(schema.modCompilations)
+    await expect(
+      h.app.mods.resolveNew({ gameVersion: '26.3', loader: 'fabric' }, [{ projectId: 'bounded-0' }]),
+    ).rejects.toThrow('Resolving mods did not settle')
+    const rows = await h.db.select().from(schema.modCompilations)
+    expect(rows).toEqual(before)
+    for (let i = 0; i < 20; i++) h.catalog.setProjectState(`bounded-${i}`, 'archived')
+  })
 
-test.skipIf(!hasDatabase)(
-  'editing a failed first configuration starts its corrected revision',
-  async () => {
+  test('editing a failed first configuration starts its corrected revision', async () => {
     const owner = await h.user('Corrected configuration', 'plus')
     h.minecraft.breakOn(() => 'This first configuration could not load')
     let id: string
@@ -397,6 +394,5 @@ test.skipIf(!hasDatabase)(
     expect(
       (await loadRevision(h.db, (await h.server(id)).desiredRevisionId)).mods.map((mod) => mod.name),
     ).toContain('Corrected Mod')
-  },
-  30_000,
-)
+  }, 30_000)
+})
