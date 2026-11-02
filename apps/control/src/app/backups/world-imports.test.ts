@@ -104,6 +104,19 @@ describe.skipIf(!hasDatabase)('a single-player save', () => {
       'It was last played on Minecraft 1.21.11. It opens on 26.3, which updates it; the world as you uploaded it stays in Backups.',
       'Its folder on the server is world-2.',
     ])
+    const measured = await h.db.query.worldImports.findFirst({
+      where: (table, { eq }) => eq(table.id, ready.importId),
+    })
+    expect(measured?.progress?.steps.map((entry) => entry.step)).toEqual([
+      'fetching',
+      'checking',
+      'players',
+      'mods',
+      'packing',
+      'saving',
+    ])
+    expect(measured?.progress?.step).toBe('saving')
+
     // Its owner plays it as the world it is, by name, on the Minecraft that last saved it.
     expect(ready.world).toEqual({ name: 'world', gameVersion: '1.21.11', newer: null })
 

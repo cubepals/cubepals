@@ -356,6 +356,9 @@ async function restoreTargets() {
   await expect(withWorldMods(deps, desired, { gameVersion: '99.1', mods }, true)).rejects.toMatchObject({
     code: 'invalid_choice',
   })
+  await expect(withWorldMods(deps, desired, { gameVersion: '26.3', mods }, false)).rejects.toThrow(
+    'Tree Harvester couldn’t be prepared for this server.',
+  )
   const restored = await withWorldMods(deps, desired, { gameVersion: '26.2', mods }, true)
   expect(restored.draft.gameVersion).toBe('26.3')
   expect(restored.draft.mods.find((mod) => mod.name === 'Tree Harvester')?.source).toMatchObject({

@@ -138,6 +138,18 @@ describe.skipIf(!hasDatabase)('a single-player save, before its server is made',
       ],
     })
 
+    const measured = await h.db.query.worldImports.findFirst({
+      where: (table, { eq }) => eq(table.id, asked.importId),
+    })
+    expect(measured?.progress?.steps.map((entry) => entry.step)).toEqual([
+      'fetching',
+      'checking',
+      'players',
+      'packing',
+      'saving',
+    ])
+    expect(measured?.progress?.step).toBe('saving')
+
     // Its world inside its own folder, as the step unpacks it, its host's file among it.
     const dir = await unpacked(await keptKey(asked.importId))
     const alex = normalizeUuid((await h.profiles.byName('Alex'))?.uuid ?? '')
