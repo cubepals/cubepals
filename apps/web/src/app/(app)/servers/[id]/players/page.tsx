@@ -151,7 +151,7 @@ export default function PlayersPage() {
         />
       </FormSection>
 
-      <Moderation serverId={server.id} running={running}>
+      <Moderation server={server.data}>
         <AccessSection
           serverId={server.id}
           list="helper"

@@ -7,6 +7,7 @@
 import {
   DIFFICULTIES,
   GAME_MODES,
+  type RestartWhen,
   type ServerSettingsView,
   type ServerView,
   type SettingsOptions,
@@ -52,6 +53,13 @@ export function GameSettings({ view, options }: { view: ServerView; options: Set
   const outcome = useOutcome(view)
   return <GameForm key={JSON.stringify(view.settings)} view={view} options={options} outcome={outcome} />
 }
+
+/** The settings change as the API takes it, with when it restarts the server and any jars run anyway. */
+const saved = (
+  view: ServerView,
+  settings: ServerSettingsView,
+  how: { requestId: string; when: RestartWhen; acknowledgeRevoked?: boolean },
+) => ({ serverId: view.id, version: view.version, settings, ...how })
 
 function GameForm({
   view,
@@ -197,6 +205,7 @@ function GameForm({
         </div>
       </FormSection>
       <ConfirmChange
+        view={restarts ? view : undefined}
         open={confirming}
         onClose={() => setConfirming(false)}
         title="Save these changes?"
@@ -204,17 +213,9 @@ function GameForm({
         confirmLabel={view.status === 'running' && restarts ? 'Save and restart' : 'Save changes'}
         working="Saving your changes"
         error={save.error}
-        onConfirm={(requestId) =>
-          save.mutateAsync({ serverId: view.id, requestId, version: view.version, settings: next })
-        }
-        onAcknowledge={(requestId) =>
-          save.mutateAsync({
-            serverId: view.id,
-            requestId,
-            version: view.version,
-            settings: next,
-            acknowledgeRevoked: true,
-          })
+        onConfirm={(requestId, when) => save.mutateAsync(saved(view, next, { requestId, when }))}
+        onAcknowledge={(requestId, when) =>
+          save.mutateAsync(saved(view, next, { requestId, when, acknowledgeRevoked: true }))
         }
       >
         <p className="type-body-sm" style={{ color: 'var(--ink-muted)' }}>

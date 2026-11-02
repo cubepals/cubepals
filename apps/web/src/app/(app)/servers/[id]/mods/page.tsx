@@ -4,7 +4,7 @@
 
 'use client'
 
-import type { ModChangeInput, ModsView, ModView, ServerView } from '@blockly/contracts'
+import type { ModChangeInput, ModsView, ModView, RestartWhen, ServerView } from '@blockly/contracts'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Download, ExternalLink, Plus, RefreshCw, Upload } from 'lucide-react'
 import Image from 'next/image'
@@ -169,17 +169,19 @@ function MovePack({
       },
     }),
   )
-  const send = (requestId: string, acknowledgeRevoked: boolean) =>
+  const send = (requestId: string, acknowledgeRevoked: boolean, when: RestartWhen) =>
     apply.mutateAsync({
       serverId: view.id,
       requestId,
       version: view.version,
       to: move.to,
+      when,
       acknowledgeRevoked,
     })
   const from = list.modpack
   return (
     <ConfirmChange
+      view={view}
       open
       onClose={onClose}
       title={`Play ${move.name} ${move.version}?`}
@@ -190,8 +192,8 @@ function MovePack({
       confirmLabel={view.status === 'running' ? 'Update and restart' : 'Update'}
       working="Updating the pack"
       error={apply.error}
-      onConfirm={(requestId) => send(requestId, false)}
-      onAcknowledge={(requestId) => send(requestId, true)}
+      onConfirm={(requestId, when) => send(requestId, false, when)}
+      onAcknowledge={(requestId, when) => send(requestId, true, when)}
     >
       {move.movesWorld && (
         <Note tone="info">
@@ -593,18 +595,20 @@ function PlanChange({
   const planned = plan.data?.kind === 'ok' ? plan.data : null
   const refused = plan.data?.kind === 'conflicts' ? plan.data : null
   const lines = planned ? presentPlan(planned) : []
-  const send = (requestId: string, acknowledgeRevoked: boolean) =>
+  const send = (requestId: string, acknowledgeRevoked: boolean, when: RestartWhen) =>
     apply.mutateAsync({
       serverId: view.id,
       ...change,
       ...(moveTo === null ? {} : { moveTo }),
       requestId,
       expected: planned?.expected ?? [],
+      when,
       acknowledgeRevoked,
     })
 
   return (
     <ConfirmChange
+      view={view}
       open
       onClose={onClose}
       title={planned && lines.length === 0 ? 'Everything is up to date' : title}
@@ -613,8 +617,8 @@ function PlanChange({
       working="Applying your mods"
       error={apply.error}
       disabled={planned === null || lines.length === 0 || (planned.revoked.length > 0 && !acknowledged)}
-      onConfirm={(requestId) => send(requestId, acknowledged)}
-      onAcknowledge={(requestId) => send(requestId, true)}
+      onConfirm={(requestId, when) => send(requestId, acknowledged, when)}
+      onAcknowledge={(requestId, when) => send(requestId, true, when)}
     >
       {plan.isPending && <Skeleton width="70%" />}
       {plan.isError && <Note tone="danger">{messageOf(plan.error)}</Note>}

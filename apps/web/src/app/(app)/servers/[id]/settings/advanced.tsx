@@ -81,6 +81,7 @@ function ServerSoftware({ view, outcome }: { view: ServerView; outcome: Outcome 
         }
       />
       <ConfirmChange
+        view={view}
         open={asking}
         onClose={() => setAsking(false)}
         title={on ? 'Run Mojang’s own server?' : 'Run on Paper?'}
@@ -88,10 +89,11 @@ function ServerSoftware({ view, outcome }: { view: ServerView; outcome: Outcome 
         confirmLabel={on ? 'Switch to Mojang’s server' : 'Switch to Paper'}
         working="Switching"
         error={save.error}
-        onConfirm={(requestId) =>
+        onConfirm={(requestId, when) =>
           save.mutateAsync({
             serverId: view.id,
             requestId,
+            when,
             version: view.version,
             gameVersion: view.gameVersion,
             loader: 'vanilla',
@@ -173,6 +175,7 @@ function OnlineAuthentication({ view, outcome }: { view: ServerView; outcome: Ou
         }
       />
       <ConfirmChange
+        view={view}
         open={asking}
         onClose={() => setAsking(false)}
         title={on ? 'Turn off online authentication?' : 'Turn on online authentication?'}
@@ -181,8 +184,8 @@ function OnlineAuthentication({ view, outcome }: { view: ServerView; outcome: Ou
         tone={on ? 'danger' : 'primary'}
         working={on ? 'Turning it off' : 'Turning it on'}
         error={save.error}
-        onConfirm={(requestId) =>
-          save.mutateAsync({ serverId: view.id, requestId, version: view.version, onlineMode: !on })
+        onConfirm={(requestId, when) =>
+          save.mutateAsync({ serverId: view.id, requestId, when, version: view.version, onlineMode: !on })
         }
       >
         {on ? (

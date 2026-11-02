@@ -62,7 +62,6 @@ function BedrockForm({ view, on, blocked }: { view: ServerView; on: boolean; blo
   const allowed = changeable(view)
   // The server's words only for work this switch started; anything else it waits out disabled.
   const busy = busyFor(outcome, view)
-  const occupied = view.status === 'running' && (view.players?.online ?? 0) > 0
   const line = lineOf(on, blocked)
   const said =
     busy !== undefined
@@ -98,14 +97,21 @@ function BedrockForm({ view, on, blocked }: { view: ServerView; on: boolean; blo
         </>
       )}
       <ConfirmChange
+        view={view}
         open={asking !== null}
         onClose={() => setAsking(null)}
         title={asking === false ? 'Stop Bedrock players joining?' : 'Let Bedrock players join?'}
         confirmLabel={asking === false ? 'Stop them joining' : 'Let them join'}
         working="Saving your change"
         error={save.error}
-        onConfirm={(requestId) =>
-          save.mutateAsync({ serverId: view.id, requestId, version: view.version, bedrock: asking ?? on })
+        onConfirm={(requestId, when) =>
+          save.mutateAsync({
+            serverId: view.id,
+            requestId,
+            when,
+            version: view.version,
+            bedrock: asking ?? on,
+          })
         }
       >
         <p>
@@ -114,9 +120,7 @@ function BedrockForm({ view, on, blocked }: { view: ServerView; on: boolean; blo
             : 'Players on phones, tablets and Windows can join with the same address.'}
         </p>
         <p className="type-body-sm" style={{ color: 'var(--ink-muted)' }}>
-          {occupied
-            ? 'Someone is playing, so the change waits and the server takes it the next time it starts.'
-            : whatHappens(view)}
+          {whatHappens(view)}
         </p>
       </ConfirmChange>
     </FormSection>
@@ -145,7 +149,6 @@ function LetThemIn({ view }: { view: ServerView }) {
   const allowed = changeable(view)
   // The server's words only for work this switch started; anything else it waits out disabled.
   const busy = busyFor(outcome, view)
-  const occupied = view.status === 'running' && (view.players?.online ?? 0) > 0
   const line = 'Friends on phones, tablets and Windows can’t join this server yet.'
   const said = busy !== undefined ? `${busy}…` : outcome.said === 'failed' ? `Didn’t change. ${line}` : line
   return (
@@ -154,14 +157,15 @@ function LetThemIn({ view }: { view: ServerView }) {
         Let Bedrock friends in
       </Button>
       <ConfirmChange
+        view={view}
         open={asking}
         onClose={() => setAsking(false)}
         title="Let Bedrock friends in?"
         confirmLabel="Let them in"
         working="Saving your change"
         error={save.error}
-        onConfirm={(requestId) =>
-          save.mutateAsync({ serverId: view.id, requestId, version: view.version, bedrock: true })
+        onConfirm={(requestId, when) =>
+          save.mutateAsync({ serverId: view.id, requestId, when, version: view.version, bedrock: true })
         }
       >
         <p>
@@ -171,9 +175,7 @@ function LetThemIn({ view }: { view: ServerView }) {
         </p>
         <p>You can stop them joining here, and go back to Mojang’s own server under Advanced.</p>
         <p className="type-body-sm" style={{ color: 'var(--ink-muted)' }}>
-          {occupied
-            ? 'Someone is playing, so the change waits and the server takes it the next time it starts.'
-            : whatHappens(view)}
+          {whatHappens(view)}
         </p>
       </ConfirmChange>
     </FormSection>

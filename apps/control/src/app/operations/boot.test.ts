@@ -539,3 +539,22 @@ describe('a resume', () => {
     expect(seen).toMatchObject({ process: 2, forceStops: 1, marks: ['resume_hung', 'let_in'] })
   })
 })
+
+test('a pack contents outage does not reject a healthy game that is ready to admit players', async () => {
+  const requested: string[] = []
+  const { boot, ctx, seen } = machine({
+    answers: () => true,
+    pack: {
+      load: async (sha512) => {
+        requested.push(sha512)
+        throw new Error('The pack contents store is unavailable')
+      },
+      leaveOutAfterCrash: async () => [],
+      keepAfterCrash: async () => null,
+    },
+  })
+  const modpack = { artifact: { sha512: 'unavailable-pack' } } as ServerRevision['modpack']
+  await boot.run(ctx, server, handle, { ...vanilla, modpack })
+  expect(requested).toEqual(['unavailable-pack'])
+  expect(seen).toEqual({ process: 1, stops: 0, forceStops: 0, reprovisions: 0, marks: ['let_in'] })
+})

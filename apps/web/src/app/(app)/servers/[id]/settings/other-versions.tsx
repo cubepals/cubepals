@@ -97,16 +97,18 @@ function OtherVersionsForm({
         />
       )}
       <ConfirmChange
+        view={view}
         open={asking !== null}
         onClose={() => setAsking(null)}
         title={asking === 'off' ? 'Only let in your own version?' : 'Let in other versions?'}
         confirmLabel={asking === 'off' ? 'Only my version' : 'Let them in'}
         working="Saving your change"
         error={save.error}
-        onConfirm={(requestId) =>
+        onConfirm={(requestId, when) =>
           save.mutateAsync({
             serverId: view.id,
             requestId,
+            when,
             version: view.version,
             otherVersions: asking ?? choice,
           })

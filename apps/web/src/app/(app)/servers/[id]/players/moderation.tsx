@@ -16,25 +16,31 @@ import {
   MODERATION_LENGTHS,
   type ModerationKind,
   type ModerationStep,
+  type ServerView,
 } from '@blockly/contracts'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { type ReactNode, useState } from 'react'
 import { messageOf, useTRPC } from '../../../../../lib/api'
 import { lengthLabel, stepLabel } from '../../../../../lib/moderation'
 import { Button, FormSection, Note, Select, Toggle } from '../../../../../ui'
+import { occupied } from '../settings/restart-lines'
 import { useChanged } from '../settings/shared'
+import { WaitingChanges } from '../settings/waiting-changes'
+import { useRestartAsk } from './restart-ask'
 import { StopCheaters } from './stop-cheaters'
 
 export function Moderation({
-  serverId,
-  running,
+  server,
   children,
 }: {
-  serverId: string
-  running: boolean
+  /** The server, for who is on it: with players on, a switch asks when it restarts the server. */
+  server: ServerView
   /** The helpers, as the page lists every access list. */
   children: ReactNode
 }) {
+  const serverId = server.id
+  const running = server.status === 'running'
+  const restart = useRestartAsk(server)
   const trpc = useTRPC()
   const queries = useQueryClient()
   const changed = useChanged(serverId)
@@ -50,13 +56,25 @@ export function Moderation({
   if (!view.isSuccess) return null
   const { enabled, chatFilter, available, stopCheaters } = view.data
   const change = (next: { enabled: boolean; chatFilter: boolean }) =>
-    set.mutate({ serverId, ...next, requestId: crypto.randomUUID() })
-  const cheaters = <StopCheaters serverId={serverId} view={stopCheaters} tools={enabled} />
-  // Said once for the section: every switch in it restarts a running server.
+    restart.ask({
+      title: next.enabled === enabled ? 'Change the chat filter?' : 'Change the moderation tools?',
+      confirmLabel: 'Save',
+      run: (when) => set.mutateAsync({ serverId, ...next, when, requestId: crypto.randomUUID() }),
+    })
+  const cheaters = <StopCheaters serverId={serverId} view={stopCheaters} tools={enabled} ask={restart.ask} />
+  // Said once for the section: every switch in it restarts a running server, and what waits for
+  // everyone to leave shows above them, with its ways out.
   const restarts = (
-    <p className="bk-field__help">
-      {running ? 'Turning these on or off restarts the server.' : 'They arrive when the server next starts.'}
-    </p>
+    <>
+      <p className="bk-field__help">
+        {running
+          ? 'Turning these on or off restarts the server.'
+          : 'They arrive when the server next starts.'}
+        {occupied(server) && ' Someone is playing, so you choose whether it waits for everyone to leave.'}
+      </p>
+      <WaitingChanges view={server} changed={changed} />
+      {restart.dialog}
+    </>
   )
   // Where the tools can't run, Stop cheaters' line is all the section says.
   if (!available)
