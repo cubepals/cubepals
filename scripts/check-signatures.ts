@@ -58,14 +58,13 @@ if (import.meta.main) {
         throw new Error('Signing must be enabled: git config --local commit.gpgsign true')
       }
     } else if (mode === '--pr' && /^\d+$/.test(number)) {
-      const pages = JSON.parse(
-        execFileSync(
-          'gh',
-          ['api', '--paginate', '--slurp', `repos/cubepals/cubepals/pulls/${number}/commits`],
-          { encoding: 'utf8' },
-        ),
-      )
-      requireVerified(pages.flat())
+      for (let page = 1; ; page++) {
+        const commits = api(
+          `repos/cubepals/cubepals/pulls/${number}/commits?per_page=100&page=${page}`,
+        ) as Parameters<typeof requireVerified>[0]
+        requireVerified(commits)
+        if (commits.length < 100) break
+      }
     } else throw new Error('Usage: check-signatures.ts --pre-push | --config | --pr NUMBER')
   } catch (error) {
     console.error(error instanceof Error ? error.message : error)
