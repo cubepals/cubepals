@@ -434,3 +434,36 @@ describe('joining a server that lets Bedrock players in', () => {
     expect(letsBedrockIn({ bedrock: null })).toBe(false)
   })
 })
+
+test('the public countdown keeps its boundary wording after moving', () => {
+  const now = Date.parse('2026-11-02T12:00:00Z')
+  for (const [seconds, label] of [
+    [151, 'A few minutes left'],
+    [150, 'A couple of minutes left'],
+    [91, 'A couple of minutes left'],
+    [90, 'About a minute left'],
+    [46, 'About a minute left'],
+    [45, 'About 45 seconds left'],
+    [6, 'About 10 seconds left'],
+    [5, 'Almost there'],
+    [-29, 'Almost there'],
+    [-30, 'Taking a little longer than usual'],
+  ] as const)
+    expect(etaLine(null, seconds, now)).toBe(label)
+  expect(etaLine('2026-11-02T11:59:00Z', 150, now)).toBe('About a minute left')
+})
+
+test('the retained progress labels still describe the current stage', () => {
+  const server = { gameVersion: '26.3', modCount: 0, modpack: null }
+  for (const [step, label] of [
+    ['saving', 'Saving your world first'],
+    ['stopping', 'Stopping it safely'],
+    ['rolling_back', 'Putting it back how it was'],
+    ['allocating', 'Finding room for it'],
+    ['waiting_for_room', 'Waiting for room to do this'],
+    ['storage', 'Setting aside space for your world'],
+    ['compute', 'Getting its home ready'],
+    ['resuming', 'Picking up where it left off'],
+  ] as const)
+    expect(quietLine(step, server)).toBe(label)
+})
