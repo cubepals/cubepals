@@ -70,8 +70,9 @@ export class Resume {
   }
 
   /**
-   * Whether a server its runtime resumed came back as it was: running, and answering a status
-   * ping within `RESUME_MS` of running, which no boot does. False where the provider dropped the
+   * Whether a server its runtime resumed came back as it was: answering a valid status ping,
+   * even while provider state still lags. Once the provider reports running, the answer has
+   * `RESUME_MS` to arrive before a fresh boot is considered. False where the provider dropped the
    * memory it kept and boots it from its storage instead (a deploy, a host move, maintenance), as
    * what it printed since `since` shows: the start goes on as a boot, whose output is then followed
    * from there, a few seconds into it. False too where the resume hung, once the machine is
@@ -87,7 +88,13 @@ export class Resume {
     const running = AbortSignal.timeout(this.#hungMs)
     let came: 'answered' | 'booting' | 'hung'
     try {
-      await this.#runtime.waitRunning(handle, running)
+      await ctx.mark('resume_observing')
+      const first = await this.#runningOrAnswered(handle, endpoint(), running)
+      if (first === 'answered') {
+        await ctx.mark('resume_answered')
+        return true
+      }
+      await ctx.mark('resume_running')
       // Running at last, it has `RESUME_MS` to answer or print: a boot from its disk that got
       // running late in the bound is never cut off before its output could show it boots.
       came = await this.#answer(endpoint(), handle, since, Math.max(hungAt, Date.now() + RESUME_MS))
@@ -99,7 +106,41 @@ export class Resume {
     }
     if (came === 'hung')
       await this.#startFresh(ctx, handle, new Error('It ran, but answered and printed nothing'))
+    if (came === 'answered') await ctx.mark('resume_answered')
     return came === 'answered'
+  }
+
+  /** An answering game is ready even while its provider's state or long poll still lags. */
+  async #runningOrAnswered(
+    handle: RuntimeHandle,
+    endpoint: GameEndpoint,
+    signal: AbortSignal,
+  ): Promise<'running' | 'answered'> {
+    const finished = new AbortController()
+    const waiting = AbortSignal.any([signal, finished.signal])
+    try {
+      return await Promise.race([
+        this.#runtime.waitRunning(handle, waiting).then(() => 'running' as const),
+        this.#answerWhileStarting(endpoint, waiting).then(() => 'answered' as const),
+      ])
+    } finally {
+      // Neither a provider long poll nor a pending socket may outlive the readiness decision.
+      finished.abort()
+    }
+  }
+
+  async #answerWhileStarting(endpoint: GameEndpoint, signal: AbortSignal): Promise<void> {
+    for (;;) {
+      signal.throwIfAborted()
+      try {
+        await this.#probe.ping(endpoint, AbortSignal.any([signal, AbortSignal.timeout(PING_MS)]))
+        signal.throwIfAborted()
+        return
+      } catch {
+        signal.throwIfAborted()
+      }
+      await new Promise((resolve) => setTimeout(resolve, RESUME_PAUSE_MS))
+    }
   }
 
   /**

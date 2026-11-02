@@ -14,7 +14,7 @@ import { describe, expect, test } from 'bun:test'
 import type { ProgressSink, RuntimeKey, RuntimeSpec } from '../../app/ports/runtime.ts'
 import { flyClient } from './client.ts'
 import { FakeFly } from './fake-fly.ts'
-import { createMachine, updateMachine } from './fly-runtime/machines.ts'
+import { createMachine, untilStarted, updateMachine } from './fly-runtime/machines.ts'
 import { FlyRuntime } from './fly-runtime.ts'
 import { decodeHandle, encodeHandle } from './handle.ts'
 
@@ -245,4 +245,27 @@ describe('FlyRuntime waiting on a machine that never starts', () => {
     )
     expect(Date.now() - asked).toBeLessThan(2_000)
   })
+})
+
+test('cancelling a running-state wait aborts its pending machine read', async () => {
+  const received = Promise.withResolvers<void>()
+  let requestSignal: AbortSignal | undefined
+  const client = flyClient('token', {
+    fetch: async (request) => {
+      requestSignal = request.signal
+      received.resolve()
+      return new Promise<Response>((_, reject) => {
+        request.signal.addEventListener('abort', () => reject(request.signal.reason), { once: true })
+      })
+    },
+  })
+  const cancel = new AbortController()
+  const waiting = untilStarted(client, APP, 'pending-machine', cancel.signal).then(
+    () => null,
+    (error: unknown) => error,
+  )
+  await received.promise
+  cancel.abort(new Error('readiness already answered'))
+  expect(await waiting).toBe(cancel.signal.reason)
+  expect(requestSignal?.aborted).toBe(true)
 })
