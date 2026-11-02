@@ -22,6 +22,7 @@ import type { LoaderBuilds } from '../ports/loaders.ts'
 import { loaderPin } from '../revisions/pins.ts'
 import { draftOf } from '../revisions/service.ts'
 import { newerRelease } from './moved-up.ts'
+import type { WorldMods } from './world-mods.ts'
 
 /** The revision a restore with a world's mods makes, and the one it was resolved from. */
 export interface WithMods {
@@ -35,7 +36,7 @@ export interface WithMods {
  * can't run there.
  */
 export async function withWorldMods(
-  deps: { mods: Pick<ModService, 'planOn'>; builds: LoaderBuilds },
+  deps: { mods: Pick<ModService, 'planOn'>; builds: LoaderBuilds; worldMods: Pick<WorldMods, 'current'> },
   desired: ServerRevision,
   world: { gameVersion: string; mods: BroughtModsJson },
   moveUp: boolean | undefined,
@@ -50,21 +51,22 @@ export async function withWorldMods(
   const { loader } = world.mods
   if (!supports(gameVersion, loader)) throw new AppError('invalid_choice', notOffered(loader, gameVersion))
   const exact = gameVersion === world.gameVersion
+  const serverMods = await deps.worldMods.current(world.mods)
   const plan = await deps.mods.planOn(
     desired,
     { gameVersion, loader },
     {
-      add: world.mods.catalog.map((mod) => ({
+      add: serverMods.catalog.map((mod) => ({
         projectId: mod.projectId,
         ...(exact ? { versionId: mod.versionId } : {}),
       })),
-      addUploads: world.mods.own.map((mod) => mod.uploadId),
+      addUploads: serverMods.own.map((mod) => mod.uploadId),
     },
   )
   if (plan.kind === 'conflicts')
     throw new AppError(
       'mods_conflict',
-      `The mods this world was played with can’t run together on ${LOADER_LABELS[loader]} for Minecraft ${gameVersion}: ${plan.conflicts.map((c) => c.mod).join(', ')}.`,
+      `Some mods need attention before this world can play on ${LOADER_LABELS[loader]} for Minecraft ${gameVersion}. ${plan.conflicts.map((conflict) => (conflict.kind === 'missing_dependency' ? `${conflict.mod} needs ${conflict.dependency}, which couldn’t be resolved for this server.` : `${conflict.mod} couldn’t be prepared for this server.`)).join(' ')}`,
     )
   const moves = gameVersion !== desired.gameVersion || loader !== desired.loader
   return {

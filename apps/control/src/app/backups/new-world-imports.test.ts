@@ -8,7 +8,7 @@
  * its owner knows, packed as the new server's first start unpacks it, and a server made to fit it,
  * whose own link serves the archive the real step unpacks where its world goes.
  */
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
+import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test'
 import { execFile } from 'node:child_process'
 import { mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -33,6 +33,8 @@ import { offlineUuid } from '../access/identity.ts'
 import { grownStorage, loadRevision } from '../servers/persistence.ts'
 import { installTuning, tuning } from '../tuning.ts'
 import { listWorlds } from '../worlds/persistence.ts'
+import { broughtWorld } from './new-world-imports.ts'
+import { MAX_WORLD_BYTES } from './world-reading.ts'
 
 const run = promisify(execFile)
 const formats = new LibraryFileFormats()
@@ -135,6 +137,18 @@ describe.skipIf(!hasDatabase)('a single-player save, before its server is made',
         'Gave Alex what they carried and where they stood in the single-player world.',
       ],
     })
+
+    const measured = await h.db.query.worldImports.findFirst({
+      where: (table, { eq }) => eq(table.id, asked.importId),
+    })
+    expect(measured?.progress?.steps.map((entry) => entry.step)).toEqual([
+      'fetching',
+      'checking',
+      'players',
+      'packing',
+      'saving',
+    ])
+    expect(measured?.progress?.step).toBe('saving')
 
     // Its world inside its own folder, as the step unpacks it, its host's file among it.
     const dir = await unpacked(await keptKey(asked.importId))
@@ -244,6 +258,8 @@ describe.skipIf(!hasDatabase)('a Paper server’s folder, before its server is m
 })
 
 describe.skipIf(!hasDatabase)('what can’t make a server', () => {
+  test('invalid or incomplete uploads never become a world', rejectIncompleteUploads, 120_000)
+  test('old saves explain their update and survive a lost cleanup acknowledgement', oldSaveCleanup, 120_000)
   test('a world newer than every release offered is refused, saying so', async () => {
     const owner = await h.user('Ivo', 'plus')
     const files = await save('Future/')
@@ -561,3 +577,84 @@ describe.skipIf(!hasDatabase)('a server’s folder with other worlds, before its
     )
   }, 120_000)
 })
+
+async function rejectIncompleteUploads() {
+  const owner = await h.user('Checks', 'plus')
+  const stranger = await h.user('Different owner', 'plus')
+  for (const file of [
+    { fileName: '', sizeBytes: 1 },
+    { fileName: 'world.exe', sizeBytes: 1 },
+    { fileName: 'world.zip', sizeBytes: 0 },
+    { fileName: 'world.zip', sizeBytes: 1.1 },
+    { fileName: 'world.zip', sizeBytes: MAX_WORLD_BYTES + 1 },
+  ])
+    await expect(h.app.backups.newWorlds.begin(owner, file)).rejects.toMatchObject({ code: 'invalid_upload' })
+  const small = await h.user('Small world plan', 'free')
+  await expect(
+    h.app.backups.newWorlds.begin(small, { fileName: 'world.zip', sizeBytes: MAX_WORLD_BYTES }),
+  ).rejects.toMatchObject({ code: 'invalid_upload' })
+  const pending = await h.app.backups.newWorlds.begin(owner, { fileName: 'world.zip', sizeBytes: 10 })
+  await expect(h.app.backups.newWorlds.finish(owner, pending.ticket)).rejects.toThrow('never arrived')
+  await expect(h.app.backups.newWorlds.finish(stranger, pending.ticket)).rejects.toThrow('Upload')
+  await fetch(pending.url, { method: 'PUT', body: 'short', headers: pending.headers })
+  await expect(h.app.backups.newWorlds.finish(owner, pending.ticket)).rejects.toThrow('whole')
+  const read = await bringNewWorld(h, owner, zipBytes(await save('Life/')))
+  if (read.status !== 'ready') throw new Error(`Import ${read.status}`)
+  expect(await h.app.backups.newWorlds.finish(owner, read.importId)).toEqual({ importId: read.importId })
+  const row = await h.db.query.worldImports.findFirst({ where: (t, { eq }) => eq(t.id, read.importId) })
+  if (!row) throw new Error('Missing kept import')
+  await h.db.update(schema.worldImports).set({ facts: null }).where(eq(schema.worldImports.id, read.importId))
+  await expect(broughtWorld(h.db, owner.userId, read.importId)).rejects.toThrow('isn’t ready')
+  const legacy = await h.app.backups.newWorlds.view(owner, read.importId)
+  expect(legacy.status === 'ready' && legacy.world).toMatchObject({
+    name: 'Your world',
+    gameVersion: '',
+    playsOn: '',
+  })
+  await expect(
+    h.app.backups.newWorlds.choosePeople(owner, read.importId, {
+      letIn: [],
+      operators: [],
+      whitelistOn: false,
+      keepBans: false,
+    }),
+  ).rejects.toMatchObject({ code: 'invalid_choice' })
+  expect((await h.app.backups.newWorlds.answer(owner, read.importId, {})).status).toBe('ready')
+  await h.db
+    .update(schema.worldImports)
+    .set({ facts: row.facts, startsOn: null })
+    .where(eq(schema.worldImports.id, read.importId))
+  await expect(broughtWorld(h.db, owner.userId, read.importId)).rejects.toThrow('no longer keeps')
+  await h.db.transaction(async (tx) =>
+    expect(
+      await h.app.backups.newWorlds.fromPack(tx, {
+        ownerId: owner.userId,
+        key: 'unused',
+        fileName: 'huge.zip',
+        sizeBytes: MAX_WORLD_BYTES + 1,
+      }),
+    ).toBeNull(),
+  )
+}
+
+async function oldSaveCleanup() {
+  const owner = await h.user('Older world', 'plus')
+  const files = await save('Old/')
+  const level = files['Old/level.dat']
+  if (!level) throw new Error('Missing fixture level.dat')
+  files['Old/level.dat'] = await savedOn(level, '1.20.3')
+  const remove = store.delete.bind(store)
+  const cleanup = spyOn(store, 'delete').mockImplementation(async (key) => {
+    await remove(key)
+    // The store applied the deletion, but its acknowledgement was lost.
+    throw new Error('The store disconnected after deleting the upload')
+  })
+  try {
+    const read = await bringNewWorld(h, owner, zipBytes(files))
+    if (read.status !== 'ready') throw new Error(`Import ${read.status}`)
+    expect(read.notes.join(' ')).toContain('updates it when it first starts')
+    expect((await broughtWorld(h.db, owner.userId, read.importId)).startsOn).toBeDefined()
+  } finally {
+    cleanup.mockRestore()
+  }
+}

@@ -2,24 +2,48 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-/**
- * How long reading a world that went up takes, said while it is read: the control plane fetches it
- * from the store, walks every file and keeps it again, at about the pace production read a 2.1 GB
- * world (4 minutes 16 seconds, about 8 MB a second). A countdown from that, which says so once it
- * runs long rather than stopping at nothing. Not how fast it went up (`upload-pace.ts`).
- */
-import { SECOND_MS } from '@blockly/contracts/durations'
+/** World-import progress from the worker's stage and byte counts; estimates apply only to that stage. */
+import type { WorldImportProgress } from '@blockly/contracts'
+import { MINUTE_S, SECOND_MS } from '@blockly/contracts/durations'
+import { bytes } from './present'
 import { timeLeft } from './upload-pace'
 
-/** Bytes a second the control plane reads an upload at, as production did. */
-const READ_BYTES_PER_SECOND = 8 * 1024 ** 2
-/** Every world takes a little time whatever its size: fetching it and keeping it again. */
-const LEAST_SECONDS = 10
+const LABELS: Record<WorldImportProgress['step'], string> = {
+  fetching: 'Fetching your uploaded world',
+  checking: 'Checking the world’s files',
+  players: 'Checking players and their inventories',
+  mods: 'Finding the mods your server needs',
+  packing: 'Preparing and saving your world',
+  saving: 'Finishing and keeping your world safe',
+}
 
-/** "About 3 minutes left", counted down from when reading began. */
-export function readingLeft(sizeBytes: number, startedAt: number, now: number): string {
-  const expected = Math.max(LEAST_SECONDS, sizeBytes / READ_BYTES_PER_SECOND)
-  const left = expected - (now - startedAt) / SECOND_MS
-  if (left > 0) return timeLeft(left)
-  return left > -expected / 2 ? 'Almost there' : 'Taking longer than usual for a world this size'
+/** Elapsed time, never a prediction of the remaining work. */
+export function readingElapsed(seconds: number): string {
+  const whole = Math.max(0, Math.floor(seconds))
+  return whole < MINUTE_S ? `${whole}s` : `${Math.floor(whole / MINUTE_S)}m ${whole % MINUTE_S}s`
+}
+
+export function readingProgress(progress: WorldImportProgress | null, now: number) {
+  if (progress === null)
+    return {
+      label: 'Waiting to prepare your world',
+      detail: 'Your upload is safe. Waiting for a worker.',
+      percent: null,
+    }
+  const elapsed = Math.max(0, now - Date.parse(progress.startedAt)) / SECOND_MS
+  const parts = [`${readingElapsed(elapsed)} elapsed`]
+  const total = progress.totalBytes
+  if (total !== null) parts.unshift(`${bytes(progress.bytes)} of ${bytes(total)}`)
+  const phaseAt = progress.steps.at(-1)?.at ?? progress.startedAt
+  const measuredSeconds = (Date.parse(progress.updatedAt) - Date.parse(phaseAt)) / SECOND_MS
+  const fresh = now - Date.parse(progress.updatedAt) < 15 * SECOND_MS
+  if (total !== null && progress.bytes < total && progress.bytes > 0 && measuredSeconds >= 2 && fresh) {
+    parts.push(`${timeLeft(((total - progress.bytes) / progress.bytes) * measuredSeconds)} in this step`)
+  }
+  return {
+    label: LABELS[progress.step],
+    detail: parts.join(' · '),
+    // The bar describes this step. Completion is acknowledged only when the next stage arrives.
+    percent: total === null || total <= 0 ? null : Math.min(99, Math.max(0, (progress.bytes / total) * 100)),
+  }
 }

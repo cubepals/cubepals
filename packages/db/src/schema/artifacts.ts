@@ -6,7 +6,7 @@
  * Files Blockly keeps and builds from: stored artifacts by hash, uploads in flight, uploaded mods,
  * and the packs read from them.
  */
-import type { PeopleChoice } from '@blockly/contracts'
+import type { PeopleChoice, WorldImportProgress } from '@blockly/contracts'
 import {
   type AnyPgColumn,
   bigint,
@@ -176,6 +176,7 @@ export const worldImports = pgTable(
     /** What its owner named it, for a world the server has never had. */
     name: text('name'),
     status: worldImportStatus('status').notNull().default('reading'),
+    progress: jsonb().$type<WorldImportProgress>(),
     question: jsonb('question').$type<WorldImportQuestionJson>(),
     answer: jsonb('answer').$type<WorldImportAnswerJson>(),
     /** Set once ready: the backup the world became. */

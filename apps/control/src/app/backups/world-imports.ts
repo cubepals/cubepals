@@ -52,6 +52,7 @@ import { loadRevisionFields } from '../servers/revision-reads.ts'
 import { claimPendingUpload, loadPendingUpload, type PendingUpload } from '../uploads/persistence.ts'
 import { listWorlds } from '../worlds/persistence.ts'
 import { putStream } from './downloads.ts'
+import { ImportProgress } from './import-progress.ts'
 import { type KeptWorld, levelFor, othersNotes, recordKept } from './kept-worlds.ts'
 import { movesWithWorld, newerWorldOf } from './moved-up.ts'
 import type { NewWorldImports } from './new-world-imports.ts'
@@ -96,7 +97,7 @@ export class WorldImports {
   readonly #events: EventBus
   readonly #reading: WorldReading
   readonly #forNewServers: Pick<NewWorldImports, 'bring'>
-  readonly #mods: Pick<WorldMods, 'found'>
+  readonly #mods: Pick<WorldMods, 'found' | 'current'>
 
   constructor(
     deps: ReadingDeps & {
@@ -106,7 +107,7 @@ export class WorldImports {
       /** Worlds brought while a server is being made, read by the same job. */
       forNewServers: Pick<NewWorldImports, 'bring'>
       /** The mods a world's upload holds beside it (`world-mods.ts`). */
-      mods: Pick<WorldMods, 'found'>
+      mods: Pick<WorldMods, 'found' | 'current'>
     },
   ) {
     this.#db = deps.db
@@ -168,7 +169,10 @@ export class WorldImports {
       record.status === 'ready' && record.backupId !== null
         ? await loadBackup(this.#db, record.backupId)
         : null
-    const playedWith = playedWithOf(backup?.worldFacts ?? null)
+    const facts = backup?.worldFacts ?? null
+    const playedWith = playedWithOf(
+      facts?.mods === undefined ? facts : { ...facts, mods: await this.#mods.current(facts.mods) },
+    )
     return viewOf(record, (ready) => ({
       backupId: ready.backupId as string,
       people: ready.people,
@@ -280,7 +284,8 @@ export class WorldImports {
   }
 
   async #bring(record: WorldImportRecord, pending: PendingUpload, server: MinecraftServer, work: string) {
-    const archive = await this.#reading.open(pending, work)
+    const progress = new ImportProgress(this.#db, record.id)
+    const archive = await this.#reading.open(pending, work, progress)
     try {
       const read = await this.#reading.read(archive, record.answer ?? {})
       const desired = await loadRevisionFields(this.#db, server.desiredRevisionId, [
@@ -292,6 +297,7 @@ export class WorldImports {
         read,
         desired.gameVersion,
       )
+      await progress.step('players')
       const player = await this.#reading.hostPlayer(read, record.answer ?? {}, desired.settings.onlineMode)
       const others = await this.#reading.others(
         read,
@@ -300,6 +306,7 @@ export class WorldImports {
       )
       const accounts = await this.#reading.accounts(read, desired.settings.onlineMode, others.reads)
       const people = await this.#reading.people(read, desired.settings.onlineMode)
+      await progress.step('mods')
       const mods = await this.#mods.found(read, server.ownerId, work)
       await this.#keep({
         record,
@@ -313,6 +320,7 @@ export class WorldImports {
         others,
         serverVersion: desired.gameVersion,
         mods,
+        progress,
       })
     } finally {
       await archive.close()
@@ -342,6 +350,7 @@ export class WorldImports {
     serverVersion: string
     /** The mods the upload held beside it, matched and kept (`world-mods.ts`). */
     mods: BroughtModsJson | null
+    progress: ImportProgress
   }): Promise<void> {
     const { record, pending, server, read, player, accounts } = input
     const store = requireCapability(this.#caps, 'archives')
@@ -393,13 +402,29 @@ export class WorldImports {
     const backupId = randomUUID()
     const key = store.newKey('archive', { serverId: server.id, id: backupId })
     const target = await store.archiveTarget(key, LINK_SECONDS, 'browser')
+    const total = read.archive.files.reduce(
+      (sum, file) => (place(file.name) === null ? sum : sum + file.sizeBytes),
+      0,
+    )
+    await input.progress.step(
+      'packing',
+      asItCame || hostWritten
+        ? null
+        : total + new TextEncoder().encode(`level-name=${levelName}\n`).byteLength,
+    )
     const sizeBytes = asItCame
       ? await putStream((await openAsBlob(input.upload)).stream(), target, pending.sizeBytes)
       : await putStream(
-          this.#archives.tarball(this.#placed(read, levelName, place, hostWritten ? playerPath : null)),
+          this.#archives.tarball(
+            input.progress.entries(this.#placed(read, levelName, place, hostWritten ? playerPath : null)),
+          ),
           target,
           mostOf(read.archive),
         )
+    await input.progress.step('saving').catch(async (error: unknown) => {
+      await store.delete(key).catch(() => undefined)
+      throw error
+    })
     // Written after the world itself, which a failure among them takes with it.
     const others = await this.#keptOthers(
       server,

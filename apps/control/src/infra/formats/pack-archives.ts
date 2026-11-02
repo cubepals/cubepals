@@ -105,7 +105,7 @@ export class LibraryPackArchives implements PackArchives {
     url: string,
     path: string,
     maxBytes: number,
-    options: { allowed?(url: string): boolean } = {},
+    options: { allowed?(url: string): boolean; progress?(bytes: number): Promise<void> } = {},
   ): Promise<{ sizeBytes: number; sha512: string }> {
     const abort = new AbortController()
     const response = await follow(url, abort.signal, options.allowed)
@@ -128,6 +128,7 @@ export class LibraryPackArchives implements PackArchives {
         if (size > maxBytes) throw tooLarge()
         hash.update(next.value)
         if (!out.write(next.value)) await once(out, 'drain')
+        await options.progress?.(size)
       }
       await new Promise<void>((resolve, reject) =>
         out.end((error?: Error | null) => (error ? reject(error) : resolve())),

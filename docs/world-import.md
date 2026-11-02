@@ -394,3 +394,43 @@ Each is a pull request of its own, with its tests.
 
 - Converting Bedrock saves.
 - Worlds from before Minecraft 1.9.
+
+## Measured import progress
+
+Reading is reported by the worker, rather than predicted from a fixed number of megabytes per
+second. `world_imports.progress` retains each attempt's stage boundaries (`fetching`, `checking`,
+`players`, `mods`, `packing`, `saving`), its start, its latest report and the current stage's byte
+count. Byte reports are limited to one every two seconds, plus completion. A retry starts a new
+attempt; answering a question starts another. The page polls these records and shows elapsed time.
+Fetching has the upload's exact size. Packing counts uncompressed source bytes consumed, including
+the generated settings, rather than guessing the compressed size. A remaining-time estimate
+belongs only to a measured stage with fresh progress; unknown work stays indeterminate.
+
+Production evidence collected on 2026-11-02:
+
+- The reported 2,161,586,688-byte import finished in 510.659 seconds after upload. Its job waited
+  62 ms, ran once, and did not retry. The former 8 MiB/s estimate predicted about 258 seconds.
+  Upload time is not retained by that job and is not included in these figures.
+- The original import retained no stage timings. A read-only replay on production used its saved
+  1,968,421,349-byte archive: fetching took 116.768 seconds, checking 122.606 seconds, and repacking
+  to a discarded stream 117.523 seconds. This replay did not measure saving an output to storage;
+  it is not a breakdown of the original run.
+- Increasing read buffers from 16 KiB to 256 KiB changed checking to 116.517 seconds and repacking
+  to 117.499 seconds. That experiment did not justify changing the buffer.
+- On an uncompressed tar reconstructed from the same production world, the streaming reader took
+  130.451 seconds and the indexed reader 0.126 seconds. Both returned the same 537 files and kept
+  the same metadata. These are checking times, not end-to-end import times. Both production roles
+  had the same machine size; the replay ran separately from the import worker.
+
+Plain tar archives now use node-tar's decoded headers to index file offsets. Checking does not
+read opaque region data; reading a mod and skipping other files no longer drains their bodies.
+The normal path, duplicate, tree and size limits still apply. Extended/GNU headers, malformed
+headers and incomplete archives go through the existing strict parser. Gzip and zip retain their
+existing readers.
+
+A `client_only_server_optional` catalog version stays in players' games when a world or pack is
+brought in. A server companion is optional. This avoids resolving the union of unrelated loader
+dependencies for a client mod: Zoomify's universal 2.17.0 release lists KotlinLangForge as required,
+although that dependency has no Fabric version. Earlier world imports are reclassified from their
+exact catalog versions when displayed and played, so they do not need another upload. A real
+server dependency that cannot resolve still blocks Play, with the dependency named in the refusal.

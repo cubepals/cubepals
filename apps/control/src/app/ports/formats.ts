@@ -108,7 +108,7 @@ export interface PackArchives {
     url: string,
     path: string,
     maxBytes: number,
-    options?: { allowed?(url: string): boolean },
+    options?: { allowed?(url: string): boolean; progress?(bytes: number): Promise<void> },
   ): Promise<{ sizeBytes: number; sha512: string }>
   /** Writes a new zip at `path` from `entries`, in order, and says what it wrote. */
   write(

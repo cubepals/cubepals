@@ -99,8 +99,18 @@ export const AnswerNewWorldImportInput = AnswerWorldImportInput.omit({ serverId:
  * A world upload as its owner sees it while it is read (docs/world-import.md): being read, asking
  * what only they know, ready as `Ready` says, or refused and why.
  */
+export interface WorldImportProgress {
+  step: 'fetching' | 'checking' | 'players' | 'mods' | 'packing' | 'saving'
+  startedAt: string
+  updatedAt: string
+  bytes: number
+  totalBytes: number | null
+  /** Stage boundaries retained for diagnosing slow imports. Reset on a new attempt. */
+  steps: Array<{ step: WorldImportProgress['step']; at: string }>
+}
+
 type ImportView<Ready> = { importId: string; fileName: string } & (
-  | { status: 'reading' }
+  | { status: 'reading'; progress?: WorldImportProgress | null }
   | {
       status: 'asking'
       /** The worlds the upload holds, to choose one; null where that isn't asked. */

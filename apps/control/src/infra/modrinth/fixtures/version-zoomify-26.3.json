@@ -1,0 +1,39 @@
+{
+  "game_versions": ["26.3"],
+  "loaders": ["fabric", "neoforge"],
+  "environment": "client_only_server_optional",
+  "id": "RUBpNu00",
+  "project_id": "w7ThoJFB",
+  "author_id": "nyx2i4fB",
+  "featured": false,
+  "name": "Zoomify 2.17.0+mc26.3",
+  "version_number": "2.17.0+mc26.3",
+  "changelog": "# Zoomify 2.17.0\n\n## Changes\n\n- Support NeoForge\n- Allow scrolling out past the initial zoom (#308 -- thank you Saadndm)",
+  "changelog_url": null,
+  "date_published": "2026-10-08T12:59:28.799522Z",
+  "downloads": 1770499,
+  "version_type": "release",
+  "status": "listed",
+  "requested_status": null,
+  "files": [
+    {
+      "id": "gAKFm7Uh",
+      "hashes": {
+        "sha1": "7f18090fea4a2ddae01e032d09629d14fa381d3f",
+        "sha512": "1c5bc8e46a3575847584bb6993034dbe7d8060be32ee676c473d36bd4bbbc4df21d03a8f3b3f8904e42312667e9716050cca2cf7a098c8ebf6985d52eea4d637"
+      },
+      "url": "https://cdn.modrinth.com/data/w7ThoJFB/versions/RUBpNu00/zoomify-2.17.0%2Bmc26.3-universal.jar",
+      "filename": "zoomify-2.17.0+mc26.3-universal.jar",
+      "primary": true,
+      "size": 579146,
+      "file_type": null
+    }
+  ],
+  "dependencies": [
+    { "version_id": null, "project_id": "mOgUt4GM", "file_name": null, "dependency_type": "optional" },
+    { "version_id": null, "project_id": "1vrSzlao", "file_name": null, "dependency_type": "required" },
+    { "version_id": null, "project_id": "P7dR8mSH", "file_name": null, "dependency_type": "required" },
+    { "version_id": null, "project_id": "Ha28R6CL", "file_name": null, "dependency_type": "required" },
+    { "version_id": null, "project_id": "1eAoo2KR", "file_name": null, "dependency_type": "required" }
+  ]
+}

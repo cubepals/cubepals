@@ -35,6 +35,7 @@ import {
 import { offlineUuid } from '../access/identity.ts'
 import type { UserActor } from '../actor.ts'
 import { listWorlds } from '../worlds/persistence.ts'
+import { ImportProgress } from './import-progress.ts'
 import { WorldReading } from './world-reading.ts'
 
 const run = promisify(execFile)
@@ -103,6 +104,19 @@ describe.skipIf(!hasDatabase)('a single-player save', () => {
       'It was last played on Minecraft 1.21.11. It opens on 26.3, which updates it; the world as you uploaded it stays in Backups.',
       'Its folder on the server is world-2.',
     ])
+    const measured = await h.db.query.worldImports.findFirst({
+      where: (table, { eq }) => eq(table.id, ready.importId),
+    })
+    expect(measured?.progress?.steps.map((entry) => entry.step)).toEqual([
+      'fetching',
+      'checking',
+      'players',
+      'mods',
+      'packing',
+      'saving',
+    ])
+    expect(measured?.progress?.step).toBe('saving')
+
     // Its owner plays it as the world it is, by name, on the Minecraft that last saved it.
     expect(ready.world).toEqual({ name: 'world', gameVersion: '1.21.11', newer: null })
 
@@ -360,9 +374,15 @@ describe.skipIf(!hasDatabase)('a world larger than the server holds', () => {
 })
 
 describe.skipIf(!hasDatabase)('a world kept when recording it fails', () => {
+  test('failed progress and partial companion copies clean up before retrying', importWriteFailures, 120_000)
   test('leaves no copy behind, and the retry keeps one', async () => {
     const { owner, id } = await server('Sage')
     const target = store.archiveTarget.bind(store)
+    const remove = store.delete.bind(store)
+    const cleanup = spyOn(store, 'delete').mockImplementation(async (key) => {
+      await remove(key)
+      throw new Error('The store lost the delete acknowledgement')
+    })
     const written: string[] = []
     // A world made under the same folder while this one is written: Postgres refuses the second.
     const raced = spyOn(store, 'archiveTarget').mockImplementation(async (key) => {
@@ -377,7 +397,7 @@ describe.skipIf(!hasDatabase)('a world kept when recording it fails', () => {
       return target(key)
     })
     try {
-      const bytes = zipBytes(await save('My World/'))
+      const bytes = zipBytes(withSecondWorld(await serverFolder('paper-1.21.11')))
       const start = await h.app.backups.beginWorldUpload(owner, id, {
         fileName: 'w.zip',
         sizeBytes: bytes.length,
@@ -394,15 +414,16 @@ describe.skipIf(!hasDatabase)('a world kept when recording it fails', () => {
         ).rows[0]?.state
       while ((await stateOf()) !== 'retry' && Date.now() < until) await Bun.sleep(200)
       expect(await stateOf()).toBe('retry')
-      expect(written).toHaveLength(1)
+      expect(written).toHaveLength(2)
       expect(store.objects.has(written[0] as string)).toBe(false)
       // The retry, as the queue runs it once it comes due.
       await h.app.backups.imports.runImport(importId)
       const backup = await broughtBackup(h, await untilRead(h, owner, id, importId))
-      expect(written).toHaveLength(2)
-      expect(backup.archiveKey).toBe(written[1] as string)
+      expect(written).toHaveLength(4)
+      expect(backup.archiveKey).toBe(written[2] as string)
     } finally {
       raced.mockRestore()
+      cleanup.mockRestore()
     }
   }, 120_000)
 })
@@ -446,6 +467,10 @@ describe.skipIf(!hasDatabase)('an upload that says it is a Cubepals download', (
       'server.properties': 'level-name=world\n',
       'world/level.dat': levelDat('26.3'),
       'world/region/r.0.0.mca': 'a region',
+      'world_nether/level.dat': levelDat('26.3'),
+      'world_nether/DIM-1/region/r.0.0.mca': 'the Nether',
+      'world_the_end/level.dat': levelDat('26.3'),
+      'world_the_end/DIM1/region/r.0.0.mca': 'the End',
       'cubepals-download.txt': downloadNote([]),
     }
     for (const [path, bytes] of Object.entries(files)) {
@@ -495,3 +520,76 @@ describe.skipIf(!hasDatabase)('an upload that says it is a Cubepals download', (
     expect((await run('ls', ['-A', dir])).stdout).not.toContain('plugins')
   }, 120_000)
 })
+
+async function importWriteFailures() {
+  for (const fault of ['saving', 'companion']) {
+    const { owner, id } = await server(`Writer ${fault}`)
+    const files = withSecondWorld(await serverFolder('paper-1.21.11'))
+    for (const [path, bytes] of Object.entries({ ...files }))
+      if (path.startsWith('creative/')) files[path.replace('creative/', 'adventure/')] = bytes
+    const step = ImportProgress.prototype.step
+    const pack = LibraryUploadArchives.prototype.tarball
+    const remove = store.delete.bind(store)
+    const target = store.archiveTarget.bind(store)
+    const written: string[] = []
+    let refused = false
+    let packed = 0
+    const progress = spyOn(ImportProgress.prototype, 'step').mockImplementation(async function (
+      this: ImportProgress,
+      next,
+      total,
+    ) {
+      if (fault === 'saving' && next === 'saving' && !refused) {
+        refused = true
+        throw new Error('The progress write disconnected')
+      }
+      return step.call(this, next, total)
+    })
+    const writer = spyOn(LibraryUploadArchives.prototype, 'tarball').mockImplementation(function (
+      this: LibraryUploadArchives,
+      entries,
+    ) {
+      packed++
+      if (fault === 'companion' && packed === 3 && !refused) {
+        refused = true
+        throw new Error('The companion copy disconnected')
+      }
+      return pack.call(this, entries)
+    })
+    const destinations = spyOn(store, 'archiveTarget').mockImplementation(async (key) => {
+      written.push(key)
+      return target(key)
+    })
+    const cleanup = spyOn(store, 'delete').mockImplementation(async (key) => {
+      await remove(key)
+      throw new Error('The store lost the acknowledgement after deleting the file')
+    })
+    const queued = spyOn(h.jobs, 'enqueueWorldImport').mockResolvedValue(undefined)
+    try {
+      const bytes = zipBytes(files)
+      const start = await h.app.backups.beginWorldUpload(owner, id, {
+        fileName: 'server.zip',
+        sizeBytes: bytes.length,
+      })
+      await fetch(start.url, { method: 'PUT', body: bytes, headers: start.headers })
+      const { importId } = await h.app.backups.finishWorldUpload(owner, id, start.ticket)
+      await expect(h.app.backups.imports.runImport(importId)).rejects.toThrow(
+        fault === 'saving' ? 'progress write' : 'companion copy',
+      )
+      expect(written.every((key) => !store.objects.has(key))).toBe(true)
+      await h.app.backups.imports.runImport(importId)
+      const read = await h.app.backups.imports.view(owner, id, importId)
+      expect(read.status).toBe('ready')
+      expect(refused).toBe(true)
+      expect(store.objects.has((await broughtBackup(h, read)).archiveKey ?? '')).toBe(true)
+    } finally {
+      queued.mockRestore()
+      progress.mockRestore()
+      writer.mockRestore()
+      destinations.mockRestore()
+      cleanup.mockRestore()
+      await h.app.servers.stop(owner, id, randomUUID())
+      await h.settled(id)
+    }
+  }
+}

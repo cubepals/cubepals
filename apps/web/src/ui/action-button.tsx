@@ -5,7 +5,7 @@
 'use client'
 
 import { AlertTriangle, Check, Loader2 } from 'lucide-react'
-import { type ReactNode, useRef, useState } from 'react'
+import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { newId } from '../lib/ids'
 import { Button, type ButtonProps } from './Button'
 import { ICON } from './index'
@@ -74,6 +74,18 @@ export function ActionButton({
   const [pressed, setPressed] = useState(now)
   // A ref, not the state, is what a second click in the same tick can see.
   const inFlight = useRef(false)
+  const mounted = useRef(true)
+  const reset = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  useEffect(() => {
+    mounted.current = true
+    return () => {
+      mounted.current = false
+      clearTimeout(reset.current)
+    }
+  }, [])
+  const settleIdle = () => {
+    if (mounted.current) setState('idle')
+  }
   const phase = phases[now]
   if (phase === undefined) throw new Error(`no phase called ${now}`)
   const ended = phases[pressed] ?? phase
@@ -84,18 +96,21 @@ export function ActionButton({
   const press = async () => {
     if (inFlight.current) return
     inFlight.current = true
+    clearTimeout(reset.current)
     setPressed(now)
     setState('working')
     const pressedAt = Date.now()
     try {
       await phase.run(newId())
+      if (!mounted.current) return
       // A wake the control plane answers in eighty milliseconds is still a wake the person asked
       // for: the working words are held long enough to read before the server's own take over.
       await wait(HELD_MS - (Date.now() - pressedAt))
-      setState('idle')
+      settleIdle()
     } catch {
+      if (!mounted.current) return
       setState('failed')
-      setTimeout(() => setState('idle'), FAILED_MS)
+      reset.current = setTimeout(settleIdle, FAILED_MS)
     } finally {
       inFlight.current = false
     }
