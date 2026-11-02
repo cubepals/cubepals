@@ -91,6 +91,8 @@ export const catalogVersionNeeds = pgTable(
     modIds: text('mod_ids').array(),
     modDepends: text('mod_depends').array(),
     carriesJars: boolean('carries_jars'),
+    fileSha512: text('file_sha512'),
+    nativeMetadata: jsonb('native_metadata').$type<Record<string, import('../json.ts').NativeModJson>>(),
     readAt: ts('read_at').notNull(),
   },
   (t) => [primaryKey({ columns: [t.catalog, t.versionId] })],

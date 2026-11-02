@@ -319,6 +319,7 @@ test('public server choices remain compatible with saved worlds and request payl
 test('public operation choices remain compatible with stored progress and revisions', () => {
   expect(server.OPERATION_STEPS).toEqual([
     'queued',
+    'checking_mods',
     'allocating',
     'waiting_for_room',
     'storage',

@@ -9,19 +9,21 @@
  */
 import type { AppliedConfigJson, Db } from '@blockly/db'
 import type { MinecraftServer } from '../../../domain/server/server.ts'
-import { type ArtifactService, ArtifactUnavailable } from '../../artifacts/service.ts'
+import { ArtifactUnavailable } from '../../artifacts/service.ts'
 import { PermanentFailure } from '../../errors.ts'
+import { IncompatibleMods, ValidationUnavailable } from '../../mods/validation-runtime.ts'
 import type { AccessPolicy } from '../../policy/access-policy.ts'
 import type { DesiredRuntime } from '../../servers/specs.ts'
+import type { OperationContext } from '../runner.ts'
 
 export type Rechecks = ReturnType<typeof rechecks>
 
 export function rechecks(deps: {
   db: Db
   policy: Pick<AccessPolicy, 'check'>
-  artifacts: Pick<ArtifactService, 'preflight'>
+  configuration: Pick<import('../../mods/configuration-preflight.ts').ConfigurationPreflight, 'check'>
 }) {
-  const { db, artifacts } = deps
+  const { db } = deps
 
   /** Quotas were counted when the request was accepted; switches and standing may have changed. */
   const stillAllowed = (server: MinecraftServer, kind: 'continue_provisioning' | 'continue_starting') =>
@@ -42,12 +44,23 @@ export function rechecks(deps: {
    * Every jar a configuration needs can be handed to its server, checked before the runtime is
    * touched (§15.2). A configuration the server already ran has its jars on disk.
    */
-  const preflight = async (desired: DesiredRuntime, applied: AppliedConfigJson | null) => {
+  const preflight = async (
+    desired: DesiredRuntime,
+    applied: AppliedConfigJson | null,
+    ctx?: Pick<OperationContext, 'step'>,
+  ) => {
     if (applied?.specDigest === desired.digest) return
     try {
-      await artifacts.preflight(desired.revision)
+      await deps.configuration.check(desired.revision, desired, async () => {
+        await ctx?.step('checking_mods')
+      })
     } catch (error) {
-      if (error instanceof ArtifactUnavailable) throw new PermanentFailure(error.message)
+      if (
+        error instanceof ArtifactUnavailable ||
+        error instanceof IncompatibleMods ||
+        error instanceof ValidationUnavailable
+      )
+        throw new PermanentFailure(error.message)
       throw error
     }
   }

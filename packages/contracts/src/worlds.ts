@@ -222,6 +222,8 @@ export type PlayedWith = {
  * which playing it restores (`RestoreBackupInput`), until its owner plays it.
  */
 export type WorldImportView = ImportView<{
+  /** Imported files are distinct from a server mod set that has actually passed a runtime check. */
+  compatibility?: import('./mod-validation.ts').ModValidationView | null
   backupId: string
   people: WorldPeople
   /** The world as its owner knows it; null where what it waits in is gone, deleted from Backups. */

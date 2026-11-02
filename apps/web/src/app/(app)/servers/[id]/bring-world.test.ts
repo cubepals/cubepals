@@ -366,3 +366,56 @@ test('a ready world can be sent again from its instance when its mods were missi
   await until(() => calls.filter((call) => call.method === 'finishWorldUpload').length === 2)
   await until(() => text().includes('Life is ready'))
 })
+
+test('an imported world waits for real mod proof and temporary failures remain visible until verified', async () => {
+  const check = { key: 'check', state: 'checking' as const, message: null, checkedAt: null }
+  await show({ ...ready(), compatibility: check })
+  await until(() => text().includes('Life is imported'))
+  expect(button('Play Life').disabled).toBe(true)
+  expect(text()).toContain('testing the server’s mods together')
+  state = {
+    ...ready(),
+    compatibility: { ...check, state: 'unavailable', message: 'The check will be retried.' },
+  }
+  await act(async () => {
+    await queries.invalidateQueries()
+  })
+  await until(() => text().includes('The check will be retried.'))
+  expect(button('Play Life').disabled).toBe(true)
+  state = { ...ready(), compatibility: { ...check, state: 'verified', checkedAt: new Date().toISOString() } }
+  await act(async () => {
+    await queries.invalidateQueries()
+  })
+  await until(() => text().includes('Life is ready'))
+  expect(button('Play Life').disabled).toBe(false)
+})
+
+test('a loader conflict keeps the imported world and explains why Play is unavailable', async () => {
+  await show({
+    ...ready(),
+    compatibility: {
+      key: 'check',
+      state: 'blocked',
+      message: 'A required server library is missing.',
+      checkedAt: new Date().toISOString(),
+    },
+  })
+  await until(() => text().includes('A required server library is missing.'))
+  expect(text()).toContain('Life is imported')
+  expect(button('Play Life').disabled).toBe(true)
+  await click('Not now')
+  expect(closed).toBe(1)
+})
+
+test('an imported archive without world metadata keeps a usable title while checking', async () => {
+  await show({
+    ...ready(),
+    world: null,
+    compatibility: { key: 'check', state: 'checking', message: null, checkedAt: null },
+  })
+  await until(() => text().includes('Your world is imported'))
+  expect(text()).toContain('This world is no longer in Backups')
+  expect(
+    [...document.querySelectorAll('button')].some((button) => button.textContent?.startsWith('Play')),
+  ).toBe(false)
+})

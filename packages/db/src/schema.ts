@@ -18,6 +18,7 @@
  *   the worlds kept only in one.
  * - `artifacts.ts`: stored files, uploads in flight, uploaded mods, the packs read from them, and
  *   the worlds being brought to a server.
+ * - `mod-validation.ts`: exact mod configurations and isolated startup evidence.
  * - `catalog.ts`: the mod catalogs' cache, the trust in them, and checked and curated packs.
  * - `jar-checks.ts`: uploaded jars checked for malware, and the lists of known malware.
  * - `listings.ts`: the public directory, its reports, and the stars and notes on public servers.
@@ -54,6 +55,7 @@ export * from './schema/insight.ts'
 export * from './schema/jar-checks.ts'
 export * from './schema/joins.ts'
 export * from './schema/listings.ts'
+export * from './schema/mod-validation.ts'
 export * from './schema/placement.ts'
 export * from './schema/players.ts'
 export * from './schema/realtime.ts'

@@ -8,7 +8,8 @@ import { createRequire } from 'node:module'
 import type { RestartWhen, ServerView } from '@blockly/contracts'
 import { SECOND_MS } from '@blockly/contracts/durations'
 import { act, createElement } from 'react'
-import { ConfirmChange, whatHappens } from './shared'
+import { renderToStaticMarkup } from 'react-dom/server'
+import { ConfirmChange, RevokedChoice, whatHappens } from './shared'
 
 const quality = createRequire(new URL('../../../../../../../../tools/quality/package.json', import.meta.url))
 function browserScope() {
@@ -106,4 +107,13 @@ test('confirmation waits for prerequisites and submits the chosen restart timing
     await act(async () => root.unmount())
     await dom.close()
   }
+})
+
+test('multiple revoked mods are named together before the owner acknowledges them', () => {
+  const html = renderToStaticMarkup(
+    createElement(RevokedChoice, { mods: ['First mod', 'Second mod'], checked: false, onChange: () => {} }),
+  )
+  expect(html).toContain('First mod, Second mod')
+  expect(html).toContain('were taken down on Modrinth')
+  expect(html).toContain('I trust them. Run them anyway.')
 })

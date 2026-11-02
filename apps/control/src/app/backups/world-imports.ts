@@ -66,7 +66,7 @@ import {
   worldImportReady,
   worldImportRefused,
 } from './world-import-records.ts'
-import { playedWithOf, type WorldMods } from './world-mods.ts'
+import { type ModdedWorldFacts, playedWithOf, type WorldMods } from './world-mods.ts'
 import { accessFrom } from './world-people.ts'
 import {
   type Accounts,
@@ -98,6 +98,10 @@ export class WorldImports {
   readonly #reading: WorldReading
   readonly #forNewServers: Pick<NewWorldImports, 'bring'>
   readonly #mods: Pick<WorldMods, 'found' | 'current'>
+  readonly #compatibility: (
+    serverId: string,
+    facts: ModdedWorldFacts,
+  ) => Promise<import('@blockly/contracts').ModValidationView | null>
 
   constructor(
     deps: ReadingDeps & {
@@ -108,6 +112,10 @@ export class WorldImports {
       forNewServers: Pick<NewWorldImports, 'bring'>
       /** The mods a world's upload holds beside it (`world-mods.ts`). */
       mods: Pick<WorldMods, 'found' | 'current'>
+      compatibility: (
+        serverId: string,
+        facts: ModdedWorldFacts,
+      ) => Promise<import('@blockly/contracts').ModValidationView | null>
     },
   ) {
     this.#db = deps.db
@@ -120,6 +128,7 @@ export class WorldImports {
     this.#reading = new WorldReading(deps)
     this.#forNewServers = deps.forNewServers
     this.#mods = deps.mods
+    this.#compatibility = deps.compatibility
   }
 
   /** The upload arrived: it is read on a worker, and `view` says how it went. Asked twice, once. */
@@ -171,13 +180,20 @@ export class WorldImports {
         : null
     const facts = backup?.worldFacts ?? null
     const playedWith = playedWithOf(
-      facts?.mods === undefined ? facts : { ...facts, mods: await this.#mods.current(facts.mods) },
+      facts?.mods === undefined
+        ? facts
+        : { ...facts, mods: await this.#mods.current(facts.mods).catch(() => facts.mods) },
     )
+    const compatibility =
+      facts?.mods === undefined || record.serverId === null
+        ? null
+        : await this.#compatibility(record.serverId, { ...facts, mods: facts.mods })
     return viewOf(record, (ready) => ({
       backupId: ready.backupId as string,
       people: ready.people,
       world,
       playedWith,
+      compatibility,
     }))
   }
 

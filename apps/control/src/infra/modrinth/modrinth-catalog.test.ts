@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { describe, expect, test } from 'bun:test'
+import { constants as HTTP } from 'node:http2'
 import { CatalogUnavailable } from '../../app/ports/catalog.ts'
 import { type ModrinthSchemas, modrinthClient } from './client.ts'
 import { ModrinthCatalog } from './modrinth-catalog.ts'
@@ -387,4 +388,159 @@ describe('ModrinthCatalog', () => {
     await expect(refused).rejects.toThrow(/400/)
     await expect(refused).rejects.not.toBeInstanceOf(CatalogUnavailable)
   })
+})
+
+test('hash lookup retains the actual selected file and client-companion environment', async () => {
+  const shown = await Bun.file(new URL('./fixtures/version-files-life.json', import.meta.url)).json()
+  const { catalog } = modrinth(() => Response.json(shown))
+  const found = await catalog.filesByHash(Object.keys(shown))
+  expect(found.size).toBeGreaterThan(0)
+  for (const [hash, match] of found) {
+    const raw = shown[hash]
+    const actual = raw.files.find((file: { hashes: { sha512: string } }) => file.hashes.sha512 === hash)
+    expect(match.file).toEqual({
+      url: actual.url,
+      sha1: actual.hashes.sha1,
+      sha512: hash,
+      sizeBytes: actual.size,
+      fileName: actual.filename,
+    })
+    expect(match.version.environment).toBe(raw.environment)
+  }
+  const raw = await Bun.file(new URL('./fixtures/version-zoomify-26.3.json', import.meta.url)).json()
+  const zoomify = modrinth(() => Response.json(raw))
+  expect((await zoomify.catalog.version(raw.id))?.environment).toBe('client_only_server_optional')
+})
+
+test('modpack search carries its facets and versions are sorted newest first', async () => {
+  const shown = await Bun.file(new URL('./fixtures/versions-ore-harvester.json', import.meta.url)).json()
+  const { catalog, requests } = modrinth((url) =>
+    url.pathname === '/v2/search'
+      ? Response.json({
+          hits: [
+            hit({ project_type: 'modpack', slug: undefined, icon_url: 'https://example.test/icon.png' }),
+          ],
+          total_hits: 1,
+        })
+      : Response.json([...shown].reverse()),
+  )
+  const search = await catalog.searchModpacks({ text: 'friends', offset: 0, limit: 5 })
+  expect(search.hits[0]?.slug).toBe('gvQqBUqZ')
+  expect(search.hits[0]?.categories).toEqual(['fabric', 'optimization'])
+  expect(search.hits[0]?.gameVersions).toEqual(['26.3'])
+  expect(JSON.parse(new URL(requests[0]?.url ?? '').searchParams.get('facets') ?? '')).toEqual([
+    ['project_type:modpack'],
+  ])
+  const versions = await catalog.modpackVersions('Xiv4r347')
+  expect(versions.length).toBe(shown.length)
+  expect(versions.map((item) => item.publishedAt.getTime())).toEqual(
+    shown.map((item: Version) => Date.parse(item.date_published)).sort((a: number, b: number) => b - a),
+  )
+})
+
+test('uninstallable files and absent versions remain absent, not guessed', async () => {
+  const raw = await Bun.file(new URL('./fixtures/version-zoomify-26.3.json', import.meta.url)).json()
+  const variants = [
+    { ...raw, files: [] },
+    { ...raw, files: raw.files.map((file: object) => ({ ...file, url: '' })) },
+  ]
+  for (const variant of variants)
+    expect(await modrinth(() => Response.json(variant)).catalog.version(raw.id)).toBeNull()
+  const first = {
+    ...raw,
+    version_number: undefined,
+    name: undefined,
+    version_type: undefined,
+    status: 'draft',
+    environment: undefined,
+    loaders: undefined,
+    game_versions: undefined,
+    dependencies: undefined,
+    files: raw.files.map((file: object) => ({ ...file, primary: false })),
+  }
+  const selected = await modrinth(() => Response.json(first)).catalog.version(raw.id)
+  expect(selected).toMatchObject({
+    versionLabel: raw.id,
+    channel: 'release',
+    state: 'absent',
+    environment: 'unknown',
+    loaders: [],
+    gameVersions: [],
+    dependencies: [],
+  })
+  const missing = modrinth(() => new Response('', { status: HTTP.HTTP_STATUS_NOT_FOUND }))
+  expect(await missing.catalog.versions('missing', { loaders: ['fabric'], gameVersion: '26.3' })).toEqual([])
+  expect(await missing.catalog.modpackVersions('missing')).toEqual([])
+})
+
+test('only supported catalog links and allowed HTTPS pack hosts are accepted', () => {
+  const { catalog } = modrinth(() => Response.json({}))
+  for (const [url, expected] of [
+    [
+      'https://modrinth.com/mod/zoomify/version/RUBpNu00',
+      { kind: 'mod', project: 'zoomify', version: 'RUBpNu00' },
+    ],
+    [
+      'https://www.modrinth.com/modpack/friends/versions',
+      { kind: 'modpack', project: 'friends', version: null },
+    ],
+    ['https://modrinth.com/plugin/example', { kind: 'plugin', project: 'example', version: null }],
+    ['https://modrinth.com/project/w7ThoJFB', { kind: 'other', project: 'w7ThoJFB', version: null }],
+    ['https://modrinth.com/datapack/example', { kind: 'other', project: 'example', version: null }],
+    [
+      'https://cdn.modrinth.com/data/example/versions/release/world.mrpack',
+      { kind: 'modpack', project: 'example', version: 'release' },
+    ],
+    [
+      'https://cdn.modrinth.com/data/example/versions/release/mod.jar',
+      { kind: 'other', project: 'example', version: 'release' },
+    ],
+    ['bad url', null],
+    ['https://example.test/mod/a', null],
+    ['https://modrinth.com/mod', null],
+    ['https://modrinth.com/unsupported/a', null],
+    ['https://cdn.modrinth.com/invalid', null],
+  ] as const)
+    expect(catalog.linkOf(url)).toEqual(expected)
+  expect(catalog.packDownloadAllowed('https://cdn.modrinth.com/file.mrpack')).toBe(true)
+  expect(catalog.packDownloadAllowed('http://cdn.modrinth.com/file.mrpack')).toBe(false)
+  expect(catalog.packDownloadAllowed('https://example.test/file.mrpack')).toBe(false)
+  expect(catalog.packDownloadAllowed('bad url')).toBe(false)
+})
+
+test('project loader evidence survives the real adapter boundary', async () => {
+  const raw = project({ loaders: ['fabric', 'forge'] })
+  const { catalog } = modrinth(() => Response.json(raw))
+  expect((await catalog.project(raw.id))?.loaders).toEqual(raw.loaders)
+})
+
+test('a catalog file without its hash-lookup proof is omitted', async () => {
+  const shown = await Bun.file(new URL('./fixtures/version-files-life.json', import.meta.url)).json()
+  const [entry] = Object.entries(shown)
+  if (!entry) throw new Error('The retained response must contain an imported mod')
+  const [hash, raw] = entry as [string, Version]
+  const unproven = {
+    ...raw,
+    files: raw.files.map((file) => ({ ...file, hashes: { sha512: file.hashes.sha512 } })),
+  }
+  const { catalog } = modrinth(() => Response.json({ [hash]: unproven }))
+  expect((await catalog.filesByHash([hash])).size).toBe(0)
+})
+
+test('sparse project and version metadata remains explicit instead of inventing compatibility', async () => {
+  const sparse = project({
+    slug: undefined,
+    icon_url: null,
+    categories: undefined,
+    additional_categories: undefined,
+    loaders: undefined,
+    game_versions: undefined,
+  })
+  const projected = await modrinth(() => Response.json(sparse)).catalog.project(sparse.id)
+  expect(projected).toMatchObject({ slug: sparse.id, iconUrl: null, categories: [], gameVersions: [] })
+  expect(projected?.loaders).toBeUndefined()
+  const raw = await Bun.file(new URL('./fixtures/version-zoomify-26.3.json', import.meta.url)).json()
+  delete raw.version_number
+  const named = await modrinth(() => Response.json(raw)).catalog.version(raw.id)
+  expect(named?.versionLabel).toBe(raw.name)
 })

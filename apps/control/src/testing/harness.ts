@@ -108,6 +108,8 @@ export interface Harness {
 }
 
 export interface HarnessOptions {
+  /** Use the production review defaults, rather than the test’s empty review. */
+  productionCuration?: boolean
   /** Or made from the harness's database, for an adapter that keeps its record there. */
   capabilities?: DeploymentCapabilities | ((db: Db) => DeploymentCapabilities)
   mirrorCatalogArtifacts?: boolean
@@ -214,9 +216,14 @@ const settingsFrom = ({
   officialServerFiles,
   stopCheatersProblem,
   templatesKeptMs,
+  productionCuration,
+  curatedPacks,
+  ownPacks,
 }: HarnessOptions) => ({
   officialServerFiles,
   stopCheatersProblem,
+  curatedPacks: productionCuration ? curatedPacks : (curatedPacks ?? []),
+  ownPacks: productionCuration ? ownPacks : (ownPacks ?? []),
   templatesKeptMs: templatesKeptMs ?? 0,
   bootTimeouts: provider?.bootTimeouts ?? { runningMs: 5_000, readyMs: 3_000, resumeMs: 1_000 },
   wakeWaitMs: provider?.wakeWaitMs ?? 5_000,
@@ -338,8 +345,6 @@ export async function startHarness(options: HarnessOptions = {}): Promise<Harnes
       mirrorCatalogArtifacts: options.mirrorCatalogArtifacts ?? false,
       adminEmails: options.adminEmails ?? [],
       webOrigin: 'http://localhost:3000',
-      curatedPacks: options.curatedPacks ?? [],
-      ownPacks: options.ownPacks ?? [],
       ...settingsFrom(options),
     },
   )

@@ -11,6 +11,8 @@
  * ends (`leftovers.ts`).
  */
 import { type Db, schema } from '@blockly/db'
+
+import { validationActive, validationResource } from '../../mods/validation-records.ts'
 import type { Runtimes } from '../../runtimes/router.ts'
 import { findServer, loadRuntime, lockServer } from '../../servers/persistence.ts'
 import { activeOperation } from '../persistence.ts'
@@ -71,6 +73,15 @@ export function clearingOrphans(deps: {
     return stopped
   }
 
+  async function unknown(key: string, owner: string, handle: import('../../ports/runtime.ts').RuntimeHandle) {
+    const check = SERVER_ID.test(key) ? await validationResource(db, key) : null
+    if (check === null) {
+      console.warn(`orphans: ${owner} holds ${key}, which no server here knows; kept for an operator`)
+      return
+    }
+    if (!validationActive(check)) await runtime.destroy(owner, handle)
+  }
+
   /**
    * Provider resources a purged server or a move left behind are destroyed. Scoped to this
    * deployment by the adapter. Compute whose server the database doesn't know is kept, and logged
@@ -86,7 +97,7 @@ export function clearingOrphans(deps: {
       // A key that isn't a server id belongs to no server, and would only make the query fail.
       const server = SERVER_ID.test(item.key) ? await findServer(db, item.key) : null
       if (server === null) {
-        console.warn(`orphans: ${owner} holds ${item.key}, which no server here knows; kept for an operator`)
+        await unknown(item.key, owner, item.handle)
         continue
       }
       if (server.lifecycle.status === 'purged') {

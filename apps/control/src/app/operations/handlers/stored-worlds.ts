@@ -233,7 +233,7 @@ export function storedWorlds(deps: {
       const binding = await bindingOf(server.id)
       if (binding.handle === null) throw new PermanentFailure('This server has nowhere to come back to.')
       const desired = await specs.desired(db, server)
-      await preflight(desired, null)
+      await preflight(desired, null, ctx)
       // The copy's access files are as old as the copy: who can join is put back on them at boot.
       await markReseed(db, server.id)
       try {

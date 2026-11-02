@@ -11,6 +11,8 @@
  */
 import type { Db } from '@blockly/db'
 import type { ServerStatus } from '../../../domain/server/lifecycle.ts'
+
+import { validationActive, validationResource } from '../../mods/validation-records.ts'
 import type { RuntimeHandle, RuntimeKey } from '../../ports/runtime.ts'
 import type { Runtimes } from '../../runtimes/router.ts'
 import { findServer, loadRuntime } from '../../servers/persistence.ts'
@@ -49,7 +51,7 @@ export async function strayCompute(
   runtime: Pick<Runtimes, 'observeChanged' | 'providers' | 'sameCompute'>,
 ): Promise<StrayCompute[]> {
   const found: StrayCompute[] = []
-  for await (const { key, handle, observation } of runtime.observeChanged(new Date(0))) {
+  for await (const { key, handle, observation } of playerCompute(db, runtime)) {
     if (observation.state !== 'running' && observation.state !== 'starting') continue
     const server = SERVER_ID.test(key) ? await findServer(db, key) : null
     const stray = { key, handle, since: observation.at }
@@ -64,4 +66,11 @@ export async function strayCompute(
     found.push({ ...stray, serverId: server.id, status: server.lifecycle.status, tier: server.memoryTier })
   }
   return found
+}
+
+async function* playerCompute(db: Db, runtime: Pick<Runtimes, 'observeChanged'>) {
+  for await (const item of runtime.observeChanged(new Date(0))) {
+    if (SERVER_ID.test(item.key) && validationActive(await validationResource(db, item.key))) continue
+    yield item
+  }
 }

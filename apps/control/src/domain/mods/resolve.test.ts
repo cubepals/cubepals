@@ -5,6 +5,7 @@
 import { describe, expect, test } from 'bun:test'
 import { isDatapack, type PinnedMod } from './artifact.ts'
 import type { CatalogDependency, CatalogProject, CatalogVersion } from './catalog.ts'
+import type { JarNeeds } from './jar-holds.ts'
 import { type CatalogData, type ResolveRequest, resolve } from './resolve.ts'
 
 const project = (
@@ -599,7 +600,7 @@ describe('the Java a jar asks for', () => {
         [bentobox, aoneblock],
         [listed('3.23.3'), listed('3.16.2'), ...aoneblockVersions.map(addon)],
       ),
-      needs: new Map([
+      needs: new Map<string, JarNeeds>([
         ['3.23.3', { java: 25, api: null }],
         ['3.16.2', { java: 21, api: null }],
         ['1.28.0', { java: 21, api: { projectId: 'bentobox', atLeast: '3.22.0' } }],
@@ -732,4 +733,69 @@ describe('the mods a Fabric jar requires', () => {
       conflicts: [{ kind: 'missing_dependency', mod: 'spark', projectId: 'spark', dependency: 'Fabric API' }],
     })
   })
+})
+
+test('a universal server jar keeps only its selected loader’s required dependency edges', () => {
+  const universal = version('universal', 'u1', {
+    loaders: ['fabric', 'neoforge'],
+    requires: ['fabric-api', 'forge-library'],
+  })
+  const forge = { ...project('forge-library', 'Forge Library'), loaders: ['forge', 'neoforge'] }
+  const data = {
+    ...catalog(
+      [project('universal', 'Universal'), fabricApi, forge],
+      [universal, version('fabric-api', 'f1')],
+    ),
+    needs: new Map<string, JarNeeds>([
+      [
+        'u1',
+        {
+          java: null,
+          api: null,
+          native: {
+            fabric: {
+              ids: ['universal'],
+              depends: ['fabric-api'],
+              carriesJars: false,
+              version: '1',
+              environment: 'server' as const,
+              complete: true,
+              requirements: [{ id: 'fabric-api', versions: ['*'] }],
+            },
+          },
+        },
+      ],
+      ['f1', { java: null, api: null, native: {} }],
+    ]),
+  }
+  const wanted = request({
+    target: { gameVersion: '26.3', loader: 'fabric', loaders: ['fabric'] },
+    wanted: [{ projectId: 'universal' }],
+  })
+  const result = resolve(wanted, data)
+  expect(summary(resolved(result))).toEqual([
+    ['Fabric API', 'f1', 'dependency', ['Universal']],
+    ['Universal', 'u1', 'user', []],
+  ])
+  expect(result.kind === 'resolved' && result.decisions).toEqual([
+    {
+      kind: 'foreign_loader_dependency',
+      from: 'universal',
+      projectId: 'forge-library',
+      loader: 'fabric',
+      artifactSha512: universal.file.sha512,
+    },
+  ])
+  // A dependency version's own loader list is stronger than its project's broad list.
+  const named = version('forge-library', 'forge-1', { loaders: ['neoforge'] })
+  const exact = {
+    ...universal,
+    dependencies: [{ projectId: null, versionId: named.versionId, kind: 'required' as const }],
+  }
+  const byVersion = {
+    ...data,
+    fitting: new Map(data.fitting).set('universal', [exact]),
+    versions: new Map(data.versions).set(named.versionId, named),
+  }
+  expect(resolve(wanted, byVersion).kind).toBe('resolved')
 })

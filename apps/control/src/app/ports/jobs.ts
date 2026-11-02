@@ -99,6 +99,12 @@ export interface JobAttempt {
   retryLimit: number
 }
 
+/** A bounded background import and its terminal failure notification. */
+export interface Importer {
+  runImport(importId: string): Promise<void>
+  importGaveUp(importId: string, error: string): Promise<void>
+}
+
 /**
  * The job queue, seen from the application. `enqueue` joins the caller's transaction, so a job
  * exists only if the domain write that asked for it committed.
@@ -138,6 +144,10 @@ export interface JobQueue {
    * it; asked again once its owner has answered what it asked. One queued at a time per upload.
    */
   enqueueWorldImport(tx: Tx, importId: string): Promise<void>
+  /** An exact mod configuration checked once on an isolated runtime. */
+  enqueueModValidation(tx: Tx, key: string): Promise<void>
+  /** Bind configuration checks to the ordinary jar-check worker lifecycle, without starting a worker on APIs. */
+  registerModValidation(importer: Importer): void
   /** `world-download`: an archive's world copied for its owner to download, once, on a worker. */
   enqueueWorldDownload(tx: Tx, downloadId: string): Promise<void>
   /**

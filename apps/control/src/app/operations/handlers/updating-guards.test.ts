@@ -49,7 +49,7 @@ async function fixture() {
   const game = gameConsole({ runtime, specs: h.app.specs, console: h.minecraft, access: h.app.reconciler })
   const common = { db: h.db, runtime, specs: h.app.specs, boot: h.app.boot, transitions: h.app.transitions }
   const back = goingBack({ ...common, ...binding, access: h.app.reconciler })
-  const checks = rechecks({ db: h.db, policy: h.app.policy, artifacts: h.app.artifacts })
+  const checks = rechecks({ db: h.db, policy: h.app.policy, configuration: h.app.configuration })
   const copies = worldCopies({
     db: h.db,
     runtime,
@@ -66,6 +66,7 @@ async function fixture() {
     ...checks,
     console: h.minecraft,
     artifacts: h.app.artifacts,
+    configuration: h.app.configuration,
     backups: h.app.backups,
     consoleTarget: game.consoleTarget,
     capture: copies.capture,
@@ -320,8 +321,8 @@ async function unavailableArtifact() {
     const previous = (await binding.bindingOf(server.id)).applied
     const result = await updating({
       ...deps,
-      artifacts: {
-        preflight: async () => {
+      configuration: {
+        check: async () => {
           throw problem
         },
       },
@@ -333,8 +334,8 @@ async function unavailableArtifact() {
     await expect(
       updating({
         ...deps,
-        artifacts: {
-          preflight: async () => {
+        configuration: {
+          check: async () => {
             throw unexpected
           },
         },

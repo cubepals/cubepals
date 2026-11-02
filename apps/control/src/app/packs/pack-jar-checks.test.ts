@@ -21,6 +21,7 @@ import { FakeMalwareLists } from '../../testing/malware.ts'
 import { MemoryStore } from '../../testing/memory-store.ts'
 import { classFile, fabricJar, unzipBytes, utf8, zipBytes } from '../../testing/uploads.ts'
 import type { UserActor } from '../actor.ts'
+import { loadRuntime } from '../servers/persistence.ts'
 import { loadPackContents } from './persistence.ts'
 
 const digest = (algorithm: string, bytes: Uint8Array) => createHash(algorithm).update(bytes).digest('hex')
@@ -398,7 +399,7 @@ describe.skipIf(!hasDatabase)('a jar a pack keeps off servers, which a mod of it
     const server = await h.create(owner, { from: { kind: 'modpack', projectId: needed.projectId } })
     await h.settled(server.id, 30_000)
     expect((await h.server(server.id)).lifecycle.status).not.toBe('running')
-    expect(await h.minecraft.file(server.id, needed.path)).toBeNull()
+    expect((await loadRuntime(h.db, server.id, ['fake'])).handle).toBeNull()
     expect((await loadPackContents(h.db, needed.pack.sha512))?.leftOut ?? []).toEqual([])
     const env = (await h.app.specs.desired(h.db, await h.server(server.id))).spec.env
     expect(env.MODRINTH_FORCE_INCLUDE_FILES).toBeUndefined()
@@ -503,7 +504,7 @@ describe.skipIf(!hasDatabase)('a jar Blockly left out for players, which a mod o
     const server = await h.create(owner, { from: { kind: 'modpack', projectId: lib.projectId } })
     await h.settled(server.id, 30_000)
     expect((await h.server(server.id)).lifecycle.status).not.toBe('running')
-    expect(await h.minecraft.file(server.id, lib.path)).toBeNull()
+    expect((await loadRuntime(h.db, server.id, ['fake'])).handle).toBeNull()
     expect((await loadPackContents(h.db, lib.pack.sha512))?.leftOut).toEqual([
       { path: lib.path, why: 'players', sha512: lib.library.sha512 },
     ])

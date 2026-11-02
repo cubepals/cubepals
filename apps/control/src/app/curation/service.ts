@@ -74,6 +74,7 @@ export class PackCuration {
     wanted: ReadonlyArray<{ projectId: string }>,
   ) => Promise<ModPlan>
   readonly #loaderBuilds: LoaderBuilds
+  readonly #verify: (checked: import('./check-outcome.ts').Checked) => Promise<void>
   readonly #packs: readonly CuratedPack[]
   readonly #own: readonly OwnPack[]
   /** What `offered()` last answered, and when it asked; null once a move makes it out of date. */
@@ -95,6 +96,7 @@ export class PackCuration {
       wanted: ReadonlyArray<{ projectId: string }>,
     ) => Promise<ModPlan>
     loaderBuilds: LoaderBuilds
+    verify: (checked: import('./check-outcome.ts').Checked) => Promise<void>
     /** The review; tests bring their own. */
     packs?: readonly CuratedPack[]
     /** Blockly's own packs; tests bring their own. */
@@ -110,6 +112,7 @@ export class PackCuration {
     this.#pin = deps.pin
     this.#resolve = deps.resolve
     this.#loaderBuilds = deps.loaderBuilds
+    this.#verify = deps.verify
     this.#packs = deps.packs ?? CURATED_PACKS
     this.#own = deps.own ?? OWN_PACKS
   }
@@ -140,6 +143,7 @@ export class PackCuration {
         db: this.#db,
         packs: this.#packs,
         own: this.#own,
+        verify: this.#verify,
         checkCatalog: (pack, spec, work) =>
           checkCatalogRelease(
             {

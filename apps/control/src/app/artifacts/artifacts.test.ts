@@ -21,11 +21,35 @@ async function pin(h: Harness, owner: UserActor, id: string, mods: PinnedMod[]) 
   await h.app.revisions.changeMods(owner, id, { basedOn, mods }, randomUUID())
 }
 
+let h: Harness
+const cdn = new Cdn()
+
+const modded = async () => {
+  const owner = await h.user('Steve', 'plus')
+  const server = await h.create(owner, { loader: 'fabric' })
+  await h.until(server.id, 'running')
+  await h.settled(server.id)
+  return { owner, id: server.id }
+}
+const withMods = async (owner: UserActor, id: string, mods: PinnedMod[]) => {
+  const before = await h.server(id)
+  await pin(h, owner, id, mods)
+  await h.until(id, (s) => s.lifecycle.status !== 'updating' && s.version > before.version + 1, 20_000)
+  return h.settled(id, 20_000)
+}
+const lastApply = async (id: string) => (await h.operations(id)).filter((op) => op.kind === 'apply').at(-1)
+const linksOf = async (id: string) =>
+  ((await h.app.specs.desired(h.db, await h.server(id))).spec.env.MODS ?? '').split(',').filter(Boolean)
+
+const backupsOf = (id: string) =>
+  h.db
+    .select({ id: schema.backups.id })
+    .from(schema.backups)
+    .where(eq(schema.backups.serverId, id))
+    .orderBy(asc(schema.backups.id))
+
 // Jars at boot, end to end (§15.2): preflight, the runtime endpoint, the install check.
 describe.skipIf(!hasDatabase)('artifacts', () => {
-  let h: Harness
-  const cdn = new Cdn()
-
   beforeAll(async () => {
     await cdn.start()
     h = await startHarness()
@@ -35,23 +59,6 @@ describe.skipIf(!hasDatabase)('artifacts', () => {
     await h.close()
     cdn.close()
   })
-
-  const modded = async () => {
-    const owner = await h.user('Steve', 'plus')
-    const server = await h.create(owner, { loader: 'fabric' })
-    await h.until(server.id, 'running')
-    await h.settled(server.id)
-    return { owner, id: server.id }
-  }
-  const withMods = async (owner: UserActor, id: string, mods: PinnedMod[]) => {
-    const before = await h.server(id)
-    await pin(h, owner, id, mods)
-    await h.until(id, (s) => s.lifecycle.status !== 'updating' && s.version > before.version + 1, 20_000)
-    return h.settled(id, 20_000)
-  }
-  const lastApply = async (id: string) => (await h.operations(id)).filter((op) => op.kind === 'apply').at(-1)
-  const linksOf = async (id: string) =>
-    ((await h.app.specs.desired(h.db, await h.server(id))).spec.env.MODS ?? '').split(',').filter(Boolean)
 
   test('a server installs its mods through the endpoint, under names unique to their bytes, and checks them', async () => {
     const { owner, id } = await modded()
@@ -64,13 +71,13 @@ describe.skipIf(!hasDatabase)('artifacts', () => {
     expect(sha512(await readFile(h.minecraft.path(id, `mods/${diskName(lithium.artifact)}`)))).toBe(
       lithium.artifact.sha512,
     )
-    expect(cdn.downloads).toBe(downloads + 1)
+    expect(cdn.downloads).toBe(downloads + 2)
 
-    // A restart takes the jar from disk: the image asks the endpoint, and the CDN sees nothing.
+    // The isolated check and the player runtime each installed once. A restart reuses both proofs and disk bytes.
     await h.app.servers.restart(owner, id, randomUUID())
     await h.until(id, 'running')
     await h.settled(id)
-    expect(cdn.downloads).toBe(downloads + 1)
+    expect(cdn.downloads).toBe(downloads + 2)
   })
 
   test('the endpoint answers from the database, for this server’s own token and pins only', async () => {
@@ -140,22 +147,29 @@ describe.skipIf(!hasDatabase)('artifacts', () => {
     )
   })
 
-  test('a jar changed where it is published fails the check twice, and the change goes back', async () => {
+  test('a changed published jar stays retryable and leaves the running configuration untouched', async () => {
     const { owner, id } = await modded()
     const lithium = cdn.publish('krypton')
     await withMods(owner, id, [lithium])
     const before = (await h.server(id)).desiredRevisionId
+    const backups = await backupsOf(id)
     const tampered = cdn.publish('c2me')
     cdn.replace(tampered, jar('something else entirely'))
     await withMods(owner, id, [lithium, tampered])
 
     const apply = await lastApply(id)
     expect(apply?.status).toBe('failed')
-    expect(apply?.error).toContain("c2me didn't install as chosen")
+    expect(apply?.error).toContain('couldn’t finish checking')
+    const checks = await h.db.select().from(schema.modValidations)
+    expect(
+      checks.find((check) => check.plan.mods.some((mod) => mod.artifact.sha512 === tampered.artifact.sha512))
+        ?.state,
+    ).toBe('unavailable')
+    expect(await backupsOf(id)).toEqual(backups)
     const after = await h.server(id)
     expect(after.lifecycle.status).toBe('running')
     expect(after.desiredRevisionId).toBe(before)
-    // The image removed the jar the configuration it went back to doesn't list.
+    // The player runtime retained its previous files; the failed check used separate storage.
     expect(await h.minecraft.jars(id)).toEqual([diskName(lithium.artifact)])
   }, 30_000)
 

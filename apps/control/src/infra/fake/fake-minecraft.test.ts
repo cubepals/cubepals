@@ -119,50 +119,54 @@ describe('game rule startup boundaries', () => {
   })
 })
 
-describe('a start', () => {
-  test('writes the properties, keeps white-list once set, and logs as the image does', async () => {
-    const { minecraft } = fresh()
-    const m = await machine({
-      DIFFICULTY: 'hard',
-      MOTD: 'Hi',
-      ONLINE_MODE: 'FALSE',
-      ENFORCE_WHITELIST: 'TRUE',
-    })
-    await minecraft.start(m)
-    expect(await minecraft.file(m.key, 'server.properties')).toBe(
-      [
-        'difficulty=hard',
-        'gamemode=survival',
-        'pvp=true',
-        'view-distance=10',
-        'simulation-distance=10',
-        'max-players=20',
-        'motd=Hi',
-        'spawn-protection=16',
-        'level-name=world',
-        'online-mode=false',
-        'enforce-whitelist=true',
-        'white-list=false',
-        '',
-      ].join('\n'),
-    )
-    expect(await minecraft.run(target(m), 'whitelist on')).toBe('Whitelist is now turned on')
-    await minecraft.stop(m)
-    await minecraft.start(m)
-    expect(await minecraft.file(m.key, 'server.properties')).toContain('white-list=true\n')
-    const log = await lines(minecraft, m.key)
-    expect(log[0]).toBe('[init] Starting the Minecraft server...')
-    expect(log.map(unclocked)).toEqual([
-      '[init] Starting the Minecraft server...',
-      '[Server thread/INFO]: Done (0.100s)! For help, type "help"',
-      '[Server thread/INFO]: [Rcon: Whitelist is now turned on]',
-      '[Server thread/INFO]: Stopping server',
-      '[init] Starting the Minecraft server...',
-      '[Server thread/INFO]: Done (0.100s)! For help, type "help"',
-    ])
-    expect(log[1]).toMatch(/^\[\d\d:\d\d:\d\d\] \[Server thread\/INFO\]: Done/)
-    expect(await minecraft.file(m.key, 'world/level.dat')).toBe('opened by unknown\nopened by unknown\n')
+async function restartProperties() {
+  const { minecraft } = fresh()
+  const m = await machine({
+    DIFFICULTY: 'hard',
+    MOTD: 'Hi',
+    ONLINE_MODE: 'FALSE',
+    ENFORCE_WHITELIST: 'TRUE',
   })
+  await minecraft.start(m)
+  expect(await minecraft.file(m.key, 'server.properties')).toBe(
+    [
+      'difficulty=hard',
+      'gamemode=survival',
+      'pvp=true',
+      'view-distance=10',
+      'simulation-distance=10',
+      'max-players=20',
+      'motd=Hi',
+      'spawn-protection=16',
+      'level-name=world',
+      'online-mode=false',
+      'enforce-whitelist=true',
+      'white-list=false',
+      '',
+    ].join('\n'),
+  )
+  expect(await minecraft.run(target(m), 'whitelist on')).toBe('Whitelist is now turned on')
+  await minecraft.stop(m)
+  await minecraft.start(m)
+  expect(await minecraft.file(m.key, 'server.properties')).toContain('white-list=true\n')
+  const log = await lines(minecraft, m.key)
+  expect(log[0]).toBe('[init] Starting the Minecraft server...')
+  expect(log.map(unclocked)).toEqual([
+    '[init] Starting the Minecraft server...',
+    '[Server thread/INFO]: Starting minecraft server version unknown',
+    '[Server thread/INFO]: Done (0.100s)! For help, type "help"',
+    '[Server thread/INFO]: [Rcon: Whitelist is now turned on]',
+    '[Server thread/INFO]: Stopping server',
+    '[init] Starting the Minecraft server...',
+    '[Server thread/INFO]: Starting minecraft server version unknown',
+    '[Server thread/INFO]: Done (0.100s)! For help, type "help"',
+  ])
+  expect(log[2]).toMatch(/^\[\d\d:\d\d:\d\d\] \[Server thread\/INFO\]: Done/)
+  expect(await minecraft.file(m.key, 'world/level.dat')).toBe('opened by unknown\nopened by unknown\n')
+}
+
+describe('a start', () => {
+  test('writes the properties, keeps white-list once set, and logs as the image does', restartProperties)
 
   test('creates each missing list empty, and loads the lists and the name cache from their files', async () => {
     const { minecraft } = fresh()
@@ -677,6 +681,7 @@ describe('the switches tests flip', () => {
     expect(await minecraft.file(m.key, 'world/level.dat')).toBe('opened by 26.3\n')
     expect((await lines(minecraft, m.key)).map(unclocked)).toEqual([
       '[init] Starting the Minecraft server...',
+      '[Server thread/INFO]: Starting minecraft server version 26.3',
       '[Server thread/ERROR]: Encountered an unexpected exception: java.lang.IllegalStateException: bad',
       '\tat a.b(C.java:1)',
     ])
@@ -693,6 +698,7 @@ describe('the switches tests flip', () => {
     await minecraft.start(m)
     expect((await lines(minecraft, m.key)).map(unclocked)).toEqual([
       '[init] Starting the Minecraft server...',
+      '[Server thread/INFO]: Starting minecraft server version slow',
     ])
     await expect(minecraft.ping({ host: m.host, port: 25565 }, new AbortController().signal)).rejects.toThrow(
       'Connection refused',

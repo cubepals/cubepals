@@ -34,7 +34,6 @@
  */
 import type { Db } from '@blockly/db'
 import type { AccessReconciler } from '../access/reconciler.ts'
-import type { ArtifactService } from '../artifacts/service.ts'
 import type { BackupService } from '../backups/service.ts'
 import type { PlayerService } from '../players/service.ts'
 import type { AccessPolicy } from '../policy/access-policy.ts'
@@ -81,7 +80,7 @@ export interface HandlerDeps {
   probe: ReadinessProbe
   /** Each player's facts, kept as a server stops for its page while it sleeps. */
   players: Pick<PlayerService, 'snapshot'>
-  artifacts: ArtifactService
+  configuration: import('../mods/configuration-preflight.ts').ConfigurationPreflight
   backups: BackupService
   /** The archive store, when the deployment has one (§15.4). */
   archives: ArchiveStore | null
@@ -94,7 +93,7 @@ export interface HandlerDeps {
 
 /** Every operation a server can run. Each re-validates, acts through ports, then records the outcome. */
 export function createHandlers(deps: HandlerDeps): OperationHandler[] {
-  const { db, runtime, transitions, specs, boot, artifacts } = deps
+  const { db, runtime, transitions, specs, boot } = deps
 
   const { bindingOf, progressSink, startCompute, booted, stopWhatFailed } = serverBinding({
     db,
@@ -102,7 +101,7 @@ export function createHandlers(deps: HandlerDeps): OperationHandler[] {
     jobs: deps.jobs,
   })
 
-  const { stillAllowed, mayBoot, preflight } = rechecks({ db, policy: deps.policy, artifacts })
+  const { stillAllowed, mayBoot, preflight } = rechecks(deps)
 
   const { consoleTarget, windDown } = gameConsole({
     runtime,
@@ -155,13 +154,13 @@ export function createHandlers(deps: HandlerDeps): OperationHandler[] {
   })
 
   const apply = updating({
+    configuration: deps.configuration,
     db,
     runtime,
     specs,
     console: deps.console,
     transitions,
     boot,
-    artifacts,
     backups: deps.backups,
     bindingOf,
     startCompute,

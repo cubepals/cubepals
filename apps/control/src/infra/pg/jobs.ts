@@ -11,6 +11,7 @@ import { notifyQueue } from 'pg-boss/dist/plans.js'
 import type {
   BlockedOperation,
   CurationJob,
+  Importer,
   JobAttempt,
   JobOutcomes,
   JobQueue,
@@ -61,6 +62,7 @@ const PACK_IMPORT = 'pack-import'
 const WORLD_DOWNLOAD = 'world-download'
 /** Uploaded worlds to read and bring to their server: one job queued per upload at a time. */
 const WORLD_IMPORT = 'world-import'
+const MOD_VALIDATION = 'mod-validation'
 /** Reviewed releases of curated packs to fetch and check: one job per release at a time. */
 const CURATION_INGEST = 'curation-ingest'
 /** Uploaded jars to read for malware: one job per bytes queued or running at a time. */
@@ -219,6 +221,12 @@ export async function startBoss(
     },
     BACKGROUND_KEPT,
   )
+  await ensureQueue(
+    boss,
+    MOD_VALIDATION,
+    { policy: 'standard', retryLimit: HEAVY_RETRIES, retryDelay: 30, expireInSeconds: 1800 },
+    BACKGROUND_KEPT,
+  )
   // Bringing a world in reads and rewrites one of up to a few gigabytes, and may be asked again
   // once its owner has answered what it asked: one queued at a time per upload.
   await ensureQueue(
@@ -285,11 +293,17 @@ export async function startBoss(
   return boss
 }
 
+const modValidators = new WeakMap<PgBoss, Importer>()
+
 export class PgBossJobs implements JobQueue {
   readonly #boss: PgBoss
 
   constructor(boss: PgBoss) {
     this.#boss = boss
+  }
+
+  registerModValidation(importer: Importer): void {
+    modValidators.set(this.#boss, importer)
   }
 
   async enqueue(
@@ -349,6 +363,10 @@ export class PgBossJobs implements JobQueue {
 
   async enqueueWorldImport(tx: Tx, importId: string): Promise<void> {
     await this.#boss.send(WORLD_IMPORT, { importId }, { singletonKey: importId, db: fromDrizzle(tx, sql) })
+  }
+
+  async enqueueModValidation(tx: Tx, key: string): Promise<void> {
+    await this.#boss.send(MOD_VALIDATION, { importId: key }, { singletonKey: key, db: fromDrizzle(tx, sql) })
   }
 
   async enqueueWorldDownload(tx: Tx, downloadId: string): Promise<void> {
@@ -466,11 +484,7 @@ export async function workListingEligibility(
   })
 }
 
-/** What reads an upload off the request that sent it, and what is told when it gave up. */
-export interface Importer {
-  runImport(importId: string): Promise<void>
-  importGaveUp(importId: string, error: string): Promise<void>
-}
+export type { Importer } from '../../app/ports/jobs.ts'
 
 /**
  * Reads and builds uploaded packs, one at a time on each worker. The last attempt that fails
@@ -478,6 +492,10 @@ export interface Importer {
  */
 export const workPackImports = (boss: PgBoss, packs: Importer, pollingIntervalSeconds = 2) =>
   workImports(boss, PACK_IMPORT, packs, pollingIntervalSeconds)
+
+/** Uses the same bounded queue/retry protocol as other heavy import work. */
+const workModValidation = (boss: PgBoss, validator: Importer, pollingIntervalSeconds = 2) =>
+  workImports(boss, MOD_VALIDATION, validator, pollingIntervalSeconds)
 
 /** Reads uploaded worlds and brings each to its server, as packs are read. */
 export const workWorldImports = (boss: PgBoss, worlds: Importer, pollingIntervalSeconds = 2) =>
@@ -560,12 +578,14 @@ export async function workCuration(
   )
 }
 
-/** Reads uploaded jars for malware as they arrive (`app/mods/jar-checks.ts`); a failed read is retried. */
+/** Starts jar checks and registered configuration verification on workers; APIs only register their handlers. */
 export async function workJarChecks(
   boss: PgBoss,
   check: (sha512: string) => Promise<void>,
   pollingIntervalSeconds = 2,
 ): Promise<void> {
+  const validator = modValidators.get(boss)
+  if (validator !== undefined) await workModValidation(boss, validator, pollingIntervalSeconds)
   await boss.work(
     JAR_CHECK,
     { ...background(pollingIntervalSeconds), localConcurrency: 1 },

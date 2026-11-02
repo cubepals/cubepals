@@ -75,8 +75,8 @@ describe.skipIf(!hasDatabase)('what a catalog jar asks of a server', () => {
     const versions = [at('Wm9asg4I', '/BentoBox-3.23.3.jar'), at('AbNCctdZ', '/BentoBox-3.12.0.jar')]
     expect(await java.of('modrinth', versions)).toEqual(
       new Map([
-        ['Wm9asg4I', { java: 25, api: null, mod: null }],
-        ['AbNCctdZ', { java: 21, api: null, mod: null }],
+        ['Wm9asg4I', { java: 25, api: null, mod: null, native: {} }],
+        ['AbNCctdZ', { java: 21, api: null, mod: null, native: {} }],
       ]),
     )
     // Nothing was downloaded whole.
@@ -84,7 +84,12 @@ describe.skipIf(!hasDatabase)('what a catalog jar asks of a server', () => {
     // Kept with the version: asked again, the jar isn't read again.
     cdn.files.clear()
     const again = new JarNeedsReader({ db: h.db, formats: new LibraryFileFormats() })
-    expect((await again.of('modrinth', versions)).get('Wm9asg4I')).toEqual({ java: 25, api: null, mod: null })
+    expect((await again.of('modrinth', versions)).get('Wm9asg4I')).toEqual({
+      java: 25,
+      api: null,
+      mod: null,
+      native: {},
+    })
   })
 
   test('a jar that can’t be read is unknown, and read again next time', async () => {
@@ -92,7 +97,12 @@ describe.skipIf(!hasDatabase)('what a catalog jar asks of a server', () => {
     const missing = at('missing', '/missing.jar')
     expect((await java.of('modrinth', [missing])).get('missing')).toBeNull()
     cdn.files.set('/missing.jar', Buffer.from(bentobox(BENTOBOX_3_23_3_MAIN)))
-    expect((await java.of('modrinth', [missing])).get('missing')).toEqual({ java: 25, api: null, mod: null })
+    expect((await java.of('modrinth', [missing])).get('missing')).toEqual({
+      java: 25,
+      api: null,
+      mod: null,
+      native: {},
+    })
   })
 
   test('a BentoBox add-on says the BentoBox it loads on', async () => {
@@ -113,6 +123,7 @@ describe.skipIf(!hasDatabase)('what a catalog jar asks of a server', () => {
       java: 21,
       api: { projectId: 'aBVLHiAW', atLeast: '3.22.0' },
       mod: null,
+      native: {},
     })
   })
 
@@ -143,6 +154,17 @@ describe.skipIf(!hasDatabase)('what a catalog jar asks of a server', () => {
       java: 25,
       api: null,
       mod: { ids: ['spark'], depends: ['fabric-api-base'], carriesJars: true },
+      native: {
+        fabric: {
+          ids: ['spark'],
+          depends: ['fabric-api-base'],
+          carriesJars: true,
+          version: null,
+          environment: 'both' as const,
+          complete: true,
+          requirements: [{ id: 'fabric-api-base', versions: ['*'] }],
+        },
+      },
     }
     expect((await reader().of('modrinth', [spark])).get('e3hsPc1o')).toEqual(fabric)
     // Kept, and read from there next time.

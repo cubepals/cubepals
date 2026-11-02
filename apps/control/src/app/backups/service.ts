@@ -61,7 +61,7 @@ import {
 } from './persistence.ts'
 import { type WithMods, withWorldMods } from './restored-mods.ts'
 import { WorldImports } from './world-imports.ts'
-import { WorldMods } from './world-mods.ts'
+import { type ModdedWorldFacts, WorldMods } from './world-mods.ts'
 import { MAX_WORLD_BYTES, refusedByName, worldUploadLimit } from './world-reading.ts'
 
 /** Snapshots taken before a change, a restore or a move: the latest few, apart from the owner's own. */
@@ -95,6 +95,7 @@ const MAX_KEPT_WORLD_BYTES = 4 * MAX_WORLD_FILE_BYTES
  * brings back who could join: the access record is re-imposed after it (§15.1).
  */
 export class BackupService {
+  readonly #configuration: import('../mods/configuration-preflight.ts').ConfigurationPreflight
   readonly #db: Db
   readonly #transitions: ServerTransitions
   readonly #events: EventBus
@@ -104,7 +105,7 @@ export class BackupService {
   readonly #formats: FileFormats
   readonly #artifacts: ArtifactService
   readonly #builds: LoaderBuilds
-  readonly #mods: Pick<ModService, 'planOn' | 'ownJars'>
+  readonly #mods: Pick<ModService, 'planOn' | 'ownJars' | 'jars'>
   readonly #worldMods: WorldMods
   /** What an archive's owner downloads of it (`downloads.ts`). */
   readonly downloads: WorldDownloads
@@ -114,6 +115,7 @@ export class BackupService {
   readonly newWorlds: NewWorldImports
 
   constructor(deps: {
+    configuration: import('../mods/configuration-preflight.ts').ConfigurationPreflight
     db: Db
     transitions: ServerTransitions
     events: EventBus
@@ -124,7 +126,7 @@ export class BackupService {
      * A brought world's own jars kept as its owner's uploads (`mods/own-jars.ts`), and its mods
      * resolved for the server that restores it (`restored-mods.ts`).
      */
-    mods: Pick<ModService, 'planOn' | 'ownJars'>
+    mods: Pick<ModService, 'planOn' | 'ownJars' | 'jars'>
     ports: {
       runtime: Runtimes
       capabilities: DeploymentCapabilities
@@ -137,6 +139,7 @@ export class BackupService {
     }
   }) {
     this.#db = deps.db
+    this.#configuration = deps.configuration
     this.#transitions = deps.transitions
     this.#events = deps.events
     this.#runtime = deps.ports.runtime
@@ -147,7 +150,7 @@ export class BackupService {
     this.#builds = deps.ports.loaderBuilds
     this.#mods = deps.mods
     const { official, ports } = deps
-    this.#worldMods = new WorldMods({ ...ports, ownJars: deps.mods.ownJars })
+    this.#worldMods = new WorldMods({ ...ports, ownJars: deps.mods.ownJars, jars: deps.mods.jars })
     this.downloads = new WorldDownloads({ db: deps.db, policy: deps.policy, official, ...ports })
     this.newWorlds = new NewWorldImports({ db: deps.db, policy: deps.policy, ...ports })
     this.imports = new WorldImports({
@@ -156,6 +159,7 @@ export class BackupService {
       events: deps.events,
       forNewServers: this.newWorlds,
       mods: this.#worldMods,
+      compatibility: (serverId, facts) => this.#compatibility(serverId, facts),
       ...ports,
     })
   }
@@ -493,12 +497,41 @@ export class BackupService {
     if (backup.worldFacts === null || mods === undefined)
       throw new AppError('invalid_choice', 'This world came without its mods, so there are none to bring.')
     const desired = await loadRevision(this.#db, server.desiredRevisionId)
-    return withWorldMods(
+    const compiled = await withWorldMods(
       { mods: this.#mods, builds: this.#builds, worldMods: this.#worldMods },
       desired,
       { gameVersion: backup.worldFacts.gameVersion, mods },
       moveUp,
     )
+    await this.#configuration.request({ ...desired, ...compiled.draft })
+    return compiled
+  }
+
+  /** Same compiler and verifier as Play; importing files never asserts that an unchecked set runs. */
+  async #compatibility(serverId: string, facts: ModdedWorldFacts) {
+    const { gameVersion, mods } = facts
+    try {
+      const server = await findServer(this.#db, serverId)
+      if (server === null) throw new NotFound('Server')
+      const desired = await loadRevision(this.#db, server.desiredRevisionId)
+      const compiled = await withWorldMods(
+        { mods: this.#mods, builds: this.#builds, worldMods: this.#worldMods },
+        desired,
+        { gameVersion, mods },
+        true,
+      )
+      return this.#configuration.request({ ...desired, ...compiled.draft })
+    } catch (error) {
+      if (error instanceof AppError && error.code !== 'catalog_unavailable')
+        return { key: '', state: 'blocked' as const, message: error.message, checkedAt: null }
+      return {
+        key: '',
+        state: 'unavailable' as const,
+        message:
+          'Cubepals couldn’t finish checking these mods yet. Your world is imported; the check will be retried.',
+        checkedAt: null,
+      }
+    }
   }
 
   /** The server moved up to the release a world it restores was last played on (`moved-up.ts`). */

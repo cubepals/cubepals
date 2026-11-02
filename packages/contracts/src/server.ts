@@ -244,6 +244,7 @@ export const AdminUntrashInput = ServerRef.extend({ reason: adminReason })
 /** Internal progress steps; the web app words them for people. */
 export const OPERATION_STEPS = [
   'queued',
+  'checking_mods',
   'allocating',
   /** The provider holds as many machines as it may: the work waits for one to free. */
   'waiting_for_room',
@@ -306,6 +307,8 @@ export interface OperationView {
   broughtWorld: string | null
   status: 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled'
   step: OperationStep | null
+  /** Actual time in the independent mod check; null while it runs, absent when no check ran. */
+  modCheckSeconds?: number | null
   error: string | null
   createdAt: string
   startedAt: string | null

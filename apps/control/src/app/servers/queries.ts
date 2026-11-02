@@ -716,6 +716,7 @@ function operationView(
     broughtWorld,
     status: op.status,
     step: (op.step as OperationView['step']) ?? null,
+    ...(op.modCheckSeconds === undefined ? {} : { modCheckSeconds: op.modCheckSeconds }),
     error: op.error,
     createdAt: op.createdAt.toISOString(),
     startedAt: op.startedAt?.toISOString() ?? null,

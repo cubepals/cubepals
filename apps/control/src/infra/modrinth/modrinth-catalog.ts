@@ -354,6 +354,7 @@ function projectOf(project: Project): CatalogProject {
     summary: project.description,
     iconUrl: project.icon_url ?? null,
     environments: project.environment.map(environmentOf),
+    loaders: project.loaders,
     downloads: project.downloads,
     // A search hit's tags are all of these at once; a project keeps them apart. Read as a hit's,
     // so a pack found by its link knows its loader and its size as one found by its name does.

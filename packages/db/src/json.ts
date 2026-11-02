@@ -6,6 +6,32 @@
 // these interfaces are what the database promises to hand back. Persistence code maps between
 // the two, so a drift between them is a compile error there rather than a silent mismatch.
 
+export interface NativeModJson {
+  ids: string[]
+  depends: string[]
+  carriesJars: boolean
+  version: string | null
+  environment: 'client' | 'server' | 'both'
+  complete: boolean
+  requirements: Array<{ id: string; versions: readonly string[] }>
+}
+
+/** The immutable inputs of an isolated server check. No signed URLs or runtime secrets are stored. */
+export interface ModValidationPlanJson {
+  compat: PinnedModJson[]
+  gameVersion: string
+  loader: import('@blockly/contracts').Loader
+  loaderVersion: string | null
+  settings: ServerSettingsJson
+  mods: PinnedModJson[]
+  modpack: PinnedModpackJson | null
+  files: CarriedFileJson[]
+  memoryTier: string
+  storageGb: number
+  provider: string
+  regionKey: string
+}
+
 export interface ServerSettingsJson {
   difficulty: 'peaceful' | 'easy' | 'normal' | 'hard'
   defaultGameMode: 'survival' | 'creative' | 'adventure' | 'spectator'

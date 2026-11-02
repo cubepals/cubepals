@@ -226,7 +226,7 @@ export function restoring(deps: RestoringDeps) {
         if (bigger !== null) await growStorage(db, server.id, bigger)
       }
       const desired = await specs.desired(db, server)
-      await preflight(desired, null)
+      await preflight(desired, null, ctx)
       if ((await runtime.observe(binding.handle)).state === 'running')
         await deps.access.reconcile(server, binding.handle, 'import').catch(() => undefined)
       // Every other world the server lists stays as it is now, whatever the backup holds.

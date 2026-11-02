@@ -30,6 +30,7 @@ import {
   worldStartingOn,
 } from './persistence.ts'
 import { keepReporterStored, reporterJar, reporterPin } from './reporter.ts'
+import { validationArtifact } from './validation-artifacts.ts'
 
 export type UnavailableReason = 'no_archive_store' | 'not_stored' | 'revoked'
 
@@ -222,7 +223,9 @@ export class ArtifactService {
     this.authorize(serverId, token)
     // Malware is handed to no server, whatever pins it (`mods/jar-checks.ts`).
     if ((await quarantinedOf(this.#db, [sha512])).size > 0) throw new ArtifactNotFound()
-    const found = await pinnedBy(this.#db, serverId, sha512)
+    const validation = await validationArtifact(this.#db, serverId, sha512)
+    if (validation === null) throw new ArtifactNotFound()
+    const found = validation ?? (await pinnedBy(this.#db, serverId, sha512))
     if (found === null) return this.#compat(serverId, sha512)
     const pinned = found
     // An HTTP date holds whole seconds: a refresh rounds up, so it is newer than every file that

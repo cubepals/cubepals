@@ -12,10 +12,11 @@ import type { Db } from '@blockly/db'
 import { describeChanges } from '../../../domain/revision/revision.ts'
 import type { MinecraftServer } from '../../../domain/server/server.ts'
 import { resetHeartsCommand } from '../../../minecraft/lifesteal.ts'
-import { type ArtifactService, ArtifactUnavailable } from '../../artifacts/service.ts'
+import { ArtifactUnavailable } from '../../artifacts/service.ts'
 import type { BackupRecord } from '../../backups/persistence.ts'
 import type { BackupService } from '../../backups/service.ts'
 import { aside, inFull, PermanentFailure } from '../../errors.ts'
+import { IncompatibleMods, ValidationUnavailable } from '../../mods/validation-runtime.ts'
 import type { ServerConsole } from '../../ports/minecraft.ts'
 import type { RuntimeHandle } from '../../ports/runtime.ts'
 import type { Runtimes } from '../../runtimes/router.ts'
@@ -106,6 +107,16 @@ async function wentBack(
   }
 }
 
+function configurationRefusal(
+  error: unknown,
+): error is ArtifactUnavailable | IncompatibleMods | ValidationUnavailable {
+  return (
+    error instanceof ArtifactUnavailable ||
+    error instanceof IncompatibleMods ||
+    error instanceof ValidationUnavailable
+  )
+}
+
 export function updating(deps: {
   db: Db
   runtime: Pick<Runtimes, 'apply' | 'stop' | 'exec'>
@@ -114,7 +125,7 @@ export function updating(deps: {
   console: ServerConsole
   transitions: ServerTransitions
   boot: Pick<BootSequence, 'run'>
-  artifacts: Pick<ArtifactService, 'preflight'>
+  configuration: Pick<import('../../mods/configuration-preflight.ts').ConfigurationPreflight, 'check'>
   backups: Pick<BackupService, 'enforceRetention'>
   bindingOf: ServerBinding['bindingOf']
   startCompute: ServerBinding['startCompute']
@@ -133,7 +144,6 @@ export function updating(deps: {
     transitions,
     specs,
     boot,
-    artifacts,
     bindingOf,
     startCompute,
     booted,
@@ -189,9 +199,9 @@ export function updating(deps: {
       )
         return { status: 'succeeded' }
       try {
-        await artifacts.preflight(desired.revision)
+        await deps.configuration.check(desired.revision, desired, () => ctx.step('checking_mods'))
       } catch (error) {
-        if (!(error instanceof ArtifactUnavailable)) throw error
+        if (!configurationRefusal(error)) throw error
         // Nothing was touched: the server keeps running what it ran, and should run it.
         await putBack(server, previous)
         return { status: 'failed', reason: `Nothing changed: ${error.message}` }

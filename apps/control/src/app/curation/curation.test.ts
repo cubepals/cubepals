@@ -263,8 +263,8 @@ describe.skipIf(!hasDatabase)('curated packs', () => {
     const server = await h.create(owner, { from: { kind: 'curated', key: 'mixed' } })
     await h.until(server.id, 'running')
     await h.settled(server.id)
-    // The pack and both of its mods, from the pack's own CDN.
-    expect(cdn.downloads - before).toBe(3)
+    // The check and the player's server each fetch the pack and both mods from the authors.
+    expect(cdn.downloads - before).toBe(6)
     expect(await h.minecraft.file(server.id, 'mods/balm.jar')).not.toBeNull()
   }, 60_000)
 

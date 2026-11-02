@@ -2,6 +2,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
+import type { OperationStep as ContractOperationStep } from '@blockly/contracts'
 import type { Db } from '@blockly/db'
 import type { OperationKind, Phase, ServerStatus } from '../../domain/server/lifecycle.ts'
 import type { MinecraftServer } from '../../domain/server/server.ts'
@@ -23,20 +24,7 @@ import {
   recordStep,
 } from './persistence.ts'
 
-export type OperationStep =
-  | 'rolling_back'
-  | 'allocating'
-  | 'waiting_for_room'
-  | 'storage'
-  | 'compute'
-  | 'booting'
-  | 'resuming'
-  | 'starting'
-  | 'loading_world'
-  | 'verifying'
-  | 'access'
-  | 'saving'
-  | 'stopping'
+export type OperationStep = Exclude<ContractOperationStep, 'queued'>
 
 /**
  * What an operation's record keeps for the platform beside its steps, never shown as one:

@@ -43,6 +43,7 @@ const STEPS: Record<string, string> = {
   starting: 'Java starting',
   loading_world: 'Loading the world',
   verifying: 'Checking it answers',
+  checking_mods: 'Checking the server’s mods',
   access: 'Access',
   saving: 'Saving',
   stopping: 'Stopping',

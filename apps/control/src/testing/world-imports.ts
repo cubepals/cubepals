@@ -53,7 +53,8 @@ export async function untilRead(
   const until = Date.now() + timeoutMs
   for (;;) {
     const view = await h.app.backups.imports.view(owner, serverId, importId)
-    if (view.status !== 'reading') return view
+    if (view.status !== 'reading' && !(view.status === 'ready' && view.compatibility?.state === 'checking'))
+      return view
     if (Date.now() > until)
       throw new Error(`The import ${importId} was still being read after ${timeoutMs} ms`)
     await new Promise((resolve) => setTimeout(resolve, 100))

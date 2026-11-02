@@ -24,6 +24,9 @@ export const ENTRY_FILES = {
   /** A BentoBox addon's, which BentoBox loads itself. */
   'addon.yml': 'yaml',
   'fabric.mod.json': 'json',
+  'quilt.mod.json': 'json',
+  'META-INF/mods.toml': 'toml',
+  'META-INF/neoforge.mods.toml': 'toml',
   'META-INF/MANIFEST.MF': 'manifest',
 } as const
 export type EntryFile = keyof typeof ENTRY_FILES
