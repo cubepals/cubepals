@@ -269,3 +269,43 @@ test('cancelling a running-state wait aborts its pending machine read', async ()
   expect(await waiting).toBe(cancel.signal.reason)
   expect(requestSignal?.aborted).toBe(true)
 })
+
+test('a wake whose app has gone stops observing its old machine', async () => {
+  const { runtime, handle } = await provisioned()
+  await runtime.destroy(KEY)
+  await expect(runtime.waitRunning(handle, AbortSignal.timeout(1000))).rejects.toThrow('The machine is gone')
+})
+
+test('a wake whose machine was replaced does not follow the replacement as its old handle', async () => {
+  const { fake, runtime, handle } = await provisioned()
+  const machine = fake.machines.get(APP)?.[0]
+  if (!machine) throw new Error('no provisioned machine')
+  fake.machines.set(APP, [{ ...machine, id: 'replacement-machine' }])
+  await expect(runtime.waitRunning(handle, AbortSignal.timeout(1000))).rejects.toThrow('The machine is gone')
+  expect(fake.machines.get(APP)?.[0]?.id).toBe('replacement-machine')
+})
+
+test('cancelling a disappearing-machine lookup aborts its pending app listing', async () => {
+  const { fake } = await provisioned()
+  const listing = Promise.withResolvers<void>()
+  let requestSignal: AbortSignal | undefined
+  const client = flyClient('token', {
+    fetch: async (request) => {
+      if (new URL(request.url).pathname !== `/v1/apps/${APP}/machines`) return fake.fetch(request)
+      requestSignal = request.signal
+      listing.resolve()
+      return new Promise<Response>((_, reject) => {
+        request.signal.addEventListener('abort', () => reject(request.signal.reason), { once: true })
+      })
+    },
+  })
+  const cancel = new AbortController()
+  const waiting = untilStarted(client, APP, 'missing-machine', cancel.signal).then(
+    () => null,
+    (error: unknown) => error,
+  )
+  await listing.promise
+  cancel.abort(new Error('game answered during lookup'))
+  expect(await waiting).toBe(cancel.signal.reason)
+  expect(requestSignal?.aborted).toBe(true)
+})
