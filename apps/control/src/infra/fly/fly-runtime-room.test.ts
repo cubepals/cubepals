@@ -86,6 +86,11 @@ describe('FlyRuntime at the organization’s machine limit', () => {
       [next.machineId as string, 'started'],
     ])
     expect(fake.volumes.get(APP)?.map((v) => v.id)).toEqual([next.volumeId as string])
+    const place = { regionKey: 'eu-central' }
+    const other = await runtime.ensureProvisioned(OTHER, place, spec, progress)
+    const from = { kind: 'snapshot' as const, snapshot }
+    await expect(runtime.restore(other, from, spec, progress)).rejects.toThrow()
+    await expect(runtime.relocate(other, place, spec, progress, snapshot)).rejects.toThrow()
   })
 
   test('Fly’s limit is asked again until a machine frees, never a failure', async () => {
