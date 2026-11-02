@@ -7,7 +7,7 @@ import { expect, test } from 'bun:test'
 import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { create } from 'tar'
+import { create, Header } from 'tar'
 import { indexedBody, indexTar } from './indexed-tar.ts'
 
 async function archive(run: (dir: string, path: string) => Promise<void>) {
@@ -81,5 +81,21 @@ test('long-name extensions and links use the full parser', () =>
     await rm(join(dir, 'world', long))
     await symlink('../elsewhere', join(dir, 'world/link'))
     await create({ cwd: dir, file: path, gzip: false, portable: true }, ['world'])
+    expect(await indexTar(path, 10)).toBeNull()
+  }))
+
+test('single zero blocks are not an end marker and truncated framing falls back', () =>
+  archive(async (_dir, path) => {
+    const block = Buffer.alloc(512)
+    new Header({ path: 'world/level.dat', type: 'File', size: 0 }).encode(block)
+    await writeFile(path, Buffer.concat([Buffer.alloc(512), block, Buffer.alloc(1024)]))
+    expect((await indexTar(path, 10))?.map((entry) => entry.header.path)).toEqual(['world/level.dat'])
+    await writeFile(path, Buffer.concat([block, Buffer.alloc(512), block, Buffer.alloc(1024)]))
+    expect((await indexTar(path, 10))?.length).toBe(2)
+    await writeFile(path, Buffer.concat([block, Buffer.alloc(512)]))
+    expect(await indexTar(path, 10)).toBeNull()
+    const oversized = Buffer.alloc(512)
+    new Header({ path: 'world/level.dat', type: 'File', size: 4096 }).encode(oversized)
+    await writeFile(path, Buffer.concat([oversized, Buffer.alloc(1024)]))
     expect(await indexTar(path, 10)).toBeNull()
   }))

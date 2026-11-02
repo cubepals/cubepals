@@ -376,3 +376,37 @@ test('a streamed file that fails cannot produce an apparently valid world archiv
     'The source disconnected',
   )
 })
+
+test('indexed archives retain only requested metadata and accept exact size limits', async () => {
+  const path = join(scratch, 'exact-limits.tar')
+  await writeFile(
+    path,
+    gunzipSync(
+      rawTar([
+        { path: 'World/level.dat', body: 'level' },
+        { path: 'World/region/a.mca', body: 'chunk' },
+      ]),
+    ),
+  )
+  const exact = { ...LIMITS, maxFiles: 2, maxFileBytes: 5, maxTotalBytes: 10, maxKeptBytes: 5 }
+  const world = await archives.openWorld(path, exact)
+  expect(world.files).toEqual([
+    { name: 'World/level.dat', sizeBytes: 5 },
+    { name: 'World/region/a.mca', sizeBytes: 5 },
+  ])
+  expect([...world.kept.keys()]).toEqual(['World/level.dat'])
+  expect(new TextDecoder().decode(world.kept.get('World/level.dat'))).toBe('level')
+  const contents: Record<string, string> = {}
+  for await (const file of world.entries()) contents[file.name] = await new Response(file.data).text()
+  expect(contents).toEqual({ 'World/level.dat': 'level', 'World/region/a.mca': 'chunk' })
+  for (const [limits, reason, message] of [
+    [{ maxFiles: 1 }, 'too_many_files', 'More than 1 files'],
+    [{ maxFileBytes: 4 }, 'too_large', 'World/level.dat is 5 bytes, more than 4'],
+    [{ maxTotalBytes: 9 }, 'too_large', 'The files come to more than 9 bytes'],
+    [{ maxKeptBytes: 4 }, 'too_large', 'The files kept come to more than 4 bytes'],
+  ] as const) {
+    const error = await archives.openWorld(path, { ...exact, ...limits }).catch((error: unknown) => error)
+    expect(error).toBeInstanceOf(HostileArchive)
+    expect(error).toMatchObject({ reason, message })
+  }
+})

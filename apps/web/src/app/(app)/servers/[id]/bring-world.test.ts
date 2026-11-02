@@ -182,6 +182,9 @@ test('an uploaded world shows its real stage and bytes, then plays the kept back
   await click('Upload')
   await until(() => text().includes('Fetching your uploaded world'))
   expect(text()).toContain('5 MB of 10 MB')
+  expect(text()).toContain('Fetching your uploaded world: your world.')
+  expect(text()).toMatch(/\d+s elapsed/)
+  expect(text()).not.toContain('NaN')
   state = ready()
   await act(async () => {
     await queries.invalidateQueries()

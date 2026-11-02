@@ -69,3 +69,37 @@ describe('measured progress reading a world', () => {
     expect(readingProgress(progress({ steps: [] }), 10 * SECOND_MS).detail).toContain('About 10 seconds left')
   })
 })
+
+test('names every stage and keeps elapsed time accurate at minute boundaries', () => {
+  const labels = {
+    fetching: 'Fetching your uploaded world',
+    checking: 'Checking the world’s files',
+    players: 'Checking players and their inventories',
+    mods: 'Finding the mods your server needs',
+    packing: 'Preparing and saving your world',
+    saving: 'Finishing and keeping your world safe',
+  } as const
+  for (const [step, label] of Object.entries(labels))
+    expect(
+      readingProgress(progress({ step: step as WorldImportProgress['step'] }), 10 * SECOND_MS).label,
+    ).toBe(label)
+  expect(readingProgress(null, 0)).toEqual({
+    label: 'Waiting to prepare your world',
+    detail: 'Your upload is safe. Waiting for a worker.',
+    percent: null,
+  })
+  expect(readingElapsed(60)).toBe('1m 0s')
+  expect(readingElapsed(61.9)).toBe('1m 1s')
+  expect(readingProgress(progress(), -SECOND_MS).detail).toContain('0s elapsed')
+})
+
+test('a prediction needs fresh positive measurements for two seconds of this stage', () => {
+  const measured = progress({ updatedAt: at(2 * SECOND_MS) })
+  expect(readingProgress(measured, 2 * SECOND_MS).detail).toContain('left in this step')
+  expect(readingProgress(measured, 17 * SECOND_MS).detail).not.toContain('left')
+  expect(readingProgress(progress({ bytes: 0 }), 10 * SECOND_MS).detail).not.toContain('left')
+  expect(readingProgress(progress({ updatedAt: at(SECOND_MS) }), SECOND_MS).detail).not.toContain('left')
+  const unknown = readingProgress(progress({ totalBytes: null }), 10 * SECOND_MS)
+  expect(unknown.detail).toBe('10s elapsed')
+  expect(unknown.percent).toBeNull()
+})
