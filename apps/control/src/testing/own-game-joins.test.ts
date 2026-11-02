@@ -64,6 +64,23 @@ describe.skipIf(!hasDatabase)('own game staging joins', () => {
       join.mockRestore()
     }
   }, 30_000)
+
+  test('a cold wake still refuses a slow join after login', async () => {
+    const { j, execute } = await journey(h)
+    let joins = 0
+    const join = spyOn(client, 'intoWorld').mockImplementation(async () => ({
+      loggedInMs: 2 * MINUTE_MS,
+      inWorldMs: 2 * MINUTE_MS + (++joins === 3 ? 4 * SECOND_MS : SECOND_MS),
+    }))
+    try {
+      await expect(ownGameJoins(j, { host: '127.0.0.1', port: 1 }, execute)).rejects.toThrow(
+        'woken by the join',
+      )
+      expect(join).toHaveBeenCalledTimes(3)
+    } finally {
+      join.mockRestore()
+    }
+  }, 30_000)
 })
 
 async function journey(h: Harness) {

@@ -5,7 +5,7 @@
 import { checkEstimate, checkingModsProgress, journeyEstimate } from './mod-check-progress'
 import { etaLine } from './operation-eta'
 
-export { etaLine }
+export { etaLine } from './operation-eta'
 
 import {
   type ChangeKind,
