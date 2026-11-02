@@ -90,6 +90,13 @@ A value that belongs to another system is taken from that system, never typed ou
 
 A change isn't done when its PR is green. It is done when the runs it starts on `main` are green too.
 
+**Every new commit is signed.** Enable `git config --local commit.gpgsign true` before committing.
+Never disable signing or create an unsigned interim commit. If this machine has no signing key,
+use `bun scripts/signed-commit.ts "Subject"` with authenticated GitHub access; it signs as the
+authenticated account and verifies the complete staged tree. Never generate a replacement user
+key. Before pushing, verify every PR commit. Rewrite published history only with explicit user
+authorization and an expected-head check; leave merged history alone.
+
 - **Workflows are code.** A change to `.github/workflows/` passes `actionlint` before it is pushed, and CI runs it again. A workflow GitHub can't parse never runs and shows only a red run named by its path.
 - **Subjects are short.** A commit subject or pull request title says the change in 50 characters or fewer, with no closing period; the detail goes in the body. The `commit-msg` hook that `bun install` sets up and the `PR title` workflow enforce it.
 - **After a merge, look at the Actions page,** not only the PR's checks: `gh run list -R cubepals/<repo> -L 30`. Scheduled runs (the nightly, the weekly fleet run) fail without a PR to show it.

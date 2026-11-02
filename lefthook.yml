@@ -4,6 +4,15 @@
 
 # Git hooks, installed by `bun install` (package.json's prepare). CI checks the pull request title
 # and body with the same scripts, since they become the commit on main.
+pre-commit:
+  commands:
+    signing:
+      run: bun run scripts/check-signatures.ts --config
+pre-push:
+  commands:
+    signatures:
+      use_stdin: true
+      run: bun run scripts/check-signatures.ts --pre-push
 commit-msg:
   commands:
     subject:

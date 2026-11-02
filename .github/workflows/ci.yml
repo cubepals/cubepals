@@ -58,6 +58,16 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        if: github.event_name == 'pull_request'
+        with:
+          bun-version: 1.4.3
+      - name: Every pull request commit has a verified signature
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: bun scripts/check-signatures.ts --pr "$PR_NUMBER"
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         id: filter
         if: github.event_name != 'merge_group' && github.event_name != 'schedule' && github.event_name != 'workflow_dispatch'
