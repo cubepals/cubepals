@@ -309,3 +309,20 @@ test('cancelling a disappearing-machine lookup aborts its pending app listing', 
   expect(await waiting).toBe(cancel.signal.reason)
   expect(requestSignal?.aborted).toBe(true)
 })
+
+test('a briefly missing machine stops being retried when readiness observation is cancelled', async () => {
+  const { fake, runtime, handle } = await provisioned()
+  fake.machines.set(APP, [])
+  fake.calls.length = 0
+  const cancel = new AbortController()
+  const waiting = runtime.waitRunning(handle, cancel.signal).then(
+    () => null,
+    (error: unknown) => error,
+  )
+  while (!fake.calls.includes(`GET /v1/apps/${APP}/machines`)) await Bun.sleep(1)
+  // Let the real app-list response reach the disappearance retry path before cancelling it.
+  await Bun.sleep(10)
+  cancel.abort(new Error('readiness observation ended'))
+  expect(await waiting).toBe(cancel.signal.reason)
+  expect(fake.calls.filter((call) => call === `GET /v1/apps/${APP}/machines`)).toHaveLength(1)
+})
