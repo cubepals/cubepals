@@ -25,6 +25,7 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { MINUTE_MS } from '../../packages/contracts/src/durations.ts'
+import { measurementFingerprint } from './baseline-identity.mjs'
 import { mergeReports, validateReport } from './coverage.mjs'
 import { writeRuntimeManifest } from './coverage-cache.mjs'
 import { createFragmentCollector } from './coverage-fragments.mjs'
@@ -41,7 +42,7 @@ function sha256(bytes) {
   return createHash('sha256').update(bytes).digest('hex')
 }
 
-export function runShard({ root, group, reportDir, baseManifest, plan, partition }) {
+export function runShard({ root, group, reportDir, baseManifest, plan, partition, contextRoot }) {
   const startedAt = new Date().toISOString()
   root = resolve(root)
   reportDir = resolve(reportDir)
@@ -88,6 +89,7 @@ export function runShard({ root, group, reportDir, baseManifest, plan, partition
   mkdirSync(resolve(reportDir, 'manifests'), { recursive: true })
   const manifest = resolve(reportDir, 'manifests', `${shardId}.json`)
   for (const path of [junit, report, manifest]) rmSync(path, { force: true })
+  const fingerprint = measurementFingerprint(contextRoot ?? root)
   const temporary = mkdtempSync(join(tmpdir(), `quality-${group}-`))
   const deadline = Date.now() + 30 * MINUTE_MS
   try {
@@ -201,7 +203,7 @@ export function runShard({ root, group, reportDir, baseManifest, plan, partition
     writeFileSync(junit, xml)
     writeFileSync(
       manifest,
-      `${JSON.stringify({ ...testManifest(prepared.tests), startedAt, completedAt: new Date().toISOString() }, null, 2)}\n`,
+      `${JSON.stringify({ ...testManifest(prepared.tests), startedAt, completedAt: new Date().toISOString(), fingerprint }, null, 2)}\n`,
     )
     const executionDir = join(reportDir, 'test-execution')
     mkdirSync(executionDir, { recursive: true })
@@ -222,7 +224,7 @@ export function runShard({ root, group, reportDir, baseManifest, plan, partition
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
-    const [root, group, reportDir, baseManifest, planPath, index] = process.argv.slice(2)
+    const [root, group, reportDir, baseManifest, planPath, index, contextRoot] = process.argv.slice(2)
     if (!root || !group || !reportDir)
       throw new Error('Usage: run-shard.mjs ROOT GROUP REPORT_DIR [BASE_TEST_MANIFEST]')
     runShard({
@@ -232,6 +234,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
       baseManifest: baseManifest === '-' ? undefined : baseManifest,
       plan: planPath ? JSON.parse(readFileSync(planPath, 'utf8')) : undefined,
       partition: planPath ? Number(index) : undefined,
+      contextRoot,
     })
   } catch (error) {
     console.error(error.message)

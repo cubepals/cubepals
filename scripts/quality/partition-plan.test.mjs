@@ -36,7 +36,7 @@ test('native partition counts still cover all seven logical groups', () => {
   assert.deepEqual(Object.keys(nativePartitions).sort(), Object.keys(groups).sort())
   assert.equal(
     Object.values(nativePartitions).reduce((a, b) => a + b),
-    16,
+    17,
   )
 })
 

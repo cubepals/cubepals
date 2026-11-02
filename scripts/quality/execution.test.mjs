@@ -20,6 +20,7 @@ const clean = () =>
     [
       'changes',
       'licenses',
+      'baseline',
       'static',
       'test',
       'quality',
@@ -59,6 +60,7 @@ test('documentation-only changes still require licenses and permit only classifi
   const needs = clean()
   needs.changes.outputs = { code: 'false', reporter: 'false', fleet: 'false' }
   for (const job of [
+    'baseline',
     'static',
     'test',
     'quality',
@@ -91,6 +93,7 @@ test('Fleet can skip only when its own classification permits it', () => {
   const prose = clean()
   prose.changes.outputs = { code: 'false', reporter: 'false', fleet: 'true' }
   for (const job of [
+    'baseline',
     'static',
     'test',
     'quality',
@@ -244,7 +247,7 @@ test('the workflow schedules every partition and requires the same number of evi
   assert.match(workflow, /partition: \[0, 1, 2, 3\]/)
   assert.match(
     workflow,
-    /needs: \[changes, licenses, static, test, quality, mutation, mutation_quality, worker, images, reporter, fleet\]/,
+    /needs: \[changes, licenses, baseline, static, test, quality, mutation, mutation_quality, worker, images, reporter, fleet\]/,
   )
   assert.match(workflow, /mutation-partitions\.mjs/)
 })

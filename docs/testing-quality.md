@@ -90,8 +90,8 @@ fails, as does a failed, cancelled, missing, or unexpectedly skipped Fleet job.
 
 ## Runtime scheduling
 
-The seven logical coverage groups run as sixteen independent service-backed partitions:
-three each for lifecycle, worlds, access and the remainder; two for providers; one each for mods
+The seven logical coverage groups run as seventeen independent service-backed partitions:
+three each for lifecycle, worlds and access; four for the remainder; two for providers; one each for mods
 and web. `partition-plan.mjs` builds a deterministic assignment from the union of the exact base
 and head test inventories. Measured test durations in `runtime-costs.json` balance the work;
 unknown files receive a positive default cost and remain mandatory. Scheduling weights never
@@ -293,3 +293,26 @@ controls. They are not a security sandbox for arbitrary JavaScript or a proof th
 values are independent of application code. Processes still share the filesystem and test services;
 process isolation does not prevent malicious filesystem writes. The trust-boundary document
 states these limits and the external administration boundary required for server enforcement.
+
+
+## Validated baseline reuse
+
+Ordinary CI may reuse baseline evidence from an immutable artifact belonging to a successful
+main CI run in this repository. A resolver checks GitHub's run provenance before any application
+tests execute and distributes one validated artifact to all runners. Pull requests cannot publish
+eligible artifacts. The exact baseline commit, protected controller and workflow bytes, dependency
+configuration, Bun and Node versions, runner image and calendar must match. Coverage inventories,
+test hashes, JUnit, execution profiles, measurement timestamps and file digests are validated again
+against the baseline checkout. Evidence expires after three hours and cannot cross a UTC date.
+Reuse is disabled on the first UTC day of the month, during its final UTC hour, and for full audits.
+Lookup, download or publication failures fall back to fresh baseline tests.
+
+Every head test, head coverage measurement and selected mutation census still runs fresh. Cached
+baselines never supply head results or mutation credit. Only a main run whose required aggregate
+has passed can publish a baseline, and consumers require the entire producer run to have succeeded.
+Scheduled and manual full audits retain complete scope with at most two native or mutation runners
+at once; ordinary change checks use seventeen native and four mutation runners.
+
+To measure reuse, dispatch the same exact comparison after its main producer succeeds and inspect
+the resolver's verified-hit summary. Compare both elapsed time and runner minutes; a green run that
+falls back to fresh measurement does not demonstrate a cache speedup.

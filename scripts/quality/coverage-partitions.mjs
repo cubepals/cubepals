@@ -3,9 +3,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /** Reassembles isolated runners only after proving their exact, disjoint test inventories. */
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { cpSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { revalidateBaseline } from './baseline-cache.mjs'
 import { mergeReports } from './coverage.mjs'
 import { checkJUnit, mergeJUnit } from './coverage-junit.mjs'
 import { inventory } from './inventory.mjs'
@@ -16,12 +17,18 @@ import { groups } from './shards.mjs'
 const read = (path) => JSON.parse(readFileSync(path, 'utf8'))
 const write = (path, data) => writeFileSync(path, `${JSON.stringify(data)}\n`)
 
-export function mergeNativePartitions({ root, baseRoot, directory, base }) {
+export function mergeNativePartitions({ root, baseRoot, directory, base, cachedBaseline }) {
   const plan = testPlan(root, base)
+  if (cachedBaseline) {
+    revalidateBaseline({ root, checkout: baseRoot, directory: cachedBaseline })
+    mkdirSync(join(directory, 'merged'), { recursive: true })
+    cpSync(join(cachedBaseline, 'data'), join(directory, 'merged', 'base'), { recursive: true })
+  }
   for (const [side, checkout] of [
     ['base', baseRoot],
     ['head', root],
   ]) {
+    if (side === 'base' && cachedBaseline) continue
     const entries = inventory(checkout)
     const hashes = new Map(
       entries.filter((entry) => entry.kind === 'test').map((entry) => [entry.path, entry.sha256]),
@@ -43,6 +50,7 @@ export function mergeNativePartitions({ root, baseRoot, directory, base }) {
         tests = []
       const execution = { version: 1, group, sources, tests: {} }
       const timings = {}
+      const intervals = []
       for (let index = 0; index < nativePartitions[group]; index++) {
         const id = `${group}-${index}`
         const report = read(join(input, `${id}.json`))
@@ -89,6 +97,7 @@ export function mergeNativePartitions({ root, baseRoot, directory, base }) {
         const xml = readFileSync(join(input, `${id}.xml`), 'utf8')
         const started = new Date(manifest.startedAt),
           completed = new Date(manifest.completedAt)
+        intervals.push({ started, completed, fingerprint: manifest.fingerprint })
         if (
           !Number.isFinite(+started) ||
           !Number.isFinite(+completed) ||
@@ -111,6 +120,12 @@ export function mergeNativePartitions({ root, baseRoot, directory, base }) {
       write(join(output, 'manifests', `${group}.json`), {
         version: 1,
         tests: tests.sort((a, b) => a.path.localeCompare(b.path)),
+        startedAt: new Date(Math.min(...intervals.map((interval) => +interval.started))).toISOString(),
+        completedAt: new Date(Math.max(...intervals.map((interval) => +interval.completed))).toISOString(),
+        fingerprint:
+          new Set(intervals.map((interval) => interval.fingerprint)).size === 1
+            ? intervals[0].fingerprint
+            : null,
       })
       write(join(output, 'test-execution', `${group}.json`), execution)
       write(join(output, 'timings', `${group}.json`), timings)
@@ -123,7 +138,7 @@ export function mergeNativePartitions({ root, baseRoot, directory, base }) {
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const [root, baseRoot, directory, base] = process.argv.slice(2)
+  const [root, baseRoot, directory, base, cachedBaseline] = process.argv.slice(2)
   if (!base) throw new Error('Usage: coverage-partitions.mjs ROOT BASE_ROOT DIRECTORY BASE_SHA')
-  mergeNativePartitions({ root, baseRoot, directory, base })
+  mergeNativePartitions({ root, baseRoot, directory, base, cachedBaseline })
 }
