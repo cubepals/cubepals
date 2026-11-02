@@ -15,6 +15,7 @@ import { runMutation } from './mutation.mjs'
 import { selectReleaseMutationScope } from './mutation-release-scope.mjs'
 import { rotationSubjects } from './mutation-scope.mjs'
 import { orderMutationTests } from './mutation-test-order.mjs'
+import { costs, mutationAssignment, mutationPartitions } from './partition-plan.mjs'
 import { groupOf, groups } from './shards.mjs'
 
 const { values } = parseArgs({
@@ -29,6 +30,7 @@ const { values } = parseArgs({
     output: { type: 'string' },
     root: { type: 'string', default: process.cwd() },
     'base-root': { type: 'string' },
+    partition: { type: 'string' },
   },
 })
 if (
@@ -91,13 +93,23 @@ if (executionPath && existsSync(executionPath)) {
 }
 const groupSubjects = scope.subjects.filter((subject) => groupOf(subject) === values.group)
 const rotation = values.rotation === undefined ? null : Number(values.rotation)
-const subjects = rotation === null ? groupSubjects : rotationSubjects(groupSubjects, rotation)
+let subjects = rotation === null ? groupSubjects : rotationSubjects(groupSubjects, rotation)
+let partition = null
+if (values.partition !== undefined) {
+  const index = Number(values.partition)
+  if (!/^[0-3]$/.test(values.partition) || index >= mutationPartitions)
+    throw new Error('Mutation partition must be 0 through 3')
+  const wanted = new Set(mutationAssignment(scope.subjects, costs(root).mutations, index, rotation))
+  subjects = subjects.filter((subject) => wanted.has(subject))
+  partition = { index, count: mutationPartitions }
+}
 const selection = {
   group: values.group,
   rotation,
   rotations: rotation === null ? null : 7,
   totalInGroup: groupSubjects.length,
   selectedCount: subjects.length,
+  partition,
 }
 mkdirSync(output, { recursive: true })
 writeFileSync(

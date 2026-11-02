@@ -11,20 +11,31 @@ import test from 'node:test'
 import { fileURLToPath } from 'node:url'
 import { verifyJobs } from './aggregate.mjs'
 import { inventory } from './inventory.mjs'
+import { nativePartitions } from './partition-plan.mjs'
 import { checkJUnit } from './run-shard.mjs'
 import { groupOf, groups } from './shards.mjs'
 
 const clean = () =>
   Object.fromEntries(
-    ['changes', 'licenses', 'static', 'test', 'quality', 'worker', 'images', 'reporter', 'fleet'].map(
-      (key) => [
-        key,
-        {
-          result: 'success',
-          ...(key === 'changes' ? { outputs: { code: 'true', reporter: 'true', fleet: 'true' } } : {}),
-        },
-      ],
-    ),
+    [
+      'changes',
+      'licenses',
+      'static',
+      'test',
+      'quality',
+      'mutation',
+      'mutation_quality',
+      'worker',
+      'images',
+      'reporter',
+      'fleet',
+    ].map((key) => [
+      key,
+      {
+        result: 'success',
+        ...(key === 'changes' ? { outputs: { code: 'true', reporter: 'true', fleet: 'true' } } : {}),
+      },
+    ]),
   )
 
 test('required CI rejects every non-success state, missing result and missing change output', () => {
@@ -47,7 +58,17 @@ test('required CI rejects every non-success state, missing result and missing ch
 test('documentation-only changes still require licenses and permit only classified skips', () => {
   const needs = clean()
   needs.changes.outputs = { code: 'false', reporter: 'false', fleet: 'false' }
-  for (const job of ['static', 'test', 'quality', 'worker', 'images', 'reporter', 'fleet'])
+  for (const job of [
+    'static',
+    'test',
+    'quality',
+    'mutation',
+    'mutation_quality',
+    'worker',
+    'images',
+    'reporter',
+    'fleet',
+  ])
     needs[job].result = 'skipped'
   assert.equal(verifyJobs(needs), true)
   needs.licenses.result = 'skipped'
@@ -69,7 +90,16 @@ test('Fleet can skip only when its own classification permits it', () => {
   }
   const prose = clean()
   prose.changes.outputs = { code: 'false', reporter: 'false', fleet: 'true' }
-  for (const job of ['static', 'test', 'quality', 'worker', 'images', 'reporter'])
+  for (const job of [
+    'static',
+    'test',
+    'quality',
+    'mutation',
+    'mutation_quality',
+    'worker',
+    'images',
+    'reporter',
+  ])
     prose[job].result = 'skipped'
   assert.equal(
     verifyJobs(prose),
@@ -200,10 +230,23 @@ test('the access split preserves every actual source and test in exactly one par
 
 test('the workflow schedules every partition and requires the same number of evidence shards', () => {
   const workflow = readFileSync(new URL('../../.github/workflows/ci.yml', import.meta.url), 'utf8')
-  const matrix = [...workflow.matchAll(/^\s+quality: ([a-z]+)$/gm)].map((match) => match[1])
-  assert.deepEqual(matrix.sort(), Object.keys(groups).sort())
+  const matrix = [...workflow.matchAll(/^\s+- quality: ([a-z]+)\n\s+partition: (\d+)$/gm)].map((match) => [
+    match[1],
+    Number(match[2]),
+  ])
+  const expected = Object.entries(nativePartitions).flatMap(([group, count]) =>
+    Array.from({ length: count }, (_, index) => [group, index]),
+  )
+  assert.deepEqual(matrix, expected)
+  assert.deepEqual([...new Set(matrix.map(([group]) => group))].sort(), Object.keys(groups).sort())
   const counts = [...workflow.matchAll(/--expected-shards (\d+)/g)].map((match) => Number(match[1]))
-  assert.deepEqual(counts, [matrix.length, matrix.length])
+  assert.deepEqual(counts, [Object.keys(groups).length, Object.keys(groups).length])
+  assert.match(workflow, /partition: \[0, 1, 2, 3\]/)
+  assert.match(
+    workflow,
+    /needs: \[changes, licenses, static, test, quality, mutation, mutation_quality, worker, images, reporter, fleet\]/,
+  )
+  assert.match(workflow, /mutation-partitions\.mjs/)
 })
 
 test('nested describe suites retain failure and skip enforcement', () => {

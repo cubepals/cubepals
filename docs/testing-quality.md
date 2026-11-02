@@ -71,7 +71,7 @@ Each test shard measures both the comparison commit and the proposed source. For
 comparison is the checked-out merge's validated first parent, so another merged PR does not
 become part of this PR's quality obligations. The baseline run writes a manifest of test paths
 and hashes. On the proposed source, identical tests run first, then added or modified tests.
-Every test file runs sequentially in a fresh Bun process. Instrumentation runs once per baseline
+Within each isolated runner, every test file runs sequentially in a fresh Bun process. Instrumentation runs once per baseline
 or proposed-source shard in a separate Node process; the test processes reuse a hashed compiled
 module cache. This isolates native module state as well as JavaScript globals between test files.
 After each file, the parent validates its JUnit result and exact coverage fragment, retains the
@@ -87,6 +87,37 @@ calls the reusable Fleet workflow for both the one-node and two-node suites, wit
 daemon binaries, Docker, Postgres, and S3 they need. Live Fleet evidence must contain both exact
 test files with executed cases and no failures, errors, or skips. Missing or malformed evidence
 fails, as does a failed, cancelled, missing, or unexpectedly skipped Fleet job.
+
+## Runtime scheduling
+
+The seven logical coverage groups run as sixteen independent service-backed partitions:
+three each for lifecycle, worlds, access and the remainder; two for providers; one each for mods
+and web. `partition-plan.mjs` builds a deterministic assignment from the union of the exact base
+and head test inventories. Measured test durations in `runtime-costs.json` balance the work;
+unknown files receive a positive default cost and remain mandatory. Scheduling weights never
+change test eligibility or quality thresholds.
+
+`coverage-partitions.mjs` independently reconstructs the assignment from Git, checks each test's
+hash, JUnit identity, execution profile and coverage inventory, and rejects missing or duplicated
+partitions before rebuilding the seven logical reports. The usual per-file coverage gate runs
+on those complete reports. Clean native tests and coverage must pass before mutation runners start.
+
+Four independent runners divide the complete selected mutation scope. Each file's full selected
+census stays on one runner; reports and detected mutants are never combined across attempts.
+`mutation-partitions.mjs` recomputes the Git scope and candidate census independently and requires
+every runner's exact selection, including explicit evidence for empty partitions. The seven daily
+audit rotations retain their original source membership.
+
+The reusable `quality-runner.yml` checks the pinned Bun installation, DOM tooling and service
+readiness before testing. Logs identify each test file and mutation subject before it starts.
+Native artifacts retain per-file elapsed times; the mutation completeness summary retains both
+per-file times and runner loads. Measurements exceeding six minutes per native side or twenty
+minutes per mutation runner produce runtime warnings without changing the quality verdict.
+
+For a representative benchmark, a maintainer can dispatch CI on the proposed infrastructure
+with `gh workflow run ci.yml --ref BRANCH -f comparison_base=COMMIT_SHA`. The comparison must be
+an exact ancestor commit; PR and main-push runs always retain their authoritative event bases.
+This measures existing application changes without manufacturing application edits for timing.
 
 All control-plane, shared-package, script, and tool changes require Fleet. Package manifests,
 lockfiles, Bun/TypeScript configuration, root runtime configuration, and the CI/Fleet workflows

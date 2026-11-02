@@ -32,6 +32,7 @@ import { assertInputsUnchanged, partitionTests, snapshotInputs, testManifest } f
 import { checkJUnit, mergeJUnit } from './coverage-junit.mjs'
 import { legacyCalendarSkips } from './legacy-calendar-case.mjs'
 import { executionProfile, recordExecution } from './mutation-test-order.mjs'
+import { selectedTests } from './partition-plan.mjs'
 import { groupOf, groups } from './shards.mjs'
 
 export { checkJUnit } from './coverage-junit.mjs'
@@ -40,7 +41,8 @@ function sha256(bytes) {
   return createHash('sha256').update(bytes).digest('hex')
 }
 
-export function runShard({ root, group, reportDir, baseManifest }) {
+export function runShard({ root, group, reportDir, baseManifest, plan, partition }) {
+  const startedAt = new Date().toISOString()
   root = resolve(root)
   reportDir = resolve(reportDir)
   if (!Object.hasOwn(groups, group)) throw new Error(`Unknown test group ${group}`)
@@ -63,7 +65,7 @@ export function runShard({ root, group, reportDir, baseManifest }) {
   })
   if (listed.status !== 0) throw new Error('Cannot enumerate test files')
   const paths = [...new Set(listed.stdout.split('\0').filter(Boolean))]
-  const tests = paths
+  let tests = paths
     .filter(
       (file) =>
         /\.(?:test|spec)\.[cm]?[jt]sx?$/.test(file) &&
@@ -72,6 +74,8 @@ export function runShard({ root, group, reportDir, baseManifest }) {
         existsSync(resolve(root, file)),
     )
     .sort()
+  const shardId = plan ? `${group}-${partition}` : group
+  if (plan) tests = selectedTests(plan, root, group, partition, tests)
   if (!tests.length) throw new Error(`No tests in ${group}`)
   const base = baseManifest ? JSON.parse(readFileSync(baseManifest, 'utf8')) : undefined
   const inputs = snapshotInputs(
@@ -79,10 +83,10 @@ export function runShard({ root, group, reportDir, baseManifest }) {
     paths.filter((file) => /\.[cm]?[jt]sx?$/.test(file)),
   )
   mkdirSync(reportDir, { recursive: true })
-  const junit = resolve(reportDir, `${group}.xml`)
-  const report = resolve(reportDir, `${group}.json`)
+  const junit = resolve(reportDir, `${shardId}.xml`)
+  const report = resolve(reportDir, `${shardId}.json`)
   mkdirSync(resolve(reportDir, 'manifests'), { recursive: true })
-  const manifest = resolve(reportDir, 'manifests', `${group}.json`)
+  const manifest = resolve(reportDir, 'manifests', `${shardId}.json`)
   for (const path of [junit, report, manifest]) rmSync(path, { force: true })
   const temporary = mkdtempSync(join(tmpdir(), `quality-${group}-`))
   const deadline = Date.now() + 30 * MINUTE_MS
@@ -112,11 +116,14 @@ export function runShard({ root, group, reportDir, baseManifest }) {
     const reports = []
     const documents = []
     const allowedSkippedTests = new Set()
+    const timings = {}
     let executed = 0
     for (const phase of phases) {
       const phaseName = `${group}:${phase.name}`
       const collector = createFragmentCollector(prepared, phase.tests, { preparedSha256, phase: phaseName })
       for (const testPath of phase.tests) {
+        const began = Date.now()
+        console.warn(`${shardId}: starting ${testPath}`)
         const identity = `${phase.name}-${sha256(testPath)}`
         const parts = join(temporary, identity)
         const fileJUnit = join(temporary, `${identity}.xml`)
@@ -175,6 +182,7 @@ export function runShard({ root, group, reportDir, baseManifest }) {
         // Absorb evidence in trusted parent memory before subsequent tests can touch its files.
         collector.accept(fragments, [testPath])
         recordExecution(execution, fragments)
+        timings[testPath] = Date.now() - began
         documents.push(xml)
         rmSync(parts, { recursive: true, force: true })
         rmSync(fileJUnit, { force: true })
@@ -183,7 +191,7 @@ export function runShard({ root, group, reportDir, baseManifest }) {
       console.warn(`${phaseName}: ${phase.tests.length} isolated test files verified`)
     }
     const combined = mergeReports(reports, reports.length)
-    combined.shards = [group]
+    combined.shards = [shardId]
     validateReport(combined)
     const xml = mergeJUnit(documents)
     if (checkJUnit(xml, tests, { allowedSkippedTests }) !== executed)
@@ -191,10 +199,21 @@ export function runShard({ root, group, reportDir, baseManifest }) {
     assertInputsUnchanged(root, inputs)
     writeFileSync(report, `${JSON.stringify(combined)}\n`)
     writeFileSync(junit, xml)
-    writeFileSync(manifest, `${JSON.stringify(testManifest(prepared.tests), null, 2)}\n`)
+    writeFileSync(
+      manifest,
+      `${JSON.stringify({ ...testManifest(prepared.tests), startedAt, completedAt: new Date().toISOString() }, null, 2)}\n`,
+    )
     const executionDir = join(reportDir, 'test-execution')
     mkdirSync(executionDir, { recursive: true })
-    writeFileSync(join(executionDir, `${group}.json`), `${JSON.stringify(execution)}\n`)
+    writeFileSync(join(executionDir, `${shardId}.json`), `${JSON.stringify(execution)}\n`)
+    mkdirSync(join(reportDir, 'timings'), { recursive: true })
+    writeFileSync(join(reportDir, 'timings', `${shardId}.json`), `${JSON.stringify(timings)}\n`)
+    const elapsed = Date.now() - Date.parse(startedAt)
+    console.warn(`${shardId}: measurement took ${(elapsed / MINUTE_MS).toFixed(1)} minutes`)
+    if (plan && elapsed > 6 * MINUTE_MS)
+      console.warn(
+        `::warning::${shardId} exceeded its six-minute measurement target; inspect per-file timings.`,
+      )
     console.warn(`${group}: ${executed} executed cases and complete coverage evidence verified`)
   } finally {
     rmSync(temporary, { recursive: true, force: true })
@@ -203,10 +222,17 @@ export function runShard({ root, group, reportDir, baseManifest }) {
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
-    const [root, group, reportDir, baseManifest] = process.argv.slice(2)
+    const [root, group, reportDir, baseManifest, planPath, index] = process.argv.slice(2)
     if (!root || !group || !reportDir)
       throw new Error('Usage: run-shard.mjs ROOT GROUP REPORT_DIR [BASE_TEST_MANIFEST]')
-    runShard({ root, group, reportDir, baseManifest })
+    runShard({
+      root,
+      group,
+      reportDir,
+      baseManifest: baseManifest === '-' ? undefined : baseManifest,
+      plan: planPath ? JSON.parse(readFileSync(planPath, 'utf8')) : undefined,
+      partition: planPath ? Number(index) : undefined,
+    })
   } catch (error) {
     console.error(error.message)
     process.exitCode = 1
