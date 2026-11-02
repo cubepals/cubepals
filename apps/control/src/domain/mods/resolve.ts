@@ -5,6 +5,7 @@
 import { DATAPACK, type PinnedMod } from './artifact.ts'
 import { type CatalogDependency, type CatalogProject, type CatalogVersion, catalogOfId } from './catalog.ts'
 import { type Held, heldBack, JarHold, type JarNeeds, type JarTarget } from './jar-holds.ts'
+import { type DependencyDecision, explicitSide, foreignDependency, nativeFor } from './loader-dependencies.ts'
 
 /**
  * Which versions a server runs for the mods its owner wants, with everything they require
@@ -23,7 +24,7 @@ export interface ResolveRequest {
    * `java` is the Java the server's image runs for the release (`minecraft/versions.ts`): a version
    * whose jar asks for a newer one never fits, whatever the catalog lists. Absent: not checked.
    */
-  target: { gameVersion: string; loaders: readonly string[]; java?: number }
+  target: { gameVersion: string; loaders: readonly string[]; loader?: string; java?: number }
   /** Every catalog mod the owner wants, by project, and a version where they chose one. */
   wanted: ReadonlyArray<{ projectId: string; versionId?: string | undefined }>
   /**
@@ -82,7 +83,7 @@ export type Resolution =
   /** `jars`: versions whose jars must be read for what they ask of the server. */
   | { kind: 'need'; projects: string[]; versions: string[]; jars: string[] }
   | { kind: 'conflicts'; conflicts: ModConflict[] }
-  | { kind: 'resolved'; mods: PinnedMod[] }
+  | { kind: 'resolved'; mods: PinnedMod[]; decisions?: DependencyDecision[] }
 
 /** Only these project states may be picked: the rest are taken down or never shown. */
 const PICKABLE = new Set(['approved', 'archived', 'unlisted'])
@@ -111,6 +112,7 @@ type Pick =
 export function resolve(request: ResolveRequest, data: CatalogData): Resolution {
   const need = { projects: new Set<string>(), versions: new Set<string>(), jars: new Set<string>() }
   const conflicts: ModConflict[] = []
+  const decisions: DependencyDecision[] = []
   const picked = new Map<string, Pick>()
   const excluded: Array<{ from: string; projectId: string | null; versionId: string | null }> = []
   const queue: Want[] = request.wanted.map((want) => ({ ...want, origin: 'user' }))
@@ -161,7 +163,7 @@ export function resolve(request: ResolveRequest, data: CatalogData): Resolution 
       refuse(want, refusal(version.held, { mod: project.name, projectId: want.projectId }))
       continue
     }
-    const environment = request.environment(version.environment, version.loaders)
+    const environment = environmentOf(request, data, version)
     if (environment === null) {
       refuse(want, { kind: 'client_only', mod: project.name, projectId: want.projectId })
       continue
@@ -175,7 +177,7 @@ export function resolve(request: ResolveRequest, data: CatalogData): Resolution 
       requiredBy: new Set(want.by === undefined ? [] : [want.by]),
     })
 
-    for (const dependency of [...version.dependencies, ...providedFor(request, data, version)]) {
+    for (const dependency of scopedDependencies(request, data, version, decisions)) {
       if (dependency.kind === 'incompatible') excluded.push({ from: want.projectId, ...dependency })
       if (dependency.kind !== 'required') continue
       let projectId = dependency.projectId
@@ -286,8 +288,7 @@ export function resolve(request: ResolveRequest, data: CatalogData): Resolution 
     })
   }
 
-  const uploads = request.current.filter((m) => !('versionId' in m.source))
-  conflicts.push(...uploads.flatMap((upload) => misfit(upload, target)))
+  const uploads = checkedUploads(request, conflicts)
 
   conflicts.push(...jarsHeld(picked, jarTarget(target, data, need, picked), request, data))
   if (need.projects.size > 0 || need.versions.size > 0 || need.jars.size > 0)
@@ -295,7 +296,7 @@ export function resolve(request: ResolveRequest, data: CatalogData): Resolution 
   if (conflicts.length > 0) return { kind: 'conflicts', conflicts }
 
   const mods = [...picked.values()].map((pick) => pinOf(request, pick, nameOf))
-  return { kind: 'resolved', mods: [...mods, ...uploads].sort(byName) }
+  return resolvedMods(mods, uploads, decisions)
 }
 
 /** A version that couldn't be picked, as the conflict it is: none fitting, or what its jar asks. */
@@ -368,7 +369,7 @@ function providedFor(
   data: CatalogData,
   version: CatalogVersion,
 ): CatalogDependency[] {
-  const declared = data.needs?.get(version.versionId)?.mod?.depends ?? []
+  const declared = nativeFor(request.target, data.needs?.get(version.versionId))?.depends ?? []
   const providers = new Set(declared.map((modId) => request.providerOf?.(modId) ?? null))
   return [...providers].flatMap((projectId) =>
     projectId === null || projectId === version.projectId
@@ -393,7 +394,9 @@ function modsMissing(
   const jars = [...picked.values()].filter((pick) => pick.kind === 'kept' || !isDatapack(pick.version))
   const read = jars.flatMap((pick) => {
     const needs = pick.kind === 'catalog' ? data.needs?.get(pick.version.versionId) : undefined
-    return needs === undefined || needs === null ? [] : [{ pick, mod: needs.mod ?? null }]
+    return needs === undefined || needs === null
+      ? []
+      : [{ pick, mod: nativeFor(request.target, needs) ?? null }]
   })
   if (read.length < jars.length) return []
   const answered = new Set(read.flatMap(({ mod }) => mod?.ids ?? []))
@@ -496,4 +499,46 @@ function pinOf(request: ResolveRequest, pick: Pick, nameOf: (projectId: string) 
 /** The spec lists mods in this order, so the same set always makes the same spec. */
 function byName(a: PinnedMod, b: PinnedMod): number {
   return a.name.localeCompare(b.name, 'en') || a.artifact.sha512.localeCompare(b.artifact.sha512)
+}
+
+function resolvedMods(mods: PinnedMod[], uploads: PinnedMod[], decisions: DependencyDecision[]): Resolution {
+  return {
+    kind: 'resolved',
+    mods: [...mods, ...uploads].sort(byName),
+    ...(decisions.length === 0 ? {} : { decisions }),
+  }
+}
+
+function scopedDependencies(
+  request: ResolveRequest,
+  data: CatalogData,
+  version: CatalogVersion,
+  decisions: DependencyDecision[],
+): CatalogDependency[] {
+  return [...version.dependencies, ...providedFor(request, data, version)].filter((dependency) => {
+    if (dependency.kind !== 'required') return true
+    const named = dependency.versionId === null ? undefined : data.versions.get(dependency.versionId)
+    const projectId = dependency.projectId ?? named?.projectId
+    const scope = named ?? (projectId == null ? undefined : data.projects.get(projectId))
+    if (!foreignDependency(request.target, version, data.needs?.get(version.versionId), scope)) return true
+    decisions.push({
+      kind: 'foreign_loader_dependency',
+      from: version.projectId,
+      projectId: projectId ?? '',
+      loader: request.target.loader ?? request.target.loaders[0] ?? '',
+      artifactSha512: version.file.sha512,
+    })
+    return false
+  })
+}
+
+function environmentOf(request: ResolveRequest, data: CatalogData, version: CatalogVersion) {
+  const side = explicitSide(nativeFor(request.target, data.needs?.get(version.versionId)))
+  return side === 'client' ? null : (side ?? request.environment(version.environment, version.loaders))
+}
+
+function checkedUploads(request: ResolveRequest, conflicts: ModConflict[]): PinnedMod[] {
+  const uploads = request.current.filter((mod) => !('versionId' in mod.source))
+  conflicts.push(...uploads.flatMap((upload) => misfit(upload, request.target)))
+  return uploads
 }

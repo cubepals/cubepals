@@ -19,6 +19,16 @@ export interface JarNeeds {
   api: { projectId: string; atLeast: string } | null
   /** For a Fabric mod, what its fabric.mod.json says; null for any other jar. Absent: not read. */
   mod?: FabricMod | null
+  /** Each loader's own declaration, kept separately for universal jars. */
+  native?: Readonly<Record<string, LoaderMod>>
+}
+
+export interface LoaderMod extends FabricMod {
+  version: string | null
+  environment: 'client' | 'server' | 'both'
+  /** Only complete declarations can disambiguate a catalog's cross-loader dependency union. */
+  complete: boolean
+  requirements: Array<{ id: string; versions: readonly string[] }>
 }
 
 /** A Fabric mod, as its jar's fabric.mod.json says. */

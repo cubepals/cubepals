@@ -27,9 +27,11 @@ import { InsightService } from './insight/service.ts'
 import { JoinService } from './joins/service.ts'
 import { ListingQueries } from './listings/queries.ts'
 import { ListingService } from './listings/service.ts'
+import { ConfigurationPreflight } from './mods/configuration-preflight.ts'
 import { JarChecks } from './mods/jar-checks.ts'
 import { ModQueries } from './mods/queries.ts'
 import { ModService } from './mods/service.ts'
+import { ModValidation } from './mods/validation.ts'
 import { BootSequence, type BootTimeouts } from './operations/boot.ts'
 import { createHandlers } from './operations/handlers.ts'
 import { OperationRunner } from './operations/runner.ts'
@@ -38,6 +40,7 @@ import { PackBuilder } from './packs/build.ts'
 import { PackChanges } from './packs/changes.ts'
 import { PackContents } from './packs/contents.ts'
 import { PackService } from './packs/service.ts'
+import { learnPack } from './packs/startup-learning.ts'
 import { PlatformAlerts } from './platform/alerts.ts'
 import { AuditQueries } from './platform/audit.ts'
 import { PlatformControlsService } from './platform/controls.ts'
@@ -66,6 +69,7 @@ import { officialFilesOf } from './servers/own-files.ts'
 import { OwnerNotices } from './servers/owner-notices.ts'
 import { markNotLoaded } from './servers/persistence.ts'
 import { ServerQueries } from './servers/queries.ts'
+import { packOf } from './servers/revision-reads.ts'
 import { MinecraftServerService } from './servers/service.ts'
 import { RuntimeSpecs } from './servers/specs.ts'
 import { ServerTransitions } from './servers/transitions.ts'
@@ -177,27 +181,21 @@ export function composeControlPlane(ports: ControlPlanePorts, settings: ControlP
   // server service reaches for setups only when a server is being made, so it takes a getter.
   let setups: SetupService
   const servers = new MinecraftServerService({
-    db,
+    ...ports,
     policy,
     transitions,
-    events,
-    addressing: ports.addressing,
-    regions: ports.regions,
     placement,
-    jobs: ports.jobs,
-    loaderBuilds: ports.loaderBuilds,
     setups: () => setups,
   })
   const notices = new OwnerNotices({ ...ports, ...settings, servers })
 
-  const artifacts = new ArtifactService({
-    db,
-    archive: ports.capabilities.archives,
-    secrets: settings.runtimeSecrets,
-    mirror: settings.mirrorCatalogArtifacts,
-    jobs: ports.jobs,
-    locks: ports.locks,
-  })
+  const { artifacts, modValidation, configuration } = artifactServices(
+    ports,
+    settings,
+    specs,
+    links,
+    () => contents,
+  )
   const revisions = new RevisionService({
     db,
     policy,
@@ -228,14 +226,12 @@ export function composeControlPlane(ports: ControlPlanePorts, settings: ControlP
   const contents = new PackContents({ db, formats: ports.formats, catalog: ports.catalog, jarChecks })
   const packs = new PackService({
     ...ports,
-    db,
     policy,
     builder: new PackBuilder({ ...ports, jarChecks }),
     worlds: () => backups.newWorlds,
   })
   setups = new SetupService({
     ...ports,
-    db,
     mods,
     providers: runtime.providers,
     contents,
@@ -243,22 +239,16 @@ export function composeControlPlane(ports: ControlPlanePorts, settings: ControlP
     curation: () => curation,
   })
   const curation: PackCuration = new PackCuration({
-    db,
-    catalog: ports.catalog,
-    archives: ports.archives,
-    formats: ports.formats,
+    ...ports,
     contents,
-    capabilities: ports.capabilities,
-    jobs: ports.jobs,
     pin: (projectId, versionId) => setups.pinnedPack(projectId, versionId),
     resolve: (target, wanted) => mods.resolveNew(target, wanted),
-    loaderBuilds: ports.loaderBuilds,
+    verify: (checked) => configuration.release(checked),
     ...(settings.curatedPacks === undefined ? {} : { packs: settings.curatedPacks }),
     ...(settings.ownPacks === undefined ? {} : { own: settings.ownPacks }),
   })
   const queries = new ServerQueries({
     ...ports,
-    db,
     service: servers,
     setups,
     packs,
@@ -277,7 +267,17 @@ export function composeControlPlane(ports: ControlPlanePorts, settings: ControlP
     configured: { admins: settings.adminEmails ?? [], signupCap: settings.signupCap ?? true },
   })
   const billing = new BillingService({ ...ports, db, policy, accounts, webOrigin: settings.webOrigin })
-  const backups = new BackupService({ db, transitions, events, policy, artifacts, official, mods, ports })
+  const backups = new BackupService({
+    db,
+    transitions,
+    events,
+    policy,
+    artifacts,
+    official,
+    mods,
+    ports,
+    configuration,
+  })
   const worlds = new WorldService({ db, transitions, events, providers: runtime.providers })
   const reconciler = new AccessReconciler({ db, runtime, console: ports.console, profiles, specs, events })
   const consoleService = new ConsoleService({ db, policy, runtime, console: ports.console, specs })
@@ -323,7 +323,7 @@ export function composeControlPlane(ports: ControlPlanePorts, settings: ControlP
       boot,
       access: reconciler,
       players,
-      artifacts,
+      configuration,
       backups,
       archives: ports.capabilities.archives,
       webOrigin: settings.webOrigin,
@@ -356,6 +356,8 @@ export function composeControlPlane(ports: ControlPlanePorts, settings: ControlP
     revisions,
     catalog,
     mods,
+    modValidation,
+    configuration,
     jarChecks,
     modQueries: new ModQueries({ db, policy, catalog: ports.catalog, packs, contents, curation }),
     queries,
@@ -403,3 +405,39 @@ export function composeControlPlane(ports: ControlPlanePorts, settings: ControlP
 }
 
 export type ControlPlane = ReturnType<typeof composeControlPlane>
+
+function artifactServices(
+  ports: ControlPlanePorts,
+  settings: ControlPlaneSettings,
+  specs: RuntimeSpecs,
+  links: ArtifactLinks,
+  contents: () => PackContents,
+) {
+  const { db } = ports
+  const artifacts = new ArtifactService({
+    db,
+    archive: ports.capabilities.archives,
+    secrets: settings.runtimeSecrets,
+    mirror: settings.mirrorCatalogArtifacts,
+    jobs: ports.jobs,
+    locks: ports.locks,
+  })
+  const modValidation = new ModValidation({
+    links,
+    ...ports,
+    timeouts: settings.bootTimeouts,
+    learn: async (plan, found) => {
+      const pack = packOf(plan.modpack)
+      return pack === null ? false : learnPack(contents(), pack, found)
+    },
+  })
+  const configuration = new ConfigurationPreflight({
+    ...ports,
+    artifacts,
+    validation: modValidation,
+    specs,
+    defaultRuntime: settings.defaultRuntime,
+    defaultRegion: ports.regions.defaultKey,
+  })
+  return { artifacts, modValidation, configuration }
+}

@@ -50,6 +50,7 @@ import {
   workArtifactMirror,
   workJarChecks,
   workListingEligibility,
+  workModValidation,
   workPackImports,
   workWorldDownloads,
   workWorldImports,
@@ -451,6 +452,7 @@ async function workQueues(boss: PgBoss, app: ControlPlane, url: string): Promise
   await workJarChecks(boss, (sha512) => app.jarChecks.run(sha512), 0.5)
   await workPackImports(boss, app.packs, 0.5)
   await workWorldImports(boss, app.backups.imports, 0.5)
+  await workModValidation(boss, app.modValidation, 0.5)
   await workWorldDownloads(boss, app.backups.downloads, 0.5)
   await workListingEligibility(boss, (serverIds) => app.listings.reevaluate(serverIds), 0.5)
   return startOperationsWorker(url, app)

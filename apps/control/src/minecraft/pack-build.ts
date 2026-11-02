@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import type { ModEnvironment } from '../domain/mods/catalog.ts'
+import { explicitSide } from '../domain/mods/loader-dependencies.ts'
 import type { MemoryTier } from '../domain/server/size.ts'
 import { serverEnvironment } from './mods.ts'
 import type { PackLoader } from './mrpack.ts'
@@ -24,14 +25,15 @@ import { compareVersions } from './versions.ts'
  */
 export function jarSide(evidence: {
   catalog?: ModEnvironment | null
-  metadata?: Pick<ModMetadata, 'environment'> | null
+  metadata?: Partial<Pick<ModMetadata, 'environment'>> | null
 }): 'server' | 'optional' | 'both' | 'client' {
+  // A loader's explicit side is stronger evidence than a catalog listing.
+  const side = explicitSide(evidence.metadata)
+  if (side !== null) return side
   // An optional server companion is not needed to bring a player's world or pack to a server.
   if (evidence.catalog === 'client_only_server_optional') return 'client'
   if (evidence.catalog && evidence.catalog !== 'unknown')
     return serverEnvironment(evidence.catalog) ?? 'client'
-  if (evidence.metadata?.environment === 'client') return 'client'
-  if (evidence.metadata?.environment === 'server') return 'server'
   return 'both'
 }
 

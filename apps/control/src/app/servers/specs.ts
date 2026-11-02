@@ -46,6 +46,7 @@ import { noOfficialFiles, type OfficialFiles, withCurrentOwnFiles } from './own-
 import { grownStorage, loadRevision, loadWorld } from './persistence.ts'
 
 export interface DesiredRuntime {
+  validation: { mods: PinnedMod[]; files: CarriedFile[]; compat: PinnedMod[] }
   revision: ServerRevision
   world: World
   spec: RuntimeSpec
@@ -158,15 +159,25 @@ export class RuntimeSpecs {
     })
   }
 
+  /** Compile a proposed revision through the same path as an ordinary server start. */
+  forRevision(q: Queryable, server: MinecraftServer, revision: ServerRevision): Promise<DesiredRuntime> {
+    return this.forConfig(q, server, {
+      revisionId: revision.id,
+      revision,
+      worldId: server.activeWorldId,
+      memoryTier: server.memoryTier,
+    })
+  }
+
   /** The runtime for one configuration, such as the one last applied, to go back to it. */
   async forConfig(
     q: Queryable,
     server: MinecraftServer,
-    config: { revisionId: string; worldId: string; memoryTier: MemoryTier },
+    config: { revisionId: string; worldId: string; memoryTier: MemoryTier; revision?: ServerRevision },
   ): Promise<DesiredRuntime> {
     const revision = await withoutMalware(
       q,
-      await withWhatItsPackLearned(q, await loadRevision(q, config.revisionId)),
+      await withWhatItsPackLearned(q, config.revision ?? (await loadRevision(q, config.revisionId))),
     )
     const world = await loadWorld(q, config.worldId)
     const standing = await loadStanding(q, server.ownerId)
@@ -255,6 +266,11 @@ export class RuntimeSpecs {
             .digest('hex')
     const spec = { ...labelled, resumesOn }
     return {
+      validation: {
+        mods: starting.mods,
+        files: starting.files,
+        compat: [...placed, ...reporter, ...(stop.placed?.jar ? [stop.placed.jar] : [])],
+      },
       revision,
       world,
       spec,
@@ -284,7 +300,7 @@ const filesDigest = (files: readonly CarriedFile[]): string =>
  * and so is one it left out that a mod of it needs (`needed`), which is no longer forced in. It
  * runs after `withWhatItsPackLearned`, whose `forceInclude` it takes from.
  */
-async function withoutMalware(q: Queryable, revision: ServerRevision): Promise<ServerRevision> {
+export async function withoutMalware(q: Queryable, revision: ServerRevision): Promise<ServerRevision> {
   const pack = revision.modpack
   const contents = pack === null ? null : await loadPackContents(q, pack.artifact.sha512)
   const needed = (contents?.leftOut ?? []).flatMap((l) =>
@@ -321,7 +337,10 @@ async function withoutMalware(q: Queryable, revision: ServerRevision): Promise<S
  * server of the pack as it started are left out, and ones it turned out to need are put back
  * (docs/modpack-system.md § Verify). The same pack file teaches every server that plays it.
  */
-async function withWhatItsPackLearned(q: Queryable, revision: ServerRevision): Promise<ServerRevision> {
+export async function withWhatItsPackLearned(
+  q: Queryable,
+  revision: ServerRevision,
+): Promise<ServerRevision> {
   const pack = revision.modpack
   if (pack === null) return revision
   const contents = await loadPackContents(q, pack.artifact.sha512)

@@ -14,6 +14,7 @@ import { schema } from '@blockly/db'
 import { eq } from 'drizzle-orm'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
 import { saveMemoryKept } from '../servers/persistence.ts'
+import { lastWakeSeconds } from './persistence.ts'
 import { medianOf, readWakeMedians, WAKE_TIMES_DAYS, WakeTimes, wayOf } from './wake-times.ts'
 
 /** A wake that succeeded, `seconds` long, `daysAgo` days ago: a start by its steps, or an unstore. */
@@ -23,6 +24,7 @@ async function woke(
   way: 'resume' | 'boot' | 'restore',
   seconds: number,
   daysAgo = 1,
+  checked = false,
 ) {
   const created = new Date(Date.now() - daysAgo * DAY_MS)
   await h.db.insert(schema.serverOperations).values({
@@ -32,7 +34,10 @@ async function woke(
     status: 'succeeded',
     requestedBy: 'system:wake',
     idempotencyKey: randomUUID(),
-    steps: [{ step: way === 'resume' ? 'resuming' : 'booting', at: created.toISOString() }],
+    steps: [
+      ...(checked ? [{ step: 'checking_mods', at: created.toISOString() }] : []),
+      { step: way === 'resume' ? 'resuming' : 'booting', at: created.toISOString() },
+    ],
     createdAt: created,
     startedAt: created,
     finishedAt: new Date(created.getTime() + seconds * SECOND_MS),
@@ -64,6 +69,8 @@ describe.skipIf(!hasDatabase)('wake times', () => {
     // Five rests come back across two servers: two of B's, three of C's.
     for (const seconds of [60, 70]) await woke(h, ids.b, 'restore', seconds)
     for (const seconds of [80, 90, 100]) await woke(h, ids.c, 'restore', seconds)
+    // A configuration check is measured separately and cannot inflate the next ordinary wake.
+    await woke(h, ids.a, 'boot', 500, 0.5, true)
     // Too old to count.
     await woke(h, ids.b, 'boot', 500, WAKE_TIMES_DAYS + 1)
   })
@@ -72,6 +79,7 @@ describe.skipIf(!hasDatabase)('wake times', () => {
   test('a server with three wakes one way goes by its own median', async () => {
     const medians = await readWakeMedians(h.db)
     expect(medianOf(medians, ids.a, 'boot')).toBe(40)
+    expect(await lastWakeSeconds(h.db, ids.a, 'booted')).toBe(50)
     expect(medianOf(medians, ids.a, 'resume')).toBe(2)
     expect(medianOf(medians, ids.c, 'restore')).toBe(90)
   })

@@ -16,6 +16,7 @@ import { join } from 'node:path'
 import type { Db } from '@blockly/db'
 import { type ReleaseRef, releaseRef } from '../../domain/mods/curation.ts'
 import { recordStored } from '../artifacts/persistence.ts'
+import { IncompatibleMods } from '../mods/validation-runtime.ts'
 import { leavePackJarOut, savePackContents } from '../packs/persistence.ts'
 import { audit } from './audit.ts'
 import { type Checked, Refused } from './check-outcome.ts'
@@ -34,6 +35,7 @@ export async function ingest(
     own: readonly OwnPack[]
     checkCatalog: (pack: CuratedPack, spec: CuratedReleaseSpec, work: string) => Promise<Checked>
     checkOwn: (pack: OwnPack, version: string, gameVersion: string, work: string) => Promise<Checked>
+    verify: (checked: Checked) => Promise<void>
   },
   release: ReleaseRef,
 ): Promise<void> {
@@ -59,6 +61,9 @@ export async function ingest(
       if (checked.contents !== null) await savePackContents(tx, checked.contents)
       for (const path of checked.forPlayers)
         await leavePackJarOut(tx, spec?.sha512 ?? checked.pack.artifact.sha512, { path, why: 'players' })
+    })
+    await deps.verify(checked)
+    await deps.db.transaction(async (tx) => {
       const verified = await releaseVerified(tx, release.key, release.version, {
         distribution: checked.distribution,
         pack: checked.pack,
@@ -72,8 +77,8 @@ export async function ingest(
       })
     })
   } catch (error) {
-    if (!(error instanceof Refused)) throw error
-    await refuse(deps.db, release, error.message, error.detail)
+    if (!(error instanceof Refused) && !(error instanceof IncompatibleMods)) throw error
+    await refuse(deps.db, release, error.message, error instanceof Refused ? error.detail : error.message)
   } finally {
     await rm(work, { recursive: true, force: true })
   }

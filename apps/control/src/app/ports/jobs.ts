@@ -138,6 +138,8 @@ export interface JobQueue {
    * it; asked again once its owner has answered what it asked. One queued at a time per upload.
    */
   enqueueWorldImport(tx: Tx, importId: string): Promise<void>
+  /** An exact mod configuration checked once on an isolated runtime. */
+  enqueueModValidation(tx: Tx, key: string): Promise<void>
   /** `world-download`: an archive's world copied for its owner to download, once, on a worker. */
   enqueueWorldDownload(tx: Tx, downloadId: string): Promise<void>
   /**

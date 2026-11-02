@@ -30,7 +30,7 @@ import { WaitingChanges } from './waiting-changes'
  */
 export function changeable(view: ServerView): { ok: boolean } {
   if (view.activeOperation !== null) return { ok: false }
-  return { ok: view.status === 'running' || view.status === 'stopped' }
+  return { ok: ['running', 'stopped', 'failed'].includes(view.status) }
 }
 
 /**

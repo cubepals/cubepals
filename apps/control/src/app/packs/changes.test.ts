@@ -13,6 +13,9 @@ import { listBackups } from '../backups/persistence.ts'
 import { loadRevision } from '../servers/persistence.ts'
 import { loadPackContents } from './persistence.ts'
 
+const brokenMixin =
+  '[main/ERROR] [mixin/]: Mixin apply failed mixins.farm.json:MixinPlayer -> net.minecraft.world.entity.player.Player: org.spongepowered.asm.mixin.injection.throwables.InvalidInjectionException Critical injection failure'
+
 // A pack changes like a deployment (docs/modpack-system.md § Installing): a newer version is
 // offered, never applied by itself; moving to it takes a restore point, and a version that doesn't
 // start puts the one before back, whether the server was running or starts onto the change.
@@ -132,9 +135,7 @@ describe.skipIf(!hasDatabase)('pack changes', () => {
 
     // A version that doesn't start: the one before comes back, files and all, still running.
     const broken = publish(3)
-    h.minecraft.breakOn((env) =>
-      env.BLOCKLY_PACK === broken.file.sha512.slice(0, 32) ? 'a mod of it crashed' : null,
-    )
+    h.minecraft.breakOn((env) => (env.BLOCKLY_PACK === broken.file.sha512.slice(0, 32) ? brokenMixin : null))
     await changeTo(owner, server.id, 'update-3')
     await h.settled(server.id)
     expect((await h.server(server.id)).lifecycle.status).toBe('running')
@@ -142,7 +143,7 @@ describe.skipIf(!hasDatabase)('pack changes', () => {
     expect(await h.minecraft.file(server.id, 'config/farm.toml')).toBe('version = 2\n')
     const [last] = (await h.operations(server.id)).filter((op) => op.kind === 'apply').reverse()
     expect(last?.status).toBe('failed')
-    expect(last?.error).toContain('Your server is back on the one before.')
+    expect(last?.error).toContain('Nothing changed:')
   }, 90_000)
 
   test('a change made while stopped installs as the server starts, and goes back if it doesn’t', async () => {
@@ -157,9 +158,7 @@ describe.skipIf(!hasDatabase)('pack changes', () => {
     await h.settled(server.id)
 
     const broken = releases.find((r) => r.versionId === 'update-3') as CatalogVersion
-    h.minecraft.breakOn((env) =>
-      env.BLOCKLY_PACK === broken.file.sha512.slice(0, 32) ? 'a mod of it crashed' : null,
-    )
+    h.minecraft.breakOn((env) => (env.BLOCKLY_PACK === broken.file.sha512.slice(0, 32) ? brokenMixin : null))
     await changeTo(owner, server.id, 'update-3')
     // Stopped, it waits for the start.
     expect((await h.server(server.id)).lifecycle.status).toBe('stopped')
@@ -172,7 +171,7 @@ describe.skipIf(!hasDatabase)('pack changes', () => {
     expect(start?.status).toBe('failed')
     expect(start?.error).toContain('Your server is back on the one before.')
     const restorePoints = (await listBackups(h.db, server.id)).filter((b) => b.trigger === 'pre_apply')
-    expect(restorePoints.length).toBeGreaterThanOrEqual(1)
+    expect(restorePoints).toEqual([])
   }, 90_000)
 
   test('a mod the catalog lets a server run that stops one as it starts is left out, and the start goes on', async () => {

@@ -12,6 +12,7 @@
 import type { AppliedConfigJson, Db } from '@blockly/db'
 import { rewritesWorld } from '../../../domain/revision/revision.ts'
 import type { MinecraftServer } from '../../../domain/server/server.ts'
+import type { BackupRecord } from '../../backups/persistence.ts'
 import { aside, inFull, PermanentFailure } from '../../errors.ts'
 import type { AccessPolicy } from '../../policy/access-policy.ts'
 import { RuntimeFull, type RuntimeHandle, type RuntimeSpec, runtimeKey } from '../../ports/runtime.ts'
@@ -175,7 +176,7 @@ export function bringingUp(deps: {
       throw new PermanentFailure('This server’s world is resting; waking it brings it back.')
     const binding = await bindingOf(server.id)
     let desired = await specs.desired(db, server)
-    await preflight(desired, binding.applied)
+    await preflight(desired, binding.applied, ctx)
     let provider = binding.provider
     const provisioned = (spec: RuntimeSpec) =>
       runtime.ensureProvisioned(
@@ -266,11 +267,11 @@ export function bringingUp(deps: {
     ctx: OperationContext,
     installing: { handle: RuntimeHandle; previous: AppliedConfigJson; desired: DesiredRuntime },
   ): Promise<DesiredRuntime | OperationResult> => {
-    const server = ctx.server
-    await preflight(installing.desired, installing.previous)
-    await ctx.step('saving')
-    const snapshot = await capture(server, installing.handle, installing.previous, 'pre_apply', false)
+    let snapshot: BackupRecord | null = null
     try {
+      await preflight(installing.desired, installing.previous, ctx)
+      await ctx.step('saving')
+      snapshot = await capture(ctx.server, installing.handle, installing.previous, 'pre_apply', false)
       // Its rollback starts it fresh on what ran before, so this boot doesn't start it again itself.
       return await bringUp(ctx, { startAgainOnHang: false })
     } catch (error) {
@@ -278,7 +279,7 @@ export function bringingUp(deps: {
       if (error instanceof NoLongerApplies) throw error
       await ctx.step('rolling_back')
       try {
-        await rollBack(ctx, server, installing.previous, installing.desired, snapshot, 'starting')
+        await rollBack(ctx, ctx.server, installing.previous, installing.desired, snapshot, 'starting')
       } catch (again) {
         if (again instanceof NoLongerApplies) throw again
         throw new PermanentFailure(
@@ -376,7 +377,7 @@ export function bringingUp(deps: {
         if (!decision.ok) return { status: 'cancelled', reason: decision.message }
       }
       let desired = await specs.desired(db, server)
-      await preflight(desired, binding.handle === null ? null : binding.applied)
+      await preflight(desired, binding.handle === null ? null : binding.applied, ctx)
       let handle = binding.handle
       if (handle === null) {
         handle = await runtime.ensureProvisioned(

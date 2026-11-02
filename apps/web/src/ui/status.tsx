@@ -55,6 +55,8 @@ export function StatusPill({ status, label }: { status: PillStatus; label?: stri
 export interface ProvisioningStep {
   label: string
   state: 'todo' | 'active' | 'done'
+  /** This step has no measured completion fraction. */
+  indeterminate?: boolean
 }
 
 export function ProvisioningPanel({
@@ -88,7 +90,7 @@ export function ProvisioningPanel({
         )}
         {eta && <p className="bk-prov__eta">{eta}</p>}
       </header>
-      {progress !== undefined && (
+      {progress !== undefined && !steps.some((step) => step.state === 'active' && step.indeterminate) && (
         <div
           className="bk-prov__bar"
           role="progressbar"

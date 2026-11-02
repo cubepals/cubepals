@@ -1,0 +1,39 @@
+{
+  "project": "w7ThoJFB",
+  "version": "RUBpNu00",
+  "url": "https://cdn.modrinth.com/data/w7ThoJFB/versions/RUBpNu00/zoomify-2.17.0%2Bmc26.3-universal.jar",
+  "sha512": "1c5bc8e46a3575847584bb6993034dbe7d8060be32ee676c473d36bd4bbbc4df21d03a8f3b3f8904e42312667e9716050cca2cf7a098c8ebf6985d52eea4d637",
+  "loaders": ["fabric", "neoforge"],
+  "dependencies": [
+    {
+      "version_id": null,
+      "project_id": "mOgUt4GM",
+      "file_name": null,
+      "dependency_type": "optional"
+    },
+    {
+      "version_id": null,
+      "project_id": "1vrSzlao",
+      "file_name": null,
+      "dependency_type": "required"
+    },
+    {
+      "version_id": null,
+      "project_id": "P7dR8mSH",
+      "file_name": null,
+      "dependency_type": "required"
+    },
+    {
+      "version_id": null,
+      "project_id": "Ha28R6CL",
+      "file_name": null,
+      "dependency_type": "required"
+    },
+    {
+      "version_id": null,
+      "project_id": "1eAoo2KR",
+      "file_name": null,
+      "dependency_type": "required"
+    }
+  ]
+}

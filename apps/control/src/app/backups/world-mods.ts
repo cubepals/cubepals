@@ -17,6 +17,7 @@ import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { PlayedWith } from '@blockly/contracts'
 import type { BroughtModsJson, UploadedWorldFactsJson } from '@blockly/db'
+import { nativeFor } from '../../domain/mods/loader-dependencies.ts'
 import { playedWithIn } from '../../minecraft/instance-layout.ts'
 import { PACK_LOADERS, type PackLoader } from '../../minecraft/mrpack.ts'
 import { jarSide, namedReleases, runsOn } from '../../minecraft/pack-build.ts'
@@ -24,6 +25,7 @@ import { instanceIdentity, packwizMod } from '../../minecraft/pack-manifests.ts'
 import { offeredVersions } from '../../minecraft/versions.ts'
 import { moddedBrands } from '../../minecraft/world-facts.ts'
 import { type BroughtJar, type JarMatch, matchJars } from '../mods/jar-matches.ts'
+import type { JarNeedsReader } from '../mods/jar-needs.ts'
 import type { OwnJars } from '../mods/own-jars.ts'
 import { MAX_JAR_BYTES } from '../mods/service.ts'
 import { jarMetadata } from '../packs/jars.ts'
@@ -38,15 +40,18 @@ const MOST_JARS = 500
 type ReadJar = BroughtJar & { path: string }
 
 export class WorldMods {
+  readonly #needs: Pick<JarNeedsReader, 'of'>
   readonly #formats: FileFormats
   readonly #catalog: Pick<ModCatalog, 'versionsByIds' | 'filesByHash'>
   readonly #own: Pick<OwnJars, 'mayKeep' | 'keep'>
 
   constructor(deps: {
+    jars: Pick<JarNeedsReader, 'of'>
     formats: FileFormats
     catalog: Pick<ModCatalog, 'versionsByIds' | 'filesByHash'>
     ownJars: Pick<OwnJars, 'mayKeep' | 'keep'>
   }) {
+    this.#needs = deps.jars
     this.#formats = deps.formats
     this.#catalog = deps.catalog
     this.#own = deps.ownJars
@@ -55,9 +60,11 @@ export class WorldMods {
   /** Recheck earlier imports too: a catalog's corrected side must not keep an old world unplayable. */
   async current(mods: BroughtModsJson): Promise<BroughtModsJson> {
     const versions = await this.#catalog.versionsByIds(mods.catalog.map((mod) => mod.versionId))
+    const needs = await this.#needs.of('modrinth', [...versions.values()])
     const forPlayers = mods.catalog.filter((mod) => {
       const version = versions.get(mod.versionId)
-      return version !== undefined && jarSide({ catalog: version.environment }) === 'client'
+      const native = nativeFor({ loader: mods.loader, loaders: [mods.loader] }, needs.get(mod.versionId))
+      return version !== undefined && jarSide({ catalog: version.environment, metadata: native }) === 'client'
     })
     const omitted = new Set(forPlayers.map((mod) => mod.versionId))
     return {

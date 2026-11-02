@@ -1,0 +1,7 @@
+modLoader = 'klf'
+loaderVersion = '[1,)'
+license = 'LGPL-3.0-or-later'
+issueTrackerURL = 'https://github.com/isXander/Zoomify/issues'
+mods = [{modId = 'zoomify', version = '2.17.0+mc26.3', displayName = 'Zoomify', description = 'A zoom mod with inifinte customizability.', logoFile = 'assets/zoomify/zoomify.png', credits = '', authors = 'isXander', displayURL = 'https://github.com/isXander/Zoomify'}]
+dependencies.zoomify = [{modId = 'minecraft', type = 'required', versionRange = '[26.3,26.4)'}, {modId = 'yet_another_config_lib_v3', type = 'required', versionRange = '(,)'}]
+mixins = [{config = 'zoomify.mixins.json'}]

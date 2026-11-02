@@ -228,7 +228,7 @@ describe.skipIf(!hasDatabase)('Blockly’s own packs', () => {
     const server = await harness().create(owner, { from: { kind: 'curated', key: 'easy' } })
     await harness().until(server.id, 'running')
     await harness().settled(server.id)
-    expect(cdn.downloads - before).toBe(3)
+    expect(cdn.downloads - before).toBe(6)
     expect(await harness().minecraft.file(server.id, `mods/${graves.fileName}`)).not.toBeNull()
     expect(await harness().minecraft.file(server.id, `mods/${perf.fileName}`)).not.toBeNull()
     const page = await harness().app.sharingQueries.page(server.slug, owner)

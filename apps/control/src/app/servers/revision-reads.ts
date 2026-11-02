@@ -20,7 +20,7 @@ import { runsOf } from '../revisions/caps.ts'
 const revisions = schema.serverRevisions
 
 /** A pack pinned before `environment` and `icon` existed reads as it would have: for everyone, with no picture. */
-const packOf = (pack: (typeof revisions.$inferSelect)['modpack']): PinnedModpack | null =>
+export const packOf = (pack: (typeof revisions.$inferSelect)['modpack']): PinnedModpack | null =>
   pack === null ? null : { environment: 'both', icon: null, ...pack }
 
 const columns = {

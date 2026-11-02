@@ -159,7 +159,7 @@
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/control/src/app/operations/boot.ts › #upLearning": {
-      "n": 41,
+      "n": 33,
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/control/src/app/operations/handlers/bringing-up.ts › run": {
@@ -315,7 +315,7 @@
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/control/src/domain/server/lifecycle.ts › function decide": {
-      "n": 47,
+      "n": 43,
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/control/src/infra/auth/github-sign-in.test.ts › describe.skipIf GitHub sign-in › beforeAll › globalThis.fetch = (async (input: string | URL | Request, in…": {
@@ -921,7 +921,7 @@
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/control/src/app/control-plane.ts › function composeControlPlane": {
-      "n": 217,
+      "n": 215,
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/control/src/app/curation/catalog-check.ts › function checkCatalogRelease": {
@@ -997,7 +997,7 @@
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/control/src/app/packs/changes.test.ts › describe.skipIf pack changes": {
-      "n": 348,
+      "n": 344,
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/control/src/app/packs/packs.test.ts › describe.skipIf packs people bring": {

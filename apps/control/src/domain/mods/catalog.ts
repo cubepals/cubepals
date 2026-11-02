@@ -73,6 +73,8 @@ export interface CatalogHit {
 
 export interface CatalogProject extends CatalogHit {
   state: ProjectState
+  /** Loaders explicitly supported by the project; absent is unknown, never evidence for omission. */
+  loaders?: readonly string[]
   /**
    * The licence its publisher declares, as an SPDX identifier or expression, where the catalog says;
    * null when it declares none.

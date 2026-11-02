@@ -70,6 +70,7 @@ import {
   placeBedrock,
   placeCarried,
   placeStopCheaters,
+  startupBanner,
 } from './fake-minecraft/image.ts'
 import { AccessLists } from './fake-minecraft/lists.ts'
 import { ServerLog } from './fake-minecraft/log.ts'
@@ -148,6 +149,7 @@ export class FakeMinecraft implements FakeWorkload, ServerConsole, ReadinessProb
     await placeBedrock(server.dir, { ...server.env, ...machine.spec.secrets })
     await installJars(server.dir, server.env, say)
     await installPack(server.dir, server.env, say)
+    if (server.env.MODRINTH_MODPACK === undefined) startupBanner(server.env, say)
     await this.#loadJars(server)
     const level = join(server.dir, server.env.LEVEL ?? 'world')
     await mkdir(level, { recursive: true })

@@ -112,7 +112,7 @@ export function packCheck(jars: ReadonlyArray<{ path: string; sha512: string }>)
  * One the image's record doesn't list was left out on purpose (a name on its own list of mods
  * made for players' games), which isn't a failure to install.
  */
-export function packProblems(check: PackCheck, stdout: string): string[] {
+export function packProblems(check: PackCheck, stdout: string, requireAll = false): string[] {
   const [manifestText = '', hashes = ''] = stdout.split(MANIFEST_END)
   let installed: Set<string> | null = null
   try {
@@ -123,7 +123,7 @@ export function packProblems(check: PackCheck, stdout: string): string[] {
   }
   const found = parseInstalled(hashes.trim())
   return check.expected
-    .filter((jar) => installed === null || installed.has(jar.path))
+    .filter((jar) => requireAll || installed === null || installed.has(jar.path))
     .filter((jar) => found.get(jar.path) !== jar.sha512)
     .map((jar) => jar.path)
 }

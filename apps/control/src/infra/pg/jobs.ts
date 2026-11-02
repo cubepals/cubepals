@@ -61,6 +61,7 @@ const PACK_IMPORT = 'pack-import'
 const WORLD_DOWNLOAD = 'world-download'
 /** Uploaded worlds to read and bring to their server: one job queued per upload at a time. */
 const WORLD_IMPORT = 'world-import'
+const MOD_VALIDATION = 'mod-validation'
 /** Reviewed releases of curated packs to fetch and check: one job per release at a time. */
 const CURATION_INGEST = 'curation-ingest'
 /** Uploaded jars to read for malware: one job per bytes queued or running at a time. */
@@ -219,6 +220,12 @@ export async function startBoss(
     },
     BACKGROUND_KEPT,
   )
+  await ensureQueue(
+    boss,
+    MOD_VALIDATION,
+    { policy: 'standard', retryLimit: HEAVY_RETRIES, retryDelay: 30, expireInSeconds: 1800 },
+    BACKGROUND_KEPT,
+  )
   // Bringing a world in reads and rewrites one of up to a few gigabytes, and may be asked again
   // once its owner has answered what it asked: one queued at a time per upload.
   await ensureQueue(
@@ -351,6 +358,10 @@ export class PgBossJobs implements JobQueue {
     await this.#boss.send(WORLD_IMPORT, { importId }, { singletonKey: importId, db: fromDrizzle(tx, sql) })
   }
 
+  async enqueueModValidation(tx: Tx, key: string): Promise<void> {
+    await this.#boss.send(MOD_VALIDATION, { importId: key }, { singletonKey: key, db: fromDrizzle(tx, sql) })
+  }
+
   async enqueueWorldDownload(tx: Tx, downloadId: string): Promise<void> {
     await this.#boss.send(WORLD_DOWNLOAD, { downloadId }, { id: downloadId, db: fromDrizzle(tx, sql) })
   }
@@ -478,6 +489,10 @@ export interface Importer {
  */
 export const workPackImports = (boss: PgBoss, packs: Importer, pollingIntervalSeconds = 2) =>
   workImports(boss, PACK_IMPORT, packs, pollingIntervalSeconds)
+
+/** Uses the same bounded queue/retry protocol as other heavy import work. */
+export const workModValidation = (boss: PgBoss, validator: Importer, pollingIntervalSeconds = 2) =>
+  workImports(boss, MOD_VALIDATION, validator, pollingIntervalSeconds)
 
 /** Reads uploaded worlds and brings each to its server, as packs are read. */
 export const workWorldImports = (boss: PgBoss, worlds: Importer, pollingIntervalSeconds = 2) =>

@@ -2,9 +2,10 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
+import { checkEstimate, checkingModsProgress, journeyEstimate } from './mod-check-progress'
 import { etaLine } from './operation-eta'
 
-export { etaLine } from './operation-eta'
+export { etaLine }
 
 import {
   type ChangeKind,
@@ -335,7 +336,7 @@ export interface Progress {
   title: string
   steps: ProvisioningStep[]
   percent: number
-  expectedSeconds: number
+  expectedSeconds: number | null
   /** Which of the steps it is on, counting from 0. */
   index: number
 }
@@ -372,6 +373,7 @@ export function presentProgress(
   /** What the change being applied brings, where the step names its download. */
   changes: readonly RevisionChangeView[] = [],
 ): Progress | null {
+  if (operation.step === 'checking_mods') return checkingModsProgress()
   const plain = operation.step === 'rolling_back' ? GOING_BACK[operation.kind] : JOURNEYS[operation.kind]
   const journey = broughtJourney(operation) ?? plain
   if (!journey) return null
@@ -382,10 +384,7 @@ export function presentProgress(
   )
   return {
     title: journey.title,
-    expectedSeconds:
-      typeof journey.expectedSeconds === 'number'
-        ? journey.expectedSeconds
-        : journey.expectedSeconds(server, operation),
+    expectedSeconds: journeyEstimate(journey.expectedSeconds, server, operation),
     percent: Math.min(95, ((current + 0.5) / journey.steps.length) * 100),
     index: current,
     steps: journey.steps.map((s, i) => ({
@@ -433,6 +432,8 @@ export function quietLine(
       return `Starting Minecraft ${server.gameVersion}`
     case 'loading_world':
       return fresh ? 'Shaping the land' : 'Loading the world'
+    case 'checking_mods':
+      return 'Testing these mods together before opening your world'
     case 'verifying':
       return 'Checking its mods are the ones chosen'
     case 'access':
@@ -472,8 +473,9 @@ export function wakeLine(server: ServerView, now: number): string {
   if (operation === null || progress === null) return 'Waking up'
   const last = server.lastWakeSeconds
   const booting = isBooting(operation.step) && last !== null && last < RESUME_SECONDS
-  const expected = isWake(operation) && last !== null && !booting ? last : progress.expectedSeconds
-  return `${progress.steps[progress.index]?.label ?? 'Waking up'} · ${etaLine(operation.createdAt, expected, now)}`
+  const expected =
+    isWake(operation) && last !== null && !booting ? checkEstimate(last, operation) : progress.expectedSeconds
+  return `${progress.steps[progress.index]?.label ?? 'Waking up'} · ${etaLine(operation.startedAt ?? operation.createdAt, expected, now)}`
 }
 
 /** What a wake is: a server asleep coming back, or a world that rested coming back from storage. */

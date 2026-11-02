@@ -23,6 +23,7 @@ import {
   fabricModOf,
   javaOfClasses,
 } from '../../minecraft/class-files.ts'
+import { loaderMetadata } from '../../minecraft/loader-metadata.ts'
 import { type FileFormats, UnreadableFile } from '../ports/formats.ts'
 
 const needs = schema.catalogVersionNeeds
@@ -58,13 +59,16 @@ export class JarNeedsReader {
     // A row kept before a Fabric mod's own needs were read has its jar read again, once.
     const found = new Map<string, JarNeeds | null>(
       known.flatMap((row) =>
-        row.modIds === null
+        row.modIds === null ||
+        row.nativeMetadata === null ||
+        row.fileSha512 !== versions.find((version) => version.versionId === row.versionId)?.file.sha512
           ? []
           : [
               [
                 row.versionId,
                 {
                   java: row.java,
+                  native: row.nativeMetadata,
                   api:
                     row.apiProjectId === null || row.apiAtLeast === null
                       ? null
@@ -91,7 +95,7 @@ export class JarNeedsReader {
   }
 
   #once(catalog: string, version: CatalogVersion): Promise<JarNeeds | null> {
-    const key = `${catalog}:${version.versionId}`
+    const key = `${catalog}:${version.versionId}:${version.file.sha512}`
     const known = this.#reading.get(key)
     if (known !== undefined) return known
     const reading = this.#read(catalog, version).finally(() => this.#reading.delete(key))
@@ -114,6 +118,8 @@ export class JarNeedsReader {
         modIds: read.mod?.ids ?? [],
         modDepends: read.mod?.depends ?? [],
         carriesJars: read.mod?.carriesJars ?? false,
+        fileSha512: version.file.sha512,
+        nativeMetadata: read.native ?? {},
         readAt: new Date(),
       }
       await this.#db
@@ -126,13 +132,13 @@ export class JarNeedsReader {
 
   /** Two reads by ranges: the jar's directory with its entry files, then the classes they name. */
   async #readJar(catalog: string, url: string): Promise<JarNeeds> {
-    const { api, mod, classes } = await this.#entryFiles(catalog, url)
-    if (classes.size === 0) return { java: null, api, mod }
+    const { api, mod, native, classes } = await this.#entryFiles(catalog, url)
+    if (classes.size === 0) return { java: null, api, mod, native }
     const second = await this.#formats.readRemoteZip(url, {
       wanted: (name) => classes.has(name),
       maxEntryBytes: MAX_CLASS_BYTES,
     })
-    return { java: javaOfClasses(second.entries.values()), api, mod }
+    return { java: javaOfClasses(second.entries.values()), api, mod, native }
   }
 
   /**
@@ -142,7 +148,7 @@ export class JarNeedsReader {
   async #entryFiles(
     catalog: string,
     url: string,
-  ): Promise<Pick<JarNeeds, 'api' | 'mod'> & { classes: Set<string> }> {
+  ): Promise<Pick<JarNeeds, 'api' | 'mod' | 'native'> & { classes: Set<string> }> {
     const entries = new Set<string>(Object.keys(ENTRY_FILES))
     const first = await this.#formats.readRemoteZip(url, {
       wanted: (name) => entries.has(name),
@@ -165,6 +171,11 @@ export class JarNeedsReader {
     const host = ADDON_HOST[catalog]
     const addon = addonNeeds(decoded)
     const api = host === undefined || addon === null ? null : { projectId: host, atLeast: addon }
-    return { api, mod: fabricModOf(decoded), classes: new Set(classesToRead(first.names, decoded, manifest)) }
+    return {
+      api,
+      mod: fabricModOf(decoded),
+      native: loaderMetadata(decoded, first.names),
+      classes: new Set(classesToRead(first.names, decoded, manifest)),
+    }
   }
 }

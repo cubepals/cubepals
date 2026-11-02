@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "id": "zoomify",
+  "version": "2.17.0+mc26.3",
+  "entrypoints": {
+    "modmenu": [
+      {
+        "value": "dev.isxander.zoomify.fabric.integrations.ModMenuIntegration",
+        "adapter": "kotlin"
+      }
+    ],
+    "client": [
+      {
+        "value": "dev.isxander.zoomify.fabric.ZoomifyBootstrap",
+        "adapter": "kotlin"
+      }
+    ]
+  },
+  "mixins": ["zoomify.mixins.json"],
+  "depends": {
+    "minecraft": ">=26.3 <26.4",
+    "yet_another_config_lib_v3": "*",
+    "fabricloader": ">=0.19"
+  },
+  "name": "Zoomify",
+  "description": "A zoom mod with inifinte customizability.",
+  "authors": ["isXander"],
+  "contact": {
+    "homepage": "https://github.com/isXander/Zoomify",
+    "sources": "https://github.com/isXander/Zoomify",
+    "issues": "https://github.com/isXander/Zoomify/issues"
+  },
+  "license": "LGPL-3.0-or-later",
+  "icon": "assets/zoomify/zoomify.png",
+  "jars": []
+}

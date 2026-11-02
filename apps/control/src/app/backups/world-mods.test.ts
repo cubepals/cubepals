@@ -331,6 +331,7 @@ async function restoreTargets() {
   const { id } = await server('Target checks')
   const desired = await loadRevision(h.db, (await h.server(id)).desiredRevisionId)
   const worldMods = new WorldMods({
+    jars: h.app.mods.jars,
     formats: new LibraryFileFormats(),
     catalog: h.catalog,
     ownJars: h.app.mods.ownJars,

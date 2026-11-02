@@ -6,6 +6,8 @@ import { type Queryable, schema, type Tx } from '@blockly/db'
 import { and, desc, eq, gte, inArray, isNotNull, ne, notInArray, or, sql } from 'drizzle-orm'
 import type { OperationKind } from '../../domain/server/lifecycle.ts'
 
+import { modCheckTiming } from './mod-check-timing.ts'
+
 const operations = schema.serverOperations
 
 export type OperationStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled'
@@ -19,6 +21,7 @@ export interface OperationRecord {
   requestedBy: string
   idempotencyKey: string
   step: string | null
+  modCheckSeconds?: number | null
   /** What went wrong, in owners' words. */
   error: string | null
   /** What went wrong as it was said, for the platform's admins only. */
@@ -39,6 +42,7 @@ export const toRecord = (row: Row): OperationRecord => ({
   requestedBy: row.requestedBy,
   idempotencyKey: row.idempotencyKey,
   step: row.progress?.step ?? null,
+  ...modCheckTiming(row.steps),
   error: row.error,
   detail: row.detail,
   startedAt: row.startedAt,
@@ -245,6 +249,9 @@ export type WakePath = 'resumed' | 'booted'
 
 export const resumedWake = sql<boolean>`coalesce(${operations.steps} @> '[{"step":"resuming"}]'::jsonb and not ${operations.steps} @> '[{"step":"booting"}]'::jsonb, false)`
 
+/** Configuration checks are measured separately from ordinary wake durations. */
+export const checkedMods = sql<boolean>`coalesce(${operations.steps} @> ${JSON.stringify([{ step: 'checking_mods' }])}::jsonb, false)`
+
 /**
  * Whether the operation failed in waking its server rather than over what the server runs: it
  * gave up on a resume, or its server's host couldn't run it (`OperationMark`).
@@ -302,6 +309,7 @@ export async function lastWakeSeconds(
         eq(operations.kind, 'start'),
         eq(operations.status, 'succeeded'),
         path === 'resumed' ? resumedWake : sql`not ${resumedWake}`,
+        sql`not ${checkedMods}`,
       ),
     )
     .orderBy(desc(operations.createdAt))

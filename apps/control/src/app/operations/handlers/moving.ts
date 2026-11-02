@@ -154,7 +154,7 @@ export function moving(deps: {
       const binding = await bindingOf(server.id)
       if (binding.handle === null) throw new PermanentFailure('This server has nothing to move yet.')
       const desired = await specs.desired(db, server)
-      await preflight(desired, binding.applied)
+      await preflight(desired, binding.applied, ctx)
       if (input.toProvider !== undefined && input.toProvider !== binding.provider)
         return rehost(ctx, server, binding, binding.handle, desired, input.toProvider, { up, refusal })
       // A lost host can't be asked anything: no in-game changes to bring in, no snapshot to take.

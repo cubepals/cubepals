@@ -12,7 +12,7 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { randomUUID } from 'node:crypto'
 import { Cdn } from '../../testing/cdn.ts'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
-import { findServer } from '../servers/persistence.ts'
+import { loadRuntime } from '../servers/persistence.ts'
 
 describe.skipIf(!hasDatabase)('what a start left out', () => {
   let h: Harness
@@ -28,7 +28,7 @@ describe.skipIf(!hasDatabase)('what a start left out', () => {
     cdn.close()
   })
 
-  test('a plugin Paper couldn’t load is kept on the server and shown, until a start loads everything', async () => {
+  test('a plugin Paper couldn’t load is refused before play and its owner can remove it', async () => {
     // AuraSkills, RPG survival's plugin, published as bytes Paper can't load.
     h.catalog.publish(
       {
@@ -58,10 +58,10 @@ describe.skipIf(!hasDatabase)('what a start left out', () => {
     )
     const owner = await h.user('Mira', 'plus')
     const made = await h.create(owner, { from: { kind: 'template', key: 'rpg' } })
-    await h.until(made.id, 'running')
     await h.settled(made.id)
-    expect((await findServer(h.db, made.id))?.notLoaded).toEqual(['AuraSkills'])
-    expect((await h.app.queries.get(owner, made.id)).notLoaded).toEqual(['AuraSkills'])
+    expect((await h.server(made.id)).lifecycle.status).toBe('failed')
+    expect((await loadRuntime(h.db, made.id, ['fake'])).handle).toBeNull()
+    expect((await h.operations(made.id)).at(-1)?.error).toContain('AuraSkills')
 
     // Without it, everything it was told to load loads, and nothing is said any more.
     await h.app.mods.apply(owner, made.id, { remove: ['uDdZAVls'] }, [], randomUUID())

@@ -16,6 +16,9 @@
 import {
   type BroughtWorld,
   DEFAULT_PEOPLE_CHOICE,
+  type ModValidationView,
+  modValidationPassed,
+  modValidationPending,
   type PeopleChoice,
   type ServerView,
   type WorldImportView,
@@ -69,6 +72,17 @@ const READING_POLL_MS = 1500
 
 type Ready = Extract<WorldImportView, { status: 'ready' }>
 
+function bringTitle(
+  ready: Ready | null,
+  sending: boolean,
+  state: WorldImportView | null,
+  coming: string | null,
+) {
+  if (ready !== null && !modValidationPassed(ready.compatibility))
+    return `${ready.world?.name ?? coming ?? 'Your world'} is imported`
+  return titleOf(stageOf(sending, state), ready?.world?.name ?? coming)
+}
+
 export function BringWorld({
   view,
   brought,
@@ -107,7 +121,7 @@ export function BringWorld({
     <Modal
       open
       onClose={reading || play.pending ? () => {} : close}
-      title={titleOf(stageOf(sending, state), ready?.world?.name ?? coming)}
+      title={bringTitle(ready, sending, state, coming)}
       actions={
         <Actions
           state={state}
@@ -170,7 +184,13 @@ function useBringing(view: ServerView, name: string) {
   const watched = useQuery({
     ...trpc.backups.upload.queryOptions({ serverId: view.id, importId: sent.importId ?? '' }),
     enabled: sent.importId !== null,
-    refetchInterval: (query) => (query.state.data?.status === 'reading' ? READING_POLL_MS : false),
+    refetchInterval: (query) => {
+      const data = query.state.data
+      return data?.status === 'reading' ||
+        (data?.status === 'ready' && modValidationPending(data.compatibility))
+        ? READING_POLL_MS
+        : false
+    },
   })
   return { ...sent, state: watched.data ?? null, watching: watched.isError ? messageOf(watched.error) : null }
 }
@@ -333,6 +353,7 @@ function Actions({
         playing={playing}
         onClose={onClose}
         onPlay={() => onPlay(state)}
+        compatibility={state.compatibility}
       />
     )
   if (state?.status === 'ready' || state?.status === 'refused' || state?.status === 'asking')
@@ -363,6 +384,7 @@ function Actions({
 
 /** "Not now", quietly, and the one press that plays the world, held while the server is busy. */
 function PlayActions({
+  compatibility,
   view,
   world,
   mods,
@@ -372,6 +394,7 @@ function PlayActions({
 }: {
   view: ServerView
   world: BroughtWorld
+  compatibility?: ModValidationView | null
   mods: ModsPlay
   playing: boolean
   onClose: () => void
@@ -387,7 +410,7 @@ function PlayActions({
       </Button>
       <Button
         variant="primary"
-        disabled={blocked || !allowed.ok}
+        disabled={blocked || !allowed.ok || !modValidationPassed(compatibility)}
         busy={playing ? `Switching to ${world.name}` : undefined}
         onClick={onPlay}
       >
@@ -562,6 +585,12 @@ function ReadyToPlay({
   return (
     <>
       <WorldCard world={world} />
+      {!modValidationPassed(ready.compatibility) && (
+        <Note tone={ready.compatibility?.state === 'blocked' ? 'danger' : 'info'}>
+          {ready.compatibility?.message ??
+            'Your world is imported. Cubepals is testing the server’s mods together before Play becomes available.'}
+        </Note>
+      )}
       {ready.notes.length > 0 && (
         <div className="bk-stack" style={{ gap: 'var(--space-4)' }}>
           <span className="type-label">What Cubepals did</span>

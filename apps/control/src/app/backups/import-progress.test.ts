@@ -5,9 +5,10 @@
 /** The pollable worker record preserves stage time, throttles bytes and counts consumed source bytes. */
 import { afterAll, afterEach, beforeAll, describe, expect, setSystemTime, test } from 'bun:test'
 import { randomUUID } from 'node:crypto'
+import type { WorldImportProgress } from '@blockly/contracts'
 import { SECOND_MS } from '@blockly/contracts/durations'
 import { schema } from '@blockly/db'
-import { eq } from 'drizzle-orm'
+import { eq, inArray } from 'drizzle-orm'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
 import { ImportProgress } from './import-progress.ts'
 
@@ -120,5 +121,33 @@ describe.skipIf(!hasDatabase)('world import measurements', () => {
       { name: 'region/r.0.0.mca', sizeBytes: 6, bytes: [3, 4, 5, 6, 7, 8] },
     ])
     expect(await read(id)).toMatchObject({ step: 'packing', bytes: 8, totalBytes: 8 })
+  })
+
+  test('new progress survives a write and read while earlier imports remain null', async () => {
+    const ownerId = randomUUID()
+    await h.db
+      .insert(schema.users)
+      .values({ id: ownerId, name: 'Schema test', email: `${ownerId}@example.com` })
+    const id = randomUUID()
+    const legacyId = randomUUID()
+    const at = new Date().toISOString()
+    const progress: WorldImportProgress = {
+      step: 'fetching',
+      startedAt: at,
+      updatedAt: at,
+      bytes: 5,
+      totalBytes: 10,
+      steps: [{ step: 'fetching', at }],
+    }
+    await h.db.insert(schema.worldImports).values([
+      { id, ownerId, fileName: 'Life.tar', sizeBytes: 10, progress },
+      { id: legacyId, ownerId, fileName: 'Earlier.tar', sizeBytes: 10 },
+    ])
+    const rows = await h.db
+      .select({ id: schema.worldImports.id, progress: schema.worldImports.progress })
+      .from(schema.worldImports)
+      .where(inArray(schema.worldImports.id, [id, legacyId]))
+    expect(rows.find((row) => row.id === id)?.progress).toEqual(progress)
+    expect(rows.find((row) => row.id === legacyId)?.progress).toBeNull()
   })
 })

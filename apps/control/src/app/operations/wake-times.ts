@@ -5,7 +5,7 @@
 /**
  * How long a wake takes, by the way the server wakes: a resume of one asleep with its memory kept,
  * a boot of one whose sleep stopped it, and a restore of a world at rest. Each is the median of the
- * wakes that way that succeeded in the last `WAKE_TIMES_DAYS` days, from the ask to running: the
+ * ordinary wakes that way that succeeded in the last `WAKE_TIMES_DAYS` days, from the ask to running: the
  * server's own where it has woken that way often enough, else every server's. What a waiting player
  * is told to expect (the server list's line while it wakes, the server page's countdown), so
  * nothing is said without measurements: a way with too few gives no number.
@@ -18,7 +18,7 @@ import { type Queryable, schema } from '@blockly/db'
 import { sql } from 'drizzle-orm'
 import type { OperationKind, ServerStatus } from '../../domain/server/lifecycle.ts'
 import { inFull } from '../errors.ts'
-import { lastWakeSeconds, resumedWake, wakePathOf } from './persistence.ts'
+import { checkedMods, lastWakeSeconds, resumedWake, wakePathOf } from './persistence.ts'
 
 const operations = schema.serverOperations
 
@@ -69,6 +69,7 @@ export async function readWakeMedians(q: Queryable): Promise<WakeMedians> {
         from ${operations}
        where ${operations.kind} in ('start', 'unstore')
          and ${operations.status} = 'succeeded'
+         and not ${checkedMods}
          and ${operations.finishedAt} is not null
          and ${operations.createdAt} >= ${since.toISOString()}
     )

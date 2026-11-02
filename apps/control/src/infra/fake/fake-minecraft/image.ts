@@ -87,8 +87,10 @@ export async function installPack(volume: string, env: Env, say: (text: string) 
   const index = JSON.parse(strFromU8(entries['modrinth.index.json'] ?? strToU8('{}'))) as {
     name?: string
     versionId?: string
+    dependencies?: Record<string, string>
     files?: Array<{ path: string; downloads: string[]; env?: { server?: string } }>
   }
+  startupBanner(env, say, index.dependencies)
   say(`[mc-image-helper] INFO : Processing modpack files for ${index.name} ${index.versionId}`)
   const excluded = (env.MODRINTH_EXCLUDE_FILES ?? '')
     .split('\n')
@@ -244,3 +246,26 @@ export async function placeBedrock(volume: string, env: Env): Promise<void> {
 /** Where the image puts jars: plugins for plugin servers, mods for the rest. */
 export const jarDir = (env: Env) =>
   ['PAPER', 'BUKKIT', 'SPIGOT', 'PURPUR'].includes(env.TYPE ?? '') ? 'plugins' : 'mods'
+
+/** The public loader startup banners, also used for a pack whose index selects its own loader. */
+export function startupBanner(
+  env: Env,
+  say: (line: string) => void,
+  dependencies?: Record<string, string>,
+): void {
+  const game = dependencies?.minecraft ?? env.VERSION ?? 'unknown'
+  const selected = Object.entries(dependencies ?? {}).find(
+    ([id]) => id.endsWith('-loader') || id === 'forge' || id === 'neoforge',
+  )
+  const loader = selected?.[0].replace('-loader', '').toUpperCase() ?? env.TYPE
+  const version = selected?.[1] ?? env[`${loader}_LOADER_VERSION`] ?? env[`${loader}_VERSION`] ?? 'unknown'
+  say(`[Server thread/INFO]: Starting minecraft server version ${game}`)
+  if (loader === 'FABRIC' || loader === 'QUILT')
+    say(
+      `[main/INFO]: Loading Minecraft ${game} with ${loader === 'FABRIC' ? 'Fabric' : 'Quilt'} Loader ${version}`,
+    )
+  if (loader === 'FORGE' || loader === 'NEOFORGE')
+    say(
+      `[main/INFO]: ${loader === 'FORGE' ? 'Forge' : 'NeoForge'} mod loading, version ${version}, for MC ${game}`,
+    )
+}

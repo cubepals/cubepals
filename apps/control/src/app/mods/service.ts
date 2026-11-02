@@ -14,6 +14,7 @@ import type {
   VersionState,
 } from '../../domain/mods/catalog.ts'
 import type { JarNeeds } from '../../domain/mods/jar-holds.ts'
+import type { DependencyDecision } from '../../domain/mods/loader-dependencies.ts'
 import {
   type CatalogData,
   type ModConflict,
@@ -65,6 +66,7 @@ import {
   insertPendingUpload,
   loadPendingUpload,
 } from '../uploads/persistence.ts'
+import { recordCompilation } from './compilation-records.ts'
 import { DATAPACK_LIMITS, DatapackUploads } from './datapack-uploads.ts'
 import { digestsOf, quarantinedOf, refusalOf, requireInstallable } from './jar-check-records.ts'
 import type { JarChecks } from './jar-checks.ts'
@@ -107,6 +109,7 @@ export interface ModChange {
 export type ModPlan =
   | {
       kind: 'ok'
+      decisions?: DependencyDecision[]
       /** The revision the plan starts from; applying it from any other is refused. */
       basedOn: string
       /** The server type it runs on: a vanilla world's own while it adds only datapacks. */
@@ -159,7 +162,7 @@ export class ModService {
   readonly #formats: FileFormats
   readonly #catalogMoved: (transitions: readonly CatalogTransition[]) => Promise<void>
   readonly #builds: LoaderBuilds
-  readonly #jars: JarNeedsReader
+  readonly jars: JarNeedsReader
   readonly #datapacks: DatapackUploads
   readonly #checks: JarChecks
   /** Jars an owner brings inside another upload, kept as their uploads are (a world's mods folder). */
@@ -189,7 +192,7 @@ export class ModService {
     this.#formats = deps.formats
     this.#catalogMoved = deps.catalogMoved
     this.#builds = deps.loaderBuilds
-    this.#jars = new JarNeedsReader({ db: deps.db, formats: deps.formats })
+    this.jars = new JarNeedsReader({ db: deps.db, formats: deps.formats })
     this.#datapacks = new DatapackUploads(deps)
     this.#checks = deps.jarChecks
     this.ownJars = new OwnJars(deps)
@@ -558,7 +561,7 @@ export class ModService {
     const request: ResolveRequest = {
       catalog: this.#catalog.id,
       // The Java the server's image runs for the release: a jar built for a newer one never loads.
-      target: { gameVersion, loaders: catalogLoadersFor(loader), java: javaFor(gameVersion) },
+      target: { gameVersion, loader, loaders: catalogLoadersFor(loader), java: javaFor(gameVersion) },
       wanted: [...wanted.values()],
       current,
       upgrade: change.upgrade === 'all' ? 'all' : new Set(change.upgrade ?? []),
@@ -584,6 +587,7 @@ export class ModService {
     )
     return {
       kind: 'ok',
+      ...(result.decisions === undefined ? {} : { decisions: result.decisions }),
       basedOn: desired.id,
       loader,
       mods,
@@ -662,7 +666,10 @@ export class ModService {
     }
     for (let round = 0; round < MAX_ROUNDS; round++) {
       const result = resolve(request, data)
-      if (result.kind !== 'need') return { result, data }
+      if (result.kind !== 'need') {
+        await recordCompilation(this.#db, request, result, data)
+        return { result, data }
+      }
       await this.#reading(async () => {
         await Promise.all(
           result.projects.map(async (projectId) => {
@@ -685,10 +692,12 @@ export class ModService {
           v !== null && result.jars.includes(v.versionId) ? [[v.versionId, v] as const] : [],
         ),
       )
-      const needs = await this.#jars.of(this.#catalog.id, [...weighed.values()])
+      const needs = await this.jars.of(this.#catalog.id, [...weighed.values()])
       for (const versionId of result.jars) data.needs.set(versionId, needs.get(versionId) ?? null)
     }
-    return { result: resolve(request, data), data }
+    const result = resolve(request, data)
+    await recordCompilation(this.#db, request, result, data)
+    return { result, data }
   }
 
   /** The catalog being down stops authoring with nothing written (§15.3). */

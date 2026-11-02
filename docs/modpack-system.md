@@ -413,3 +413,46 @@ Nothing past the build changes: the runtime already installs the result.
   and `app/packs/changes.test.ts` (update, rollback running and stopped, guarded changes). These
   need the `S3_TEST_*` variables, as CI sets them (`.github/workflows/ci.yml`).
 - Real packs on the real image: run by hand against a deployment.
+
+## Shared compatibility checks
+
+The catalog is discovery evidence, rather than proof that a complete server will boot. Universal
+jars may publish dependencies for several loaders in one list. `JarNeedsReader` reads the exact
+artifact's loader declarations, caches them by version and SHA-512, and gives the shared resolver
+selected-loader evidence. A dependency is omitted as foreign only when both the parent declaration
+and the dependency's supported loaders establish that distinction. Missing metadata remains
+unknown. Explicit client declarations and optional client companions stay in players' games.
+Existing imported worlds use the same reader and classification when displayed and played.
+
+Every distinct completed resolution retains its target, requested projects, selected hashes,
+omitted dependency edges, conflicts and unknown metadata in `mod_compilations`. Imports, mod
+changes and other callers use the same ModService; there is no per-screen dependency solver.
+Native version constraints are retained as evidence. The actual loader remains responsible for
+checking its complete constraint language and runtime interactions.
+
+`ConfigurationPreflight` is the worker-side gate before creation/start, changes, moves, world
+switches and restores modify the player's runtime. Pack curation and world import previews use
+the same verifier. It first checks artifact availability and then boots a disposable fresh world
+through the normal runtime adapters, signed artifact route, loader, readiness probe and installed
+hash checks. Pack crash corrections use the ordinary shared pack-learning policy and are checked
+again under their changed identity. An existing running configuration stays available when a
+proposed change fails its check.
+
+`mod_validations` keys evidence by compiler policy, image/Java selection, game and loader build,
+artifact hashes and filenames, carried configuration, pack corrections, size and placement. A
+verified result is reused; changed inputs require another check. The check receives no player
+world or player route. Each attempt has its own durable `mod_validation_runs` identity, restricted
+artifact access and a bounded lease. Normal cleanup removes its resources; the orphan sweep can
+recognize expired attempts after a worker crashes, including late provider responses.
+
+A recognized loader rejection blocks that exact plan. A provider, download, installation or
+readiness failure remains unavailable and retryable; it is not a claim that the mods conflict.
+The world page keeps polling and cannot promise readiness until verification succeeds. Operation
+progress records `checking_mods` separately, shows elapsed time while its duration is unknown,
+and uses the actual recorded duration once it ends.
+
+This proves an exact configuration can start on a fresh world, not that every mod interaction or
+piece of an existing world is safe. The ordinary startup checks and world-preserving rollback
+still apply. The regression suite includes Zoomify's real universal-jar declarations, shared
+cache/invalidation and retry tests, and a real Fabric boot that accepts Fabric API and rejects a
+jar with a missing native dependency.

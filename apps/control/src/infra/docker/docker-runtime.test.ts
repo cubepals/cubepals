@@ -5,9 +5,23 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { createHash, randomUUID } from 'node:crypto'
 import { existsSync } from 'node:fs'
+import { MINUTE_MS } from '@blockly/contracts/durations'
+import { type ModValidationPlanJson, schema } from '@blockly/db'
 import Docker from 'dockerode'
+import { ArtifactLinks } from '../../app/artifacts/links.ts'
+import { validationKey } from '../../app/mods/validation-plan.ts'
+import { IncompatibleMods, verifyModRuntime } from '../../app/mods/validation-runtime.ts'
 import { type RuntimeSpec, runtimeKey } from '../../app/ports/runtime.ts'
+import { RuntimeRouter } from '../../app/runtimes/router.ts'
+import { singleKey } from '../../app/secrets.ts'
+import { defaultSettings } from '../../domain/revision/revision.ts'
+import { createRuntimeApp } from '../../interfaces/runtime/artifacts.ts'
+import fixture from '../../minecraft/fixtures/fabric-api-runtime.json' with { type: 'json' }
+import { startHarness } from '../../testing/harness.ts'
+import { utf8, zipBytes } from '../../testing/uploads.ts'
+import { SlpProbe } from '../mc-protocol/slp.ts'
 import { S3ArchiveStore } from '../s3/s3-archive-store.ts'
+import { DockerLogSource } from './docker-logs.ts'
 import { helperRunner } from './docker-runtime/helper.ts'
 import { DockerRuntime } from './docker-runtime.ts'
 import { decodeHandle, encodeHandle } from './handle.ts'
@@ -446,6 +460,11 @@ describe.skipIf(!existsSync(SOCKET) || !s3.endpoint || !s3.bucket)('Docker volum
 
 // A new server's install, copied from the one made for its release instead of downloaded again.
 describe.skipIf(!existsSync(SOCKET))('Docker installs', () => {
+  test(
+    'the real Fabric loader verifies a pinned mod and refuses a missing native dependency',
+    realModValidation,
+    12 * MINUTE_MS,
+  )
   const docker = new Docker({ socketPath: SOCKET })
   const deployment = `test-${randomUUID().slice(0, 8)}`
   const runtime = new DockerRuntime({ socketPath: SOCKET, deploymentId: deployment, gameNetwork: 'bridge' })
@@ -492,3 +511,105 @@ describe.skipIf(!existsSync(SOCKET))('Docker installs', () => {
     expect((await step('reading the jar', inVolume(volume, 'cat /data/server.jar'))).trim()).toBe('jar')
   }, 60_000)
 })
+
+/** Real loader answers exercise the same verifier used by every production configuration path. */
+async function realModValidation() {
+  const secrets = singleKey(randomUUID())
+  const h = await startHarness({ runtimeSecrets: secrets })
+  const deployment = `mods-${randomUUID().slice(0, 8)}`
+  const runtime = new RuntimeRouter([
+    new DockerRuntime({ socketPath: SOCKET, deploymentId: deployment, gameNetwork: 'bridge' }),
+  ])
+  const broken = zipBytes({
+    'fabric.mod.json': utf8(
+      JSON.stringify({
+        schemaVersion: 1,
+        id: 'blockly_required_dependency_check',
+        version: '1.0.0',
+        depends: { blockly_missing_required_dependency: '*' },
+      }),
+    ),
+  })
+  const app = createRuntimeApp(h.app)
+  const endpoint = Bun.serve({
+    hostname: '0.0.0.0',
+    port: 0,
+    fetch: (request) =>
+      new URL(request.url).pathname === '/broken.jar' ? new Response(broken) : app.fetch(request),
+  })
+  const base = `http://host.docker.internal:${endpoint.port}`
+  const links = new ArtifactLinks(base, secrets)
+  const mod = {
+    source: { catalog: 'modrinth', projectId: fixture.projectId, versionId: fixture.versionId },
+    name: fixture.name,
+    versionLabel: fixture.versionLabel,
+    artifact: { ref: { kind: 'remote' as const, url: fixture.file.url }, ...fixture.file },
+    environment: 'server' as const,
+    loaders: ['fabric'],
+    gameVersions: [fixture.gameVersion],
+    origin: 'user' as const,
+    requiredBy: [],
+  }
+  const plan: ModValidationPlanJson = {
+    gameVersion: fixture.gameVersion,
+    loader: 'fabric',
+    loaderVersion: fixture.loaderVersion,
+    settings: {
+      ...defaultSettings({ name: 'Compatibility check', gameMode: 'survival', maxPlayers: 1 }),
+      viewDistance: 2,
+      simulationDistance: 2,
+    },
+    mods: [mod],
+    compat: [],
+    files: [],
+    modpack: null,
+    memoryTier: '3g',
+    storageGb: 5,
+    provider: 'docker',
+    regionKey: 'local',
+  }
+  const bad = {
+    ...mod,
+    name: 'Missing native dependency',
+    source: { catalog: 'upload' as const, uploadId: randomUUID() },
+    artifact: {
+      ref: { kind: 'remote' as const, url: `${base}/broken.jar` },
+      fileName: 'broken.jar',
+      sha512: createHash('sha512').update(broken).digest('hex'),
+      sizeBytes: broken.length,
+    },
+  }
+  const ports = {
+    db: h.db,
+    runtime,
+    links,
+    logs: new DockerLogSource(SOCKET),
+    probe: new SlpProbe(),
+    timeouts: { runningMs: MINUTE_MS, readyMs: 4 * MINUTE_MS },
+  }
+  try {
+    for (const candidate of [plan, { ...plan, mods: [...plan.mods, bad] }]) {
+      const id = randomUUID()
+      const key = validationKey(candidate)
+      await h.db
+        .insert(schema.modValidations)
+        .values({ key, plan: candidate, runtimeId: id, leaseUntil: new Date(Date.now() + 6 * MINUTE_MS) })
+      await h.db
+        .insert(schema.modValidationRuns)
+        .values({ id, key, leaseUntil: new Date(Date.now() + 6 * MINUTE_MS) })
+      try {
+        const check = verifyModRuntime(ports, candidate, id, async () => {})
+        if (candidate === plan) {
+          const evidence = await check
+          expect(evidence.installed).toContain(mod.artifact.sha512)
+          expect(evidence.log.some((line) => line.includes('Fabric Loader'))).toBe(true)
+        } else await expect(check).rejects.toBeInstanceOf(IncompatibleMods)
+      } finally {
+        await runtime.destroy('docker', runtimeKey(id))
+      }
+    }
+  } finally {
+    endpoint.stop(true)
+    await h.close()
+  }
+}

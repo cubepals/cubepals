@@ -11,7 +11,6 @@ import {
   installCheck,
   installProblems,
   type PackCheck,
-  packCheck,
   packCleanup,
   packProblems,
   parseInstalled,
@@ -34,6 +33,8 @@ import { type AccessReconciler, AccessReseedFailed } from '../access/reconciler.
 import type { ArtifactService } from '../artifacts/service.ts'
 import { DiagnosedFailure, inFull, PermanentFailure, PlainFailure } from '../errors.ts'
 import type { PackContents } from '../packs/contents.ts'
+import { packInstallCheck } from '../packs/startup-evidence.ts'
+import { learnPack } from '../packs/startup-learning.ts'
 import {
   AnswerUnreadable,
   type GameEndpoint,
@@ -405,16 +406,7 @@ export class BootSequence {
         )
           throw error
         if (learned >= LEARNED_PER_START) throw error
-        const { playersOnly, missing } = error.found
-        const changed =
-          playersOnly !== undefined
-            ? (await this.#packs.leaveOutAfterCrash(pack.artifact.sha512, playersOnly)).length > 0
-            : missing !== undefined &&
-              (await this.#packs.keepAfterCrash(
-                pack.artifact.sha512,
-                missing,
-                pack.artifact.ref.kind === 'remote' ? pack.artifact.ref.url : null,
-              )) !== null
+        const changed = await learnPack(this.#packs, pack, error.found)
         if (!changed) throw error
         learned++
         // A start again on what the pack learned is a fresh start: a hang after it is the second.
@@ -485,8 +477,7 @@ export class BootSequence {
     if (pack === null || this.#packs === null) return null
     const contents = await this.#packs.load(pack.artifact.sha512).catch(() => null)
     if (contents === null) return null
-    const leftOut = new Set(pack.leaveOut ?? [])
-    return packCheck(contents.jars.filter((jar) => !leftOut.has(jar.path)))
+    return packInstallCheck(contents, pack)
   }
 
   /** The pack's jars the image installed wrong: missing, or holding other bytes. */
