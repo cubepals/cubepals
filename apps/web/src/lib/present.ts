@@ -2,12 +2,6 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import { etaLine as operationEtaLine } from './operation-eta'
-
-export function etaLine(startedAt: string | null, expectedSeconds: number, now: number): string {
-  return operationEtaLine(startedAt, expectedSeconds, now)
-}
-
 import {
   type ChangeKind,
   type JoinRange,
@@ -27,6 +21,7 @@ import { DAY_MS, DAY_S, HOUR_S, MINUTE_S } from '@blockly/contracts/durations'
 import { PICK_ANOTHER_NAME } from '@blockly/contracts/names'
 import type { PillStatus, ProvisioningStep } from '../ui'
 import { broughtJourney } from './brought-journey'
+import { etaLine as operationEtaLine } from './operation-eta'
 import { outOfPlay } from './out-of-play'
 import { restoreSeconds } from './restore-pace'
 
@@ -481,6 +476,11 @@ export function wakeLine(server: ServerView, now: number): string {
 /** What a wake is: a server asleep coming back, or a world that rested coming back from storage. */
 export const isWake = (operation: OperationView | null): operation is OperationView =>
   operation?.kind === 'start' || operation?.kind === 'unstore'
+
+/** An honest countdown: it says so when the wait runs long instead of freezing at zero. */
+export function etaLine(startedAt: string | null, expectedSeconds: number, now: number): string {
+  return operationEtaLine(startedAt, expectedSeconds, now)
+}
 
 export { coverFor, iconSrc, playIconSrc } from './pictures'
 
