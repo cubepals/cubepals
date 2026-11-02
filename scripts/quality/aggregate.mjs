@@ -9,6 +9,7 @@ export function verifyJobs(needs) {
   const required = [
     'changes',
     'licenses',
+    'baseline',
     'static',
     'test',
     'quality',
@@ -28,6 +29,7 @@ export function verifyJobs(needs) {
     throw new Error('Missing change classification')
   const classifications = { reporter, fleet }
   for (const name of [
+    'baseline',
     'static',
     'test',
     'quality',

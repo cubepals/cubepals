@@ -18,6 +18,9 @@ on:
       full_quality:
         type: boolean
         default: false
+      baseline_hit:
+        type: boolean
+        default: false
       comparison_base:
         type: string
         default: ''
@@ -143,22 +146,37 @@ jobs:
           QUALITY_BASE_REF: ${{ github.event_name == 'workflow_dispatch' && inputs.comparison_base || github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before || 'HEAD^' }}
           QUALITY_PR_HEAD: ${{ github.event.pull_request.head.sha || '' }}
         run: node scripts/quality/prepare.mjs coverage/quality
+      - name: Obtain the immutable validated baseline
+        if: inputs.kind == 'native' && inputs.baseline_hit
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: validated-baseline
+          path: coverage/quality/cached-base
       - name: Install the base checkout's pinned dependencies
         if: inputs.kind == 'native'
         env:
           BASE: ${{ steps.quality.outputs.base }}
+          BASELINE_HIT: ${{ inputs.baseline_hit }}
         run: |
           git worktree add --detach "$RUNNER_TEMP/quality-base" "$BASE"
-          (cd "$RUNNER_TEMP/quality-base" && bun install --frozen-lockfile && bun run quality:install && bun run openapi:install && bun run labels:install)
+          if [ "$BASELINE_HIT" = true ]; then
+            node scripts/quality/baseline-cache.mjs check "$GITHUB_WORKSPACE" "$RUNNER_TEMP/quality-base" coverage/quality/cached-base
+          else
+            (cd "$RUNNER_TEMP/quality-base" && bun install --frozen-lockfile && bun run quality:install && bun run openapi:install && bun run labels:install)
+          fi
           node scripts/quality/partition-plan.mjs "$GITHUB_WORKSPACE" "$BASE" coverage/quality/test-plan.json
       - name: Measure this partition on the unchanged base
-        if: inputs.kind == 'native'
+        if: inputs.kind == 'native' && !inputs.baseline_hit
         run: |
-          node scripts/quality/run-shard.mjs "$RUNNER_TEMP/quality-base" "$GROUP" "$GITHUB_WORKSPACE/coverage/quality/base" - coverage/quality/test-plan.json "$PARTITION"
+          node scripts/quality/run-shard.mjs "$RUNNER_TEMP/quality-base" "$GROUP" "$GITHUB_WORKSPACE/coverage/quality/base" - coverage/quality/test-plan.json "$PARTITION" "$GITHUB_WORKSPACE"
       - name: Test this partition with branch coverage
         if: inputs.kind == 'native'
+        env:
+          BASELINE_HIT: ${{ inputs.baseline_hit }}
         run: |
-          node scripts/quality/run-shard.mjs "$GITHUB_WORKSPACE" "$GROUP" "$GITHUB_WORKSPACE/coverage/quality/head" "$GITHUB_WORKSPACE/coverage/quality/base/manifests/$GROUP-$PARTITION.json" coverage/quality/test-plan.json "$PARTITION"
+          manifest="$GITHUB_WORKSPACE/coverage/quality/base/manifests/$GROUP-$PARTITION.json"
+          if [ "$BASELINE_HIT" = true ]; then manifest="$GITHUB_WORKSPACE/coverage/quality/cached-base/data/manifests/$GROUP.json"; fi
+          node scripts/quality/run-shard.mjs "$GITHUB_WORKSPACE" "$GROUP" "$GITHUB_WORKSPACE/coverage/quality/head" "$manifest" coverage/quality/test-plan.json "$PARTITION" "$GITHUB_WORKSPACE"
       - name: Keep the test results for the PR report
         if: ${{ !cancelled() && inputs.kind == 'native' }}
         continue-on-error: true

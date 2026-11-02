@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url'
 import { rotationSubjects } from './mutation-scope.mjs'
 import { groupOf, groups } from './shards.mjs'
 
-export const nativePartitions = { lifecycle: 3, providers: 2, worlds: 3, mods: 1, access: 3, web: 1, rest: 3 }
+export const nativePartitions = { lifecycle: 3, providers: 2, worlds: 3, mods: 1, access: 3, web: 1, rest: 4 }
 export const mutationPartitions = 4
 export const isNativeTest = (path) =>
   /\.(?:test|spec)\.[cm]?[jt]sx?$/.test(path) && !path.startsWith('scripts/quality/')

@@ -365,13 +365,78 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  # Resolve cache provenance before any application tests execute. Every runner shares one
+  # immutable hit/miss decision; cache transport or validation failures fall back to fresh tests.
+  baseline:
+    name: Resolve a trusted baseline
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      hit: ${{ steps.selected.outputs.hit }}
+      key: ${{ steps.cache.outputs.key }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.3
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22.23.4
+      - run: bun run quality:install
+      - name: Identify the exact baseline
+        id: comparison
+        env:
+          QUALITY_BASE_REF: ${{ github.event_name == 'workflow_dispatch' && inputs.comparison_base || github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before || 'HEAD^' }}
+          QUALITY_PR_HEAD: ${{ github.event.pull_request.head.sha || '' }}
+        run: node scripts/quality/prepare.mjs coverage/quality
+      - name: Restore only a matching successful main-run artifact
+        id: cache
+        env:
+          BASE: ${{ steps.comparison.outputs.base }}
+          GH_TOKEN: ${{ github.token }}
+          FULL_QUALITY: ${{ github.event_name == 'schedule' || inputs.full_quality == true }}
+        run: |
+          git worktree add --detach "$RUNNER_TEMP/quality-base" "$BASE"
+          node scripts/quality/baseline-cache.mjs restore "$GITHUB_WORKSPACE" "$RUNNER_TEMP/quality-base" coverage/quality/comparison.json coverage/quality/cached-base "$FULL_QUALITY"
+      - name: Freeze the validated baseline for this run
+        id: frozen
+        continue-on-error: true
+        if: steps.cache.outputs.hit == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: validated-baseline
+          path: coverage/quality/cached-base/
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Choose the shared baseline mode
+        id: selected
+        env:
+          RESTORED: ${{ steps.cache.outputs.hit }}
+          UPLOADED: ${{ steps.frozen.outcome }}
+        run: |
+          if [ "$RESTORED" = true ] && [ "$UPLOADED" = success ]; then
+            echo 'hit=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'hit=false' >> "$GITHUB_OUTPUT"
+            echo 'Baseline measurements will run fresh.'
+          fi
+
   # Each native partition has its own services and complete base/head evidence.
   test:
     name: Tests, ${{ matrix.quality }} / ${{ matrix.partition }}
-    needs: changes
+    needs: [changes, baseline]
     if: needs.changes.outputs.code == 'true'
     strategy:
       fail-fast: false
+      max-parallel: ${{ (github.event_name == 'schedule' || inputs.full_quality == true) && 2 || 17 }}
       matrix:
         include:
           - quality: lifecycle
@@ -406,11 +471,14 @@ jobs:
             partition: 1
           - quality: rest
             partition: 2
+          - quality: rest
+            partition: 3
     uses: ./.github/workflows/quality-runner.yml
     with:
       kind: native
       group: ${{ matrix.quality }}
       partition: ${{ matrix.partition }}
+      baseline_hit: ${{ needs.baseline.outputs.hit == 'true' }}
       comparison_base: ${{ inputs.comparison_base || '' }}
 
   mutation:
@@ -419,6 +487,7 @@ jobs:
     if: needs.changes.outputs.code == 'true'
     strategy:
       fail-fast: false
+      max-parallel: ${{ (github.event_name == 'schedule' || inputs.full_quality == true) && 2 || 4 }}
       matrix:
         partition: [0, 1, 2, 3]
     uses: ./.github/workflows/quality-runner.yml
@@ -431,7 +500,7 @@ jobs:
   # Percentages are computed from the union of all seven shards, never from an aggregate average.
   quality:
     name: Per-file test quality
-    needs: [changes, test]
+    needs: [changes, test, baseline]
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
@@ -458,12 +527,21 @@ jobs:
           QUALITY_BASE_REF: ${{ github.event_name == 'workflow_dispatch' && inputs.comparison_base || github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before || 'HEAD^' }}
           QUALITY_PR_HEAD: ${{ github.event.pull_request.head.sha || '' }}
         run: node scripts/quality/prepare.mjs coverage/quality/verified-comparison
+      - name: Obtain the immutable validated baseline
+        if: needs.baseline.outputs.hit == 'true'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: validated-baseline
+          path: coverage/quality/cached-base
       - name: Reassemble the exact native test inventory
         env:
           BASE: ${{ steps.comparison.outputs.base }}
+          BASELINE_HIT: ${{ needs.baseline.outputs.hit }}
         run: |
           git worktree add --detach "$RUNNER_TEMP/quality-base" "$BASE"
-          node scripts/quality/coverage-partitions.mjs "$GITHUB_WORKSPACE" "$RUNNER_TEMP/quality-base" coverage/quality "$BASE"
+          args=()
+          if [ "$BASELINE_HIT" = true ]; then args+=(coverage/quality/cached-base); fi
+          node scripts/quality/coverage-partitions.mjs "$GITHUB_WORKSPACE" "$RUNNER_TEMP/quality-base" coverage/quality "$BASE" "${args[@]}"
       - name: Enforce every source file and all seven evidence shards
         run: |
           node scripts/quality/coverage.mjs merge --output coverage/quality/base.json --expected-shards 7 coverage/quality/merged/base/*.json
@@ -537,6 +615,65 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  # Only complete main CI runs can become cache producers. Consumers independently require
+  # the server's successful conclusion, main branch, repository and exact workflow identity.
+  baseline_publish:
+    name: Publish successful main baseline measurements
+    needs: [changes, check]
+    if: github.ref == 'refs/heads/main' && needs.changes.outputs.code == 'true' && inputs.full_quality != true && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.3
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22.23.4
+      - run: bun run quality:install
+      - name: Obtain verified measurements for optional publication
+        id: measurements
+        continue-on-error: true
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: native-quality
+          path: coverage/quality/native
+      - name: Identify the measured comparison
+        if: steps.measurements.outcome == 'success'
+        id: comparison
+        env:
+          QUALITY_BASE_REF: ${{ github.event_name == 'workflow_dispatch' && inputs.comparison_base || github.event.before || 'HEAD^' }}
+        run: node scripts/quality/prepare.mjs coverage/quality
+      - name: Validate both measured datasets before publication
+        if: steps.measurements.outcome == 'success'
+        id: cache
+        env:
+          BASE: ${{ steps.comparison.outputs.base }}
+        run: |
+          git worktree add --detach "$RUNNER_TEMP/quality-base" "$BASE"
+          node scripts/quality/baseline-cache.mjs publish "$GITHUB_WORKSPACE" "$RUNNER_TEMP/quality-base" coverage/quality/comparison.json coverage/quality/native coverage/quality/cache-publish
+      - name: Publish the measured base
+        continue-on-error: true
+        if: steps.cache.outputs.base_key != ''
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ steps.cache.outputs.base_key }}
+          path: coverage/quality/cache-publish/base/
+          if-no-files-found: error
+          retention-days: 2
+      - name: Publish the measured head for subsequent PRs
+        continue-on-error: true
+        if: steps.cache.outputs.head_key != ''
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ steps.cache.outputs.head_key }}
+          path: coverage/quality/cache-publish/head/
+          if-no-files-found: error
+          retention-days: 2
+
   # Every file says whose it is and under what license, in its own SPDX lines or in REUSE.toml.
   # It runs on every change, prose included: a new picture or document needs its line too.
   licenses:
@@ -550,7 +687,7 @@ jobs:
 
   # The required aggregate rejects missing work and unexpected skips, including failed dependencies.
   check:
-    needs: [changes, licenses, static, test, quality, mutation, mutation_quality, worker, images, reporter, fleet]
+    needs: [changes, licenses, baseline, static, test, quality, mutation, mutation_quality, worker, images, reporter, fleet]
     if: always()
     runs-on: ubuntu-latest
     steps:
