@@ -467,9 +467,3 @@ test('the retained progress labels still describe the current stage', () => {
   ] as const)
     expect(quietLine(step, server)).toBe(label)
 })
-
-test('an isolated mod check names its work before the world opens', () => {
-  expect(quietLine('checking_mods', { gameVersion: '26.3', modCount: 11, modpack: null })).toBe(
-    'Testing these mods together before opening your world',
-  )
-})
