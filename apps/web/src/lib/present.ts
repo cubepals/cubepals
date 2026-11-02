@@ -2,7 +2,6 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import { checkEstimate, checkingModsProgress, journeyEstimate } from './mod-check-progress'
 import { etaLine } from './operation-eta'
 
 export { etaLine } from './operation-eta'
@@ -139,6 +138,8 @@ function failureLine(during: string | undefined, remedy: string | null | undefin
 type Named = Pick<ServerView, 'gameVersion' | 'modCount'> & { modpack: { name: string } | null }
 
 /** Whether a first start downloads mods as well as Minecraft: a pack's, or the server's own. */
+import { checkEstimate, checkingModsProgress, journeyEstimate } from './mod-check-progress'
+
 const modded = (server: Named) => server.modpack !== null || server.modCount > 0
 
 interface Journey {
