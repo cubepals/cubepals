@@ -99,3 +99,18 @@ test('single zero blocks are not an end marker and truncated framing falls back'
     await writeFile(path, Buffer.concat([oversized, Buffer.alloc(1024)]))
     expect(await indexTar(path, 10)).toBeNull()
   }))
+
+test.each(['OldFile', 'ContiguousFile'] as const)(
+  'ordinary %s tar entries retain indexed body bytes',
+  (type) =>
+    archive(async (_dir, path) => {
+      const header = Buffer.alloc(512)
+      new Header({ path: 'world/level.dat', type, size: 5 }).encode(header)
+      await writeFile(path, Buffer.concat([header, Buffer.from('level'), Buffer.alloc(507 + 1024)]))
+      const entries = await indexTar(path, 1)
+      expect(entries?.length).toBe(1)
+      const entry = entries?.[0]
+      if (entry === undefined) throw new Error('An ordinary tar file must be indexed')
+      expect(await new Response(indexedBody(path, entry)).text()).toBe('level')
+    }),
+)

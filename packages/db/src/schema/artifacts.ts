@@ -176,7 +176,7 @@ export const worldImports = pgTable(
     /** What its owner named it, for a world the server has never had. */
     name: text('name'),
     status: worldImportStatus('status').notNull().default('reading'),
-    progress: jsonb('progress').$type<WorldImportProgress>(),
+    progress: jsonb().$type<WorldImportProgress>(),
     question: jsonb('question').$type<WorldImportQuestionJson>(),
     answer: jsonb('answer').$type<WorldImportAnswerJson>(),
     /** Set once ready: the backup the world became. */
