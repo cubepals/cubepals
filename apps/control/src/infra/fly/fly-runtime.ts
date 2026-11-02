@@ -74,6 +74,7 @@ import {
   exec,
   machineOnVolume,
   minecraftMachine,
+  provisionMachine,
   readMachine,
   sleepMachine,
   startMachine,
@@ -288,31 +289,16 @@ export class FlyRuntime implements MinecraftRuntime {
       this.snapshotLifetimeDays,
       { mounted: existing?.config?.mounts?.[0]?.volume, ...volumesOf(storage) },
     )
-    const volumeId = idOf(volume, 'a volume')
-
-    await progress.step('compute')
-    let machine = await minecraftMachine(this.#fly, app, existing?.id ?? null)
-    const config = this.#config(key, spec, volumeId, machine)
-    if (machine === null)
-      machine = await createMachine(
-        this.#fly,
-        app,
-        volume.region ?? region,
-        config,
-        secretsVersion,
-        'minecraft',
-      )
-    else if (machine.config?.metadata?.[META.digest] !== config.metadata?.[META.digest])
-      machine = await updateMachine(
-        this.#fly,
-        this.#deployment,
-        app,
-        idOf(machine, 'a machine'),
-        config,
-        secretsVersion,
-        true,
-      )
-    return { machine, volumeId }
+    return provisionMachine(this.#fly, {
+      deployment: this.#deployment,
+      app,
+      region,
+      volume,
+      existing,
+      secretsVersion,
+      progress,
+      configFor: (volumeId, machine) => this.#config(key, spec, volumeId, machine),
+    })
   }
 
   /**
