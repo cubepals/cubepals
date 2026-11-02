@@ -11,7 +11,7 @@ import { fetchRequestHandler } from '@trpc/server/adapters/fetch'
 import { act, createElement, Fragment } from 'react'
 import { Client } from 'transport-io'
 import { History } from '../../../../web/src/app/(app)/servers/[id]/settings/history'
-import { ChangeState } from '../../../../web/src/app/(app)/servers/[id]/settings/shared'
+import { ChangeState, changeable } from '../../../../web/src/app/(app)/servers/[id]/settings/shared'
 import { ApiProvider } from '../../../../web/src/lib/api'
 import { loadRevision, setDesired } from '../../app/servers/persistence.ts'
 import { entitlementsFor } from '../../domain/account/entitlements.ts'
@@ -359,6 +359,7 @@ describe.skipIf(!hasDatabase)('revision history in the browser', () => {
       const page = await openHistory()
       try {
         const before = await page.current()
+        expect(changeable(page.view)).toEqual({ ok: true })
         await chooseTarget(page, (r) => r.fromCurrent.length === 0)
         expect(page.host.textContent).toContain('It’s the same configuration the server has now.')
         await act(async () => button('Go back').click())
@@ -392,6 +393,7 @@ describe.skipIf(!hasDatabase)('revision history in the browser', () => {
       const page = await openHistory({ count: 1, mode: 'running' })
       try {
         await until(() => page.host.textContent.includes('Running now'))
+        expect(changeable(page.view)).toEqual({ ok: true })
         expect(backs().every((b) => !b.disabled)).toBe(true)
       } finally {
         await page.close()
@@ -409,6 +411,7 @@ describe.skipIf(!hasDatabase)('revision history in the browser', () => {
         expect(backs().length).toBeGreaterThan(0)
         expect(backs().every((b) => b.disabled)).toBe(true)
         expect(page.view.activeOperation?.kind).toBe('apply')
+        expect(changeable(page.view)).toEqual({ ok: false })
       } finally {
         await page.close()
       }
@@ -423,6 +426,7 @@ describe.skipIf(!hasDatabase)('revision history in the browser', () => {
       try {
         await chooseTarget(page)
         expect(page.host.textContent).toContain('The server starts again with this configuration.')
+        expect(changeable(page.view)).toEqual({ ok: true })
         await act(async () => button('Cancel').click())
         expect(opened()).toBe(false)
         expect(page.calls).toHaveLength(0)

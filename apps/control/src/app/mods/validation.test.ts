@@ -10,6 +10,7 @@ import { schema } from '@blockly/db'
 import { eq } from 'drizzle-orm'
 import { Cdn } from '../../testing/cdn.ts'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
+import { utf8, zipBytes } from '../../testing/uploads.ts'
 import { ArtifactLinks } from '../artifacts/links.ts'
 import { ArtifactNotFound } from '../artifacts/service.ts'
 import { validationArtifact } from '../artifacts/validation-artifacts.ts'
@@ -31,6 +32,11 @@ describe.skipIf(!hasDatabase)('shared mod configuration evidence', () => {
     await h.close()
     cdn.close()
   })
+  test(
+    'check downloads include exact companion and pack bytes and expire together',
+    () => scopedDownloads(h, cdn),
+    30_000,
+  )
   test(
     'queued, failed and duplicate jobs retain correct evidence and cleanup ownership',
     () => queuedLifecycle(h, cdn),
@@ -412,4 +418,71 @@ async function evidenceRecord(h: Harness, key: string) {
   const [record] = await h.db.select().from(schema.modValidations).where(eq(schema.modValidations.key, key))
   if (record === undefined) throw new Error('Missing configuration evidence')
   return record
+}
+
+async function scopedDownloads(h: Harness, cdn: Cdn) {
+  const owner = await h.user('Scoped downloads', 'plus')
+  const { id } = await h.create(owner, { loader: 'fabric' })
+  await h.until(id, 'running')
+  await h.settled(id)
+  const revision = await loadRevision(h.db, (await h.server(id)).desiredRevisionId)
+  const mod = cdn.publish('scope-main'),
+    companion = cdn.publish('scope-companion')
+  const base = await h.app.configuration.plan({ ...revision, mods: [mod] })
+  if (base === null) throw new Error('Missing validation plan')
+  const pack = cdn.publish(
+    'scope-pack',
+    Buffer.from(
+      zipBytes({
+        'modrinth.index.json': utf8(
+          JSON.stringify({
+            formatVersion: 1,
+            game: 'minecraft',
+            versionId: '1',
+            name: 'Scope',
+            files: [],
+            dependencies: { minecraft: revision.gameVersion, 'fabric-loader': revision.loaderVersion },
+          }),
+        ),
+      }),
+    ),
+  )
+  const plan = {
+    ...base,
+    compat: [companion],
+    modpack: {
+      catalog: 'modrinth',
+      projectId: 'scope-pack',
+      versionId: '1',
+      name: 'Scope',
+      versionLabel: '1',
+      artifact: pack.artifact,
+      page: null,
+    },
+  }
+  const key = validationKey(plan),
+    runtimeId = randomUUID(),
+    leaseUntil = new Date(Date.now() + MINUTE_MS)
+  await h.db.insert(schema.modValidations).values({ key, plan, runtimeId, leaseUntil })
+  await h.db.insert(schema.modValidationRuns).values({ id: runtimeId, key, leaseUntil })
+  for (const entry of [mod, companion])
+    expect(await validationArtifact(h.db, runtimeId, entry.artifact.sha512)).toMatchObject({
+      mod: entry,
+      artifact: entry.artifact,
+      refreshedAt: null,
+    })
+  expect(await validationArtifact(h.db, runtimeId, pack.artifact.sha512)).toMatchObject({
+    mod: null,
+    artifact: pack.artifact,
+    pinnedAt: expect.any(Date),
+    refreshedAt: null,
+  })
+  expect(await validationArtifact(h.db, runtimeId, '0'.repeat(128))).toBeNull()
+  expect(await validationArtifact(h.db, randomUUID(), mod.artifact.sha512)).toBeUndefined()
+  await h.db
+    .update(schema.modValidationRuns)
+    .set({ leaseUntil: new Date(Date.now() - MINUTE_MS) })
+    .where(eq(schema.modValidationRuns.id, runtimeId))
+  for (const entry of [mod, companion, pack])
+    expect(await validationArtifact(h.db, runtimeId, entry.artifact.sha512)).toBeNull()
 }
