@@ -172,3 +172,30 @@ test(
   },
   10 * SECOND_MS,
 )
+
+test('finishing the minimum busy display after unmount never asks React to schedule another update', async () => {
+  await mount(async () => undefined)
+  await click()
+  expect(host.textContent).toContain('Starting')
+  expect(timers.size).toBeGreaterThan(0)
+  await act(async () => {
+    root.unmount()
+    root = undefined
+  })
+  let lateBrowserReads = 0
+  const descriptor = Object.getOwnPropertyDescriptor(globalThis, 'window')
+  Object.defineProperty(globalThis, 'window', {
+    configurable: true,
+    get: () => {
+      lateBrowserReads++
+      return browser
+    },
+  })
+  try {
+    await Bun.sleep(SECOND_MS)
+    expect(lateBrowserReads).toBe(0)
+    expect(timers.size).toBe(0)
+  } finally {
+    Object.defineProperty(globalThis, 'window', descriptor)
+  }
+})

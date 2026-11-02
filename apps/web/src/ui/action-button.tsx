@@ -83,6 +83,9 @@ export function ActionButton({
       clearTimeout(reset.current)
     }
   }, [])
+  const settleIdle = () => {
+    if (mounted.current) setState('idle')
+  }
   const phase = phases[now]
   if (phase === undefined) throw new Error(`no phase called ${now}`)
   const ended = phases[pressed] ?? phase
@@ -103,11 +106,11 @@ export function ActionButton({
       // A wake the control plane answers in eighty milliseconds is still a wake the person asked
       // for: the working words are held long enough to read before the server's own take over.
       await wait(HELD_MS - (Date.now() - pressedAt))
-      if (mounted.current) setState('idle')
+      settleIdle()
     } catch {
       if (!mounted.current) return
       setState('failed')
-      reset.current = setTimeout(() => setState('idle'), FAILED_MS)
+      reset.current = setTimeout(settleIdle, FAILED_MS)
     } finally {
       inFlight.current = false
     }
