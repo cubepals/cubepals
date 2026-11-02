@@ -1,0 +1,4 @@
+{
+  "error": "failed_precondition: insufficient resources to create new machine with existing volume 'vol_vly7wl5lxlp3d7p4'",
+  "status": "volume_placement_capacity"
+}
