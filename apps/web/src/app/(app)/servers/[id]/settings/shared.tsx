@@ -212,6 +212,7 @@ function useLanded(view: ServerView): string | null {
   const [landed, setLanded] = useState<string | null>(null)
   const operation = view.activeOperation
   const brought = view.activeOperation?.broughtWorld ?? null
+  const outcome = watched.current === null ? null : outcomeOf(watched.current, view)
   useEffect(() => () => clearTimeout(timer.current), [])
   useEffect(() => {
     if (operation !== null && operation.kind in LANDED) {
@@ -227,11 +228,11 @@ function useLanded(view: ServerView): string | null {
     const was = watched.current
     if (was === null || operation?.id === was.operationId) return
     watched.current = null
-    if (outcomeOf(was, view) !== 'done') return
+    if (outcome !== 'done') return
     clearTimeout(timer.current)
     setLanded(was.brought === null ? (LANDED[was.kind] ?? null) : broughtLanded(was.brought))
     timer.current = setTimeout(() => setLanded(null), LANDED_MS)
-  }, [operation, brought, view])
+  }, [operation, brought, view, outcome])
   return landed
 }
 

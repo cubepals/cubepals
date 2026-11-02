@@ -159,11 +159,16 @@ async function waitReady(
     for (const line of lines) if (isProof(line)) proof.add(line)
     if (lines.some(saysReady)) {
       const endpoint = await ports.runtime.endpoint(handle, PORT_NAMES.game, 'control')
-      await ports.probe.ping(
-        { ...endpoint, proxyProtocol: usesProxyProtocol(validationRevision(plan, '')) },
-        signal,
-      )
-      return [...proof]
+      const answered = await ports.probe
+        .ping(
+          { ...endpoint, proxyProtocol: usesProxyProtocol(validationRevision(plan, '')) },
+          AbortSignal.any([signal, AbortSignal.timeout(5 * SECOND_MS)]),
+        )
+        .then(
+          () => true,
+          () => false,
+        )
+      if (answered) return [...proof]
     }
     assertCompatible(lines)
     const observed = await ports.runtime.observe(handle)
