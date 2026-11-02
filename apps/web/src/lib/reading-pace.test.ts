@@ -64,4 +64,8 @@ describe('measured progress reading a world', () => {
     expect(view.detail).not.toContain('left')
     expect(readingElapsed(-1)).toBe('0s')
   })
+  test('a zero-sized step has no percentage and absent stage history uses the start time', () => {
+    expect(readingProgress(progress({ totalBytes: 0 }), SECOND_MS).percent).toBeNull()
+    expect(readingProgress(progress({ steps: [] }), 10 * SECOND_MS).detail).toContain('About 10 seconds left')
+  })
 })

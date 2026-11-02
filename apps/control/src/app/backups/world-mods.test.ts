@@ -21,13 +21,16 @@ import { DAY_MS } from '@blockly/contracts/durations'
 import { schema } from '@blockly/db'
 import { eq } from 'drizzle-orm'
 import type { CatalogVersion } from '../../domain/mods/catalog.ts'
+import { LibraryFileFormats } from '../../infra/formats/file-formats.ts'
 import { Cdn } from '../../testing/cdn.ts'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
 import { MemoryStore } from '../../testing/memory-store.ts'
-import { fabricJar } from '../../testing/uploads.ts'
-import { bringWorld, broughtBackup, untilRead } from '../../testing/world-imports.ts'
+import { fabricJar, utf8, zipBytes } from '../../testing/uploads.ts'
+import { bringWorld, broughtBackup, save, untilRead } from '../../testing/world-imports.ts'
 import type { UserActor } from '../actor.ts'
 import { loadRevision } from '../servers/persistence.ts'
+import { withWorldMods } from './restored-mods.ts'
+import { WorldMods } from './world-mods.ts'
 
 const run = promisify(execFile)
 const MINECRAFT = join(import.meta.dir, '../../minecraft')
@@ -111,7 +114,7 @@ const server = async (name: string, plan = 'plus'): Promise<{ owner: UserActor; 
 }
 
 /** The instance as the browser sends one picked whole: a tarball of what it keeps of it. */
-const instance = async (jars: Record<string, Uint8Array>): Promise<Uint8Array> => {
+const instance = async (jars: Record<string, Uint8Array>, components?: string): Promise<Uint8Array> => {
   const dir = join(scratch, randomUUID())
   const root = join(dir, 'Fabric 26.3')
   await cp(INSTANCE, root, { recursive: true })
@@ -119,6 +122,7 @@ const instance = async (jars: Record<string, Uint8Array>): Promise<Uint8Array> =
   await cp(FABRIC_WORLD, join(root, 'minecraft/saves/Life/level.dat'))
   await writeFile(join(root, 'minecraft/saves/Life/region/r.0.0.mca'), 'a region')
   for (const [name, bytes] of Object.entries(jars)) await writeFile(join(root, 'minecraft/mods', name), bytes)
+  if (components !== undefined) await writeFile(join(root, 'mmc-pack.json'), components)
   await run('tar', ['-cf', join(dir, 'instance.tar'), '-C', dir, 'Fabric 26.3'])
   return new Uint8Array(await readFile(join(dir, 'instance.tar')))
 }
@@ -132,6 +136,16 @@ const brought = async (owner: UserActor, id: string, bytes: Uint8Array) => {
 }
 
 describe.skipIf(!hasDatabase)('a world brought with its mods', () => {
+  test(
+    'unknown jars and damaged launcher metadata keep the world and explain what could not come',
+    unknownWorldJars,
+    120_000,
+  )
+  test(
+    'restoring checks the target and resolves versions for the server’s current release',
+    restoreTargets,
+    120_000,
+  )
   test('its mods come: Modrinth’s by their bytes, its own as uploads, players’ left out', async () => {
     const { owner, id } = await server('Robin')
     const read = await brought(
@@ -311,4 +325,62 @@ async function explainMissingServerDependency(): Promise<void> {
     }),
   ).rejects.toThrow('Broken needs missing, which couldn’t be resolved for this server.')
   expect((await h.app.backups.imports.view(owner, id, read.importId)).status).toBe('ready')
+}
+
+async function restoreTargets() {
+  const { id } = await server('Target checks')
+  const desired = await loadRevision(h.db, (await h.server(id)).desiredRevisionId)
+  const worldMods = new WorldMods({
+    formats: new LibraryFileFormats(),
+    catalog: h.catalog,
+    ownJars: h.app.mods.ownJars,
+  })
+  const deps = { mods: h.app.mods, builds: h.loaderBuilds, worldMods }
+  const mods = {
+    loader: 'fabric' as const,
+    catalog: [
+      {
+        name: 'Tree Harvester',
+        fileName: 'tree.jar',
+        projectId: 'tree-harvester',
+        versionId: 'not-the-current-version',
+      },
+    ],
+    own: [],
+    forPlayers: [],
+    refused: [],
+  }
+  await expect(
+    withWorldMods(deps, { ...desired, gameVersion: '26.2' }, { gameVersion: '26.3', mods }, false),
+  ).rejects.toMatchObject({ code: 'version_downgrade' })
+  await expect(withWorldMods(deps, desired, { gameVersion: '99.1', mods }, true)).rejects.toMatchObject({
+    code: 'invalid_choice',
+  })
+  const restored = await withWorldMods(deps, desired, { gameVersion: '26.2', mods }, true)
+  expect(restored.draft.gameVersion).toBe('26.3')
+  expect(restored.draft.mods.find((mod) => mod.name === 'Tree Harvester')?.source).toMatchObject({
+    projectId: 'tree-harvester',
+    versionId: 'tree-harvester-1',
+  })
+}
+
+async function unknownWorldJars() {
+  const { owner, id } = await server('Unknown metadata')
+  const damaged = await brought(
+    owner,
+    id,
+    await instance({ 'unreadable.jar': utf8('not a jar') }, '{broken json'),
+  )
+  expect(damaged.status).toBe('ready')
+  if (damaged.status !== 'ready') throw new Error('The world must remain importable')
+  expect(damaged.playedWith?.mods?.leftOut.some((mod) => mod.fileName === 'unreadable.jar')).toBe(true)
+  const files = await save('')
+  files['mods/local.jar'] = VEIN_MINER
+  const inferred = await brought(owner, id, zipBytes(files))
+  expect(inferred.status === 'ready' && inferred.playedWith?.mods?.loader).toBe('fabric')
+  const free = await server('Unknown mod plan', 'free')
+  const unavailable = await brought(free.owner, free.id, await instance({ 'private.jar': VEIN_MINER }))
+  expect(unavailable.status).toBe('ready')
+  if (unavailable.status !== 'ready') throw new Error('The original world must stay safe')
+  expect(unavailable.playedWith?.mods?.leftOut.some((mod) => mod.fileName === 'private.jar')).toBe(true)
 }

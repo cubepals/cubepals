@@ -5,7 +5,8 @@
   "license": "AGPL-3.0-only",
   "exports": {
     "./router": "./src/interfaces/trpc/router.ts",
-    "./testing/refusing": "./src/testing/refusing.ts"
+    "./testing/refusing": "./src/testing/refusing.ts",
+    "./testing/answered": "./src/testing/answered.ts"
   },
   "scripts": {
     "dev": "node --watch --env-file-if-exists=../../.env --env-file-if-exists=../../.env.lan src/main.node.ts",

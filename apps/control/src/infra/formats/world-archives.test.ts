@@ -17,7 +17,7 @@ import { promisify } from 'node:util'
 import { gunzipSync, gzipSync } from 'node:zlib'
 import { zipSync } from 'fflate'
 import { Header } from 'tar'
-import { HostileArchive, type TarballEntry } from '../../app/ports/formats.ts'
+import { HostileArchive, type TarballEntry, UnreadableFile } from '../../app/ports/formats.ts'
 import { LibraryUploadArchives } from './world-archives.ts'
 
 const run = promisify(execFile)
@@ -349,4 +349,30 @@ describe('indexed plain tar archives', () => {
     await writeFile(path, tar)
     await expect(archives.openWorld(path, LIMITS)).rejects.toThrow()
   })
+})
+
+test('corrupt gzip and tar framing fail through the actual decompressor and parser', async () => {
+  const compressed = rawTar([{ path: 'world/level.dat', body: 'level' }])
+  const truncated = join(scratch, 'truncated-stream.tar.gz')
+  await writeFile(truncated, compressed.subarray(0, Math.floor(compressed.length / 2)))
+  await expect(archives.openWorld(truncated, LIMITS)).rejects.toBeInstanceOf(UnreadableFile)
+  const changed = gunzipSync(compressed)
+  changed[0] = (changed[0] ?? 0) ^ 1
+  const checksum = join(scratch, 'invalid-checksum.tar.gz')
+  await writeFile(checksum, gzipSync(changed))
+  await expect(archives.openWorld(checksum, LIMITS)).rejects.toBeInstanceOf(UnreadableFile)
+})
+
+test('a streamed file that fails cannot produce an apparently valid world archive', async () => {
+  const data = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.error(new Error('The source disconnected'))
+    },
+  })
+  async function* entries(): AsyncIterable<TarballEntry> {
+    yield { name: 'world/level.dat', sizeBytes: 10, data }
+  }
+  await expect(new Response(archives.tarball(entries())).arrayBuffer()).rejects.toThrow(
+    'The source disconnected',
+  )
 })
