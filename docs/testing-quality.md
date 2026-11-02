@@ -301,10 +301,11 @@ Ordinary CI may reuse baseline evidence from an immutable artifact belonging to 
 main CI run in this repository. A resolver checks GitHub's run provenance before any application
 tests execute and distributes one validated artifact to all runners. Pull requests cannot publish
 eligible artifacts. The exact baseline commit, protected controller and workflow bytes, dependency
-configuration, Bun and Node versions, runner image and calendar must match. Coverage inventories,
+configuration, Bun and Node versions, runner OS family and calendar must match. GitHub host-image build numbers
+remain diagnostic provenance: rolling host-image deployments may mix builds within one run. Coverage inventories,
 test hashes, JUnit, execution profiles, measurement timestamps and file digests are validated again
 against the baseline checkout. Evidence expires after three hours and cannot cross a UTC date.
-Reuse is disabled on the first UTC day of the month, during its final UTC hour, and for full audits.
+Reuse is disabled on the first UTC day of the month, during the final UTC hour of each day, and for full audits.
 Lookup, download or publication failures fall back to fresh baseline tests.
 
 Every head test, head coverage measurement and selected mutation census still runs fresh. Cached

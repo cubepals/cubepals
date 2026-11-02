@@ -203,7 +203,7 @@ export function runShard({ root, group, reportDir, baseManifest, plan, partition
     writeFileSync(junit, xml)
     writeFileSync(
       manifest,
-      `${JSON.stringify({ ...testManifest(prepared.tests), startedAt, completedAt: new Date().toISOString(), fingerprint }, null, 2)}\n`,
+      `${JSON.stringify({ ...testManifest(prepared.tests), startedAt, completedAt: new Date().toISOString(), fingerprint, runnerImageVersion: process.env.ImageVersion ?? '' }, null, 2)}\n`,
     )
     const executionDir = join(reportDir, 'test-execution')
     mkdirSync(executionDir, { recursive: true })
