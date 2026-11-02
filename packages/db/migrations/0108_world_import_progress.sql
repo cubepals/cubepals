@@ -1,0 +1,1 @@
+ALTER TABLE "world_imports" ADD COLUMN "progress" jsonb;

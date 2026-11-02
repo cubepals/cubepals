@@ -6,7 +6,8 @@
  * The archives people upload, packs and worlds: a pack, or a world in a zip, is opened as
  * `pack-archives.ts` opens one, through zip.js in its strictest reading; a world in a tarball,
  * gzipped or not, through node-tar, its every header held to the same rules. The tarball a world
- * becomes is written with node-tar too. Not where a world's files are told apart, which is
+ * becomes is written with node-tar too. Plain tar files use the header index in `indexed-tar.ts`
+ * to avoid reading opaque region data during checks. Not where a world's files are told apart, which is
  * `minecraft/world-layout.ts`.
  */
 import { once } from 'node:events'
@@ -25,6 +26,7 @@ import {
   type WorldArchiveKept,
   type WorldArchives,
 } from '../../app/ports/formats.ts'
+import { type IndexedTarEntry, indexedBody, indexTar } from './indexed-tar.ts'
 import { checkedPath, keyOf, LibraryPackArchives, normalizeFilename } from './pack-archives.ts'
 
 /** The user the server image runs as (`itzg/minecraft-server`'s `minecraft`), who owns a volume's files. */
@@ -205,35 +207,34 @@ async function tarWorld(
   const kept = new Map<string, Uint8Array>()
   let totalBytes = 0
   let keptBytes = 0
-  await eachTarEntry(
-    path,
-    gzipped,
-    (name, entry) => {
-      const key = keyOf(name)
-      if (kinds.has(key))
-        throw new HostileArchive('duplicate', `${name} is in the archive twice, ignoring case`)
-      kinds.set(key, 'file')
-      if (files.length + 1 > limits.maxFiles)
-        throw new HostileArchive('too_many_files', `More than ${limits.maxFiles} files`)
-      if (entry.size > limits.maxFileBytes)
-        throw new HostileArchive(
-          'too_large',
-          `${name} is ${entry.size} bytes, more than ${limits.maxFileBytes}`,
-        )
-      totalBytes += entry.size
-      if (totalBytes > limits.maxTotalBytes)
-        throw new HostileArchive('too_large', `The files come to more than ${limits.maxTotalBytes} bytes`)
-      files.push({ name, sizeBytes: entry.size })
-      if (!limits.keep(name)) return
-      keptBytes += entry.size
-      if (keptBytes > limits.maxKeptBytes)
-        throw new HostileArchive('too_large', `The files kept come to more than ${limits.maxKeptBytes} bytes`)
-    },
-    async (name, entry) => {
+  const check = (name: string, entry: ReadEntry) => {
+    const key = keyOf(name)
+    if (kinds.has(key))
+      throw new HostileArchive('duplicate', `${name} is in the archive twice, ignoring case`)
+    kinds.set(key, 'file')
+    if (files.length + 1 > limits.maxFiles)
+      throw new HostileArchive('too_many_files', `More than ${limits.maxFiles} files`)
+    if (entry.size > limits.maxFileBytes)
+      throw new HostileArchive(
+        'too_large',
+        `${name} is ${entry.size} bytes, more than ${limits.maxFileBytes}`,
+      )
+    totalBytes += entry.size
+    if (totalBytes > limits.maxTotalBytes)
+      throw new HostileArchive('too_large', `The files come to more than ${limits.maxTotalBytes} bytes`)
+    files.push({ name, sizeBytes: entry.size })
+    if (!limits.keep(name)) return
+    keptBytes += entry.size
+    if (keptBytes > limits.maxKeptBytes)
+      throw new HostileArchive('too_large', `The files kept come to more than ${limits.maxKeptBytes} bytes`)
+  }
+  const index = gzipped ? null : await indexTar(path, limits.maxFiles)
+  if (index === null) {
+    await eachTarEntry(path, gzipped, check, async (name, entry) => {
       if (!limits.keep(name)) return void entry.resume()
       kept.set(name, await bytesOf(entry, entry.size))
-    },
-  )
+    })
+  } else await readIndexed(path, index, check, limits.keep, kept)
   for (const { name } of files)
     for (let slash = name.indexOf('/'); slash !== -1; slash = name.indexOf('/', slash + 1))
       if (kinds.has(keyOf(name.slice(0, slash))))
@@ -242,9 +243,37 @@ async function tarWorld(
     format: gzipped ? 'gzip' : 'tar',
     files,
     kept,
-    entries: () => tarEntries(path, gzipped),
+    entries: index === null ? () => tarEntries(path, gzipped) : () => indexedEntries(path, index),
     close: async () => {},
   }
+}
+
+/** Apply the streaming reader's checks before keeping any indexed file's bytes. */
+async function readIndexed(
+  path: string,
+  index: IndexedTarEntry[],
+  check: (name: string, entry: ReadEntry) => void,
+  keep: (name: string) => boolean,
+  kept: Map<string, Uint8Array>,
+): Promise<void> {
+  for (const { item, entry, name } of namedIndex(index)) {
+    check(name, entry)
+    if (keep(name)) kept.set(name, new Uint8Array(await new Response(indexedBody(path, item)).arrayBuffer()))
+  }
+}
+
+/** A checked name for each ordinary entry, using node-tar's path handling on either path. */
+function* namedIndex(index: IndexedTarEntry[]) {
+  for (const item of index) {
+    const entry = new ReadEntry(item.header)
+    const name = tarName(entry)
+    if (name !== null && entry.type !== 'Directory') yield { item, entry, name }
+  }
+}
+
+async function* indexedEntries(path: string, index: IndexedTarEntry[]) {
+  for (const { item, entry, name } of namedIndex(index))
+    yield { name, sizeBytes: entry.size, data: indexedBody(path, item) }
 }
 
 /** A tar entry's bytes as a stream; cancelling it lets the rest of the entry flow past. */

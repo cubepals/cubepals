@@ -19,7 +19,7 @@ import type { PlayedWith } from '@blockly/contracts'
 import type { BroughtModsJson, UploadedWorldFactsJson } from '@blockly/db'
 import { playedWithIn } from '../../minecraft/instance-layout.ts'
 import { PACK_LOADERS, type PackLoader } from '../../minecraft/mrpack.ts'
-import { namedReleases, runsOn } from '../../minecraft/pack-build.ts'
+import { jarSide, namedReleases, runsOn } from '../../minecraft/pack-build.ts'
 import { instanceIdentity, packwizMod } from '../../minecraft/pack-manifests.ts'
 import { offeredVersions } from '../../minecraft/versions.ts'
 import { moddedBrands } from '../../minecraft/world-facts.ts'
@@ -50,6 +50,21 @@ export class WorldMods {
     this.#formats = deps.formats
     this.#catalog = deps.catalog
     this.#own = deps.ownJars
+  }
+
+  /** Recheck earlier imports too: a catalog's corrected side must not keep an old world unplayable. */
+  async current(mods: BroughtModsJson): Promise<BroughtModsJson> {
+    const versions = await this.#catalog.versionsByIds(mods.catalog.map((mod) => mod.versionId))
+    const forPlayers = mods.catalog.filter((mod) => {
+      const version = versions.get(mod.versionId)
+      return version !== undefined && jarSide({ catalog: version.environment }) === 'client'
+    })
+    const omitted = new Set(forPlayers.map((mod) => mod.versionId))
+    return {
+      ...mods,
+      catalog: mods.catalog.filter((mod) => !omitted.has(mod.versionId)),
+      forPlayers: [...mods.forPlayers, ...forPlayers.map(({ name, fileName }) => ({ name, fileName }))],
+    }
   }
 
   /**

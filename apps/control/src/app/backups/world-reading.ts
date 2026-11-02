@@ -47,6 +47,7 @@ import {
 import type { PlayerProfiles } from '../ports/minecraft.ts'
 import { grownStorage } from '../servers/persistence.ts'
 import type { PendingUpload } from '../uploads/persistence.ts'
+import type { ImportProgress } from './import-progress.ts'
 import type { WorldImportRecord } from './world-import-records.ts'
 import { peopleOf } from './world-people.ts'
 
@@ -173,14 +174,20 @@ export class WorldReading {
   }
 
   /** The upload fetched to `work` (`uploadIn`) and opened, or why it can't be. */
-  async open(pending: PendingUpload, work: string): Promise<WorldArchive> {
+  async open(pending: PendingUpload, work: string, progress?: ImportProgress): Promise<WorldArchive> {
     const store = requireCapability(this.#caps, 'archives')
     const link = await store.presignGet(pending.key, LINK_SECONDS, 'browser')
     const path = uploadIn(work)
-    await this.#archives.fetchTo(link.url, path, pending.sizeBytes).catch((error: unknown) => {
-      if (error instanceof HostileArchive) throw new Refused(SAID.tooLarge, error.message)
-      throw error
-    })
+    await progress?.step('fetching', pending.sizeBytes)
+    await this.#archives
+      .fetchTo(link.url, path, pending.sizeBytes, {
+        progress: progress === undefined ? undefined : (bytes) => progress.bytes(bytes),
+      })
+      .catch((error: unknown) => {
+        if (error instanceof HostileArchive) throw new Refused(SAID.tooLarge, error.message)
+        throw error
+      })
+    await progress?.step('checking')
     const archive = await this.#archives
       .openWorld(path, { ...LIMITS, keep: kept })
       .catch((error: unknown) => {
@@ -503,7 +510,7 @@ export function viewOf<Ready extends object>(
   const base = { importId: record.id, fileName: record.fileName }
   switch (record.status) {
     case 'reading':
-      return { status: 'reading', ...base }
+      return { status: 'reading', ...base, progress: record.progress }
     case 'asking':
       return {
         status: 'asking',
@@ -521,7 +528,7 @@ export function viewOf<Ready extends object>(
 
 /** What `viewOf` makes of an import, ready as `Ready`: `WorldImportView` and `NewWorldImportView`. */
 type ImportViewOf<Ready> = { importId: string; fileName: string } & (
-  | { status: 'reading' }
+  | Pick<Extract<WorldImportView, { status: 'reading' }>, 'status' | 'progress'>
   | Pick<Extract<WorldImportView, { status: 'asking' }>, 'status' | 'worlds' | 'player' | 'problem'>
   | ({ status: 'ready'; notes: string[] } & Ready)
   | { status: 'refused'; message: string }

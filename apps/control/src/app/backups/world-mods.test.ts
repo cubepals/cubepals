@@ -37,6 +37,8 @@ const FABRIC_WORLD = join(MINECRAFT, 'player-fixtures/26.3/level.dat')
 const TREE_HARVESTER = fabricJar('treeharvester', { name: 'Tree Harvester', depends: { collective: '*' } })
 const COLLECTIVE = fabricJar('collective', { name: 'Collective' })
 const SODIUM = fabricJar('sodium', { name: 'Sodium' })
+const BROKEN = fabricJar('broken', { name: 'Broken' })
+const ZOOMIFY = fabricJar('zoomify', { name: 'Zoomify' })
 const VEIN_MINER = fabricJar('veinminer', { name: 'Vein Miner' })
 
 let h: Harness
@@ -88,6 +90,8 @@ beforeAll(async () => {
   publish('tree-harvester', 'Tree Harvester', TREE_HARVESTER, 'server_only', ['collective'])
   publish('collective', 'Collective', COLLECTIVE, 'client_or_server_prefers_both')
   publish('sodium', 'Sodium', SODIUM, 'client_only')
+  publish('zoomify', 'Zoomify', ZOOMIFY, 'client_only_server_optional', ['kotlin-lang-forge'])
+  publish('broken', 'Broken', BROKEN, 'server_only', ['missing'])
 }, 30_000)
 
 afterAll(async () => {
@@ -200,6 +204,14 @@ describe.skipIf(!hasDatabase)('a world brought with its mods', () => {
     await h.settled(id, 20_000)
     expect((await loadRevision(h.db, (await h.server(id)).desiredRevisionId)).loaderVersion).toBe('0.16.0')
   }, 120_000)
+
+  test(
+    'leaves out an optional server companion, including from a backup imported before the fix',
+    restoreEarlierClientImport,
+    120_000,
+  )
+
+  test('keeps the world and explains which dependency is missing', explainMissingServerDependency, 120_000)
 })
 
 describe.skipIf(!hasDatabase)('a world brought from an instance on a plan without mods', () => {
@@ -231,3 +243,72 @@ describe.skipIf(!hasDatabase)('a world brought without its mods', () => {
     ).rejects.toThrow('This world came without its mods, so there are none to bring.')
   }, 60_000)
 })
+
+async function restoreEarlierClientImport(): Promise<void> {
+  const { owner, id } = await server('Zoom world')
+  const read = await brought(
+    owner,
+    id,
+    await instance({ 'zoomify.jar': ZOOMIFY, 'treeharvester.jar': TREE_HARVESTER }),
+  )
+  expect(read.status).toBe('ready')
+  if (read.status !== 'ready') throw new Error('World not ready')
+  expect(read.playedWith?.mods?.forPlayers).toContainEqual({ name: 'Zoomify', fileName: 'zoomify.jar' })
+  const backup = await broughtBackup(h, read)
+  if (backup.worldFacts?.mods === undefined) throw new Error('Missing mods')
+  // Reproduce the persisted import that offered Zoomify as a server mod before this fix.
+  const facts = backup.worldFacts
+  const mods = facts.mods
+  if (mods === undefined) throw new Error('Missing mods')
+  await h.db
+    .update(schema.backups)
+    .set({
+      worldFacts: {
+        ...facts,
+        mods: {
+          ...mods,
+          catalog: [
+            ...mods.catalog,
+            { name: 'Zoomify', fileName: 'zoomify.jar', projectId: 'zoomify', versionId: 'zoomify-1' },
+          ],
+          forPlayers: [],
+        },
+      },
+    })
+    .where(eq(schema.backups.id, backup.id))
+  const seen = await h.app.backups.imports.view(owner, id, read.importId)
+  expect(seen.status === 'ready' ? seen.playedWith?.mods?.forPlayers : []).toContainEqual({
+    name: 'Zoomify',
+    fileName: 'zoomify.jar',
+  })
+  await h.app.backups.restoreBackup(owner, id, backup.id, randomUUID(), {
+    withConfiguration: false,
+    withMods: true,
+  })
+  await h.until(id, (s) => s.lifecycle.status !== 'restoring', 20_000)
+  await h.settled(id, 20_000)
+  const desired = await loadRevision(h.db, (await h.server(id)).desiredRevisionId)
+  expect(desired.mods.map((mod) => mod.name).sort()).toEqual(['Collective', 'Tree Harvester'])
+  const record = await h.db.query.worldImports.findFirst({ where: (t, { eq }) => eq(t.id, read.importId) })
+  expect(record?.progress?.steps.map((step) => step.step)).toEqual([
+    'fetching',
+    'checking',
+    'players',
+    'mods',
+    'packing',
+    'saving',
+  ])
+}
+
+async function explainMissingServerDependency(): Promise<void> {
+  const { owner, id } = await server('Missing server dependency')
+  const read = await brought(owner, id, await instance({ 'broken.jar': BROKEN }))
+  const backup = await broughtBackup(h, read)
+  await expect(
+    h.app.backups.restoreBackup(owner, id, backup.id, randomUUID(), {
+      withConfiguration: false,
+      withMods: true,
+    }),
+  ).rejects.toThrow('Broken needs missing, which couldn’t be resolved for this server.')
+  expect((await h.app.backups.imports.view(owner, id, read.importId)).status).toBe('ready')
+}

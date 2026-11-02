@@ -31,6 +31,7 @@ import { packRuns } from './versions.ts'
 describe('where a pack’s jar runs', () => {
   test('the catalog’s record of that exact file first, then what the jar says, then both sides', () => {
     expect(jarSide({ catalog: 'client_only' })).toBe('client')
+    expect(jarSide({ catalog: 'client_only_server_optional' })).toBe('client')
     expect(jarSide({ catalog: 'singleplayer_only' })).toBe('client')
     expect(jarSide({ catalog: 'server_only' })).toBe('server')
     // A jar that says it runs anywhere is still left out when the catalog knows better.

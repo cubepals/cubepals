@@ -14,7 +14,7 @@ import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promis
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
-import { gzipSync } from 'node:zlib'
+import { gunzipSync, gzipSync } from 'node:zlib'
 import { zipSync } from 'fflate'
 import { Header } from 'tar'
 import { HostileArchive, type TarballEntry } from '../../app/ports/formats.ts'
@@ -297,5 +297,56 @@ describe('a tarball left before its end', () => {
     await reader.read()
     const settled = reader.cancel().then(() => 'settled')
     expect(await Promise.race([settled, Bun.sleep(5000).then(() => 'still waiting')])).toBe('settled')
+  })
+})
+
+describe('indexed plain tar archives', () => {
+  test.each(
+    [
+      [{ path: '../escape', body: 'no' }],
+      [{ path: '/absolute', body: 'no' }],
+      [{ path: 'World/level.dat' }, { path: 'world/LEVEL.dat' }],
+      [{ path: 'World/file' }, { path: 'World/file/child' }],
+      [{ path: 'World/link', type: 'Link' as const, linkpath: '/etc/passwd' }],
+      [{ path: 'World/device', type: 'CharacterDevice' as const }],
+    ].map((entries) => ({ entries })),
+  )('keeps the streaming reader’s hostile-input checks: %j', async ({ entries }) => {
+    const path = join(scratch, `unsafe-${crypto.randomUUID()}.tar`)
+    await writeFile(path, gunzipSync(rawTar(entries)))
+    await expect(archives.openWorld(path, LIMITS)).rejects.toBeInstanceOf(HostileArchive)
+  })
+
+  test('holds indexed files to the file, total, kept-byte and entry limits', async () => {
+    const path = join(scratch, 'limited.tar')
+    await writeFile(
+      path,
+      gunzipSync(
+        rawTar([
+          { path: 'World/level.dat', body: 'some data' },
+          { path: 'World/region/a.mca', body: 'a region' },
+        ]),
+      ),
+    )
+    for (const limit of [{ maxFileBytes: 1 }, { maxTotalBytes: 1 }, { maxKeptBytes: 1 }, { maxFiles: 1 }]) {
+      await expect(archives.openWorld(path, { ...LIMITS, ...limit })).rejects.toBeInstanceOf(HostileArchive)
+    }
+  })
+
+  test('extended paths fall back to node-tar and keep their names and bytes', async () => {
+    const name = `World/${'long-path/'.repeat(15)}level.dat`
+    const dir = await folder({ [name]: 'a world' })
+    const path = join(scratch, 'extended.tar')
+    await run('tar', ['--format=pax', '-cf', path, '-C', dir, '.'])
+    expect(await everyFile(path)).toEqual({ [name]: 'a world' })
+  })
+
+  test('a corrupt header or a body cut short is refused', async () => {
+    const tar = gunzipSync(rawTar([{ path: 'World/level.dat', body: 'a world' }]))
+    const path = join(scratch, 'cut-short.tar')
+    await writeFile(path, tar.subarray(0, 515))
+    await expect(archives.openWorld(path, LIMITS)).rejects.toThrow()
+    tar[0] = (tar[0] ?? 0) + 1
+    await writeFile(path, tar)
+    await expect(archives.openWorld(path, LIMITS)).rejects.toThrow()
   })
 })

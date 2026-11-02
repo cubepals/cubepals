@@ -39,6 +39,7 @@ import {
   loadPendingUpload,
   type PendingUpload,
 } from '../uploads/persistence.ts'
+import { ImportProgress } from './import-progress.ts'
 import { othersForNewServer } from './kept-worlds.ts'
 import {
   insertWorldImport,
@@ -247,7 +248,8 @@ export class NewWorldImports {
    * (`world-imports.ts`) says what a question or a refusal does.
    */
   async bring(record: WorldImportRecord, pending: PendingUpload, work: string): Promise<void> {
-    const archive = await this.#reading.open(pending, work)
+    const progress = new ImportProgress(this.#db, record.id)
+    const archive = await this.#reading.open(pending, work, progress)
     try {
       const read = await this.#reading.read(archive, record.answer ?? {})
       const playsOn = releaseFor(read.facts.gameVersion)
@@ -258,6 +260,7 @@ export class NewWorldImports {
       await this.#reading.refuseWhatWontOpen({ ownerId: record.ownerId, serverId: null }, read, playsOn)
       // A new server plays in online mode, so the account named is the one Mojang says, and an
       // offline-mode server's players are moved to their accounts.
+      await progress.step('players')
       const player = await this.#reading.hostPlayer(read, record.answer ?? {}, true)
       const accounts = await this.#reading.accounts(read, true)
       const people = await this.#reading.people(read, true)
@@ -266,7 +269,7 @@ export class NewWorldImports {
         { ownerId: record.ownerId, serverId: null },
         playsOn,
       )
-      await this.#keep(record, pending, read, { player, accounts, people, others }, playsOn, work)
+      await this.#keep(record, pending, read, { player, accounts, people, others }, playsOn, work, progress)
     } finally {
       await archive.close()
     }
@@ -286,6 +289,7 @@ export class NewWorldImports {
     },
     playsOn: string,
     work: string,
+    progress: ImportProgress,
   ): Promise<void> {
     const { player, accounts } = who
     const store = requireCapability(this.#caps, 'archives')
@@ -296,7 +300,9 @@ export class NewWorldImports {
     const hostFile = levelPath === null ? null : levelPath.slice(`${LEVEL}/`.length)
     // Where the world already has a file of the account named, that file stays as the world had it.
     const hostWritten = hostFile !== null && !names.some((name) => place(name) === hostFile)
+    await progress.step('packing')
     const packed = await this.#pack(read, place, hostWritten ? hostFile : null, join(work, ARCHIVE_NAME))
+    await progress.step('saving')
     const key = await store.ingestFile(packed.path, packed.sha512)
     // Recorded at once: should what follows fail, the store's sweep finds it unused and lets it go.
     await recordStored(this.#db, { sha512: packed.sha512, key, sizeBytes: packed.sizeBytes, source: 'built' })

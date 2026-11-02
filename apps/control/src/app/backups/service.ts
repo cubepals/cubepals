@@ -105,6 +105,7 @@ export class BackupService {
   readonly #artifacts: ArtifactService
   readonly #builds: LoaderBuilds
   readonly #mods: Pick<ModService, 'planOn' | 'ownJars'>
+  readonly #worldMods: WorldMods
   /** What an archive's owner downloads of it (`downloads.ts`). */
   readonly downloads: WorldDownloads
   /** Worlds their owners upload, brought in as backups (`world-imports.ts`). */
@@ -146,6 +147,7 @@ export class BackupService {
     this.#builds = deps.ports.loaderBuilds
     this.#mods = deps.mods
     const { official, ports } = deps
+    this.#worldMods = new WorldMods({ ...ports, ownJars: deps.mods.ownJars })
     this.downloads = new WorldDownloads({ db: deps.db, policy: deps.policy, official, ...ports })
     this.newWorlds = new NewWorldImports({ db: deps.db, policy: deps.policy, ...ports })
     this.imports = new WorldImports({
@@ -153,7 +155,7 @@ export class BackupService {
       policy: deps.policy,
       events: deps.events,
       forNewServers: this.newWorlds,
-      mods: new WorldMods({ ...ports, ownJars: deps.mods.ownJars }),
+      mods: this.#worldMods,
       ...ports,
     })
   }
@@ -492,7 +494,7 @@ export class BackupService {
       throw new AppError('invalid_choice', 'This world came without its mods, so there are none to bring.')
     const desired = await loadRevision(this.#db, server.desiredRevisionId)
     return withWorldMods(
-      { mods: this.#mods, builds: this.#builds },
+      { mods: this.#mods, builds: this.#builds, worldMods: this.#worldMods },
       desired,
       { gameVersion: backup.worldFacts.gameVersion, mods },
       moveUp,

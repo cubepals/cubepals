@@ -40,7 +40,7 @@ import {
 } from '../../../../lib/brought-files'
 import { type LevelSays, levelOf } from '../../../../lib/level-version'
 import { bytes, iconSrc } from '../../../../lib/present'
-import { readingLeft } from '../../../../lib/reading-pace'
+import { readingProgress } from '../../../../lib/reading-pace'
 import { useSentImport } from '../../../../lib/sent-import'
 import { namesInZip, type PickedFile } from '../../../../lib/world-folder'
 import { Button, Modal, Note, ProgressBar, TextField } from '../../../../ui'
@@ -80,7 +80,7 @@ export function BringWorld({
 }) {
   const [name, setName] = useState('')
   const what = useSending(brought)
-  const { upload, level } = what
+  const { level } = what
   const { progress, importId, state, send, stop, reset, ...sent } = useBringing(view, name)
   const play = usePlay(view, onClose)
   const sending = progress !== null || importId !== null
@@ -128,7 +128,12 @@ export function BringWorld({
         {progress !== null && (
           <UploadProgress name={progress.name} sent={progress.sent} total={progress.total} />
         )}
-        {reading && <ReadingWorld name={coming} sizeBytes={upload?.size ?? 0} />}
+        {reading && (
+          <ReadingWorld
+            name={coming}
+            progress={state?.status === 'reading' ? (state.progress ?? null) : null}
+          />
+        )}
         {state?.status === 'asking' && <Questions view={view} state={state} />}
         {ready && (
           <ReadyToPlay
@@ -472,23 +477,28 @@ function NewerWorld({ played, view }: { played: string | null; view: ServerView 
   )
 }
 
-/** The world being read on a worker, by its name, with a countdown from its size (`reading-pace.ts`). */
-function ReadingWorld({ name, sizeBytes }: { name: string | null; sizeBytes: number }) {
-  const [startedAt] = useState(() => Date.now())
-  const [now, setNow] = useState(startedAt)
+/** The worker's current stage, measured bytes and elapsed time. */
+function ReadingWorld({
+  name,
+  progress,
+}: {
+  name: string | null
+  progress: Extract<WorldImportView, { status: 'reading' }>['progress']
+}) {
+  const [now, setNow] = useState(() => Date.now())
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), SECOND_MS)
     return () => clearInterval(timer)
   }, [])
+  const measured = readingProgress(progress ?? null, now)
   return (
     <div className="bk-stack" style={{ gap: 'var(--space-8)' }}>
       <span className="type-body-sm">
-        Reading {name ?? 'the world'}, {bytes(sizeBytes)}: finding it, checking it and getting it ready for
-        this server.
+        {measured.label}: {name ?? 'your world'}.
       </span>
-      <ProgressBar value={null} label={`Reading ${name ?? 'the world'}`} />
+      <ProgressBar value={measured.percent} label={measured.label} />
       <span className="type-body-sm" style={{ color: 'var(--ink-muted)' }}>
-        {readingLeft(sizeBytes, startedAt, now)}
+        {measured.detail}
       </span>
     </div>
   )

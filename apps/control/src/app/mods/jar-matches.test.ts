@@ -16,10 +16,17 @@ import { join } from 'node:path'
 import { LibraryFileFormats } from '../../infra/formats/file-formats.ts'
 import { modrinthClient } from '../../infra/modrinth/client.ts'
 import versionFiles from '../../infra/modrinth/fixtures/version-files-life.json' with { type: 'json' }
+import zoomify from '../../infra/modrinth/fixtures/version-zoomify-26.3.json' with { type: 'json' }
 import oreHarvester from '../../infra/modrinth/fixtures/versions-ore-harvester.json' with { type: 'json' }
 import { ModrinthCatalog } from '../../infra/modrinth/modrinth-catalog.ts'
 import { packwizMod } from '../../minecraft/pack-manifests.ts'
 import { type BroughtJar, matchJars } from './jar-matches.ts'
+
+const zoomifyFile =
+  zoomify.files[0] ??
+  (() => {
+    throw new Error('Missing Zoomify file')
+  })()
 
 const INSTANCE = join(import.meta.dir, '../../minecraft/instance-fixtures/prism-fabric-26.3')
 const formats = new LibraryFileFormats()
@@ -71,7 +78,7 @@ function recorded() {
     asked.push(`${request.method} ${url.pathname}${url.search}`)
     if (url.pathname.endsWith('/version_files')) {
       const { hashes } = (await request.json()) as { hashes: string[] }
-      const known = versionFiles as Record<string, unknown>
+      const known: Record<string, unknown> = { ...versionFiles, [zoomifyFile.hashes.sha512]: zoomify }
       return Response.json(Object.fromEntries(hashes.flatMap((h) => (h in known ? [[h, known[h]]] : []))))
     }
     if (url.pathname.endsWith('/versions')) {
@@ -136,6 +143,28 @@ describe('a world’s jars matched to Modrinth', () => {
     expect(tree?.kind === 'catalog' ? tree.version.dependencies : []).toEqual([
       { projectId: 'e0M1UDsY', versionId: null, kind: 'required' },
     ])
+  })
+
+  test('the universal Zoomify release is left in players’ games before its Forge-only dependency is resolved', async () => {
+    const { catalog } = recorded()
+    const file = zoomifyFile
+    const [match] = await matchJars(
+      catalog,
+      [published(file.filename, file.hashes.sha512, file.hashes.sha1, 'Zoomify')],
+      [],
+    )
+    expect(match).toMatchObject({
+      kind: 'catalog',
+      forPlayers: true,
+      version: { versionId: zoomify.id, environment: 'client_only_server_optional' },
+    })
+    if (match?.kind !== 'catalog') throw new Error('Expected Modrinth match')
+    expect(match.version.loaders).toEqual(['fabric', 'neoforge'])
+    expect(match.version.dependencies).toContainEqual({
+      projectId: '1vrSzlao',
+      versionId: null,
+      kind: 'required',
+    })
   })
 
   test('a source whose jar was replaced since is passed over for the bytes it is now', async () => {
