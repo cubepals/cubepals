@@ -6,9 +6,11 @@
 import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test'
 import { randomUUID } from 'node:crypto'
 import { getEventListeners } from 'node:events'
+import { createServer } from 'node:net'
 import { type ModValidationPlanJson, schema } from '@blockly/db'
 import { eq } from 'drizzle-orm'
 import { defaultSettings } from '../../domain/revision/revision.ts'
+import { SlpProbe } from '../../infra/mc-protocol/slp.ts'
 import { diskName } from '../../minecraft/jars.ts'
 import { PORT_NAMES } from '../../minecraft/runtime-spec.ts'
 import { Cdn, jar, sha512 } from '../../testing/cdn.ts'
@@ -82,6 +84,7 @@ describe.skipIf(!hasDatabase)('isolated runtime proof', () => {
   test('intact plugin bytes rejected by the loader establish incompatibility', refusedPlugin)
 
   test('a ready game is accepted before reading a stale provider observation', readyFirst)
+  test('a closed status connection is retried within the same validation deadline', closedPing)
 
   test(
     'a provider booting the wrong release or an unidentified loader cannot establish a mod conflict',
@@ -449,5 +452,30 @@ async function unidentifiedLoaders() {
     }
   } finally {
     wrong.mockRestore()
+  }
+}
+
+async function closedPing() {
+  const server = createServer((socket) => socket.destroy())
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+  let refusal: unknown
+  try {
+    const address = server.address()
+    if (address === null || typeof address === 'string') throw new Error('No TCP listener')
+    refusal = await new SlpProbe()
+      .ping({ host: '127.0.0.1', port: address.port }, AbortSignal.timeout(1000))
+      .catch((error: unknown) => error)
+    expect(refusal).toBeInstanceOf(Error)
+  } finally {
+    await new Promise<void>((resolve) => server.close(() => resolve()))
+  }
+  const ping = spyOn(ports.probe, 'ping').mockRejectedValueOnce(refusal)
+  try {
+    await expect(
+      check(plan, { ...ports, timeouts: { runningMs: 2000, readyMs: 2000 } }),
+    ).resolves.toHaveProperty('installed')
+    expect(ping.mock.calls.length).toBeGreaterThanOrEqual(2)
+  } finally {
+    ping.mockRestore()
   }
 }

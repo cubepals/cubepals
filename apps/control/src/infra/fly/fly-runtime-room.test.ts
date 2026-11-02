@@ -18,10 +18,10 @@ import {
   RuntimeUnsupported,
 } from '../../app/ports/runtime.ts'
 import { recordingTarget } from '../../testing/archive-target.ts'
-import { flyClient } from './client.ts'
+import { type FlySchemas, flyClient } from './client.ts'
 import { FakeFly } from './fake-fly.ts'
 import { FlyRuntime } from './fly-runtime.ts'
-import { decodeHandle } from './handle.ts'
+import { decodeHandle, encodeHandle } from './handle.ts'
 
 const KEY = '6276d3d7-5c80-4bd4-9d00-12818b8a4d38' as RuntimeKey
 const OTHER = '0c0e2f4a-7a51-4b8e-9d7e-4f1d2b3c4a5e' as RuntimeKey
@@ -160,3 +160,20 @@ test('validation runtime ownership and a refused archive restore preserve the or
   expect(fake.volumes.get(APP)?.map((volume) => volume.id)).toEqual([decodeHandle(handle).volumeId as string])
   expect((await runtime.observe(handle)).state).toBe('running')
 }, 15_000)
+
+test('a decommissioned runtime keeps its regionless world volume for reprovisioning', async () => {
+  const { fake, runtime, handle, progress } = await atTheLimit()
+  const volume = fake.volumes.get(APP)?.[0]
+  if (!volume) throw new Error('The fixture volume is missing')
+  await runtime.decommission(handle)
+  const released = encodeHandle({ ...decodeHandle(handle), machineId: null })
+  await runtime.decommission(released)
+  await runtime.stop(released)
+  await expect(runtime.exec(released, ['echo'], 1)).rejects.toThrow('This server has no machine')
+  const publicVolume: FlySchemas['Volume'] = volume
+  delete publicVolume.region
+  const replacement = await runtime.ensureProvisioned(KEY, { regionKey: 'eu-central' }, spec, progress)
+  expect(decodeHandle(replacement).volumeId).toBe(decodeHandle(handle).volumeId)
+  expect(fake.machines.get(APP)?.[0]?.region).toBe('fra')
+  expect(fake.volumes.get(APP)?.map((kept) => kept.id)).toEqual([volume.id as string])
+})
