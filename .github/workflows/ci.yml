@@ -617,10 +617,11 @@ jobs:
 
   # Only complete main CI runs can become cache producers. Consumers independently require
   # the server's successful conclusion, main branch, repository and exact workflow identity.
+  # An explicit status function permits classified upstream skips after check has verified them.
   baseline_publish:
     name: Publish successful main baseline measurements
     needs: [changes, check]
-    if: github.ref == 'refs/heads/main' && needs.changes.outputs.code == 'true' && inputs.full_quality != true && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    if: ${{ !cancelled() && needs.check.result == 'success' && github.ref == 'refs/heads/main' && needs.changes.outputs.code == 'true' && inputs.full_quality != true && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
