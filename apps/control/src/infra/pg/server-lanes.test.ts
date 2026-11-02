@@ -11,7 +11,7 @@ import { randomBytes, randomUUID } from 'node:crypto'
 import { createDb, createPool } from '@blockly/db'
 import { sql } from 'drizzle-orm'
 import pg from 'pg'
-import type { PgBoss } from 'pg-boss'
+import { type PgBoss, states } from 'pg-boss'
 import type { JobAttempt } from '../../app/ports/jobs.ts'
 import type { RuntimeHandle, RuntimeKey, RuntimeSpec } from '../../app/ports/runtime.ts'
 import { flyClient } from '../fly/client.ts'
@@ -322,9 +322,12 @@ describe.skipIf(!base)('a server operation refused for now', () => {
       const [first, second] = attempts
       expect(second?.retryCount).toBe(1)
       expect((second?.at ?? 0) - (first?.at ?? 0)).toBeGreaterThanOrEqual(900)
-      await Bun.sleep(200)
+      await until(
+        async () =>
+          (await boss.findJobs('server-ops', { id: op.operationId }))[0]?.state === states.completed,
+      )
       const [job] = await boss.findJobs('server-ops', { id: op.operationId })
-      expect(job?.state).toBe('completed')
+      expect(job?.state).toBe(states.completed)
     } finally {
       await boss.stop({ graceful: false })
       await pool.end()
