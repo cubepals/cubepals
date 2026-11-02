@@ -11,6 +11,7 @@
 import { afterAll, beforeAll, beforeEach, expect, test } from 'bun:test'
 import { rmSync } from 'node:fs'
 import { createServer, type ServerResponse } from 'node:http'
+import { constants as http } from 'node:http2'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import Docker from 'dockerode'
@@ -21,6 +22,7 @@ const SOCKET = join(tmpdir(), `blockly-reasked-${process.pid}.sock`)
 const FAST = { firstMs: 100, longestMs: 400 }
 const asked: string[] = []
 let imagePresent = false
+let pullOutcome: 'hang' | 'disconnect' | 'complete' = 'hang'
 
 function answer(path: string, res: ServerResponse): void {
   const times = asked.filter((p) => p === path).length
@@ -30,12 +32,18 @@ function answer(path: string, res: ServerResponse): void {
     res.write(`answer ${times}`)
     if (!first) res.end()
   } else if (path === '/images/create') {
+    if (pullOutcome === 'disconnect') {
+      res.writeHead(http.HTTP_STATUS_OK, { 'Content-Type': 'application/json' })
+      res.flushHeaders()
+      setTimeout(() => res.destroy(), 20)
+      return
+    }
     res.writeHead(200, { 'Content-Type': 'application/json' })
     res.write(`${JSON.stringify({ status: 'Pulling' })}\n`)
     // The image lands with the last line; the answer to the first pull still never ends.
     imagePresent = true
     res.write(`${JSON.stringify({ status: 'Downloaded newer image' })}\n`)
-    if (!first) res.end()
+    if (!first || pullOutcome === 'complete') res.end()
   } else if (path.startsWith('/images/')) {
     res.writeHead(imagePresent ? 200 : 404, { 'Content-Type': 'application/json' })
     res.end(JSON.stringify(imagePresent ? { Id: 'sha256:1' } : { message: 'No such image' }))
@@ -63,6 +71,7 @@ afterAll(async () => {
 beforeEach(() => {
   asked.length = 0
   imagePresent = false
+  pullOutcome = 'hang'
 })
 
 test('a reply that never ends is dropped and asked again', async () => {
@@ -135,3 +144,19 @@ test('a pull whose progress never ends is asked again and finds its image', asyn
   await ensureImage(docker, 'game:1')
   expect(asked).toEqual(['/images/game:1/json', '/images/create', '/images/game:1/json'])
 }, 20_000)
+
+test('a pull disconnected after its headers propagates the real stream error', async () => {
+  pullOutcome = 'disconnect'
+  try {
+    await expect(ensureImage(docker, 'game:1')).rejects.toBeInstanceOf(Error)
+    expect(asked).toEqual(['/images/game:1/json', '/images/create'])
+  } finally {
+    pullOutcome = 'hang'
+  }
+})
+
+test('a completed pull finishes after its progress stream ends', async () => {
+  pullOutcome = 'complete'
+  await ensureImage(docker, 'game:1')
+  expect(asked).toEqual(['/images/game:1/json', '/images/create'])
+})
