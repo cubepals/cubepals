@@ -14,7 +14,12 @@ const handle = 'resuming-machine' as RuntimeHandle
 const endpoint: GameEndpoint = { host: 'resuming.test', port: 25565, proxyProtocol: true }
 const answer = { online: 0, max: 10, version: '1.21.4' }
 
-function fixture(ping: ReadinessProbe['ping'], reportsRunning = false, resumeMs = SECOND_MS) {
+function fixture(
+  ping: ReadinessProbe['ping'],
+  reportsRunning = false,
+  resumeMs = SECOND_MS,
+  beforeObserving?: () => Promise<void>,
+) {
   const seen = { marks: [] as string[], forced: 0, starts: 0, providerCancelled: false }
   const resume = new Resume({
     runtime: {
@@ -51,9 +56,29 @@ function fixture(ping: ReadinessProbe['ping'], reportsRunning = false, resumeMs 
     op: { id: 'resume-test', kind: 'start' },
     mark: async (mark: string) => {
       seen.marks.push(mark)
+      if (mark === 'resume_observing') await beforeObserving?.()
     },
   } as OperationContext
-  return { seen, run: () => resume.cameBack(ctx, handle, () => endpoint) }
+  return {
+    seen,
+    run: async () => {
+      const pending = Symbol('operation still pending')
+      let timer: ReturnType<typeof setTimeout> | undefined
+      try {
+        const result = await Promise.race([
+          resume.cameBack(ctx, handle, () => endpoint),
+          new Promise<symbol>((resolve) => {
+            timer = setTimeout(() => resolve(pending), 500)
+          }),
+        ])
+        // A readiness call must actually finish. A test-framework timeout proves no assertion.
+        expect(result).not.toBe(pending)
+        return result as boolean
+      } finally {
+        clearTimeout(timer)
+      }
+    },
+  }
 }
 
 test('an answering game releases a join before its provider reports running', async () => {
@@ -120,6 +145,29 @@ test('a machine that neither runs nor answers still receives the bounded cold-st
     20,
   )
   expect(await run()).toBe(false)
+  expect(seen).toEqual({
+    marks: ['resume_observing', 'resume_hung'],
+    forced: 1,
+    starts: 1,
+    providerCancelled: true,
+  })
+})
+
+test('an observation whose deadline already ended opens no game connection', async () => {
+  let pings = 0
+  const { run, seen } = fixture(
+    async () => {
+      pings++
+      return answer
+    },
+    false,
+    20,
+    async () => {
+      await Bun.sleep(40)
+    },
+  )
+  expect(await run()).toBe(false)
+  expect(pings).toBe(0)
   expect(seen).toEqual({
     marks: ['resume_observing', 'resume_hung'],
     forced: 1,
