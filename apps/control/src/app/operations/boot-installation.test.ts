@@ -30,6 +30,7 @@ function fixture(
     restartAccess?: boolean
     accessError?: Error
     printed?: readonly string[]
+    failures?: Array<'logs' | 'stop' | 'console' | 'ping'>
   } = {},
 ) {
   const details = {
@@ -50,12 +51,14 @@ function fixture(
   }
   const runtime = {
     waitRunning: async () => {},
+    observe: async () => ({ state: 'stopped', at: new Date() }),
     endpoint: (...args: Parameters<Runtimes['endpoint']>) => {
       details.endpoints.push(args)
       return { host: 'installation.test', port: 25565 }
     },
     stop: async () => {
       details.stops++
+      if (options.failures?.includes('stop')) throw new Error('provider stop unavailable')
     },
     exec: async () => ({
       exitCode,
@@ -68,7 +71,12 @@ function fixture(
   } as unknown as Runtimes
   const boot = new BootSequence({
     runtime,
-    probe: { ping: async () => ({ online: 0, max: 20, version: '26.3' }) },
+    probe: {
+      ping: async () =>
+        options.failures?.includes('ping')
+          ? Promise.reject(new Error('connection refused'))
+          : { online: 0, max: 20, version: '26.3' },
+    },
     access: {
       reconcile: async (...args: unknown[]) => {
         details.access.push(args)
@@ -83,7 +91,8 @@ function fixture(
       },
     } as unknown as ArtifactService,
     logs: {
-      recent: async () => lines(),
+      recent: async () =>
+        options.failures?.includes('logs') ? Promise.reject(new Error('log unavailable')) : lines(),
       async *tail() {
         yield* lines()
       },
@@ -93,6 +102,7 @@ function fixture(
       run: async () => '',
       runAll: async (...args: unknown[]) => {
         details.console.push(args)
+        if (options.failures?.includes('console')) throw new Error('console unavailable')
         return []
       },
     },
@@ -209,4 +219,43 @@ test('a boot that is not ready retains its identity and underlying cause', () =>
   expect(error.name).toBe('NotReady')
   expect(error.message).toBe('Could not start')
   expect(error.cause).toBe(cause)
+})
+
+test('unavailable recent logs and startup commands do not invalidate a verified boot', async () => {
+  const { run, seen, details } = fixture([mod.artifact.sha512], 0, { failures: ['logs', 'console'] })
+  await run({
+    ...revision,
+    settings: {
+      ...defaultSettings({ name: 'Commands', gameMode: 'survival', maxPlayers: 1 }),
+      spawnProtection: 4,
+    },
+  })
+  expect(seen.access).toBe(1)
+  expect(seen.marks).toEqual(['let_in'])
+  expect(details.console).toHaveLength(1)
+  expect(details.notLoaded).toEqual([[server.id, []]])
+})
+
+test('a failed emergency stop preserves the access reseed refusal', async () => {
+  const error = new AccessReseedFailed('access could not be restored')
+  const { run, seen, details } = fixture([mod.artifact.sha512], 0, { accessError: error, failures: ['stop'] })
+  await expect(run()).rejects.toBe(error)
+  expect(details.stops).toBe(1)
+  expect(seen.marks).toEqual([])
+})
+
+test('an identified matching loader admits the verified revision', async () => {
+  const { run, seen } = fixture([mod.artifact.sha512], 0, {
+    printed: ['[11:37:10] [main/INFO]: Loading Minecraft 26.3 with Fabric Loader 0.16.14'],
+  })
+  await run()
+  expect(seen.access).toBe(1)
+  expect(seen.marks).toEqual(['let_in'])
+})
+
+test('a stopped runtime without readable logs cannot be admitted as ready', async () => {
+  const { run, seen } = fixture([mod.artifact.sha512], 0, { failures: ['ping', 'logs'] })
+  await expect(run()).rejects.toThrow('stopped')
+  expect(seen.access).toBe(0)
+  expect(seen.marks).toEqual([])
 })

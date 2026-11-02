@@ -331,3 +331,8 @@ describe('the releases a pack may run on', () => {
     expect(packRuns('1.21-pre1', 'fabric')).toBe(false)
   })
 })
+
+test('a crash name too short to identify one jar never removes a candidate', () => {
+  expect(jarNamed(['mods/a-1.0.jar', 'mods/another-1.0.jar'], 'A')).toBeNull()
+  expect(jarNamed(['mods/alpha-1.0.jar', 'mods/alpha-2.0.jar'], 'Alpha')).toBeNull()
+})

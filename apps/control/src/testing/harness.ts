@@ -50,7 +50,6 @@ import {
   workArtifactMirror,
   workJarChecks,
   workListingEligibility,
-  workModValidation,
   workPackImports,
   workWorldDownloads,
   workWorldImports,
@@ -109,6 +108,8 @@ export interface Harness {
 }
 
 export interface HarnessOptions {
+  /** Use the production review defaults, rather than the test’s empty review. */
+  productionCuration?: boolean
   /** Or made from the harness's database, for an adapter that keeps its record there. */
   capabilities?: DeploymentCapabilities | ((db: Db) => DeploymentCapabilities)
   mirrorCatalogArtifacts?: boolean
@@ -215,9 +216,14 @@ const settingsFrom = ({
   officialServerFiles,
   stopCheatersProblem,
   templatesKeptMs,
+  productionCuration,
+  curatedPacks,
+  ownPacks,
 }: HarnessOptions) => ({
   officialServerFiles,
   stopCheatersProblem,
+  curatedPacks: productionCuration ? curatedPacks : (curatedPacks ?? []),
+  ownPacks: productionCuration ? ownPacks : (ownPacks ?? []),
   templatesKeptMs: templatesKeptMs ?? 0,
   bootTimeouts: provider?.bootTimeouts ?? { runningMs: 5_000, readyMs: 3_000, resumeMs: 1_000 },
   wakeWaitMs: provider?.wakeWaitMs ?? 5_000,
@@ -339,8 +345,6 @@ export async function startHarness(options: HarnessOptions = {}): Promise<Harnes
       mirrorCatalogArtifacts: options.mirrorCatalogArtifacts ?? false,
       adminEmails: options.adminEmails ?? [],
       webOrigin: 'http://localhost:3000',
-      curatedPacks: options.curatedPacks ?? [],
-      ownPacks: options.ownPacks ?? [],
       ...settingsFrom(options),
     },
   )
@@ -452,7 +456,6 @@ async function workQueues(boss: PgBoss, app: ControlPlane, url: string): Promise
   await workJarChecks(boss, (sha512) => app.jarChecks.run(sha512), 0.5)
   await workPackImports(boss, app.packs, 0.5)
   await workWorldImports(boss, app.backups.imports, 0.5)
-  await workModValidation(boss, app.modValidation, 0.5)
   await workWorldDownloads(boss, app.backups.downloads, 0.5)
   await workListingEligibility(boss, (serverIds) => app.listings.reevaluate(serverIds), 0.5)
   return startOperationsWorker(url, app)

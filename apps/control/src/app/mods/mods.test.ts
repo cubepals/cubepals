@@ -14,61 +14,84 @@ import type { UserActor } from '../actor.ts'
 import { loadRevision } from '../servers/persistence.ts'
 import { identity, type ModChange } from './service.ts'
 
+let h: Harness
+const cdn = new Cdn()
+
+interface Release {
+  id: string
+  gameVersions?: string[]
+  environment?: CatalogVersion['environment']
+  requires?: string[]
+}
+/** A project on the catalog, its versions listed newest first, their files on the CDN. */
+const publish = (projectId: string, name: string, releases: Release[]) =>
+  h.catalog.publish(
+    {
+      projectId,
+      slug: projectId,
+      name,
+      summary: `${name}, for tests`,
+      iconUrl: null,
+      // A project is wherever any of its versions runs, the way Modrinth adds them up.
+      environments: [...new Set(releases.map((release) => release.environment ?? 'server_only'))],
+      downloads: 1,
+    },
+    releases.map(
+      (release, i): CatalogVersion => ({
+        versionId: release.id,
+        projectId,
+        versionLabel: release.id,
+        channel: 'release',
+        state: 'listed',
+        environment: release.environment ?? 'server_only',
+        loaders: ['fabric'],
+        gameVersions: release.gameVersions ?? ['26.3'],
+        publishedAt: new Date(Date.UTC(2026, 0, 1 + releases.length - i)),
+        file: cdn.file(`${projectId}-${release.id}`),
+        dependencies: (release.requires ?? []).map((p) => ({
+          projectId: p,
+          versionId: null,
+          kind: 'required',
+        })),
+      }),
+    ),
+  )
+
+const change = async (owner: UserActor, id: string, requested: ModChange) => {
+  const plan = await h.app.mods.plan(owner, id, requested)
+  if (plan.kind !== 'ok') throw new Error(`Conflicts: ${JSON.stringify(plan.conflicts)}`)
+  const before = await h.server(id)
+  await h.app.mods.apply(
+    owner,
+    id,
+    requested,
+    plan.mods.map((m) => m.artifact.sha512),
+    randomUUID(),
+  )
+  await h.until(id, (s) => s.lifecycle.status === 'running' && s.version > before.version + 1, 20_000)
+  await h.settled(id, 20_000)
+  return plan
+}
+const pinned = async (id: string) =>
+  (await loadRevision(h.db, (await h.server(id)).desiredRevisionId)).mods.map((m) => [
+    m.name,
+    m.versionLabel,
+    m.origin,
+    m.requiredBy,
+  ])
+
+beforeAll(async () => {
+  await cdn.start()
+  h = await startHarness()
+}, 30_000)
+
+afterAll(async () => {
+  await h.close()
+  cdn.close()
+})
+
 // Mods end to end (§15.5): search, resolution through the catalog, the plan, the revision it applies.
 describe.skipIf(!hasDatabase)('mods', () => {
-  let h: Harness
-  const cdn = new Cdn()
-
-  beforeAll(async () => {
-    await cdn.start()
-    h = await startHarness()
-  }, 30_000)
-
-  afterAll(async () => {
-    await h.close()
-    cdn.close()
-  })
-
-  interface Release {
-    id: string
-    gameVersions?: string[]
-    environment?: CatalogVersion['environment']
-    requires?: string[]
-  }
-  /** A project on the catalog, its versions listed newest first, their files on the CDN. */
-  const publish = (projectId: string, name: string, releases: Release[]) =>
-    h.catalog.publish(
-      {
-        projectId,
-        slug: projectId,
-        name,
-        summary: `${name}, for tests`,
-        iconUrl: null,
-        // A project is wherever any of its versions runs, the way Modrinth adds them up.
-        environments: [...new Set(releases.map((release) => release.environment ?? 'server_only'))],
-        downloads: 1,
-      },
-      releases.map(
-        (release, i): CatalogVersion => ({
-          versionId: release.id,
-          projectId,
-          versionLabel: release.id,
-          channel: 'release',
-          state: 'listed',
-          environment: release.environment ?? 'server_only',
-          loaders: ['fabric'],
-          gameVersions: release.gameVersions ?? ['26.3'],
-          publishedAt: new Date(Date.UTC(2026, 0, 1 + releases.length - i)),
-          file: cdn.file(`${projectId}-${release.id}`),
-          dependencies: (release.requires ?? []).map((p) => ({
-            projectId: p,
-            versionId: null,
-            kind: 'required',
-          })),
-        }),
-      ),
-    )
-
   const server = async (request: { loader?: 'fabric' | 'vanilla'; gameVersion?: string } = {}) => {
     const owner = await h.user('Steve', 'plus')
     const created = await h.create(owner, { loader: 'fabric', ...request })
@@ -77,29 +100,6 @@ describe.skipIf(!hasDatabase)('mods', () => {
     return { owner, id: created.id }
   }
   /** Plans a change, then applies exactly what the plan showed, and waits for it to land. */
-  const change = async (owner: UserActor, id: string, requested: ModChange) => {
-    const plan = await h.app.mods.plan(owner, id, requested)
-    if (plan.kind !== 'ok') throw new Error(`Conflicts: ${JSON.stringify(plan.conflicts)}`)
-    const before = await h.server(id)
-    await h.app.mods.apply(
-      owner,
-      id,
-      requested,
-      plan.mods.map((m) => m.artifact.sha512),
-      randomUUID(),
-    )
-    await h.until(id, (s) => s.lifecycle.status === 'running' && s.version > before.version + 1, 20_000)
-    await h.settled(id, 20_000)
-    return plan
-  }
-  const pinned = async (id: string) =>
-    (await loadRevision(h.db, (await h.server(id)).desiredRevisionId)).mods.map((m) => [
-      m.name,
-      m.versionLabel,
-      m.origin,
-      m.requiredBy,
-    ])
-
   test('a mod that needs a newer Minecraft offers the move, and installs in the same change', async () => {
     publish('newer-only', 'Newer Only', [{ id: 'newer-1', gameVersions: ['26.3'] }])
     const { owner, id } = await server({ gameVersion: '26.2' })
@@ -363,3 +363,40 @@ describe.skipIf(!hasDatabase)('mods', () => {
     expect(await h.app.catalog.staleSince()).toBeNull()
   })
 })
+
+test.skipIf(!hasDatabase)('an expanding dependency chain cannot publish completed proof', async () => {
+  for (let i = 0; i < 20; i++)
+    publish(`bounded-${i}`, `Bounded ${i}`, [
+      { id: `bounded-v${i}`, requires: i < 19 ? [`bounded-${i + 1}`] : [] },
+    ])
+  const before = await h.db.select().from(schema.modCompilations)
+  await expect(
+    h.app.mods.resolveNew({ gameVersion: '26.3', loader: 'fabric' }, [{ projectId: 'bounded-0' }]),
+  ).rejects.toThrow('Resolving mods did not settle')
+  const rows = await h.db.select().from(schema.modCompilations)
+  expect(rows).toEqual(before)
+  for (let i = 0; i < 20; i++) h.catalog.setProjectState(`bounded-${i}`, 'archived')
+})
+
+test.skipIf(!hasDatabase)(
+  'editing a failed first configuration starts its corrected revision',
+  async () => {
+    const owner = await h.user('Corrected configuration', 'plus')
+    h.minecraft.breakOn(() => 'This first configuration could not load')
+    let id: string
+    try {
+      ;({ id } = await h.create(owner, { loader: 'fabric' }))
+      await h.until(id, 'failed')
+      await h.settled(id)
+    } finally {
+      h.minecraft.breakOn(() => null)
+    }
+    publish('corrected-mod', 'Corrected Mod', [{ id: 'corrected-version' }])
+    await change(owner, id, { add: [{ projectId: 'corrected-mod' }] })
+    expect((await h.server(id)).lifecycle.status).toBe('running')
+    expect(
+      (await loadRevision(h.db, (await h.server(id)).desiredRevisionId)).mods.map((mod) => mod.name),
+    ).toContain('Corrected Mod')
+  },
+  30_000,
+)

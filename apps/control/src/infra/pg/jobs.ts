@@ -11,6 +11,7 @@ import { notifyQueue } from 'pg-boss/dist/plans.js'
 import type {
   BlockedOperation,
   CurationJob,
+  Importer,
   JobAttempt,
   JobOutcomes,
   JobQueue,
@@ -292,11 +293,17 @@ export async function startBoss(
   return boss
 }
 
+const modValidators = new WeakMap<PgBoss, Importer>()
+
 export class PgBossJobs implements JobQueue {
   readonly #boss: PgBoss
 
   constructor(boss: PgBoss) {
     this.#boss = boss
+  }
+
+  registerModValidation(importer: Importer): void {
+    modValidators.set(this.#boss, importer)
   }
 
   async enqueue(
@@ -477,11 +484,7 @@ export async function workListingEligibility(
   })
 }
 
-/** What reads an upload off the request that sent it, and what is told when it gave up. */
-export interface Importer {
-  runImport(importId: string): Promise<void>
-  importGaveUp(importId: string, error: string): Promise<void>
-}
+export type { Importer } from '../../app/ports/jobs.ts'
 
 /**
  * Reads and builds uploaded packs, one at a time on each worker. The last attempt that fails
@@ -491,7 +494,7 @@ export const workPackImports = (boss: PgBoss, packs: Importer, pollingIntervalSe
   workImports(boss, PACK_IMPORT, packs, pollingIntervalSeconds)
 
 /** Uses the same bounded queue/retry protocol as other heavy import work. */
-export const workModValidation = (boss: PgBoss, validator: Importer, pollingIntervalSeconds = 2) =>
+const workModValidation = (boss: PgBoss, validator: Importer, pollingIntervalSeconds = 2) =>
   workImports(boss, MOD_VALIDATION, validator, pollingIntervalSeconds)
 
 /** Reads uploaded worlds and brings each to its server, as packs are read. */
@@ -575,12 +578,14 @@ export async function workCuration(
   )
 }
 
-/** Reads uploaded jars for malware as they arrive (`app/mods/jar-checks.ts`); a failed read is retried. */
+/** Starts jar checks and registered configuration verification on workers; APIs only register their handlers. */
 export async function workJarChecks(
   boss: PgBoss,
   check: (sha512: string) => Promise<void>,
   pollingIntervalSeconds = 2,
 ): Promise<void> {
+  const validator = modValidators.get(boss)
+  if (validator !== undefined) await workModValidation(boss, validator, pollingIntervalSeconds)
   await boss.work(
     JAR_CHECK,
     { ...background(pollingIntervalSeconds), localConcurrency: 1 },

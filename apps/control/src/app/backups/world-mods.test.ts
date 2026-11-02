@@ -137,6 +137,11 @@ const brought = async (owner: UserActor, id: string, bytes: Uint8Array) => {
 
 describe.skipIf(!hasDatabase)('a world brought with its mods', () => {
   test(
+    'an unavailable catalog or incompatible target preserves an imported world',
+    importCheckRefusals,
+    30_000,
+  )
+  test(
     'unknown jars and damaged launcher metadata keep the world and explain what could not come',
     unknownWorldJars,
     120_000,
@@ -387,4 +392,26 @@ async function unknownWorldJars() {
   expect(unavailable.status).toBe('ready')
   if (unavailable.status !== 'ready') throw new Error('The original world must stay safe')
   expect(unavailable.playedWith?.mods?.leftOut.some((mod) => mod.fileName === 'private.jar')).toBe(true)
+}
+
+async function importCheckRefusals() {
+  const { owner, id } = await server('Import checks')
+  const view = await brought(owner, id, await instance({ 'tree.jar': TREE_HARVESTER }))
+  if (view.status !== 'ready') throw new Error('The test world was not imported')
+  const backup = await broughtBackup(h, view)
+  h.catalog.outage(true)
+  try {
+    const unavailable = await h.app.backups.imports.view(owner, id, view.importId)
+    expect(unavailable.status === 'ready' && unavailable.compatibility?.state).toBe('unavailable')
+  } finally {
+    h.catalog.outage(false)
+  }
+  if (backup.worldFacts === null) throw new Error('Imported world facts are missing')
+  await h.db
+    .update(schema.backups)
+    .set({ worldFacts: { ...backup.worldFacts, gameVersion: '99.1' } })
+    .where(eq(schema.backups.id, backup.id))
+  const blocked = await h.app.backups.imports.view(owner, id, view.importId)
+  expect(blocked.status === 'ready' && blocked.compatibility?.state).toBe('blocked')
+  expect((await h.app.backupQueries.list(owner, id)).backups.some((item) => item.id === backup.id)).toBe(true)
 }

@@ -10,8 +10,11 @@ import { schema } from '@blockly/db'
 import { eq } from 'drizzle-orm'
 import { Cdn } from '../../testing/cdn.ts'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
+import { ArtifactLinks } from '../artifacts/links.ts'
+import { ArtifactNotFound } from '../artifacts/service.ts'
 import { validationArtifact } from '../artifacts/validation-artifacts.ts'
 import { type RuntimeHandle, runtimeKey } from '../ports/runtime.ts'
+import { singleKey } from '../secrets.ts'
 import { loadRevision } from '../servers/persistence.ts'
 import { validationKey, validationSpec } from './validation-plan.ts'
 import { IncompatibleMods, ValidationUnavailable } from './validation-runtime.ts'
@@ -19,9 +22,10 @@ import { IncompatibleMods, ValidationUnavailable } from './validation-runtime.ts
 describe.skipIf(!hasDatabase)('shared mod configuration evidence', () => {
   let h: Harness
   const cdn = new Cdn()
+  const secrets = singleKey('validation-test-artifact-secret-0123456789')
   beforeAll(async () => {
     await cdn.start()
-    h = await startHarness()
+    h = await startHarness({ runtimeSecrets: secrets })
   }, 30_000)
   afterAll(async () => {
     await h.close()
@@ -34,7 +38,7 @@ describe.skipIf(!hasDatabase)('shared mod configuration evidence', () => {
   )
   test(
     'exact runtime evidence is shared, scoped to its files and invalidated by any changed input',
-    () => validationCache(h, cdn),
+    () => validationCache(h, cdn, secrets),
     30_000,
   )
   test(
@@ -54,7 +58,7 @@ describe.skipIf(!hasDatabase)('shared mod configuration evidence', () => {
   )
 })
 
-async function validationCache(h: Harness, cdn: Cdn) {
+async function validationCache(h: Harness, cdn: Cdn, secrets: ReturnType<typeof singleKey>) {
   const owner = await h.user('Verification', 'plus')
   const { id } = await h.create(owner, { loader: 'fabric' })
   await h.until(id, 'running')
@@ -128,12 +132,20 @@ async function validationCache(h: Harness, cdn: Cdn) {
   expect((await validationArtifact(h.db, scopeId, mod.artifact.sha512))?.artifact.sha512).toBe(
     mod.artifact.sha512,
   )
+  const link = new URL(new ArtifactLinks(h.artifactsUrl, secrets).forServer(scopeId)(mod.artifact))
+  const token = link.searchParams.get('t') ?? ''
+  expect((await h.app.artifacts.locate(scopeId, mod.artifact.sha512, token)).artifact.sizeBytes).toBe(
+    mod.artifact.sizeBytes,
+  )
   expect(await validationArtifact(h.db, scopeId, '0'.repeat(128))).toBeNull()
   await h.db
     .update(schema.modValidationRuns)
     .set({ finishedAt: new Date() })
     .where(eq(schema.modValidationRuns.id, scopeId))
   expect(await validationArtifact(h.db, scopeId, mod.artifact.sha512)).toBeNull()
+  await expect(h.app.artifacts.locate(scopeId, mod.artifact.sha512, token)).rejects.toBeInstanceOf(
+    ArtifactNotFound,
+  )
   await h.app.modValidation.importGaveUp(first.key, 'late queue failure')
   expect((await h.app.modValidation.status(first.key)).state).toBe('verified')
 }

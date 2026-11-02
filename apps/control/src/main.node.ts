@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 The Cubepals Authors
 //
 // SPDX-License-Identifier: AGPL-3.0-only
+
 import { readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -95,7 +96,6 @@ import {
   workCuration,
   workJarChecks,
   workListingEligibility,
-  workModValidation,
   workPackImports,
   workSchedules,
   workServerOperations,
@@ -123,6 +123,7 @@ import type { Services } from './interfaces/trpc/trpc.ts'
  * The composition root: the only file that reads configuration and constructs adapters.
  * Everything is built by hand, once, and handed to what needs it.
  */
+
 interface ProviderAdapters {
   runtime: MinecraftRuntime
   logs: LogSource
@@ -490,7 +491,6 @@ async function startWorker(
   await workServerOperations(boss, (attempt) => app.runner.run(attempt), config.operations)
   await workArtifactMirror(boss, (artifact) => app.artifacts.mirror(artifact))
   await workJarChecks(boss, (sha512) => app.jarChecks.run(sha512))
-  await workModValidation(boss, app.modValidation)
   await workPackImports(boss, app.packs)
   await workWorldImports(boss, app.backups.imports)
   await workWorldDownloads(boss, app.backups.downloads)
@@ -797,6 +797,8 @@ const DRAIN_MS = MINUTE_MS
  */
 const SHUTDOWN_DEADLINE_MS = DRAIN_MS + 15_000
 
-// CI loads every module with `--check`, without opening configuration or connections.
+// `--check` stops here, before any configuration or connection: by this line every module above,
+// and all they import, has loaded. CI runs the built image this way, so a dependency the image
+// leaves out fails there and not at a deploy.
 if (process.argv.includes('--check')) console.warn('every module loaded')
 else await main()

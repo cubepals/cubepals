@@ -210,3 +210,13 @@ describe('resting worlds', () => {
     expect(() => transition(at('stopped'), { type: 'stored' })).toThrow(InvalidTransition)
   })
 })
+
+test('restart requests share an existing start and start a stopped server once', () => {
+  expect(decide(at('stopped'), { type: 'restart' })).toEqual({
+    kind: 'accept',
+    to: at('starting'),
+    operation: 'start',
+  })
+  expect(decide(at('starting'), { type: 'restart' })).toEqual({ kind: 'noop' })
+  expect(decide(at('running'), { type: 'undelete', stored: false })).toEqual({ kind: 'invalid' })
+})

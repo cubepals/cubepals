@@ -406,3 +406,16 @@ test('a loader conflict keeps the imported world and explains why Play is unavai
   await click('Not now')
   expect(closed).toBe(1)
 })
+
+test('an imported archive without world metadata keeps a usable title while checking', async () => {
+  await show({
+    ...ready(),
+    world: null,
+    compatibility: { key: 'check', state: 'checking', message: null, checkedAt: null },
+  })
+  await until(() => text().includes('Your world is imported'))
+  expect(text()).toContain('This world is no longer in Backups')
+  expect(
+    [...document.querySelectorAll('button')].some((button) => button.textContent?.startsWith('Play')),
+  ).toBe(false)
+})

@@ -189,3 +189,25 @@ test.skipIf(!hasDatabase)(
   },
   30 * SECOND_MS,
 )
+
+test.skipIf(!hasDatabase)(
+  'a native loader refusal prevents publishing a reviewed release',
+  async () => {
+    const key = 'native-refused-release'
+    reviewed(key, 'upstream', publishPack(key, [{ id: 'native-required', licence: 'MIT' }]))
+    await insertPending(h.db, key, '1.0')
+    h.minecraft.breakOn(
+      () => "Mod 'Waystones' (waystones) 21.1.25 requires any version of balm, which is missing!",
+    )
+    try {
+      await h.app.curation.ingest({ key, version: '1.0' })
+      const refused = await loadRelease(h.db, key, '1.0')
+      expect(refused?.state).toBe('refused')
+      expect(refused?.refusal).toContain('balm')
+      expect(refused?.detail).toBe(refused?.refusal)
+    } finally {
+      h.minecraft.breakOn(() => null)
+    }
+  },
+  30 * SECOND_MS,
+)

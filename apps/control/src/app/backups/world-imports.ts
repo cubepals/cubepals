@@ -180,7 +180,9 @@ export class WorldImports {
         : null
     const facts = backup?.worldFacts ?? null
     const playedWith = playedWithOf(
-      facts?.mods === undefined ? facts : { ...facts, mods: await this.#mods.current(facts.mods) },
+      facts?.mods === undefined
+        ? facts
+        : { ...facts, mods: await this.#mods.current(facts.mods).catch(() => facts.mods) },
     )
     const compatibility =
       facts?.mods === undefined || record.serverId === null

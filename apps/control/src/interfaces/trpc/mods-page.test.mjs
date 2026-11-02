@@ -462,6 +462,15 @@ async function packCancels() {
     expect((await page.h.server(page.server.id)).desiredRevisionId).toBe(before.desiredRevisionId)
     expect((await page.h.app.modQueries.list(page.owner, page.server.id)).modpack.version).toBe('1.0')
     expect(page.mutations.filter((call) => call.path.endsWith('/mods.changePack'))).toHaveLength(0)
+    await page.plan()
+    await act(async () => document.querySelector('input[value="now"]').click())
+    await act(async () => button('Update and restart').click())
+    await until(async () => (await page.h.operations(page.server.id)).some((op) => op.kind === 'apply'))
+    await act(async () => {
+      await page.h.settled(page.server.id)
+    })
+    await until(() => !document.body.textContent.includes('Update to 2.0'))
+    expect(await page.h.minecraft.file(page.server.id, 'mods/farm-2.jar')).not.toBeNull()
   } finally {
     await page.close()
   }

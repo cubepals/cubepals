@@ -244,8 +244,8 @@ export function composeControlPlane(ports: ControlPlanePorts, settings: ControlP
     pin: (projectId, versionId) => setups.pinnedPack(projectId, versionId),
     resolve: (target, wanted) => mods.resolveNew(target, wanted),
     verify: (checked) => configuration.release(checked),
-    ...(settings.curatedPacks === undefined ? {} : { packs: settings.curatedPacks }),
-    ...(settings.ownPacks === undefined ? {} : { own: settings.ownPacks }),
+    packs: settings.curatedPacks,
+    own: settings.ownPacks,
   })
   const queries = new ServerQueries({
     ...ports,
@@ -431,6 +431,7 @@ function artifactServices(
       return pack === null ? false : learnPack(contents(), pack, found)
     },
   })
+  ports.jobs.registerModValidation(modValidation)
   const configuration = new ConfigurationPreflight({
     ...ports,
     artifacts,
