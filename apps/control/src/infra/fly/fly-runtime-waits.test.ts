@@ -247,6 +247,24 @@ describe('FlyRuntime waiting on a machine that never starts', () => {
   })
 })
 
+/** Cancellation must settle before the test runner's timeout, including an in-flight lookup. */
+async function completes<T>(promise: Promise<T>, within = 1500): Promise<T> {
+  const pending = Symbol('operation still pending')
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    const result = await Promise.race([
+      promise,
+      new Promise<typeof pending>((resolve) => {
+        timer = setTimeout(() => resolve(pending), within)
+      }),
+    ])
+    expect(result).not.toBe(pending)
+    return result as T
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 test('cancelling a running-state wait aborts its pending machine read', async () => {
   const received = Promise.withResolvers<void>()
   let requestSignal: AbortSignal | undefined
@@ -264,9 +282,9 @@ test('cancelling a running-state wait aborts its pending machine read', async ()
     () => null,
     (error: unknown) => error,
   )
-  await received.promise
+  await completes(received.promise, 500)
   cancel.abort(new Error('readiness already answered'))
-  expect(await waiting).toBe(cancel.signal.reason)
+  expect(await completes(waiting)).toBe(cancel.signal.reason)
   expect(requestSignal?.aborted).toBe(true)
 })
 
@@ -304,9 +322,9 @@ test('cancelling a disappearing-machine lookup aborts its pending app listing', 
     () => null,
     (error: unknown) => error,
   )
-  await listing.promise
+  await completes(listing.promise, 500)
   cancel.abort(new Error('game answered during lookup'))
-  expect(await waiting).toBe(cancel.signal.reason)
+  expect(await completes(waiting)).toBe(cancel.signal.reason)
   expect(requestSignal?.aborted).toBe(true)
 })
 
@@ -319,10 +337,12 @@ test('a briefly missing machine stops being retried when readiness observation i
     () => null,
     (error: unknown) => error,
   )
-  while (!fake.calls.includes(`GET /v1/apps/${APP}/machines`)) await Bun.sleep(1)
+  const observingBy = Date.now() + 500
+  while (!fake.calls.includes(`GET /v1/apps/${APP}/machines`) && Date.now() < observingBy) await Bun.sleep(1)
+  expect(fake.calls).toContain(`GET /v1/apps/${APP}/machines`)
   // Let the real app-list response reach the disappearance retry path before cancelling it.
   await Bun.sleep(10)
   cancel.abort(new Error('readiness observation ended'))
-  expect(await waiting).toBe(cancel.signal.reason)
+  expect(await completes(waiting)).toBe(cancel.signal.reason)
   expect(fake.calls.filter((call) => call === `GET /v1/apps/${APP}/machines`)).toHaveLength(1)
 })
