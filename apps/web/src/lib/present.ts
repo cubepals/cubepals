@@ -4,7 +4,7 @@
 
 import { etaLine as operationEtaLine } from './operation-eta'
 
-export function etaLine(startedAt: string | null, expectedSeconds: number, now: number): string {
+export function etaLine(startedAt: string | null, expectedSeconds: number | null, now: number): string {
   return operationEtaLine(startedAt, expectedSeconds, now)
 }
 
@@ -27,6 +27,7 @@ import { DAY_MS, DAY_S, HOUR_S, MINUTE_S } from '@blockly/contracts/durations'
 import { PICK_ANOTHER_NAME } from '@blockly/contracts/names'
 import type { PillStatus, ProvisioningStep } from '../ui'
 import { broughtJourney } from './brought-journey'
+import { checkEstimate, checkingModsProgress, journeyEstimate } from './mod-check-progress'
 import { outOfPlay } from './out-of-play'
 import { restoreSeconds } from './restore-pace'
 
@@ -140,7 +141,6 @@ function failureLine(during: string | undefined, remedy: string | null | undefin
 type Named = Pick<ServerView, 'gameVersion' | 'modCount'> & { modpack: { name: string } | null }
 
 /** Whether a first start downloads mods as well as Minecraft: a pack's, or the server's own. */
-import { checkEstimate, checkingModsProgress, journeyEstimate } from './mod-check-progress'
 
 const modded = (server: Named) => server.modpack !== null || server.modCount > 0
 
