@@ -169,7 +169,7 @@ test.skipIf(!hasDatabase)('a removed version is not replaced by another reviewed
 })
 
 test.skipIf(!hasDatabase)(
-  'absent and already verified releases are not downloaded again',
+  'review state preserves absent, verified and native-refused releases',
   async () => {
     const key = 'pending-only'
     reviewed(key, 'mirror', publishPack(key, []))
@@ -186,22 +186,16 @@ test.skipIf(!hasDatabase)(
     await h.app.curation.ingest({ key, version: '1.0' })
     expect(await loadRelease(h.db, key, '1.0')).toEqual(verified)
     expect(cdn.downloads).toBe(checked)
-  },
-  30 * SECOND_MS,
-)
 
-test.skipIf(!hasDatabase)(
-  'a native loader refusal prevents publishing a reviewed release',
-  async () => {
-    const key = 'native-refused-release'
-    reviewed(key, 'upstream', publishPack(key, [{ id: 'native-required', licence: 'MIT' }]))
-    await insertPending(h.db, key, '1.0')
+    const refusedKey = 'native-refused-release'
+    reviewed(refusedKey, 'upstream', publishPack(refusedKey, [{ id: 'native-required', licence: 'MIT' }]))
+    await insertPending(h.db, refusedKey, '1.0')
     h.minecraft.breakOn(
       () => "Mod 'Waystones' (waystones) 21.1.25 requires any version of balm, which is missing!",
     )
     try {
-      await h.app.curation.ingest({ key, version: '1.0' })
-      const refused = await loadRelease(h.db, key, '1.0')
+      await h.app.curation.ingest({ key: refusedKey, version: '1.0' })
+      const refused = await loadRelease(h.db, refusedKey, '1.0')
       expect(refused?.state).toBe('refused')
       expect(refused?.refusal).toContain('balm')
       expect(refused?.detail).toBe(refused?.refusal)
