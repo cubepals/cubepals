@@ -2,9 +2,11 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import { etaLine } from './operation-eta'
+import { etaLine as operationEtaLine } from './operation-eta'
 
-export { etaLine } from './operation-eta'
+export function etaLine(startedAt: string | null, expectedSeconds: number, now: number): string {
+  return operationEtaLine(startedAt, expectedSeconds, now)
+}
 
 import {
   type ChangeKind,
