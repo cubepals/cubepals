@@ -23,6 +23,7 @@ import { SlpProbe } from '../mc-protocol/slp.ts'
 import { S3ArchiveStore } from '../s3/s3-archive-store.ts'
 import { DockerLogSource } from './docker-logs.ts'
 import { helperRunner } from './docker-runtime/helper.ts'
+import { ensureImage } from './docker-runtime/images.ts'
 import { DockerRuntime } from './docker-runtime.ts'
 import { decodeHandle, encodeHandle } from './handle.ts'
 
@@ -486,6 +487,10 @@ describe.skipIf(!existsSync(SOCKET))('Docker installs', () => {
         .remove()
         .catch(() => undefined)
   })
+
+  test('a refused registry pull preserves the real Docker error', async () => {
+    await expect(ensureImage(docker, '127.0.0.1:1/blockly-unavailable:latest')).rejects.toBeInstanceOf(Error)
+  }, 30_000)
 
   test('a new server gets the install made for its release, and nothing else of that run', async () => {
     // What a setup-only run leaves: the install, and the console password it made on the way.
