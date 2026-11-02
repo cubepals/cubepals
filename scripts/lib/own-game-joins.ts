@@ -10,6 +10,7 @@
  * Not for the client itself (`into-world.ts`), or for anything else of the journey.
  */
 import { randomUUID } from 'node:crypto'
+import { MINUTE_MS } from '@blockly/contracts/durations'
 import { seconds } from './check-progress.ts'
 import { intoWorld } from './into-world.ts'
 import type { Edge } from './minecraft.ts'
@@ -21,6 +22,9 @@ import type { Api } from './people.ts'
  * held on a prompt, as by a resource pack offered while joining, never gets there.
  */
 const IN_WORLD_LIMIT_MS = 3_000
+
+/** A lost Fly suspension needs the ordinary cold boot budget before login; the post-login limit stays strict. */
+const WAKE_JOIN_LIMIT_MS = 10 * MINUTE_MS
 
 /** As much of the staging check's journey as these joins use. */
 interface Joiner {
@@ -46,8 +50,8 @@ export async function ownGameJoins(j: Joiner, edge: Edge, sql: (statement: strin
     onlineMode: false,
   })
   await j.waitFor((v) => v.status === 'running' && v.activeOperation === null, 'started again', 600)
-  const timed = async (what: string) => {
-    const { loggedInMs, inWorldMs } = await intoWorld(edge, j.address(), 'StagingCheck')
+  const timed = async (what: string, timeoutMs?: number) => {
+    const { loggedInMs, inWorldMs } = await intoWorld(edge, j.address(), 'StagingCheck', timeoutMs)
     const took = inWorldMs - loggedInMs
     if (took > IN_WORLD_LIMIT_MS)
       throw new Error(
@@ -60,5 +64,5 @@ export async function ownGameJoins(j: Joiner, edge: Edge, sql: (statement: strin
   const awake = await timed('awake')
   await j.api('servers.stop', { serverId: j.server.id, requestId: randomUUID() })
   await j.waitFor((v) => v.status === 'stopped' && v.activeOperation === null, 'went to sleep', 300)
-  return `in the world ${awake} after logging in awake, ${await timed('woken by the join')} woken by the join`
+  return `in the world ${awake} after logging in awake, ${await timed('woken by the join', WAKE_JOIN_LIMIT_MS)} woken by the join`
 }

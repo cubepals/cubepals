@@ -154,13 +154,15 @@ describe('a start', () => {
     expect(log[0]).toBe('[init] Starting the Minecraft server...')
     expect(log.map(unclocked)).toEqual([
       '[init] Starting the Minecraft server...',
+      '[Server thread/INFO]: Starting minecraft server version unknown',
       '[Server thread/INFO]: Done (0.100s)! For help, type "help"',
       '[Server thread/INFO]: [Rcon: Whitelist is now turned on]',
       '[Server thread/INFO]: Stopping server',
       '[init] Starting the Minecraft server...',
+      '[Server thread/INFO]: Starting minecraft server version unknown',
       '[Server thread/INFO]: Done (0.100s)! For help, type "help"',
     ])
-    expect(log[1]).toMatch(/^\[\d\d:\d\d:\d\d\] \[Server thread\/INFO\]: Done/)
+    expect(log[2]).toMatch(/^\[\d\d:\d\d:\d\d\] \[Server thread\/INFO\]: Done/)
     expect(await minecraft.file(m.key, 'world/level.dat')).toBe('opened by unknown\nopened by unknown\n')
   })
 
@@ -677,6 +679,7 @@ describe('the switches tests flip', () => {
     expect(await minecraft.file(m.key, 'world/level.dat')).toBe('opened by 26.3\n')
     expect((await lines(minecraft, m.key)).map(unclocked)).toEqual([
       '[init] Starting the Minecraft server...',
+      '[Server thread/INFO]: Starting minecraft server version 26.3',
       '[Server thread/ERROR]: Encountered an unexpected exception: java.lang.IllegalStateException: bad',
       '\tat a.b(C.java:1)',
     ])
@@ -693,6 +696,7 @@ describe('the switches tests flip', () => {
     await minecraft.start(m)
     expect((await lines(minecraft, m.key)).map(unclocked)).toEqual([
       '[init] Starting the Minecraft server...',
+      '[Server thread/INFO]: Starting minecraft server version slow',
     ])
     await expect(minecraft.ping({ host: m.host, port: 25565 }, new AbortController().signal)).rejects.toThrow(
       'Connection refused',
