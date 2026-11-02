@@ -52,8 +52,10 @@ async function workerProgress() {
         })
         expect(row?.progress?.step).toBe('packing')
         if (kind === 'plain') {
-          expect(row?.progress?.totalBytes).toBeGreaterThan(0)
-          expect(row?.progress?.bytes).toBe(row?.progress?.totalBytes)
+          const total = row?.progress?.totalBytes
+          expect(total).toBeGreaterThan(0)
+          if (total == null) throw new Error('A rewritten archive must have a measured total')
+          expect(row?.progress?.bytes).toBe(total)
         } else expect(row?.progress?.totalBytes).toBeNull()
         checkedPacking = true
       }
