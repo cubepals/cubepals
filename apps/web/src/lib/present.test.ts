@@ -12,7 +12,7 @@ import {
   PLAY_ICONS,
   type ServerView,
 } from '@blockly/contracts'
-import { MINUTE_MS } from '@blockly/contracts/durations'
+import { MINUTE_MS, SECOND_MS } from '@blockly/contracts/durations'
 import {
   downloadOf,
   etaLine,
@@ -269,6 +269,16 @@ describe('building a world', () => {
       server,
     )
 
+  test('a native compatibility check shows its own indeterminate step', () => {
+    expect(at('checking_mods')).toMatchObject({
+      title: 'Checking the server’s mods',
+      expectedSeconds: null,
+      percent: 0,
+      index: 0,
+      steps: [{ label: 'Testing these mods together', state: 'active', indeterminate: true }],
+    })
+  })
+
   // Measured on a real provision: the download took most of the wait with nothing moving, and
   // "Generating the world" stood over all of it though the world itself took under two seconds.
   test('each step is what the server has actually reached', () => {
@@ -471,5 +481,32 @@ test('the retained progress labels still describe the current stage', () => {
 test('an isolated mod check names its work before the world opens', () => {
   expect(quietLine('checking_mods', { gameVersion: '26.3', modCount: 11, modpack: null })).toBe(
     'Testing these mods together before opening your world',
+  )
+})
+
+test('a wake countdown starts when work began, and falls back to creation only before then', () => {
+  const createdAt = '2026-11-03T07:00:00Z',
+    startedAt = '2026-11-03T07:05:00Z'
+  const server = {
+    status: 'starting',
+    gameVersion: '26.3',
+    modCount: 11,
+    modpack: null,
+    lastWakeSeconds: 68,
+    activeOperation: {
+      kind: 'start',
+      step: 'loading_world',
+      status: 'running',
+      createdAt,
+      startedAt,
+      modCheckSeconds: 0,
+    },
+  } as unknown as ServerView
+  expect(presentStatus(server, Date.parse(startedAt) + 10 * SECOND_MS).detail).toBe(
+    'Loading the world · About a minute left',
+  )
+  const queued = { ...server, activeOperation: { ...server.activeOperation, startedAt: null } } as ServerView
+  expect(presentStatus(queued, Date.parse(createdAt) + 10 * SECOND_MS).detail).toBe(
+    'Loading the world · About a minute left',
   )
 })

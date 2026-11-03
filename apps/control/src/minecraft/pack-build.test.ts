@@ -303,6 +303,8 @@ describe('checking what a pack installed', () => {
     ].join('\n')
     // c.jar isn't in the image's record: on its own list of mods for players' games.
     expect(packProblems(check, out)).toEqual(['mods/b.jar'])
+    // Isolated compatibility checks require every jar retained by the server inclusion policy.
+    expect(packProblems(check, out, true)).toEqual(['mods/b.jar', 'mods/c.jar'])
     // With no record at all, every expected jar counts.
     expect(packProblems(check, `\n--- blockly: end of manifest ---\n${'a'.repeat(128)}  mods/a.jar`)).toEqual(
       ['mods/b.jar', 'mods/c.jar'],

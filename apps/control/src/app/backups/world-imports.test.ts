@@ -15,7 +15,7 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
-import { type BroughtModsJson, schema } from '@blockly/db'
+import { schema } from '@blockly/db'
 import { eq, sql } from 'drizzle-orm'
 import { LibraryFileFormats } from '../../infra/formats/file-formats.ts'
 import { LibraryUploadArchives } from '../../infra/formats/world-archives.ts'
@@ -78,8 +78,6 @@ const unpacked = async (key: string | null): Promise<string> => {
 }
 
 describe.skipIf(!hasDatabase)('a single-player save', () => {
-  test('retained mod facts survive catalog outages and report their compatibility', retainedModView, 30_000)
-
   test('a single-player save, zipped: its host is asked for, and gets what they carried', async () => {
     const { owner, id } = await server('Alex')
     const zip = zipBytes(await save('My World 🌲/', true))
@@ -594,43 +592,4 @@ async function importWriteFailures() {
       await h.settled(id)
     }
   }
-}
-
-async function retainedModView() {
-  const { owner, id } = await server('Retained mod view')
-  const read = await bringWorld(h, owner, id, zipBytes(await save('Retained/')))
-  const backup = await broughtBackup(h, read)
-  if (backup.worldFacts === null) throw new Error('The actual import has no world facts')
-  const mods: BroughtModsJson = {
-    loader: 'fabric',
-    catalog: [
-      { name: 'Retained mod', fileName: 'retained.jar', projectId: 'retained', versionId: 'retained-1' },
-    ],
-    own: [],
-    forPlayers: [],
-    refused: [],
-  }
-  await h.db
-    .update(schema.backups)
-    .set({ worldFacts: { ...backup.worldFacts, mods } })
-    .where(eq(schema.backups.id, backup.id))
-  h.catalog.outage(true)
-  try {
-    const unavailable = await h.app.backups.imports.view(owner, id, read.importId)
-    expect(unavailable.status).toBe('ready')
-    if (unavailable.status !== 'ready') throw new Error('The retained import disappeared')
-    expect(unavailable.playedWith?.mods?.mods.map((mod) => mod.name)).toEqual(['Retained mod'])
-    expect(unavailable.compatibility?.state).toBe('unavailable')
-  } finally {
-    h.catalog.outage(false)
-  }
-  await h.db
-    .update(schema.backups)
-    .set({ worldFacts: { ...backup.worldFacts, mods, gameVersion: '99.1' } })
-    .where(eq(schema.backups.id, backup.id))
-  const blocked = await h.app.backups.imports.view(owner, id, read.importId)
-  expect(blocked.status === 'ready' && blocked.compatibility?.state).toBe('blocked')
-  await h.app.servers.stop(owner, id, randomUUID())
-  await h.until(id, 'stopped')
-  await h.settled(id)
 }

@@ -2,63 +2,37 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-/** Pinned files and a live validation lease, beside an ordinary server, for scoped-download contracts. */
+/** Pinned bytes and a live validation lease, using the application's actual configuration planner. */
+import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { MINUTE_MS } from '@blockly/contracts/durations'
-import { type ModValidationPlanJson, schema } from '@blockly/db'
+import { schema } from '@blockly/db'
 import { validationKey } from '../app/mods/validation-plan.ts'
-import { defaultSettings } from '../domain/revision/revision.ts'
+import { loadRevision } from '../app/servers/persistence.ts'
 import type { Cdn } from './cdn.ts'
 import type { Harness } from './harness.ts'
-import { utf8, zipBytes } from './uploads.ts'
 
 export async function validationScope(h: Harness, cdn: Cdn) {
-  const owner = await h.user('Normal downloads', 'plus')
-  const server = await h.create(owner, { loader: 'vanilla' })
+  const owner = await h.user(randomUUID(), 'plus')
+  const server = await h.create(owner)
   await h.until(server.id, 'running')
   await h.settled(server.id)
-  const mod = cdn.publish('scope-main'),
-    companion = cdn.publish('scope-companion')
-  const base: ModValidationPlanJson = {
-    gameVersion: '26.3',
-    loader: 'fabric',
-    loaderVersion: '0.19.5',
-    settings: defaultSettings({ name: 'Scope', gameMode: 'survival', maxPlayers: 1 }),
-    mods: [mod],
-    compat: [],
-    modpack: null,
-    files: [],
-    memoryTier: '3g',
-    storageGb: 5,
-    provider: 'fake',
-    regionKey: 'local',
-  }
-  const pack = cdn.publish(
-    'scope-pack',
-    Buffer.from(
-      zipBytes({
-        'modrinth.index.json': utf8(
-          JSON.stringify({
-            formatVersion: 1,
-            game: 'minecraft',
-            versionId: '1',
-            name: 'Scope',
-            files: [],
-            dependencies: { minecraft: base.gameVersion, 'fabric-loader': base.loaderVersion },
-          }),
-        ),
-      }),
-    ),
-  )
+  const mod = cdn.publish(randomUUID()),
+    companion = cdn.publish(randomUUID()),
+    pack = cdn.publish(randomUUID())
+  const revision = await loadRevision(h.db, (await h.server(server.id)).desiredRevisionId)
+  const base = await h.app.configuration.plan({ ...revision, mods: [mod] })
+  assert(base)
+  // Access checks concern exact artifact identities; this pack is never installed.
   const plan = {
     ...base,
     compat: [companion],
     modpack: {
-      catalog: 'modrinth',
-      projectId: 'scope-pack',
-      versionId: '1',
-      name: 'Scope',
-      versionLabel: '1',
+      catalog: pack.source.catalog,
+      projectId: pack.artifact.sha512,
+      versionId: pack.artifact.sha512,
+      name: pack.name,
+      versionLabel: pack.versionLabel,
       artifact: pack.artifact,
       page: null,
     },

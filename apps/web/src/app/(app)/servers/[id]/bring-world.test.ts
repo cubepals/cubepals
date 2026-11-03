@@ -7,14 +7,13 @@ import { afterAll, afterEach, beforeAll, expect, test } from 'bun:test'
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import type { ServerView, WorldImportView } from '@blockly/contracts'
+import { SECOND_MS } from '@blockly/contracts/durations'
 import { answered } from '@blockly/control/testing/answered'
 import { refusing } from '@blockly/control/testing/refusing'
-import { type QueryClient, useQueryClient } from '@tanstack/react-query'
+import type { QueryClient } from '@tanstack/react-query'
 import { act, createElement } from 'react'
 import type { Root } from 'react-dom/client'
-import { ApiProvider } from '../../../../lib/api'
 import { type Brought, broughtFrom } from '../../../../lib/brought-files'
-import { BringWorld } from './bring-world'
 
 const id = crypto.randomUUID()
 const importId = crypto.randomUUID()
@@ -42,6 +41,9 @@ let chosen: Brought = { kind: 'file', file: new File(['a world'], 'Life.tar') }
 let failure: string | null = null
 let root: Root | undefined
 let queries: QueryClient
+let useQueryClient: typeof import('@tanstack/react-query').useQueryClient
+let ApiProvider: typeof import('../../../../lib/api').ApiProvider
+let BringWorld: typeof import('./bring-world').BringWorld
 let host: HTMLElement
 const quality = createRequire(new URL('../../../../../../../tools/quality/package.json', import.meta.url))
 let window: ReturnType<typeof quality>
@@ -51,7 +53,7 @@ let closed = 0
 const realFetch = globalThis.fetch
 let endpoint: ReturnType<typeof Bun.serve>
 
-beforeAll(() => {
+beforeAll(async () => {
   window = new (quality('happy-dom').Window)({ url: 'http://localhost:3000' })
   const keys = [
     'window',
@@ -67,6 +69,10 @@ beforeAll(() => {
   original = new Map(keys.map((key) => [key, Reflect.get(globalThis, key)]))
   for (const key of keys) Reflect.set(globalThis, key, key === 'window' ? window : Reflect.get(window, key))
   Reflect.set(globalThis, 'IS_REACT_ACT_ENVIRONMENT', true)
+  // React Query chooses browser timer behavior when its module first loads.
+  ;({ useQueryClient } = await import('@tanstack/react-query'))
+  ;({ ApiProvider } = await import('../../../../lib/api'))
+  ;({ BringWorld } = await import('./bring-world'))
   window.HTMLDialogElement.prototype.showModal = function (this: HTMLDialogElement) {
     this.open = true
   }
@@ -106,6 +112,7 @@ beforeAll(() => {
 afterEach(async () => {
   await act(async () => {
     root?.unmount()
+    queries?.clear()
   })
   host?.remove()
   calls = []
@@ -186,9 +193,6 @@ test('an uploaded world shows its real stage and bytes, then plays the kept back
   expect(text()).toMatch(/\d+s elapsed/)
   expect(text()).not.toContain('NaN')
   state = ready()
-  await act(async () => {
-    await queries.invalidateQueries()
-  })
   await until(() => text().includes('Life is ready'))
   await click('Play Life')
   await until(() => closed === 1)
@@ -367,28 +371,38 @@ test('a ready world can be sent again from its instance when its mods were missi
   await until(() => text().includes('Life is ready'))
 })
 
-test('an imported world waits for real mod proof and temporary failures remain visible until verified', async () => {
-  const check = { key: 'check', state: 'checking' as const, message: null, checkedAt: null }
-  await show({ ...ready(), compatibility: check })
-  await until(() => text().includes('Life is imported'))
-  expect(button('Play Life').disabled).toBe(true)
-  expect(text()).toContain('testing the server’s mods together')
-  state = {
-    ...ready(),
-    compatibility: { ...check, state: 'unavailable', message: 'The check will be retried.' },
-  }
-  await act(async () => {
-    await queries.invalidateQueries()
-  })
-  await until(() => text().includes('The check will be retried.'))
-  expect(button('Play Life').disabled).toBe(true)
-  state = { ...ready(), compatibility: { ...check, state: 'verified', checkedAt: new Date().toISOString() } }
-  await act(async () => {
-    await queries.invalidateQueries()
-  })
-  await until(() => text().includes('Life is ready'))
-  expect(button('Play Life').disabled).toBe(false)
-})
+test(
+  'an imported world waits for real mod proof and temporary failures remain visible until verified',
+  async () => {
+    const check = { key: 'check', state: 'checking' as const, message: null, checkedAt: null }
+    await show({ ...ready(), compatibility: check })
+    await until(() => text().includes('Life is imported'))
+    expect(button('Play Life').disabled).toBe(true)
+    expect(text()).toContain('testing the server’s mods together')
+    expect(document.querySelector('.bk-note--info')?.textContent).toContain(
+      'testing the server’s mods together',
+    )
+    state = {
+      ...ready(),
+      compatibility: { ...check, state: 'unavailable', message: 'The check will be retried.' },
+    }
+    await until(() => text().includes('The check will be retried.'))
+    expect(document.querySelector('.bk-note--info')?.textContent).toBe('The check will be retried.')
+    expect(button('Play Life').disabled).toBe(true)
+    state = {
+      ...ready(),
+      compatibility: { ...check, state: 'verified', checkedAt: new Date().toISOString() },
+    }
+    await until(() => text().includes('Life is ready'))
+    expect(button('Play Life').disabled).toBe(false)
+    const reads = calls.filter((call) => call.method === 'imports.view').length
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 2 * SECOND_MS))
+    })
+    expect(calls.filter((call) => call.method === 'imports.view')).toHaveLength(reads)
+  },
+  8 * SECOND_MS,
+)
 
 test('a loader conflict keeps the imported world and explains why Play is unavailable', async () => {
   await show({
@@ -402,6 +416,10 @@ test('a loader conflict keeps the imported world and explains why Play is unavai
   })
   await until(() => text().includes('A required server library is missing.'))
   expect(text()).toContain('Life is imported')
+  expect(document.querySelector('[role=alert]')?.textContent).toBe('A required server library is missing.')
+  expect(document.querySelector('.bk-note--danger')?.textContent).toBe(
+    'A required server library is missing.',
+  )
   expect(button('Play Life').disabled).toBe(true)
   await click('Not now')
   expect(closed).toBe(1)
