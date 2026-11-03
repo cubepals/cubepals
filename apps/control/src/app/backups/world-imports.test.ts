@@ -630,4 +630,7 @@ async function retainedModView() {
     .where(eq(schema.backups.id, backup.id))
   const blocked = await h.app.backups.imports.view(owner, id, read.importId)
   expect(blocked.status === 'ready' && blocked.compatibility?.state).toBe('blocked')
+  await h.app.servers.stop(owner, id, randomUUID())
+  await h.until(id, 'stopped')
+  await h.settled(id)
 }

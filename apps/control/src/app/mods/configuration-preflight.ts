@@ -8,7 +8,7 @@ import type { Db, ModValidationPlanJson } from '@blockly/db'
 import { entitlementsFor, planThatRuns } from '../../domain/account/entitlements.ts'
 import { defaultSettings, type ServerRevision } from '../../domain/revision/revision.ts'
 import { isMemoryTier } from '../../domain/server/size.ts'
-import { type ArtifactService, ArtifactUnavailable } from '../artifacts/service.ts'
+import type { ArtifactService } from '../artifacts/service.ts'
 import type { Checked } from '../curation/check-outcome.ts'
 import type { Runtimes } from '../runtimes/router.ts'
 import { findServer, loadRuntime } from '../servers/persistence.ts'
@@ -16,7 +16,7 @@ import { packOf } from '../servers/revision-reads.ts'
 import type { DesiredRuntime, RuntimeSpecs } from '../servers/specs.ts'
 import type { ModValidation } from './validation.ts'
 import { currentValidationPlan, validationKey } from './validation-plan.ts'
-import { IncompatibleMods, ValidationUnavailable } from './validation-runtime.ts'
+import { IncompatibleMods } from './validation-runtime.ts'
 
 interface PreflightDependencies {
   db: Db
@@ -121,15 +121,4 @@ export class ConfigurationPreflight {
       throw error
     }
   }
-}
-
-/** Recognized preflight refusals leave a player runtime untouched; unexpected faults still escape. */
-export function configurationRefusal(
-  error: unknown,
-): error is ArtifactUnavailable | IncompatibleMods | ValidationUnavailable {
-  return (
-    error instanceof ArtifactUnavailable ||
-    error instanceof IncompatibleMods ||
-    error instanceof ValidationUnavailable
-  )
 }
