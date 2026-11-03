@@ -59,7 +59,7 @@ const open = (checkouts: number, readAt?: Date) =>
   })
 const lastCheckout = () => [...w.checkouts.values()].at(-1)?.asked
 
-describe.skipIf(!hasDatabase)('pricing during a refresh interruption', () => {
+describe.skipIf(!hasDatabase)('the price a checkout holds', () => {
   test('a missed refresh keeps the checkout price and still counts paid holds', async () => {
     await open(2)
     const owner = await w.h.user('Before interruption')
@@ -82,9 +82,6 @@ describe.skipIf(!hasDatabase)('pricing during a refresh interruption', () => {
       setSystemTime()
     }
   })
-})
-
-describe.skipIf(!hasDatabase)('the price a checkout holds', () => {
   test('with no room, a month is the plan’s own price, sold on its own product with a code allowed', async () => {
     const owner = await w.h.user('Closed')
     expect(await w.h.app.billing.offer(owner, 'core')).toMatchObject({ priceCents: 999, productId: null })
