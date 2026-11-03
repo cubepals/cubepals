@@ -35,20 +35,18 @@ export async function publicPlans(keptSeconds?: number): Promise<PublicPlan[]> {
   }
 }
 
-/** How long what a month charges now may be kept: the control plane keeps it as long. */
-const OFFER_KEPT_SECONDS = 60
-
 /**
  * The plans with what a month of each charges someone who subscribes now (`/api/public/offer`), for
  * the cards and words people choose on: the plan's own price and hours, or an early price's while
- * one is open, kept a minute. Where it can't be read, the plan table's own. Never for what is
+ * one is open. Read on each render, just as the account does; the control plane owns caching.
+ * Where it can't be read, the plan table's own. Never for what is
  * cached longer or sent (structured data, the title), which keeps `plans` as they are.
  */
 export async function offeredPlans(plans: readonly PublicPlan[]): Promise<PublicPlan[]> {
   try {
     const response = await fetch(`${apiUpstream()}/api/public/offer`, {
       signal: AbortSignal.timeout(RENDER_READ_MS),
-      next: { revalidate: OFFER_KEPT_SECONDS },
+      cache: 'no-store',
     })
     return withOffers(plans, response.ok ? ((await response.json()) as PublicOffer[]) : [])
   } catch {
