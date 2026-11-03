@@ -23,6 +23,10 @@ on:
         default: false
   workflow_dispatch:
     inputs:
+      affected_comparison:
+        description: Benchmark affected checks on a non-main branch
+        type: boolean
+        default: false
       comparison_base:
         description: Exact ancestor SHA for a representative runtime benchmark
         type: string
@@ -42,7 +46,7 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
-  QUALITY_EXECUTION_SCOPE: ${{ github.event_name == 'pull_request' && 'affected' || 'full' }}
+  QUALITY_EXECUTION_SCOPE: ${{ (github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && github.ref != 'refs/heads/main' && inputs.affected_comparison == true)) && 'affected' || 'full' }}
   QUALITY_FULL_AUDIT: ${{ inputs.full_quality == true }}
 
 jobs:
@@ -65,6 +69,7 @@ jobs:
       services: ${{ steps.plan.outputs.services }}
       mutation: ${{ steps.plan.outputs.mutation }}
       matrix: ${{ steps.plan.outputs.matrix }}
+      scope: ${{ steps.plan.outputs.scope }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -422,7 +427,7 @@ jobs:
       matrix: ${{ fromJSON(needs.changes.outputs.matrix) }}
     uses: ./.github/workflows/quality-runner.yml
     with:
-      scope: ${{ github.event_name == 'pull_request' && 'affected' || 'full' }}
+      scope: ${{ needs.changes.outputs.scope }}
       services: ${{ matrix.services }}
       kind: native
       group: ${{ matrix.quality }}
@@ -441,7 +446,7 @@ jobs:
         partition: [0, 1, 2, 3]
     uses: ./.github/workflows/quality-runner.yml
     with:
-      scope: ${{ github.event_name == 'pull_request' && 'affected' || 'full' }}
+      scope: ${{ needs.changes.outputs.scope }}
       services: ${{ needs.changes.outputs.services == 'true' }}
       kind: mutation
       partition: ${{ matrix.partition }}

@@ -315,6 +315,9 @@ real module graphs. `ci-selection.mjs` retains consumers from either revision, i
 whose imports were removed. Uncertain mappings widen the relevant runtime. The same plan drives
 partition selection, service prerequisites, profile validation and the required job aggregate.
 There is no per-PR opt-out. Quality/controller changes retain complete tests and adversarial proof.
+Manual non-main runs can request `affected_comparison` with an exact `comparison_base` to measure
+the PR path without opening another PR or deploying application changes. Main always retains its
+complete comparison, and `full_quality` still broadens either path into the complete audit.
 
 `changed-coverage.mjs` and `coverage-lines.mjs` select existing-file counters from verified Git
 locations; new files retain complete coverage floors. JaCoCo uses its actual line and method

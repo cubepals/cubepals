@@ -29,6 +29,7 @@ const mutation =
   process.env.QUALITY_FULL_AUDIT === 'true' || plan.impact.changed.some((path) => production.has(path))
 const outputs = {
   ...plan.impact.checks,
+  scope: plan.mode,
   mutation,
   complete: plan.impact.complete,
   matrix: JSON.stringify(matrix),
