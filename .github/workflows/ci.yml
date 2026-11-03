@@ -438,7 +438,7 @@ jobs:
   mutation:
     name: Mutation runner ${{ matrix.partition }}
     needs: [changes, quality]
-    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.mutation == 'true'
+    if: ${{ !cancelled() && needs.changes.result == 'success' && needs.quality.result == 'success' && needs.changes.outputs.code == 'true' && needs.changes.outputs.mutation == 'true' }}
     strategy:
       fail-fast: false
       max-parallel: ${{ (github.event_name == 'schedule' || inputs.full_quality == true) && 2 || 4 }}
@@ -527,7 +527,7 @@ jobs:
   mutation_quality:
     name: Every mutation partition is complete
     needs: [changes, mutation]
-    if: needs.changes.outputs.mutation == 'true'
+    if: ${{ !cancelled() && needs.changes.result == 'success' && needs.mutation.result == 'success' && needs.changes.outputs.mutation == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

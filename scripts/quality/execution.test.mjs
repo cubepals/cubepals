@@ -323,3 +323,13 @@ test('superseded PR runs cancel while main groups retain their exact commit iden
   assert.match(workflow, /cancel-in-progress: \$\{\{ github.event_name == 'pull_request' \}\}/)
   assert.match(workflow, /github.event_name == 'push' && github.sha/)
 })
+
+test('optional baseline skips cannot propagate past explicitly required quality dependencies', () => {
+  const workflow = readFileSync(new URL('../../.github/workflows/ci.yml', import.meta.url), 'utf8')
+  for (const name of ['test', 'quality', 'mutation', 'mutation_quality']) {
+    const block = workflow.match(new RegExp(`^  ${name}:\\n(?:(?!^  [a-z_]+:)[\\s\\S])*`, 'm'))?.[0]
+    assert.ok(block, `Missing required job ${name}`)
+    assert.match(block, /if: \$\{\{ !cancelled\(\)/, name)
+    assert.match(block, /needs\.changes\.result == 'success'/, name)
+  }
+})
