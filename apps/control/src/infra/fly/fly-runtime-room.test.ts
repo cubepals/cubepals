@@ -20,6 +20,7 @@ import {
 import { recordingTarget } from '../../testing/archive-target.ts'
 import { type FlySchemas, flyClient } from './client.ts'
 import { FakeFly } from './fake-fly.ts'
+import { createVolume, VOLUME_NAME } from './fly-runtime/volumes.ts'
 import { FlyRuntime } from './fly-runtime.ts'
 import { decodeHandle, encodeHandle } from './handle.ts'
 
@@ -91,6 +92,10 @@ describe('FlyRuntime at the organization’s machine limit', () => {
     const from = { kind: 'snapshot' as const, snapshot }
     await expect(runtime.restore(other, from, spec, progress)).rejects.toThrow()
     await expect(runtime.relocate(other, place, spec, progress, snapshot)).rejects.toThrow()
+    const api = flyClient('token', { fetch: fake.fetch as never })
+    const data = { name: VOLUME_NAME, region: 'fra', size_gb: spec.storage.sizeGb }
+    await Promise.all([1, 2, 3, 4].map(() => createVolume(api, APP, data, 30)))
+    await expect(runtime.release(encodeHandle(next))).rejects.toThrow()
   })
 
   test('Fly’s limit is asked again until a machine frees, never a failure', async () => {
