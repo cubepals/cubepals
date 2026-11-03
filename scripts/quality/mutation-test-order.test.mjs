@@ -328,3 +328,34 @@ test('a service includes complementary recorded-input tests in its own domain di
     paths.sort(),
   )
 })
+
+test('verified evidence from another native group still orders the subject’s actual tests', () => {
+  const source = 'apps/control/src/app/mods/configuration-preflight.ts'
+  const direct = 'apps/control/src/app/control-plane.test.ts'
+  const incidental = 'apps/control/src/app/mods/search.test.ts'
+  const entries = [
+    { path: source, kind: 'source', sha256: 'source' },
+    { path: direct, kind: 'test', sha256: 'direct' },
+    { path: incidental, kind: 'test', sha256: 'incidental' },
+  ]
+  const scope = {
+    subjects: [source],
+    testsByFile: { [source]: [incidental] },
+    additionalTestsByFile: { [source]: [[direct]] },
+  }
+  const profile = {
+    version: 1,
+    group: 'all',
+    sources: { [source]: 'source' },
+    tests: {
+      [direct]: { sha256: 'direct', files: { [source]: { statements: 20, functions: 6, branches: 10 } } },
+      [incidental]: {
+        sha256: 'incidental',
+        files: { [source]: { statements: 1, functions: 1, branches: 0 } },
+      },
+    },
+  }
+  assert.equal(orderMutationTests(scope, profile, entries, 'all').testsByFile[source][0], direct)
+  delete profile.tests[direct]
+  assert.throws(() => orderMutationTests(scope, profile, entries, 'all'), /inventory differs/)
+})
