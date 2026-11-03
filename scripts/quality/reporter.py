@@ -142,7 +142,59 @@ def percent(counter):
     return covered * 100 / total if total else 100
 
 
-def compare_coverage(head_path, base_path, changed, root):
+def changed_coverage(path, name, ranges):
+    """Use JaCoCo's actual line and method locations; incomplete locations cannot pass."""
+    if ranges is None:
+        return None
+    document = read_xml(path)
+    package_name = str(Path(name).parent.relative_to(SOURCE_ROOT))
+    package = next(item for item in document.findall("package") if item.attrib["name"] == package_name)
+    source = next(item for item in package.findall("sourcefile") if item.attrib["name"] == Path(name).name)
+    lines = source.findall("line")
+    counters = coverage(path)[name]
+    if len({int(line.attrib["nr"]) for line in lines}) != counters["LINE"][1]:
+        raise ValueError(f"incomplete executable line locations: {name}")
+    selected = lambda first, last: any(item["start"] <= last and first <= item["end"] for item in ranges)
+    measured = {"LINE": [0, 0], "BRANCH": [0, 0], "METHOD": [0, 0]}
+    for line in lines:
+        values = {key: int(line.attrib[key]) for key in ("nr", "ci", "mi", "cb", "mb")}
+        if min(values.values()) < 0:
+            raise ValueError(f"negative executable line evidence: {name}")
+        if selected(values["nr"], values["nr"]):
+            measured["LINE"][0] += int(values["ci"] > 0)
+            measured["LINE"][1] += 1
+            measured["BRANCH"][0] += values["cb"]
+            measured["BRANCH"][1] += values["cb"] + values["mb"]
+    methods = [method for cls in package.findall("class") if cls.attrib.get("sourcefilename") == Path(name).name
+               for method in cls.findall("method")]
+    if methods and any("line" not in method.attrib for method in methods):
+        return None
+    method_counters = [method.find("counter[@type='METHOD']") for method in methods]
+    if any(counter is None for counter in method_counters) or sum(
+            int(counter.attrib["covered"]) + int(counter.attrib["missed"]) for counter in method_counters) != counters["METHOD"][1]:
+        raise ValueError(f"incomplete executable method locations: {name}")
+    if sum(int(line.attrib["cb"]) + int(line.attrib["mb"]) for line in lines) != counters["BRANCH"][1]:
+        raise ValueError(f"incomplete executable branch locations: {name}")
+    methods.sort(key=lambda method: int(method.attrib["line"]))
+    last_line = max((int(line.attrib["nr"]) for line in lines), default=0)
+    for index, method in enumerate(methods):
+        start = int(method.attrib["line"])
+        end = int(methods[index + 1].attrib["line"]) - 1 if index + 1 < len(methods) else last_line
+        if selected(start, end):
+            counter = method.find("counter[@type='METHOD']")
+            if counter is None:
+                raise ValueError(f"missing changed method counter: {name}")
+            covered, missed = int(counter.attrib["covered"]), int(counter.attrib["missed"])
+            if min(covered, missed) < 0:
+                raise ValueError(f"negative method evidence: {name}")
+            measured["METHOD"][0] += covered
+            measured["METHOD"][1] += covered + missed
+    if counters["METHOD"][1] and not methods:
+        raise ValueError(f"missing executable method locations: {name}")
+    return measured
+
+
+def compare_coverage(head_path, base_path, changed, root, ranges=None):
     current, previous = coverage(head_path), coverage(base_path)
     expected = {str(path.relative_to(root)) for path in (root / SOURCE_ROOT).rglob("*.java")}
     if set(current) != expected:
@@ -154,20 +206,24 @@ def compare_coverage(head_path, base_path, changed, root):
         raise ValueError(f"source inventory changed without a source change: {sorted(missing_base | missing_head)}")
     failures, deficits = [], []
     for name, counters in current.items():
+        narrowed = changed_coverage(head_path, name, ranges[name]) if ranges is not None and name in previous and name in ranges else None
         for kind, counter in counters.items():
+            full_actual = percent(counter)
+            if narrowed is not None:
+                counter = narrowed[kind]
             actual = percent(counter)
             baseline = percent(previous[name][kind]) if name in previous else 0
             if name in previous and name not in changed and counter[1] != previous[name][kind][1]:
                 failures.append(f"{name} {kind}: inventory changed without a source change")
-            if name in previous:
+            if name in previous and narrowed is None:
                 previous_covered, previous_total = previous[name][kind]
                 if counter[1] - counter[0] > previous_total - previous_covered:
                     failures.append(f"{name} {kind}: uncovered elements increased")
-            required = max(baseline, FLOORS[kind]) if name in changed or name not in previous else baseline
+            required = FLOORS[kind] if narrowed is not None else max(baseline, FLOORS[kind]) if name in changed or name not in previous else baseline
             if actual + 1e-9 < required:
                 failures.append(f"{name} {kind}: {actual:.2f}% < {required:.2f}%")
-            if actual < FLOORS[kind]:
-                deficits.append(f"{name} {kind}: {actual:.2f}% (legacy floor deficit)")
+            if full_actual < FLOORS[kind]:
+                deficits.append(f"{name} {kind}: {full_actual:.2f}% (legacy floor deficit)")
     return failures, deficits
 
 
@@ -279,7 +335,8 @@ def main():
                            for path in selected))
             return 0
         if args.command == "coverage":
-            failures, deficits = compare_coverage(args.head, args.base, changed, args.root)
+            ranges = mutation_ranges(args.root, args.base_sha, args.head_sha, scope(changed, args.root))
+            failures, deficits = compare_coverage(args.head, args.base, changed, args.root, ranges)
             for deficit in deficits:
                 print(deficit)
         else:

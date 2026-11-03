@@ -47,18 +47,20 @@ export function runShard({ root, group, reportDir, baseManifest, plan, partition
   root = resolve(root)
   reportDir = resolve(reportDir)
   if (!Object.hasOwn(groups, group)) throw new Error(`Unknown test group ${group}`)
-  for (const key of [
-    'DATABASE_URL',
-    'NATS_TEST_URL',
-    'S3_TEST_ENDPOINT',
-    'S3_TEST_BUCKET',
-    'PEBBLE_TEST_URL',
-    'CHALLTESTSRV_TEST_URL',
-  ]) {
-    if (!process.env[key]) throw new Error(`Required CI service variable is absent: ${key}`)
+  if (!plan || plan.impact.services) {
+    for (const key of [
+      'DATABASE_URL',
+      'NATS_TEST_URL',
+      'S3_TEST_ENDPOINT',
+      'S3_TEST_BUCKET',
+      'PEBBLE_TEST_URL',
+      'CHALLTESTSRV_TEST_URL',
+    ]) {
+      if (!process.env[key]) throw new Error(`Required CI service variable is absent: ${key}`)
+    }
+    if (group === 'web' && !process.env.MC_ROUTER_BIN)
+      throw new Error('MC_ROUTER_BIN is required for edge integration tests')
   }
-  if (group === 'web' && !process.env.MC_ROUTER_BIN)
-    throw new Error('MC_ROUTER_BIN is required for edge integration tests')
   const listed = spawnSync('git', ['ls-files', '-z', '--cached', '--others', '--exclude-standard'], {
     cwd: root,
     encoding: 'utf8',

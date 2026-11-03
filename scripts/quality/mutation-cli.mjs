@@ -15,7 +15,7 @@ import { runMutation } from './mutation.mjs'
 import { selectReleaseMutationScope } from './mutation-release-scope.mjs'
 import { rotationSubjects } from './mutation-scope.mjs'
 import { orderMutationTests } from './mutation-test-order.mjs'
-import { costs, mutationAssignment, mutationPartitions } from './partition-plan.mjs'
+import { costs, mutationAssignment, mutationPartitions, testPlan } from './partition-plan.mjs'
 import { groupOf, groups } from './shards.mjs'
 
 const { values } = parseArgs({
@@ -80,20 +80,44 @@ const initialScope = selectReleaseMutationScope({
   baseSha: anchored ? values.base : undefined,
   headSha: anchored ? values.head : 'HEAD',
 })
-function runGroup(group) {
-  let scope = initialScope
-  const output = values['all-groups'] ? join(outputRoot, group) : outputRoot
-  const executionPath = values.changed
-    ? join(dirname(resolve(values.changed)), 'head', 'test-execution', `${group}.json`)
+const nativePlan =
+  anchored && process.env.QUALITY_EXECUTION_SCOPE === 'affected'
+    ? testPlan(root, values.base, values.head)
     : null
-  if (executionPath && existsSync(executionPath)) {
-    const bytes = readFileSync(executionPath)
-    scope = orderMutationTests(scope, JSON.parse(bytes), entries, group)
-    scope.testOrdering = {
+
+let executionScope = initialScope
+if (values.changed) {
+  const directory = join(dirname(resolve(values.changed)), 'head', 'test-execution')
+  const paths = Object.keys(groups).map((group) => [group, join(directory, `${group}.json`)])
+  if (paths.some(([, path]) => existsSync(path))) {
+    const combined = { version: 1, group: 'all', sources: null, tests: {} }
+    for (const [group, path] of paths) {
+      const profile = JSON.parse(readFileSync(path, 'utf8'))
+      if (
+        profile.group !== group ||
+        (combined.sources && JSON.stringify(combined.sources) !== JSON.stringify(profile.sources))
+      )
+        throw new Error('Foreign cross-group execution profile')
+      combined.sources = profile.sources
+      for (const [test, evidence] of Object.entries(profile.tests)) {
+        if (Object.hasOwn(combined.tests, test)) throw new Error('Duplicate cross-group test evidence')
+        combined.tests[test] = evidence
+      }
+    }
+    const expected = nativePlan
+      ? Object.values(nativePlan.groups).flatMap((group) => group.headTests)
+      : undefined
+    executionScope = orderMutationTests(initialScope, combined, entries, 'all', expected)
+    executionScope.testOrdering = {
       kind: 'isolated-execution',
-      sha256: createHash('sha256').update(bytes).digest('hex'),
+      sha256: createHash('sha256').update(JSON.stringify(combined)).digest('hex'),
     }
   }
+}
+
+function runGroup(group) {
+  const scope = executionScope
+  const output = values['all-groups'] ? join(outputRoot, group) : outputRoot
   const groupSubjects = scope.subjects.filter((subject) => groupOf(subject) === group)
   const rotation = values.rotation === undefined ? null : Number(values.rotation)
   let subjects = rotation === null ? groupSubjects : rotationSubjects(groupSubjects, rotation)

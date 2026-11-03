@@ -213,6 +213,24 @@ class ReporterProvenanceTest(unittest.TestCase):
         self.assertEqual(0, result.returncode, result.stderr)
 
     def test_changed_file_coverage_floors_cannot_borrow_the_weak_base(self):
+        body = lambda value: "class Queue {\n" + "\n".join(
+            f"int value{i}(boolean flag) {{ return flag ? {value} : 0; }}" for i in range(10)) + "\n}\n"
+        self.source.write_text(body(1))
+        self.base = self.commit()
+        self.source.write_text(body(2))
+        self.head = self.commit()
+        self.comparison.write_text(json.dumps({"base": self.base, "head": self.head}))
+        methods = "".join(f'<method name="value{i}" line="{i + 2}"><counter type="METHOD" '
+                          f'covered="{int(i < 5)}" missed="{int(i >= 5)}"/></method>' for i in range(10))
+        lines = "".join(f'<line nr="{i + 2}" ci="{int(i < 5)}" mi="{int(i >= 5)}" '
+                        f'cb="{2 * int(i < 5)}" mb="{2 * int(i >= 5)}"/>' for i in range(10))
+        counters = ''.join(f'<counter type="{kind}" covered="{10 if kind == "BRANCH" else 5}" '
+                           f'missed="{10 if kind == "BRANCH" else 5}"/>' for kind in reporter.FLOORS)
+        xml = ('<report><package name="blockly/reporter"><class name="blockly/reporter/Queue" '
+               'sourcefilename="Queue.java">' + methods + '</class><sourcefile name="Queue.java">'
+               + lines + counters + '</sourcefile></package></report>')
+        for name in ["base.xml", "head.xml"]:
+            (self.evidence / name).write_text(xml)
         result = self.run_cli("coverage")
         self.assertEqual(1, result.returncode)
         self.assertIn("BRANCH: 50.00% < 80.00%", result.stderr)
@@ -298,6 +316,40 @@ class ReporterProvenanceTest(unittest.TestCase):
         (self.root / new_name).write_text('class New {}\n')
         added = self.commit()
         self.assertEqual({new_name: None}, reporter.mutation_ranges(self.root, deleted, added, [new_name]))
+
+
+
+
+
+class ChangedReporterCoverageTest(unittest.TestCase):
+    def test_changed_method_passes_while_legacy_debt_stays_visible(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            name = "apps/reporter/src/main/java/blockly/reporter/Queue.java"
+            source = root / name
+            source.parent.mkdir(parents=True)
+            source.write_text("class Queue {}")
+            report = root / "coverage.xml"
+            report.write_text('<report><package name="blockly/reporter">'
+                              '<class name="blockly/reporter/Queue" sourcefilename="Queue.java">'
+                              '<method name="changed" line="2"><counter type="METHOD" covered="1" missed="0"/></method>'
+                              '<method name="legacy" line="8"><counter type="METHOD" covered="0" missed="1"/></method></class>'
+                              '<sourcefile name="Queue.java"><line nr="2" ci="1" mi="0" cb="2" mb="0"/>'
+                              '<line nr="8" ci="0" mi="1" cb="0" mb="2"/>'
+                              '<counter type="LINE" covered="1" missed="1"/>'
+                              '<counter type="METHOD" covered="1" missed="1"/>'
+                              '<counter type="BRANCH" covered="2" missed="2"/>'
+                              '</sourcefile></package></report>')
+            ranges = {name: [{"start": 2, "end": 2}]}
+            failures, debt = reporter.compare_coverage(report, report, [name], root, ranges)
+            self.assertEqual([], failures)
+            self.assertEqual(3, len(debt))
+            ranges[name] = [{"start": 8, "end": 8}]
+            failures, _ = reporter.compare_coverage(report, report, [name], root, ranges)
+            self.assertEqual(3, len(failures))
+            report.write_text(report.read_text().replace('<line nr="8" ci="0" mi="1" cb="0" mb="2"/>', ''))
+            with self.assertRaisesRegex(ValueError, "incomplete executable line locations"):
+                reporter.compare_coverage(report, report, [name], root, ranges)
 
 
 if __name__ == "__main__":

@@ -614,35 +614,35 @@ test('Git-proved additive tests cannot lower the inputs of preexisting isolated 
   assert.match(proof.reason, /additive/)
 })
 
-test('existing test edits retain the complete coverage ratchet', (t) => {
+test('existing test edits retain their verified oracle coverage ratchet', (t) => {
   const f = fixture(t)
   f.write(originalTest, weak)
   const head = f.save()
-  assert.equal(
+  assert.deepEqual(
     baselineComparison(
       f.root,
       { base: f.baseSha, head },
       f.changed(),
       inventory(f.root),
       f.analyze().baseInventory,
-    ),
-    null,
+    ).files,
+    [subject],
   )
 })
 
-test('production changes retain the complete coverage ratchet', (t) => {
+test('production changes retain changed behavior without unrelated legacy coverage obligations', (t) => {
   const f = fixture(t)
   f.write(subject, 'export const choose = (value) => value > 12 ? 12 : value')
   const head = f.save()
-  assert.equal(
+  assert.deepEqual(
     baselineComparison(
       f.root,
       { base: f.baseSha, head },
       f.changed(),
       inventory(f.root),
       f.analyze().baseInventory,
-    ),
-    null,
+    ).files,
+    [subject],
   )
 })
 
