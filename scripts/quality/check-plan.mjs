@@ -13,7 +13,7 @@ export function classifyChanges(paths, { full = false } = {}) {
     throw new Error('CI requires explicit repository-relative changed paths')
   const relevant = paths.filter((path) => !/^(?:docs\/|brand\/)|\.md$/.test(path))
   const tooling = relevant.some((path) =>
-    /^(?:\.github\/workflows\/|scripts\/quality\/|tools\/quality\/)/.test(path),
+    /^(?:\.github\/(?:workflows|actions)\/|scripts\/quality\/|tools\/quality\/)/.test(path),
   )
   const configuration = relevant.some(
     (path) =>
@@ -25,7 +25,7 @@ export function classifyChanges(paths, { full = false } = {}) {
   const terraform = relevant.some((path) => path.startsWith('infra/terraform/'))
   const unknown = relevant.some(
     (path) =>
-      !/^(?:apps\/(?:web|control|edge|reporter|devtools)\/|packages\/(?:contracts|db)\/|scripts\/|tools\/|infra\/|\.github\/)/.test(
+      !/^(?:apps\/(?:web|control|edge|reporter|devtools)\/|packages\/(?:contracts|db)\/|scripts\/quality\/|tools\/quality\/|infra\/terraform\/|\.github\/(?:workflows|actions)\/)/.test(
         path,
       ) && !configuration,
   )
@@ -54,7 +54,7 @@ export function classifyChanges(paths, { full = false } = {}) {
     terraform,
     static: code || terraform,
     worker: broad || website || shared,
-    images: broad || control || relevant.some((path) => path.startsWith('apps/edge/')),
+    images: broad || control || shared || relevant.some((path) => path.startsWith('apps/edge/')),
     reporter: full || reporter || tooling,
     fleet:
       broad ||

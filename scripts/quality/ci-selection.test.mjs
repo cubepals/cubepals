@@ -43,6 +43,9 @@ test('billing retains its integration oracles without building unchanged website
   ])
 })
 test('shared contracts keep both sides of the interface', () => {
+  const checks = classifyChanges([shared])
+  assert.equal(checks.images, true)
+  assert.equal(checks.worker, true)
   const graph = view([
     [webTest, [web]],
     [billingTest, [billing]],
@@ -78,7 +81,15 @@ test('uncertainty widens the website runtime and preserves proven external consu
   assert.deepEqual(selection.tests, [[webTest, billingTest].sort(), [webTest, billingTest].sort()])
 })
 test('unknown infrastructure or execution inputs cannot select a cheaper check profile', () => {
-  for (const path of ['bun.lock', 'unmapped/input.conf', '.github/workflows/ci.yml']) {
+  for (const path of [
+    'bun.lock',
+    'unmapped/input.conf',
+    '.github/workflows/ci.yml',
+    '.github/actions/validate/action.yml',
+    'infra/unmapped/provider.conf',
+    'tools/openapi/templates/client.hbs',
+    'scripts/build-images.ts',
+  ]) {
     const checks = classifyChanges([path])
     assert.equal(checks.broad, true)
     assert.equal(checks.fleet, true)
