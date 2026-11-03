@@ -2,8 +2,12 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-/** The countdown players read before a restart: to whoever is on, and to nobody otherwise. */
+/**
+ * The countdown players read before a restart: to whoever is on, and to nobody otherwise, and never
+ * later than it says, however the console answers.
+ */
 import { describe, expect, test } from 'bun:test'
+import { SECOND_MS } from '@blockly/contracts/durations'
 import { announce, LIST_UUIDS } from '../../../minecraft/console.ts'
 import type { ConsoleTarget } from '../../ports/minecraft.ts'
 import { RESTARTING, RESTARTING_FOR_A_CHANGE } from './restart-notice.ts'
@@ -11,20 +15,26 @@ import { COUNTDOWN, restartLine, warnBeforeRestart } from './restart-warning.ts'
 
 const target: ConsoleTarget = { endpoint: { host: 'game.test', port: 25575 }, passwords: ['secret'] }
 
-/** A game console that answers `list uuids` as given, and records every command and pause. */
-const game = (answer: string | Error, failsAnnounce = false) => {
+/** A console that never answers, as one held up behind another session's lock. */
+const HANGS = Symbol('hangs')
+
+type Answer = string | Error | typeof HANGS
+
+/**
+ * A game console that answers `list uuids` as `listing` and each line as `announcing`, and records
+ * every command and pause.
+ */
+const game = (listing: Answer, announcing: Answer = '') => {
   const heard: string[] = []
   const paused: number[] = []
   const console = {
-    run: async (to: ConsoleTarget, command: string) => {
+    run: async (to: ConsoleTarget, command: string): Promise<string> => {
       expect(to).toBe(target)
       heard.push(command)
-      if (command === LIST_UUIDS) {
-        if (answer instanceof Error) throw answer
-        return answer
-      }
-      if (failsAnnounce) throw new Error('Connection reset')
-      return ''
+      const answer = command === LIST_UUIDS ? listing : announcing
+      if (answer === HANGS) return new Promise(() => undefined)
+      if (answer instanceof Error) throw answer
+      return answer
     },
   }
   const pause = async (ms: number) => {
@@ -82,10 +92,39 @@ describe('the countdown before a restart', () => {
   })
 
   test('a line that doesn’t get through still waits out the countdown', async () => {
-    const g = game(two, true)
+    const g = game(two, new Error('Connection reset'))
     expect(await warnBeforeRestart(g.console, target, RESTARTING, g.pause)).toBe(2)
     expect(g.paused).toEqual([7000, 3000])
   })
+
+  test(
+    'a line that hangs never holds the restart up',
+    async () => {
+      const g = game(two, HANGS)
+      expect(await warnBeforeRestart(g.console, target, RESTARTING, g.pause)).toBe(2)
+      expect(g.heard).toEqual([
+        LIST_UUIDS,
+        announce(restartLine(10, RESTARTING)),
+        announce(restartLine(3, RESTARTING)),
+      ])
+      expect(g.paused).toEqual([7000, 3000])
+    },
+    SECOND_MS,
+  )
+
+  test(
+    'a game that hangs before saying who is on holds the restart up only as long as the wait',
+    async () => {
+      const g = game(HANGS)
+      const began = performance.now()
+      expect(await warnBeforeRestart(g.console, target, RESTARTING, g.pause, 30)).toBe(0)
+      const took = performance.now() - began
+      expect(took).toBeGreaterThanOrEqual(25)
+      expect(took).toBeLessThan(SECOND_MS)
+      expect(g.paused).toEqual([])
+    },
+    SECOND_MS,
+  )
 
   test('waits for real when no pause is given', async () => {
     const g = game('There are 0 of a max of 10 players online:')
