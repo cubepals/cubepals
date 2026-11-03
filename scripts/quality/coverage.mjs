@@ -12,8 +12,11 @@
 import { readFileSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { changedCounters } from './changed-coverage.mjs'
 import { baselineComparison } from './coverage-impact.mjs'
+import { coverageLineRanges } from './coverage-lines.mjs'
 import { inventory, sourceFiles } from './inventory.mjs'
+import { testPlan } from './partition-plan.mjs'
 
 export const FLOORS = Object.freeze({ branches: 80, functions: 90, lines: 90 })
 
@@ -173,7 +176,14 @@ export function fileMetrics(file) {
   }
 }
 
-export function checkCoverage(report, base, changed, currentInventory, baselineFiles = null) {
+export function checkCoverage(
+  report,
+  base,
+  changed,
+  currentInventory,
+  baselineFiles = null,
+  rangesByFile = null,
+) {
   validateReport(report)
   validateReport(base)
   if (!Array.isArray(changed) || changed.some((path) => typeof path !== 'string'))
@@ -196,21 +206,30 @@ export function checkCoverage(report, base, changed, currentInventory, baselineF
     const previous = baseEntries.get(entry.path)
     const touched = changedSet.has(entry.path) || previous?.sha256 !== entry.sha256
     const metrics = fileMetrics(report.files[entry.path])
+    const scoped = touched && previous && rangesByFile && Object.hasOwn(rangesByFile, entry.path)
+    const checked = scoped
+      ? fileMetrics(changedCounters(report.files[entry.path], rangesByFile[entry.path]))
+      : metrics
     const previousMetrics = base.files[entry.path] && fileMetrics(base.files[entry.path])
     const compare = touched || baselineFiles === null || baselineFiles.has(entry.path)
     if (previousMetrics && !compare) unaffectedBaselineFiles.push(entry.path)
     for (const [name, floor] of Object.entries(FLOORS)) {
-      const current = metrics[name]
+      const current = checked[name]
       const prior = previousMetrics?.[name]
       if (touched && current.percent < floor)
         failures.push(`${entry.path}: ${name} ${current.percent.toFixed(2)}% is below ${floor}%`)
-      else if (!touched && current.percent < floor)
-        legacyDeficits.push({ path: entry.path, metric: name, ...current, floor })
-      if (compare && prior && current.percent + Number.EPSILON < prior.percent)
+      if ((!touched || scoped) && (!rangesByFile || compare) && metrics[name].percent < floor)
+        legacyDeficits.push({ path: entry.path, metric: name, ...metrics[name], floor })
+      if ((!touched || !scoped) && compare && prior && current.percent + Number.EPSILON < prior.percent)
         failures.push(
           `${entry.path}: ${name} regressed from ${prior.percent.toFixed(2)}% to ${current.percent.toFixed(2)}%`,
         )
-      if (compare && prior && current.total - current.covered > prior.total - prior.covered)
+      if (
+        (!touched || !scoped) &&
+        compare &&
+        prior &&
+        current.total - current.covered > prior.total - prior.covered
+      )
         failures.push(
           `${entry.path}: uncovered ${name} increased from ${prior.total - prior.covered} to ${current.total - current.covered}`,
         )
@@ -278,7 +297,28 @@ export function main(values) {
           base.inventory,
         )
       : null
-    result = checkCoverage(report, base, changed, current, comparison ? new Set(comparison.files) : null)
+    const identity = flags['--comparison'] ? readJson(flags['--comparison']) : null
+    const plan =
+      identity && process.env.QUALITY_EXECUTION_SCOPE === 'affected'
+        ? testPlan(resolve(flags['--root']), identity.base, identity.head)
+        : null
+    const selected =
+      plan && !plan.impact.complete
+        ? new Set(plan.impact.measured.flat())
+        : comparison
+          ? new Set(comparison.files)
+          : null
+    const subjects = changed.filter((path) => report.files[path])
+    const ranges = identity
+      ? coverageLineRanges(resolve(flags['--root']), identity, subjects, report.files)
+      : null
+    result = checkCoverage(report, base, changed, current, selected, ranges)
+    if (plan && !plan.impact.complete)
+      result.selection = {
+        mode: plan.mode,
+        measured: [...selected],
+        legacyDebt: 'Unselected legacy coverage is reported by the full main and scheduled audits.',
+      }
     if (comparison) result.baselineScope = comparison
   } else throw new Error('Use inventory, merge, or check')
   const serialized = `${JSON.stringify(result, null, 2)}\n`

@@ -124,8 +124,9 @@ describe('the pages kept at the edge', () => {
 
   test('desktop and phone pricing pages always render the current offers', async () => {
     const site = edge()
+    const devices: Record<string, string>[] = [{}, { 'user-agent': IPHONE }]
     for (const path of ['/', '/pricing']) {
-      for (const headers of [{}, { 'user-agent': IPHONE }]) {
+      for (const headers of devices) {
         const first = await site.ask(path, headers)
         const second = await site.ask(path, headers)
         expect(second.body).not.toBe(first.body)

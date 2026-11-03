@@ -47,18 +47,17 @@ seeded-defect proofs demonstrate gaps in test evidence; they did not establish a
 
 ## Required evidence
 
-Changed and new executable production files must reach **80% branches, 90% functions/methods, and 90% lines**.
-Production and existing-test edits require every existing file to preserve its measured base
-percentages and number of uncovered elements. The absolute-count check prevents padding a file with covered code to
-conceal new uncovered behavior. A fully covered file therefore keeps its stronger existing bar.
-With a Git-verified dependency-only update, the baseline comparison covers the affected oracle
-closures. Verified test additions and quality-only inputs preserve earlier isolated test inputs;
-sampling differences in unchanged code do not imply a regression. These narrower comparisons
-require a fresh authoritative Git comparison and matching base inventory. Every source file is
-still measured, every legacy deficit is reported, and changed-source floors always apply.
-These floors leave a limited allowance for hard-to-exercise adapter details while requiring most
-decision outcomes and almost every callable entry to be tested. Existing gaps remain visible and
-must be resolved when their source changes.
+New executable production files must reach **80% branches, 90% functions/methods, and 90% lines**.
+Existing files apply those same floors to changed executable statements, decisions and methods,
+using locations bound to the exact Git comparison. A small edit does not have to repair an
+unrelated legacy function. Changed decisions require their outcomes; untested changed behavior
+still fails. Deletions retain conservative scope for remaining containing code.
+
+Unchanged affected code preserves its measured baseline with the same selected test oracles.
+Whole-file legacy deficits remain visible in full main/audit reports. A scoped PR reports its
+measured dependency closure separately; unselected files are not represented as covered or
+passing. New code is inventoried even when no test imports it. Complete audits retain the full
+source and test inventory.
 
 The inventory comes from Git and syntax, independently of test imports. Unimported executable
 files receive zero counters. Type declarations are distinguished structurally; generated and
@@ -90,17 +89,22 @@ fails, as does a failed, cancelled, missing, or unexpectedly skipped Fleet job.
 
 ## Runtime scheduling
 
-The seven logical coverage groups run as seventeen independent service-backed partitions:
-three each for lifecycle, worlds and access; four for the remainder; two for providers; one each for mods
-and web. `partition-plan.mjs` builds a deterministic assignment from the union of the exact base
-and head test inventories. Measured test durations in `runtime-costs.json` balance the work;
-unknown files receive a positive default cost and remain mandatory. Scheduling weights never
-change test eligibility or quality thresholds.
+Main and complete audits retain seventeen independent service-backed partitions across seven
+logical groups. PRs derive a smaller matrix from the base and head dependency graphs. Changed
+contracts and backend behavior retain their integration consumers; unresolved dependencies widen
+selection. Website-only changes do not start unrelated backend tests, images or Fleet. Pure web
+tests also omit database, NATS, object storage and test-CA startup when their dependency closure
+needs none. Job selection and required-job validation use the same explicit classification.
+
+Superseded runs share a PR concurrency group and are cancelled. Distinct main commits retain
+separate groups and are never cancelled by a later push. Mutation runners consume validated
+execution evidence from every native group, so a focused test in another group is still tried
+before incidental consumers that merely construct the service.
 
 `coverage-partitions.mjs` independently reconstructs the assignment from Git, checks each test's
 hash, JUnit identity, execution profile and coverage inventory, and rejects missing or duplicated
-partitions before rebuilding the seven logical reports. The usual per-file coverage gate runs
-on those complete reports. Clean native tests and coverage must pass before mutation runners start.
+partitions before rebuilding the seven logical reports. The coverage gate checks changed behavior on those verified reports. A logical group with no
+selected tests is explicitly empty, not evidence of an executed test. Clean native tests and coverage must pass before mutation runners start.
 
 Four independent runners divide the complete selected mutation scope. Each file's full selected
 census stays on one runner; reports and detected mutants are never combined across attempts.

@@ -69,7 +69,7 @@ export function recordExecution(profile, fragments) {
   }
 }
 
-function validateProfile(profile, entries, group) {
+function validateProfile(profile, entries, group, expectedTests) {
   if (
     profile?.version !== 1 ||
     profile.group !== group ||
@@ -91,12 +91,14 @@ function validateProfile(profile, entries, group) {
     throw new Error('Mutation execution profile source inventory differs')
   for (const [path, sha256] of Object.entries(profile.sources))
     if (sources.get(path) !== sha256) throw new Error(`Stale mutation execution source: ${path}`)
-  if ([...tests].filter(([path]) => groupOf(path) === group).length !== Object.keys(profile.tests).length)
+  const expected =
+    expectedTests ?? [...tests.keys()].filter((path) => group === 'all' || groupOf(path) === group)
+  if (JSON.stringify([...expected].sort()) !== JSON.stringify(Object.keys(profile.tests).sort()))
     throw new Error('Mutation execution profile test inventory differs')
   for (const [path, test] of Object.entries(profile.tests)) {
     if (
       tests.get(path) !== test.sha256 ||
-      groupOf(path) !== group ||
+      (group !== 'all' && groupOf(path) !== group) ||
       !test.files ||
       Array.isArray(test.files)
     )
@@ -112,8 +114,8 @@ function validateProfile(profile, entries, group) {
 }
 
 /** A profile may improve the first attempt, but cannot remove a static or ambiguous dependent. */
-export function orderMutationTests(scope, profile, entries, group) {
-  validateProfile(profile, entries, group)
+export function orderMutationTests(scope, profile, entries, group, expectedTests) {
+  validateProfile(profile, entries, group, expectedTests)
   // Dependency comparisons deliberately use exactly the same complete oracle set on both sides.
   if (scope.baseScore) return scope
   const testsByFile = { ...scope.testsByFile }

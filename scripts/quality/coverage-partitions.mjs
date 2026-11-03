@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /** Reassembles isolated runners only after proving their exact, disjoint test inventories. */
-import { cpSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { cpSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { revalidateBaseline } from './baseline-cache.mjs'
@@ -11,7 +11,7 @@ import { mergeReports } from './coverage.mjs'
 import { checkJUnit, mergeJUnit } from './coverage-junit.mjs'
 import { inventory } from './inventory.mjs'
 import { legacyCalendarSkips } from './legacy-calendar-case.mjs'
-import { nativePartitions, testPlan } from './partition-plan.mjs'
+import { testPlan } from './partition-plan.mjs'
 import { groups } from './shards.mjs'
 
 const read = (path) => JSON.parse(readFileSync(path, 'utf8'))
@@ -19,6 +19,8 @@ const write = (path, data) => writeFileSync(path, `${JSON.stringify(data)}\n`)
 
 export function mergeNativePartitions({ root, baseRoot, directory, base, cachedBaseline }) {
   const plan = testPlan(root, base)
+  if (cachedBaseline && !plan.impact.complete)
+    throw new Error('A full-suite baseline cannot replace scoped oracle measurements')
   if (cachedBaseline) {
     revalidateBaseline({ root, checkout: baseRoot, directory: cachedBaseline })
     mkdirSync(join(directory, 'merged'), { recursive: true })
@@ -51,7 +53,31 @@ export function mergeNativePartitions({ root, baseRoot, directory, base, cachedB
       const execution = { version: 1, group, sources, tests: {} }
       const timings = {}
       const intervals = []
-      for (let index = 0; index < nativePartitions[group]; index++) {
+      if (expected.length === 0) {
+        const first = readdirSync(input).find((path) => path.endsWith('.json'))
+        if (!first) throw new Error('No executed native evidence for the selected scope')
+        const empty = structuredClone(read(join(input, first)))
+        for (const file of Object.values(empty.files)) {
+          for (const metric of ['s', 'f']) for (const id of Object.keys(file[metric])) file[metric][id] = 0
+          for (const id of Object.keys(file.b)) file.b[id] = file.b[id].map(() => 0)
+        }
+        empty.shards = [group]
+        write(join(output, `${group}.json`), empty)
+        write(join(output, 'manifests', `${group}.json`), {
+          version: 1,
+          group,
+          tests: [],
+          plannedEmpty: true,
+        })
+        write(join(output, 'test-execution', `${group}.json`), execution)
+        write(join(output, 'timings', `${group}.json`), {})
+        writeFileSync(
+          join(output, `${group}.xml`),
+          '<testsuites tests="0" failures="0" errors="0" skipped="0"/>\n',
+        )
+        continue
+      }
+      for (let index = 0; index < plan.groups[group].partitions.length; index++) {
         const id = `${group}-${index}`
         const report = read(join(input, `${id}.json`))
         if (
@@ -118,7 +144,7 @@ export function mergeNativePartitions({ root, baseRoot, directory, base, cachedB
         reports.push(report)
       }
       if (seen.size !== wanted.size) throw new Error(`Incomplete ${side} ${group} test evidence`)
-      const combined = mergeReports(reports, nativePartitions[group])
+      const combined = mergeReports(reports, plan.groups[group].partitions.length)
       combined.shards = [group]
       write(join(output, `${group}.json`), combined)
       writeFileSync(join(output, `${group}.xml`), mergeJUnit(documents))
@@ -138,7 +164,7 @@ export function mergeNativePartitions({ root, baseRoot, directory, base, cachedB
       write(join(output, 'test-execution', `${group}.json`), execution)
       write(join(output, 'timings', `${group}.json`), timings)
       console.warn(
-        `${side} ${group}: ${seen.size} test files verified across ${nativePartitions[group]} runners`,
+        `${side} ${group}: ${seen.size} test files verified across ${plan.groups[group].partitions.length} runners`,
       )
     }
   }
