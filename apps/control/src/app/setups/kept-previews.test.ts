@@ -6,7 +6,8 @@
  * A template's preview from what the control plane kept: the catalog asked once for everyone, and
  * the plan still judged for each person who asks.
  */
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
+import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test'
+import { randomUUID } from 'node:crypto'
 import { Cdn } from '../../testing/cdn.ts'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
 import { TEMPLATE_KEPT_MS } from './resolved-templates.ts'
@@ -23,6 +24,20 @@ describe.skipIf(!hasDatabase)('a template’s preview, kept', () => {
   afterAll(async () => {
     await h.close()
     cdn.close()
+  })
+
+  test('concurrent pack checks share one lookup and a later check can retry', async () => {
+    const projectId = randomUUID()
+    const project = spyOn(h.catalog, 'project')
+    try {
+      await Promise.all([h.app.setups.checkPacks([projectId]), h.app.setups.checkPacks([projectId])])
+      expect(project).toHaveBeenCalledTimes(1)
+      expect(project).toHaveBeenLastCalledWith(projectId)
+      await h.app.setups.checkPacks([projectId])
+      expect(project).toHaveBeenCalledTimes(2)
+    } finally {
+      project.mockRestore()
+    }
   })
 
   test('asks the catalog once, and judges each plan afresh', async () => {
