@@ -55,7 +55,15 @@ describe('settings a running server takes', () => {
   })
 
   test('a game rule is set in every dimension, since Paper keeps each one’s apart', () => {
-    expect(gameRuleCommands('pvp', true)).toEqual(everywhere('pvp', true))
+    expect(gameRuleCommands('pvp', true, '26.2')).toEqual(everywhere('pvp', true))
+  })
+
+  test('a release before 1.13, which has no `execute in`, sets a game rule once', () => {
+    expect(gameRuleCommands('keepInventory', true, '1.12.2')).toEqual(['gamerule keepInventory true'])
+    expect(gameRuleCommands('keepInventory', true, '1.13')).toEqual(everywhere('keepInventory', true))
+    expect(liveCommands(before, { ...before, keepInventory: true }, '1.12.2')).toEqual([
+      'gamerule keepInventory true',
+    ])
   })
 
   test('keeping items on death changes as people play, by the rule’s name on the release', () => {
@@ -68,8 +76,11 @@ describe('settings a running server takes', () => {
     expect(liveCommands(before, { ...before, keepInventory: false }, '26.2')).toEqual([])
   })
 
-  test('every start sets the rules the world keeps, kept items on or off', () => {
-    expect(bootCommands(before, '26.2')).toEqual([
+  test('every start sets the rules the world keeps, kept items on or off once chosen', () => {
+    // Never chosen: the world's own rule stays, whatever its console or the world it came from set.
+    expect(bootCommands(before, '26.2')).toEqual(everywhere('pvp', true))
+    expect(bootCommands(before, '1.21.8')).toEqual([])
+    expect(bootCommands({ ...before, keepInventory: false }, '26.2')).toEqual([
       ...everywhere('pvp', true),
       ...everywhere('keep_inventory', false),
     ])

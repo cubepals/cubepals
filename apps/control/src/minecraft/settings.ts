@@ -40,9 +40,14 @@ export const keepInventoryRule = (gameVersion: string): string =>
  */
 const DIMENSIONS = ['minecraft:overworld', 'minecraft:the_nether', 'minecraft:the_end'] as const
 
-/** The commands that set a game rule everywhere a player can be. */
-export const gameRuleCommands = (rule: string, value: boolean): string[] =>
-  DIMENSIONS.map((dimension) => `execute in ${dimension} run gamerule ${rule} ${value}`)
+/** The release that brought `execute in <dimension>`. Before it, a console sets a rule once. */
+const EXECUTE_IN = '1.13'
+
+/** The commands that set a game rule everywhere a player can be, in the release's own syntax. */
+export const gameRuleCommands = (rule: string, value: boolean, gameVersion: string): string[] =>
+  compareVersions(gameVersion, EXECUTE_IN) >= 0
+    ? DIMENSIONS.map((dimension) => `execute in ${dimension} run gamerule ${rule} ${value}`)
+    : [`gamerule ${rule} ${value}`]
 
 /** Whether players keep what they carry when they die: off, as Minecraft has it, unless chosen. */
 const keepsInventory = (settings: Pick<ServerSettings, 'keepInventory'>): boolean =>
@@ -80,22 +85,27 @@ export function liveCommands(from: ServerSettings, to: ServerSettings, gameVersi
   if (from.defaultGameMode !== to.defaultGameMode)
     commands.push(`defaultgamemode ${to.defaultGameMode}`, `gamemode ${to.defaultGameMode} @a`)
   if (from.pvp !== to.pvp && settingTakes('pvp', gameVersion) === 'now')
-    commands.push(...gameRuleCommands('pvp', to.pvp))
+    commands.push(...gameRuleCommands('pvp', to.pvp, gameVersion))
   if (keepsInventory(from) !== keepsInventory(to))
-    commands.push(...gameRuleCommands(keepInventoryRule(gameVersion), keepsInventory(to)))
+    commands.push(...gameRuleCommands(keepInventoryRule(gameVersion), keepsInventory(to), gameVersion))
   return commands
 }
 
 /**
  * The commands every start runs for the settings the game keeps in its world rather than reads
- * from its properties: PvP, since it became a game rule, and keeping items on death, on or off,
- * so a new world, one brought back or one a console changed plays as the settings say. The
- * properties it still reads, the image writes from the server's variables.
+ * from its properties: PvP, since it became a game rule, and keeping items on death once the
+ * owner has chosen, on or off, so a new world or one brought back plays as they chose. Until they
+ * choose, the world keeps its own rule: one its console or the world it came from turned on stays
+ * on. The properties it still reads, the image writes from the server's variables.
  */
 export function bootCommands(settings: ServerSettings, gameVersion: string): string[] {
   return [
-    ...(compareVersions(gameVersion, PVP_GAME_RULE) >= 0 ? gameRuleCommands('pvp', settings.pvp) : []),
-    ...gameRuleCommands(keepInventoryRule(gameVersion), keepsInventory(settings)),
+    ...(compareVersions(gameVersion, PVP_GAME_RULE) >= 0
+      ? gameRuleCommands('pvp', settings.pvp, gameVersion)
+      : []),
+    ...(settings.keepInventory === undefined
+      ? []
+      : gameRuleCommands(keepInventoryRule(gameVersion), settings.keepInventory, gameVersion)),
   ]
 }
 
