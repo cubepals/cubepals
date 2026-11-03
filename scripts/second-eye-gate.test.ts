@@ -18,6 +18,7 @@ describe('isSensitive', () => {
   test.each([
     '.github/workflows/ci.yml',
     '.github/second-eye.md',
+    '.github/second-eye.schema.json',
     'scripts/second-eye-gate.ts',
     'scripts/second-eye-comment.ts',
     'infra/fly/app.tf',
@@ -136,9 +137,23 @@ describe('statusFor', () => {
     expect(statusFor({ ...unavailable, review: 'failure', comment: 'success' })?.state).toBe('failure')
   })
 
-  test('a review that did not finish, or waits for a draft, fails', () => {
+  test('a review that did not finish fails, on a draft too', () => {
     expect(statusFor({ ...none, mark: 'success', review: 'failure' })?.description).toContain("didn't finish")
-    expect(statusFor({ ...none, mark: 'success' })?.description).toContain('ready for review')
+    expect(statusFor({ ...none, mark: 'success', review: 'cancelled', draft: true })?.state).toBe('failure')
+  })
+
+  test('a draft that waits is skipped: no status, neither failed nor pending', () => {
+    expect(statusFor({ ...none, draft: true })).toBeUndefined()
+    // The mark job held the review back until the draft is ready.
+    expect(statusFor({ ...none, mark: 'success' })).toBeUndefined()
+  })
+
+  test('a draft still passes on what passed and fails on a broken path check', () => {
+    expect(statusFor({ ...none, sensitive: 'false', draft: true })?.state).toBe('success')
+    expect(
+      statusFor({ ...none, mark: 'success', review: 'success', comment: 'success', draft: true })?.state,
+    ).toBe('success')
+    expect(statusFor({ ...none, sensitive: '', draft: true })?.state).toBe('failure')
   })
 
   test('a path check that failed is not a pass', () => {
@@ -184,6 +199,25 @@ describe('second-eye.yml', () => {
     expect(workflow.match(/secrets\.CLAUDE_CODE_OAUTH_TOKEN/g)).toHaveLength(1)
     expect(job('sensitive')).not.toContain('CLAUDE_CODE_OAUTH_TOKEN')
     expect(job('gate')).not.toContain('CLAUDE_CODE_OAUTH_TOKEN')
+    // Codex's key reaches only its own step; the job's environment learns only whether it is set.
+    const review = job('review')
+    expect(workflow.match(/secrets\.OPENAI_API_KEY/g)).toHaveLength(2)
+    expect(review).toMatch(/openai-api-key: \$\{\{ secrets\.OPENAI_API_KEY \}\}\n/)
+    expect(review).toMatch(/CODEX_SET_UP: \$\{\{ secrets\.OPENAI_API_KEY != '' \}\}\n/)
+  })
+
+  test('Codex reviews first, read-only, and Claude only when Codex gave no review', () => {
+    const review = job('review')
+    expect(review.indexOf('id: codex')).toBeLessThan(review.indexOf('id: claude'))
+    expect(review).toContain("permission-profile: ':read-only'")
+    expect(review).not.toContain('safety-strategy:')
+    for (const id of ['claude', 'result'])
+      expect(review).toContain(
+        `id: ${id}\n        if: steps.newer.outputs.superseded != 'true' && steps.answer.outputs.review == ''`,
+      )
+    expect(review).toMatch(
+      /review: \$\{\{ steps\.answer\.outputs\.review \|\| steps\.claude\.outputs\.structured_output \}\}\n/,
+    )
   })
 
   test('a skipped review writes nothing: the notice step waits for the decision', () => {

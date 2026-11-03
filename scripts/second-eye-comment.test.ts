@@ -30,6 +30,7 @@ const run: Run = {
   files: 3,
   additions: 120,
   deletions: 14,
+  reviewer: 'claude',
   model: 'claude-test-model',
   runUrl: 'https://github.com/cubepals/cubepals/actions/runs/7',
   areas: ['bugs', 'security'],
@@ -61,7 +62,7 @@ describe('secondEyeComment', () => {
     expect(body).not.toContain('| | |')
     expect(body).toContain('| **Looked at** | Bugs, security |')
     expect(body).toContain(
-      '| **Model** | `claude-test-model` · [Workflow run](https://github.com/cubepals/cubepals/actions/runs/7) |',
+      '| **Reviewer** | Claude · `claude-test-model` · [Workflow run](https://github.com/cubepals/cubepals/actions/runs/7) |',
     )
     expect(body).not.toContain('<details>')
     expect(lines.at(-2)).toBe(
@@ -102,7 +103,7 @@ describe('secondEyeComment', () => {
     expect(body).toContain('12 findings.')
   })
 
-  test("Claude's text stays in its cell, opens no tag, and mentions nobody", () => {
+  test("the reviewer's text stays in its cell, opens no tag, and mentions nobody", () => {
     const body = secondEyeComment(
       {
         verdict: 'fix first',
@@ -130,6 +131,42 @@ describe('secondEyeComment', () => {
       `<sub>Updated for [\`0123456\`](https://github.com/cubepals/cubepals/commit/${SHA})</sub>`,
     )
     expect(lines[3]).toBe('### 🤖 Second eye · AI review by Claude')
+  })
+})
+
+describe('which reviewer wrote it', () => {
+  const codex: Run = { ...run, reviewer: 'codex', model: 'gpt-6.1-sol', effort: 'medium' }
+
+  test('Codex names itself, its model and its effort', () => {
+    const body = secondEyeComment({ verdict: 'merge', findings: [] }, codex)
+    const lines = body.split('\n')
+    expect(lines[1]).toBe('### 🤖 Second eye · AI review by Codex')
+    expect(body).toContain(
+      '| **Reviewer** | Codex · `gpt-6.1-sol`, medium effort · [Workflow run](https://github.com/cubepals/cubepals/actions/runs/7) |',
+    )
+    expect(lines.at(-2)).toStartWith('<sub>An automated review by Codex, not a person.')
+    expect(body).not.toContain('Claude')
+  })
+
+  test("Claude in Codex's place says so, and why", () => {
+    const failed = secondEyeComment({ verdict: 'merge', findings: [] }, { ...run, fallback: 'failed' })
+    expect(failed.split('\n')[1]).toBe('### 🤖 Second eye · AI review by Claude')
+    expect(failed).toContain(
+      '| **Reviewer** | Claude · `claude-test-model` · in place of Codex, which gave no review · [Workflow run]',
+    )
+    const off = secondEyeComment({ verdict: 'merge', findings: [] }, { ...run, fallback: 'off' })
+    expect(off).toContain(
+      "| **Reviewer** | Claude · `claude-test-model` · in place of Codex, which isn't set up ·",
+    )
+    expect(off.split('\n').at(-2)).toStartWith('<sub>An automated review by Claude, not a person.')
+  })
+
+  test('a model, effort or missing model reaches the row as plain text', () => {
+    const body = secondEyeComment(
+      { verdict: 'merge', findings: [] },
+      { ...codex, model: '', effort: '`high` @someone' },
+    )
+    expect(body).toContain("| **Reviewer** | Codex · unknown model, 'high' @\u200bsomeone effort ·")
   })
 })
 

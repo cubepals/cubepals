@@ -4,25 +4,32 @@
 
 name: Second eye
 
-# A second reviewer for a sensitive pull request, run on the maintainer's Claude subscription
-# (CLAUDE_CODE_OAUTH_TOKEN). It runs only when v0id-user asks: by adding the needs-second-eye
-# label, by a comment with a line starting "@claude review", or with
-# `gh workflow run second-eye.yml -f pr=<number>`. Anyone else's label, comment or re-run skips
-# it, so nobody else can spend the subscription. What the reviewer looks for and how it answers
-# is .github/second-eye.md, which is its whole prompt.
+# A second reviewer for a sensitive pull request. Codex reviews first, as CODEX_MODEL at
+# CODEX_EFFORT effort, with the repository's OPENAI_API_KEY. When Codex gives no review (the key
+# isn't set, it fails or times out, or its answer isn't in the review's shape), Claude reviews in
+# its place, on the maintainer's Claude subscription (CLAUDE_CODE_OAUTH_TOKEN). The comment names
+# the reviewer that wrote it, and says when Claude stood in for Codex. It runs only when v0id-user
+# asks: by adding the needs-second-eye label, by a comment with a line starting "@claude review",
+# or with `gh workflow run second-eye.yml -f pr=<number>`. Anyone else's label, comment or re-run
+# skips it, so nobody else can spend either account. What the reviewer looks for and how it
+# answers is .github/second-eye.md, which is its whole prompt, and .github/second-eye.schema.json
+# is the shape of its answer; both reviewers get the same two.
 #
-# One pass covers the whole pull request: the turns it may use grow with the number of changed
+# One pass covers the whole pull request: the turns Claude may use grow with the number of changed
 # files (TURNS_BASE plus TURNS_PER_FILE each, up to TURNS_MOST), and the answer has no cap on the
 # findings. A later pass is given the findings of the earlier one, read from the data block the
-# comment keeps, and settles each (fixed, gone or still open) before it looks for more.
+# comment keeps, and settles each (fixed, gone or still open) before it looks for more, whichever
+# reviewer wrote them.
 #
-# The jobs that can write never meet Claude. The review job holds read-only tokens: it checks out
-# the commit this workflow came from (the default branch, or for a label or a push the pull
-# request itself, which already wrote this file), saves the pull request's description and diff
-# as data in .second-eye/, and runs Claude with no shell and no tool but reading files in the
-# workspace. Its answer is JSON in a fixed shape. The comment job writes it as Cubepals' bot
-# (github-actions[bot] without the app), editing its earlier review instead of adding one, and
-# labels the pull request review/ai-merge or review/ai-fix-first.
+# The jobs that can write never meet either model. The review job holds read-only tokens: it
+# checks out the commit this workflow came from (the default branch, or for a label or a push the
+# pull request itself, which already wrote this file), saves the pull request's description and
+# diff as data in .second-eye/, and runs the reviewer. Codex runs in its read-only permission
+# profile: it may read the workspace and run commands that change nothing, with no network, and
+# the OpenAI key stays in the action's proxy, out of its reach. Claude has no shell and no tool but
+# reading files in the workspace. The answer is JSON in a fixed shape. The comment job writes it as
+# Cubepals' bot (github-actions[bot] without the app), editing its earlier review instead of adding
+# one, and labels the pull request review/ai-merge or review/ai-fix-first.
 #
 # It follows the pull request: once it has been asked for (the pull request carries
 # needs-second-eye, or a verdict label), each push v0id-user makes reviews the new head again. The
@@ -40,8 +47,10 @@ name: Second eye
 #
 # The gate job sets one status, "Second eye gate", on every pull request's head for a ruleset to
 # require: it passes at once when no sensitive path changed, and otherwise fails until a review
-# has finished, saying that it waits for v0id-user to request one. An explicit provider HTTP 429
-# skips this optional review with an availability notice; every other failure still fails.
+# has finished, saying that it waits for v0id-user to request one. On a draft it is skipped: it
+# sets nothing while the draft waits, and marking it ready for review sets it. When Codex gave no
+# review and Claude answers with an explicit HTTP 429, this optional review is skipped with an
+# availability notice; every other failure still fails.
 on:
   pull_request:
     types: [opened, reopened, labeled, synchronize, ready_for_review]
@@ -210,21 +219,28 @@ jobs:
       && needs.mark.result == 'success'
       && needs.mark.outputs.review == 'true'
     runs-on: ubuntu-latest
-    # The quiet window and the review.
-    timeout-minutes: 60
+    # The quiet window, Codex's review (25 minutes at most) and Claude's in its place.
+    timeout-minutes: 90
     permissions:
       actions: read
       contents: read
       pull-requests: read
     outputs:
       superseded: ${{ steps.newer.outputs.superseded || steps.after.outputs.superseded }}
-      review: ${{ steps.claude.outputs.structured_output }}
+      review: ${{ steps.answer.outputs.review || steps.claude.outputs.structured_output }}
       reviewed: ${{ steps.pull.outputs.reviewed }}
       previous: ${{ steps.pull.outputs.previous }}
-      model: ${{ steps.model.outputs.model }}
+      reviewer: ${{ steps.reviewer.outputs.reviewer }}
+      model: ${{ steps.reviewer.outputs.model }}
+      effort: ${{ steps.reviewer.outputs.effort }}
+      fallback: ${{ steps.reviewer.outputs.fallback }}
       unavailable: ${{ steps.result.outputs.unavailable }}
     env:
       PR: ${{ github.event.pull_request.number || github.event.issue.number || inputs.pr }}
+      # The first reviewer. Only whether the key is set reaches the job's environment, never the key.
+      CODEX_MODEL: gpt-6.1-sol
+      CODEX_EFFORT: medium
+      CODEX_SET_UP: ${{ secrets.OPENAI_API_KEY != '' }}
     steps:
       # A push waits briefly for the pushes right after it (a burst of commits), and the job that
       # wakes to a newer push stands down (the next step). Five minutes catches a burst without
@@ -239,7 +255,7 @@ jobs:
         with:
           ref: ${{ github.workflow_sha }}
           persist-credentials: false
-      # The pull request as data for Claude to read: never fetched as a ref, checked out or run.
+      # The pull request as data for the reviewer to read: never fetched as a ref, checked out or run.
       - name: Read the pull request
         id: pull
         env:
@@ -299,17 +315,56 @@ jobs:
               done
             fi
           fi
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        if: steps.newer.outputs.superseded != 'true'
+        with:
+          bun-version: 1.4.3
+      # The prompt, the answer's shape for Claude, and the same shape for Codex without maxLength,
+      # which OpenAI's strict schemas don't take.
       - name: Load the rules
         id: rules
         if: steps.newer.outputs.superseded != 'true'
         run: |
           delimiter="rules-$(openssl rand -hex 16)"
-          { echo "prompt<<$delimiter"; cat .github/second-eye.md; echo "$delimiter"; } >> "$GITHUB_OUTPUT"
-      # Claude may read files in the workspace and nothing else: no shell, no edits, no web, and
-      # no path where a secret lives (the process's environment, the home directory's settings,
-      # the runner's files, the git config the action writes its token into).
-      - id: claude
+          {
+            echo "prompt<<$delimiter"; cat .github/second-eye.md; echo "$delimiter"
+            echo "schema=$(jq -c . .github/second-eye.schema.json)"
+            echo "codex_schema=$(jq -c 'walk(if type == "object" then del(.maxLength) else . end)' .github/second-eye.schema.json)"
+          } >> "$GITHUB_OUTPUT"
+      # Codex reviews first. The action keeps the key in a proxy Codex can't read, takes sudo away
+      # from the runner for the rest of the job (nothing after it needs sudo), and runs Codex in the
+      # read-only permission profile: it reads and searches the workspace and runs commands that
+      # change nothing, with no network. Anything short of an answer in the review's shape hands
+      # the review to Claude.
+      - name: Review with Codex
+        id: codex
+        if: steps.newer.outputs.superseded != 'true' && env.CODEX_SET_UP == 'true'
+        continue-on-error: true
+        timeout-minutes: 25
+        uses: openai/codex-action@bdf19a4a223ec2549a3e2274a0cf61556bc07675 # v1.13
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          codex-version: 0.164.0
+          model: ${{ env.CODEX_MODEL }}
+          effort: ${{ env.CODEX_EFFORT }}
+          permission-profile: ':read-only'
+          prompt-file: .github/second-eye.md
+          output-schema: ${{ steps.rules.outputs.codex_schema }}
+      - name: Read Codex's answer
+        id: answer
         if: steps.newer.outputs.superseded != 'true'
+        env:
+          MODE: codex
+          OUTCOME: ${{ steps.codex.outcome }}
+          MESSAGE: ${{ steps.codex.outputs['final-message'] }}
+        run: bun scripts/second-eye-result.ts
+      # Claude, when Codex gave no review, may read files in the workspace and nothing else: no
+      # shell, no edits, no web, and no path where a secret lives (the process's environment, the
+      # home directory's settings, the runner's files, the git config the action writes its token
+      # into).
+      - name: Review with Claude
+        id: claude
+        if: steps.newer.outputs.superseded != 'true' && steps.answer.outputs.review == ''
         # The result classifier below permits only a proved HTTP 429 to skip the review.
         continue-on-error: true
         uses: anthropics/claude-code-action@925afb53776cf1a2b738c6bdbed37b4d4000ef13 # v1.0.262
@@ -323,21 +378,21 @@ jobs:
             --permission-mode dontAsk
             --allowedTools "Read(./**)"
             --disallowedTools "Bash,Edit,MultiEdit,Write,NotebookEdit,WebFetch,WebSearch,Read(./.git/**),Read(//proc/**),Read(//sys/**),Read(//dev/**),Read(//etc/**),Read(//root/**),Read(//tmp/**),Read(//var/**),Read(//run/**),Read(//opt/**),Read(~/.*),Read(~/.*/**),Read(//home/runner/work/_temp/**),Read(//home/runner/work/_actions/**),Read(//home/runner/runners/**),Read(//home/runner/actions-runner/**)"
-            --json-schema '{"type":"object","additionalProperties":false,"required":["verdict","files_reviewed","earlier","findings"],"properties":{"verdict":{"enum":["merge","fix first"]},"files_reviewed":{"type":"integer","minimum":0},"earlier":{"type":"array","items":{"type":"object","additionalProperties":false,"required":["number","status","note"],"properties":{"number":{"type":"integer","minimum":1},"status":{"enum":["fixed","gone"]},"note":{"type":"string","maxLength":200}}}},"findings":{"type":"array","items":{"type":"object","additionalProperties":false,"required":["severity","origin","file","line","problem","fix","why"],"properties":{"severity":{"enum":["high","medium","low"]},"origin":{"enum":["first","open","new","missed"]},"file":{"type":"string","maxLength":200},"line":{"type":"integer","minimum":1},"problem":{"type":"string","maxLength":300},"fix":{"type":"string","maxLength":300},"why":{"type":"string","maxLength":600}}}}}}'
+            --json-schema '${{ steps.rules.outputs.schema }}'
       - name: Classify the review result
         id: result
-        if: steps.newer.outputs.superseded != 'true'
+        if: steps.newer.outputs.superseded != 'true' && steps.answer.outputs.review == ''
         env:
           OUTCOME: ${{ steps.claude.outcome }}
           STRUCTURED: ${{ steps.claude.outputs.structured_output }}
           EXECUTION_FILE: ${{ steps.claude.outputs.execution_file }}
         run: bun scripts/second-eye-result.ts
-      # The same question once the review is made: a push that landed while Claude read, or while
-      # the quiet window of a push before it ran, has its own review, and this one must not land
-      # over it.
+      # The same question once the review is made: a push that landed while the reviewer read, or
+      # while the quiet window of a push before it ran, has its own review, and this one must not
+      # land over it.
       - name: Whether a newer push came during the review
         id: after
-        if: steps.claude.outputs.structured_output != ''
+        if: steps.answer.outputs.review != '' || steps.claude.outputs.structured_output != ''
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -370,16 +425,23 @@ jobs:
               (.permission_denials // [] | .[] | "Refused: \(.tool_name) \(.tool_input.file_path // .tool_input.path // .tool_input.pattern // "" | gsub("[\\r\\n]+"; " "))"),
               (select(.is_error == true) | if env.UNAVAILABLE == "true" then "::notice::Automated review unavailable. Skipped for this commit." else "::error::\(.result // "no result" | gsub("[\\r\\n]+"; " ")) (\(.terminal_reason // .subtype // "unknown"), HTTP \(.api_error_status // "none"))" end)' \
             "$EXECUTION_FILE"
-      # The model the run's first message names, for the comment; only the characters a model's
-      # name has, so nothing else reaches it.
-      - name: Name the model
-        id: model
-        if: steps.claude.outputs.execution_file != ''
+      # Which reviewer wrote the review, for the comment: Codex with its model and effort, or
+      # Claude with the model its run's first message names and why Codex didn't review (off: no
+      # key; failed: no review in the answer's shape). Only the characters a model's name has, so
+      # nothing else reaches the comment.
+      - name: Name the reviewer
+        id: reviewer
+        if: steps.newer.outputs.superseded != 'true'
         env:
+          CODEX: ${{ steps.answer.outputs.codex }}
           EXECUTION_FILE: ${{ steps.claude.outputs.execution_file }}
         run: |
-          model="$(jq -r '[.[] | select(.type == "system" and .subtype == "init")][0].model // ""' "$EXECUTION_FILE" | tr -cd '[:alnum:]._-')"
-          echo "model=$model" >> "$GITHUB_OUTPUT"
+          if [ "$CODEX" = answered ]; then
+            { echo "reviewer=codex"; echo "model=$CODEX_MODEL"; echo "effort=$CODEX_EFFORT"; } >> "$GITHUB_OUTPUT"
+          elif [ -n "$EXECUTION_FILE" ]; then
+            model="$(jq -r '[.[] | select(.type == "system" and .subtype == "init")][0].model // ""' "$EXECUTION_FILE" | tr -cd '[:alnum:]._-')"
+            { echo "reviewer=claude"; echo "model=$model"; echo "fallback=$CODEX"; } >> "$GITHUB_OUTPUT"
+          fi
 
   comment:
     name: Comment
@@ -423,7 +485,10 @@ jobs:
           REVIEW: ${{ needs.review.outputs.review }}
           REVIEWED: ${{ needs.review.outputs.reviewed }}
           PREVIOUS: ${{ needs.review.outputs.previous }}
+          REVIEWER: ${{ needs.review.outputs.reviewer }}
           MODEL: ${{ needs.review.outputs.model }}
+          EFFORT: ${{ needs.review.outputs.effort }}
+          FALLBACK: ${{ needs.review.outputs.fallback }}
           NOTICE: ${{ needs.review.outputs.unavailable == 'true' && 'unavailable' || '' }}
           REPO: ${{ github.repository }}
           PULL: ${{ github.event.pull_request.number || github.event.issue.number || inputs.pr }}
@@ -475,7 +540,8 @@ jobs:
 
   # The status a ruleset requires. It runs after the others, whatever they did, and says what
   # became of the review: passed at once when no sensitive path changed, failed while a sensitive
-  # change waits for v0id-user to request one, passed once the review has finished.
+  # change waits for v0id-user to request one, passed once the review has finished, and nothing on
+  # a draft that waits.
   gate:
     name: Set the second eye gate
     needs: [sensitive, mark, review, comment]
@@ -514,6 +580,7 @@ jobs:
           REVIEW: ${{ needs.review.result }}
           COMMENT: ${{ needs.comment.result }}
           UNAVAILABLE: ${{ needs.review.outputs.unavailable }}
+          DRAFT: ${{ github.event.pull_request.draft }}
           SHA: ${{ fromJSON(needs.review.outputs.reviewed || '{}').sha || github.event.pull_request.head.sha }}
           REPO: ${{ github.repository }}
         run: bun scripts/second-eye-gate.ts

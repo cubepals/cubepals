@@ -3,12 +3,13 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * The second reviewer's one comment on a pull request (second-eye.yml): the findings Claude
- * returned as JSON, written in one fixed shape that says it is an AI review: a heading, the
- * verdict, what was reviewed, what it looked at and which model, a row a finding with the
- * reasoning folded away, and a footer saying how to run it again. Findings are grouped by
- * severity, high first, with no cap on how many. It is edited in place on each run instead of
- * written again, and the pull request carries one label for the verdict.
+ * The second reviewer's one comment on a pull request (second-eye.yml): the findings the reviewer
+ * returned as JSON, written in one fixed shape that says it is an AI review and whose: a heading
+ * naming the reviewer (Codex, or Claude in its place), the verdict, what was reviewed, what it
+ * looked at, which reviewer and model, a row a finding with the reasoning folded away, and a
+ * footer saying how to run it again. Findings are grouped by severity, high first, with no cap on
+ * how many. It is edited in place on each run instead of written again, and the pull request
+ * carries one label for the verdict.
  *
  * It shows how many of the changed files the reviewer read, so a partial pass is visible. On a
  * re-review it also says what became of the earlier findings (fixed, no longer applies, still
@@ -23,8 +24,9 @@
  *   NOTICE=running|draft|failed|unavailable bun scripts/second-eye-comment.ts
  *   DECIDE=1 bun scripts/second-eye-comment.ts
  *
- * It reads REVIEW (the action's structured output), REVIEWED (the commit and its counts, as the
- * review job read them), PREVIOUS (the earlier review's findings, when there was one), MODEL, REPO, PULL and GH_TOKEN from the environment the workflow gives
+ * It reads REVIEW (the reviewer's answer), REVIEWED (the commit and its counts, as the review job
+ * read them), PREVIOUS (the earlier review's findings, when there was one), REVIEWER, MODEL, EFFORT,
+ * FALLBACK, REPO, PULL and GH_TOKEN from the environment the workflow gives
  * it, and what the reviewer looks at from .github/second-eye.md. With NOTICE it writes only the
  * line at the top and needs no review. With DECIDE it touches nothing: it writes to GITHUB_OUTPUT
  * whether this run reviews and what it says first (EVENT, ACTION, DRAFT and FORCE say what started
@@ -71,7 +73,13 @@ export interface Previous {
   findings: Pick<Finding, 'severity' | 'file' | 'line' | 'problem'>[]
 }
 
-/** What the comment says about the run, beside Claude's answer. */
+/** Who wrote the review: Codex first, or Claude in its place. */
+export type Reviewer = 'codex' | 'claude'
+
+/** Why Claude reviewed in Codex's place: Codex isn't set up (off), or gave no review (failed). */
+export type Fallback = 'off' | 'failed'
+
+/** What the comment says about the run, beside the reviewer's answer. */
 export interface Run {
   repo: string
   pull: number | string
@@ -80,7 +88,12 @@ export interface Run {
   files: number
   additions: number
   deletions: number
+  reviewer: Reviewer
   model: string
+  /** The reasoning effort the reviewer ran at, when the workflow sets one. */
+  effort?: string
+  /** Set when Claude reviewed in Codex's place. */
+  fallback?: Fallback
   runUrl: string
   /** What .github/second-eye.md tells the reviewer to look for. */
   areas: string[]
@@ -124,7 +137,15 @@ const SINCE: Record<Origin, string> = {
 /** The verdict's badge: an emoji, which renders everywhere and fetches nothing. */
 const BADGE = { merge: '✅', 'fix first': '⚠️' } as const
 
-/** Claude's text on one line, with no code spans to break out of and nobody mentioned. */
+/** How the comment names each reviewer. */
+const NAME: Record<Reviewer, string> = { codex: 'Codex', claude: 'Claude' }
+/** What the Reviewer row says when Claude stood in for Codex. */
+const STOOD_IN: Record<Fallback, string> = {
+  off: "in place of Codex, which isn't set up",
+  failed: 'in place of Codex, which gave no review',
+}
+
+/** The reviewer's text on one line, with no code spans to break out of and nobody mentioned. */
 const plain = (text: unknown): string =>
   String(text ?? '')
     .replace(/\s+/g, ' ')
@@ -132,7 +153,7 @@ const plain = (text: unknown): string =>
     .replaceAll('@', '@​')
     .trim()
 
-/** Claude's text in a table cell or HTML block: no column break and no tag of its own. */
+/** The reviewer's text in a table cell or HTML block: no column break and no tag of its own. */
 const cell = (text: unknown): string => plain(text).replaceAll('|', '\\|').replaceAll('<', '&lt;')
 
 const short = (sha: string): string => sha.slice(0, 7)
@@ -155,6 +176,14 @@ function where(run: Run, finding: Finding): string {
 }
 
 const count = (n: number, one: string, many: string): string => `${n} ${n === 1 ? one : many}`
+
+/** Who reviewed, with which model and effort, and whether in Codex's place. */
+function reviewedBy(run: Run): string {
+  const model = run.model ? `\`${plain(run.model)}\`` : 'unknown model'
+  const effort = run.effort ? `, ${plain(run.effort)} effort` : ''
+  const stoodIn = run.reviewer === 'claude' && run.fallback ? ` · ${STOOD_IN[run.fallback]}` : ''
+  return `${NAME[run.reviewer]} · ${model}${effort}${stoodIn}`
+}
 
 /** The findings written, most severe first, and the verdict they leave. */
 function judged(review: Review): { verdict: Review['verdict']; findings: Review['findings'] } {
@@ -245,7 +274,7 @@ export function secondEyeComment(review: Review, run: Run): string {
   const summary = [
     ['Reviewed', `${commitLink(run)} · ${filesRead(review, run)}`],
     ['Looked at', areas ? areas.charAt(0).toUpperCase() + areas.slice(1) : 'Unknown'],
-    ['Model', `${run.model ? `\`${plain(run.model)}\`` : 'Unknown'} · [Workflow run](${run.runUrl})`],
+    ['Reviewer', `${reviewedBy(run)} · [Workflow run](${run.runUrl})`],
   ]
   const groups = (Object.keys(RANK) as Severity[])
     .map((severity) => ({ severity, found: findings.filter((finding) => finding.severity === severity) }))
@@ -269,7 +298,7 @@ export function secondEyeComment(review: Review, run: Run): string {
   const lines = (stage: 0 | 1 | 2) => [
     MARKER,
     ...(run.updating ? [`<sub>Updated for ${commitLink(run)}</sub>`, ''] : []),
-    '### 🤖 Second eye · AI review by Claude',
+    `### 🤖 Second eye · AI review by ${NAME[run.reviewer]}`,
     '',
     `${BADGE[verdict]} **Verdict: ${verdict === 'merge' ? 'Merge' : 'Fix first'}.** ${
       findings.length ? `${count(findings.length, 'finding', 'findings')}.` : 'No findings.'
@@ -292,7 +321,7 @@ export function secondEyeComment(review: Review, run: Run): string {
     ]),
     ...reasons(stage),
     ...(run.previous && stage < 2 ? settledDetails(review, run.previous) : []),
-    `<sub>An automated review by Claude, not a person. The verdict advises; on a sensitive change the Second eye gate also waits for a finished review. Re-run: \`gh workflow run second-eye.yml -f pr=${run.pull}\`</sub>`,
+    `<sub>An automated review by ${NAME[run.reviewer]}, not a person. The verdict advises; on a sensitive change the Second eye gate also waits for a finished review. Re-run: \`gh workflow run second-eye.yml -f pr=${run.pull}\`</sub>`,
     dataBlock(
       run,
       stage === 2
@@ -434,7 +463,11 @@ async function writeReview(repo: string, pull: string): Promise<void> {
     files: Number(reviewed.files) || 0,
     additions: Number(reviewed.additions) || 0,
     deletions: Number(reviewed.deletions) || 0,
+    // A run from before Codex reviewed first names no reviewer: Claude wrote it.
+    reviewer: process.env.REVIEWER === 'codex' ? 'codex' : 'claude',
     model: process.env.MODEL ?? '',
+    effort: process.env.EFFORT || undefined,
+    fallback: (['off', 'failed'] as const).find((reason) => reason === process.env.FALLBACK),
     runUrl: `${process.env.GITHUB_SERVER_URL ?? 'https://github.com'}/${repo}/actions/runs/${need('GITHUB_RUN_ID')}`,
     areas: lookedAt(readFileSync(new URL('../.github/second-eye.md', import.meta.url), 'utf8')),
     previous: earlier,

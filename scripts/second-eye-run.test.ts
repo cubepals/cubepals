@@ -51,7 +51,18 @@ beforeEach(() => {
     REVIEW: 'success',
     COMMENT: 'success',
   })
-  for (const key of ['DECIDE', 'NOTICE', 'UNAVAILABLE', 'DRAFT', 'FORCE', 'COMMENT_AUTHOR'])
+  for (const key of [
+    'DECIDE',
+    'NOTICE',
+    'UNAVAILABLE',
+    'DRAFT',
+    'FORCE',
+    'COMMENT_AUTHOR',
+    'REVIEWER',
+    'MODEL',
+    'EFFORT',
+    'FALLBACK',
+  ])
     delete process.env[key]
   fetcher = spyOn(globalThis, 'fetch').mockImplementation(
     Object.assign(
@@ -148,6 +159,23 @@ test('unavailability sets an explicit skipped status, while failed notices canno
   expect(calls.at(-1)?.body).toMatchObject({ state: 'failure' })
 })
 
+test('a draft that waits writes no status, and the same draft once ready fails until reviewed', async () => {
+  Object.assign(process.env, { DRAFT: 'true', MARK: 'skipped', REVIEW: 'skipped', COMMENT: 'skipped' })
+  const notice = spyOn(console, 'warn').mockImplementation(() => {})
+  try {
+    await runSecondEyeGate()
+    expect(calls).toHaveLength(0)
+    expect(notice).toHaveBeenCalledWith(
+      '::notice::A draft: the second eye gate is set when it is ready for review.',
+    )
+  } finally {
+    notice.mockRestore()
+  }
+  process.env.DRAFT = 'false'
+  await runSecondEyeGate()
+  expect(calls.at(-1)?.body).toMatchObject({ state: 'failure' })
+})
+
 test('path analysis includes renamed sensitive files and fails closed at the API listing limit', async () => {
   process.env.MODE = 'paths'
   files = [{ filename: 'readme.md', previous_filename: 'apps/edge/front.ts' }]
@@ -224,6 +252,30 @@ test('a completed review publishes its actual verdict, and a later head keeps it
   )
 })
 
+test('the published review names the reviewer the workflow says wrote it', async () => {
+  process.env.REVIEW = JSON.stringify({ verdict: 'merge', findings: [] })
+  process.env.REVIEWED = JSON.stringify({ sha: SHA, files: 1, additions: 1, deletions: 0 })
+  const published = async () => {
+    calls = []
+    comments = []
+    await runSecondEyeComment()
+    const post = calls.find((call) => call.path.endsWith('/comments') && call.method === 'POST')
+    return (post?.body as { body: string } | undefined)?.body ?? ''
+  }
+  Object.assign(process.env, { REVIEWER: 'codex', MODEL: 'gpt-6.1-sol', EFFORT: 'medium' })
+  const codex = await published()
+  expect(codex).toContain('AI review by Codex')
+  expect(codex).toContain('| **Reviewer** | Codex · `gpt-6.1-sol`, medium effort ·')
+  Object.assign(process.env, { REVIEWER: 'claude', MODEL: 'claude-test', EFFORT: '', FALLBACK: 'failed' })
+  const claude = await published()
+  expect(claude).toContain('AI review by Claude')
+  expect(claude).toContain(
+    '| **Reviewer** | Claude · `claude-test` · in place of Codex, which gave no review ·',
+  )
+  process.env.FALLBACK = 'anything else'
+  expect(await published()).toContain('| **Reviewer** | Claude · `claude-test` · [Workflow run]')
+})
+
 test('review publication defaults missing metadata and keeps an existing correct verdict label', async () => {
   process.env.REVIEW = JSON.stringify({ verdict: 'merge', findings: [] })
   process.env.REVIEWED = JSON.stringify({ sha: SHA })
@@ -234,6 +286,8 @@ test('review publication defaults missing metadata and keeps an existing correct
     body: string
   }
   expect(published.body).toContain('0 files, +0 −0 lines')
+  expect(published.body).toContain('AI review by Claude')
+  expect(published.body).toContain('| **Reviewer** | Claude · unknown model ·')
   expect(published.body).not.toContain('Stryker was here')
   expect(calls.some((call) => call.method === 'DELETE')).toBe(false)
 })

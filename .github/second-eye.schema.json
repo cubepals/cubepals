@@ -1,0 +1,75 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["verdict", "files_reviewed", "earlier", "findings"],
+  "properties": {
+    "verdict": {
+      "type": "string",
+      "enum": ["merge", "fix first"]
+    },
+    "files_reviewed": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "earlier": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["number", "status", "note"],
+        "properties": {
+          "number": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "status": {
+            "type": "string",
+            "enum": ["fixed", "gone"]
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 200
+          }
+        }
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["severity", "origin", "file", "line", "problem", "fix", "why"],
+        "properties": {
+          "severity": {
+            "type": "string",
+            "enum": ["high", "medium", "low"]
+          },
+          "origin": {
+            "type": "string",
+            "enum": ["first", "open", "new", "missed"]
+          },
+          "file": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "line": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "problem": {
+            "type": "string",
+            "maxLength": 300
+          },
+          "fix": {
+            "type": "string",
+            "maxLength": 300
+          },
+          "why": {
+            "type": "string",
+            "maxLength": 600
+          }
+        }
+      }
+    }
+  }
+}
