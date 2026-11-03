@@ -6,6 +6,7 @@
 
 import {
   type AccountOverviewView,
+  asHeld,
   type PublicPlan,
   sameSitePath,
   UPGRADE_REASONS,
@@ -460,6 +461,7 @@ function Plan({ overview }: { overview: AccountOverviewView }) {
   }, [params, billing, router, overview.plan.key])
 
   const failure = portal.error ?? refresh.error
+  const subscription = subscriptionSaid(overview)
   return (
     <FormSection
       title={overview.plan.key === 'free' ? 'Free trial' : `${title(overview.plan.key)} plan`}
@@ -477,17 +479,7 @@ function Plan({ overview }: { overview: AccountOverviewView }) {
         <Note tone="info">{billing.message}</Note>
       )}
       <Owed extra={overview.usage.extra} />
-      {overview.plan.billed !== null &&
-        overview.plan.billed.status !== 'ended' &&
-        overview.plan.billed.planKey === overview.plan.key &&
-        overview.plan.year === null && (
-          <p className="type-body-sm">
-            Your current subscription: {money(overview.entitlements.monthlyPriceCents)} a month
-            {overview.entitlements.includedUnits === null
-              ? '.'
-              : ` with ${overview.entitlements.includedUnits} hours of play each month.`}
-          </p>
-        )}
+      {subscription !== null && <p className="type-body-sm">{subscription}</p>}
       {billing?.available && (
         <p className="type-body-sm" style={{ color: 'var(--ink-muted)' }}>
           Got a gift code? <Link href="/redeem">Redeem it</Link>.
@@ -516,6 +508,21 @@ function payingSummary(
   return giftNext !== null
     ? `Renews on ${dayOf(billed.periodEnd)}. ${giftWaits(giftNext)}`
     : `Renews on ${dayOf(billed.periodEnd)}.`
+}
+
+/**
+ * The price and hours the plan is held at, as the person's own subscription pays for them: a year
+ * running for the plan, or else a month of it. Null when neither pays for the plan.
+ */
+function subscriptionSaid(overview: AccountOverviewView): string | null {
+  const { key, billed, year } = overview.plan
+  const { monthlyPriceCents, yearlyPriceCents, includedUnits } = overview.entitlements
+  const hours = includedUnits === null ? '.' : ` with ${includedUnits} hours of play each month.`
+  if (year !== null && started(year) && year.planKey === key && yearlyPriceCents !== null)
+    return `Your current subscription: ${money(yearlyPriceCents)} a year${hours}`
+  if (billed !== null && billed.status !== 'ended' && billed.planKey === key)
+    return `Your current subscription: ${money(monthlyPriceCents)} a month${hours}`
+  return null
 }
 
 /** What the account's plan section says under its name: what pays for the plan, and until when. */
@@ -684,7 +691,8 @@ function Includes({ overview }: { overview: AccountOverviewView }) {
 
 /**
  * The plans side by side, as the pricing page shows them: a card to each paid plan, the free trial
- * on the one it starts, and the way to change plan. Someone on the trial finds it on that card.
+ * on the one it starts, and the way to change plan. Someone on the trial finds it on that card. Their
+ * own plan's card says the price and hours they hold (`asHeld`); the others, what they cost now.
  */
 function Plans({ overview }: { overview: AccountOverviewView }) {
   const trpc = useTRPC()
@@ -705,7 +713,7 @@ function Plans({ overview }: { overview: AccountOverviewView }) {
         {cards.map((plan) => (
           <OfferCard
             key={plan.key}
-            plan={plan}
+            plan={asHeld(plan, overview.entitlements)}
             plans={plans.data}
             bedrock={bedrock}
             trial={plan === starter ? trial : undefined}

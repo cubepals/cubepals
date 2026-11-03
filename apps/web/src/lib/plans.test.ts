@@ -174,7 +174,7 @@ describe('plans as people read them', () => {
     expect(htmlOf(offer(plus))).not.toContain('free trial')
   })
 
-  test('marking the current plan keeps its advertised price and hours', () => {
+  test('marking the current plan keeps the price and hours it is given', () => {
     const yours = htmlOf(offer(plus, { current: true, action: null }))
     expect(yours).toContain('Yours')
     expect(yours).toContain(dollars(plus.monthlyPriceCents))
