@@ -279,3 +279,22 @@ describe('a page made without its plans', () => {
     }
   })
 })
+
+test('a network error response is returned without rebuilding or caching it', async () => {
+  const failure = Response.error()
+  const response = await fromEdge(new Request(`${ORIGIN}/guides`), {
+    version: 'v1',
+    cache: {
+      match: async () => undefined,
+      put: async () => {
+        throw new Error('A network error cannot enter the cache')
+      },
+    },
+    render: async () => failure,
+    later: () => {
+      throw new Error('A network error cannot schedule a cache write')
+    },
+  })
+  expect(response.type).toBe(failure.type)
+  expect(response.status).toBe(failure.status)
+})

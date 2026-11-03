@@ -74,7 +74,7 @@ const keepable = (response: Response) =>
 
 /** As the browser is sent a page that isn't kept: Next's own answer, less the Worker's mark. */
 function unkept(response: Response): Response {
-  if (!response.headers.has(PARTIAL)) return response
+  if (response.headers.has(PARTIAL) === false) return response
   const headers = new Headers(response.headers)
   headers.delete(PARTIAL)
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers })
