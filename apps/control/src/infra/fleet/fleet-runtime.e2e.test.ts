@@ -219,6 +219,18 @@ heartbeat_seconds = 1
 `
 }
 
+/** A pulled image is not proof that a fresh host can create a Docker workload. */
+function prepareNodeHost(dir: string) {
+  mkdirSync(dir, { recursive: true })
+  const began = performance.now()
+  const warm = spawnSync('docker', ['run', '--rm', SPEC.image, 'true'], {
+    encoding: 'utf8',
+    timeout: MINUTE_MS,
+  })
+  if (warm.error || warm.status !== 0) throw warm.error ?? new Error(warm.stderr)
+  console.warn(`fleet: Docker workload ready in ${Math.round(performance.now() - began)} ms`)
+}
+
 describe.skipIf(!ready)('FleetRuntime against a real blocklyd', () => {
   const dir = join(tmpdir(), `blockly-${DEPLOYMENT}`)
   let db: Db
@@ -243,7 +255,7 @@ describe.skipIf(!ready)('FleetRuntime against a real blocklyd', () => {
     ]).stdout.toString()
 
   beforeAll(async () => {
-    mkdirSync(dir, { recursive: true })
+    prepareNodeHost(dir)
     const fresh = await freshDatabase()
     ;({ db, drop } = fresh)
     database = fresh.url
