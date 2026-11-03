@@ -64,13 +64,13 @@ async function forgetHearts(runtime: Pick<Runtimes, 'exec'>, handle: RuntimeHand
  */
 async function tellPlayers(
   notice: RestartNotice,
-  countdown: (server: MinecraftServer, handle: RuntimeHandle) => Promise<unknown>,
+  countdown: (server: MinecraftServer, handle: RuntimeHandle, why: string) => Promise<unknown>,
   server: MinecraftServer,
   handle: RuntimeHandle,
   input: UpdateInput,
 ): Promise<void> {
   if (input.fromFailure === true) return
-  await countdown(server, handle)
+  await countdown(server, handle, RESTARTING_FOR_A_CHANGE)
   await notice.sendOff(server, handle, RESTARTING_FOR_A_CHANGE)
 }
 
@@ -146,8 +146,8 @@ export function updating(deps: {
     restBack,
   } = deps
   const notice = restartNotice(deps)
-  const countdown = (server: MinecraftServer, handle: RuntimeHandle) =>
-    warnBeforeRestart(deps.console, consoleTarget(server, handle))
+  const countdown = (server: MinecraftServer, handle: RuntimeHandle, why: string) =>
+    warnBeforeRestart(deps.console, consoleTarget(server, handle), why)
 
   /**
    * A new configuration on a running server (§9): a snapshot first, then the provider applies
