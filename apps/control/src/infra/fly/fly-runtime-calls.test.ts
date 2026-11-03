@@ -10,6 +10,7 @@ import { FakeFly, type Json } from './fake-fly.ts'
 import { HELPER_LIFETIME_MS } from './fly-runtime/helper-machine.ts'
 import { FlyRuntime } from './fly-runtime.ts'
 import { decodeHandle, decodeSnapshot } from './handle.ts'
+import { guestFor } from './machine-config.ts'
 
 // The calls FlyRuntime makes of Fly, in order, and what it sends: the order of side effects that
 // leases, cleanup and capacity checks depend on, pinned flow by flow against the in-memory Fly.
@@ -375,6 +376,7 @@ describe('FlyRuntime requests', () => {
         name: 'minecraft_data',
         region: 'fra',
         size_gb: 5,
+        compute: guestFor(spec().resources.memoryMb),
       },
       {
         auto_backup_enabled: false,
@@ -390,6 +392,7 @@ describe('FlyRuntime requests', () => {
         name: 'minecraft_data',
         region: 'fra',
         size_gb: 5,
+        compute: guestFor(spec().resources.memoryMb),
         snapshot_id: snapshotId,
       },
     ])

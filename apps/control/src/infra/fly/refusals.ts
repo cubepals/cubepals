@@ -16,6 +16,8 @@
  * ran out: CPUs (iad volume hosts, January to March 2026) or memory.
  */
 export const NO_ROOM_STATUS = 'insufficient_capacity'
+/** Fly's refusal of a machine whose world volume sits on a host that can't fit it (a staging answer). */
+export const VOLUME_PLACEMENT_CAPACITY_STATUS = 'volume_placement_capacity'
 const NO_CPUS = 'insufficient CPUs available'
 const NO_MEMORY = 'insufficient memory available'
 export const NO_CPUS_SAID = `aborted: could not reserve resource for machine: ${NO_CPUS} to fulfill request`
@@ -24,7 +26,7 @@ const NO_ROOM = new RegExp(`${NO_CPUS}|${NO_MEMORY}`, 'i')
 
 /** Whether a refusal, by its words or its status, is a host with no room for the machine. */
 export const saysNoRoom = (said: string, status: unknown): boolean =>
-  status === NO_ROOM_STATUS || NO_ROOM.test(said)
+  status === NO_ROOM_STATUS || status === VOLUME_PLACEMENT_CAPACITY_STATUS || NO_ROOM.test(said)
 
 /**
  * A new machine refused because the organization holds as many machines as Fly lets it, stopped
