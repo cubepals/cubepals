@@ -182,10 +182,6 @@ export function decide(current: Lifecycle, command: Command): Decision {
       if (status === 'starting') return { kind: 'noop' }
       return { kind: 'invalid' }
     case 'apply':
-      if (status === 'running') return accept('updating', 'apply')
-      // A stopped server keeps its new desired config; the next start boots it.
-      if (status === 'stopped') return { kind: 'accept', to: current, operation: null }
-      return { kind: 'invalid' }
     case 'rollback':
       if (status === 'running') return accept('updating', 'apply')
       if (status === 'stopped') return { kind: 'accept', to: current, operation: null }

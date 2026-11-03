@@ -5,6 +5,7 @@
 /** Proposed revisions and curated packs use the same real planner, runtime proof and learned exclusions. */
 import { afterAll, beforeAll, describe, expect, mock, spyOn, test } from 'bun:test'
 import { createHash, randomUUID } from 'node:crypto'
+import { SECOND_MS } from '@blockly/contracts/durations'
 import { type CuratedFactsJson, schema } from '@blockly/db'
 import { eq } from 'drizzle-orm'
 import { planThatRuns } from '../../domain/account/entitlements.ts'
@@ -76,6 +77,15 @@ async function proposed(h: Harness, cdn: Cdn) {
     regionKey: server.regionKey,
   })
   if (plan === null) throw new Error('Missing proposed plan')
+  const queued = await h.app.configuration.request(candidate)
+  if (queued === null) throw new Error('The proposed mod plan was not queued')
+  const deadline = Date.now() + 2 * SECOND_MS
+  let queuedProof = await h.app.modValidation.status(queued.key)
+  while (queuedProof.state === 'checking' && Date.now() < deadline) {
+    await Bun.sleep(10)
+    queuedProof = await h.app.modValidation.status(queued.key)
+  }
+  expect(queuedProof.state).toBe('verified')
   const artifacts = spyOn(h.app.artifacts, 'preflight')
   await h.app.configuration.check(candidate, desired, checking)
   expect(artifacts).toHaveBeenLastCalledWith({
