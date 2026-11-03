@@ -6,12 +6,11 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { randomUUID } from 'node:crypto'
 import { MINUTE_MS } from '@blockly/contracts/durations'
-import { type ModValidationPlanJson, schema } from '@blockly/db'
+import { schema } from '@blockly/db'
 import { eq } from 'drizzle-orm'
-import { defaultSettings } from '../../domain/revision/revision.ts'
 import { Cdn } from '../../testing/cdn.ts'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
-import { utf8, zipBytes } from '../../testing/uploads.ts'
+import { validationScope } from '../../testing/validation-scope.ts'
 import { validationKey } from '../mods/validation-plan.ts'
 import { validationArtifact } from './validation-artifacts.ts'
 
@@ -34,62 +33,8 @@ describe.skipIf(!hasDatabase)('validation artifact ownership', () => {
 })
 
 async function scopedDownloads(h: Harness, cdn: Cdn) {
-  const owner = await h.user('Normal downloads', 'plus')
-  const server = await h.create(owner, { loader: 'vanilla' })
-  await h.until(server.id, 'running')
-  await h.settled(server.id)
+  const { server, mod, companion, pack, base, runtimeId, leaseUntil } = await validationScope(h, cdn)
   expect(await validationArtifact(h.db, server.id, '0'.repeat(128))).toBeUndefined()
-  const mod = cdn.publish('scope-main'),
-    companion = cdn.publish('scope-companion')
-  const base: ModValidationPlanJson = {
-    gameVersion: '26.3',
-    loader: 'fabric',
-    loaderVersion: '0.19.5',
-    settings: defaultSettings({ name: 'Scope', gameMode: 'survival', maxPlayers: 1 }),
-    mods: [mod],
-    compat: [],
-    modpack: null,
-    files: [],
-    memoryTier: '3g',
-    storageGb: 5,
-    provider: 'fake',
-    regionKey: 'local',
-  }
-  const pack = cdn.publish(
-    'scope-pack',
-    Buffer.from(
-      zipBytes({
-        'modrinth.index.json': utf8(
-          JSON.stringify({
-            formatVersion: 1,
-            game: 'minecraft',
-            versionId: '1',
-            name: 'Scope',
-            files: [],
-            dependencies: { minecraft: base.gameVersion, 'fabric-loader': base.loaderVersion },
-          }),
-        ),
-      }),
-    ),
-  )
-  const plan = {
-    ...base,
-    compat: [companion],
-    modpack: {
-      catalog: 'modrinth',
-      projectId: 'scope-pack',
-      versionId: '1',
-      name: 'Scope',
-      versionLabel: '1',
-      artifact: pack.artifact,
-      page: null,
-    },
-  }
-  const key = validationKey(plan),
-    runtimeId = randomUUID(),
-    leaseUntil = new Date(Date.now() + MINUTE_MS)
-  await h.db.insert(schema.modValidations).values({ key, plan, runtimeId, leaseUntil })
-  await h.db.insert(schema.modValidationRuns).values({ id: runtimeId, key, leaseUntil })
   for (const entry of [mod, companion])
     expect(await validationArtifact(h.db, runtimeId, entry.artifact.sha512)).toMatchObject({
       mod: entry,

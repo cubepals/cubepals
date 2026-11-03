@@ -6,8 +6,9 @@
  * Reading what a catalog jar asks of a server by byte ranges, and keeping it with the version, from
  * the header of BentoBox's own main class.
  */
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
+import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test'
 import { schema } from '@blockly/db'
+import { eq } from 'drizzle-orm'
 import type { CatalogVersion } from '../../domain/mods/catalog.ts'
 import { LibraryFileFormats } from '../../infra/formats/file-formats.ts'
 import { Cdn } from '../../testing/cdn.ts'
@@ -127,50 +128,10 @@ describe.skipIf(!hasDatabase)('what a catalog jar asks of a server', () => {
     })
   })
 
-  test('a Fabric mod says the mods it requires, and one read before that is read again', async () => {
-    // spark 1.10.187-fabric's metadata (e3hsPc1o), cut to what this reads.
-    const fabricModJson = {
-      id: 'spark',
-      entrypoints: { main: ['me.lucko.spark.fabric.FabricSparkMod'] },
-      depends: { fabricloader: '>=0.18.4', 'fabric-api-base': '*', 'fabric-permissions-api-v0': '*' },
-      jars: [{ file: 'META-INF/jars/fabric-permissions-api-0.7.0.jar' }],
-    }
-    cdn.files.set(
-      '/spark-fabric.jar',
-      Buffer.from(
-        zipBytes({
-          'fabric.mod.json': utf8(JSON.stringify(fabricModJson)),
-          'me/lucko/spark/fabric/FabricSparkMod.class': BENTOBOX_3_23_3_MAIN,
-        }),
-      ),
-    )
-    const spark = at('e3hsPc1o', '/spark-fabric.jar')
-    // As a row kept before the mods were read left it: the Java alone.
-    await h.db
-      .insert(schema.catalogVersionNeeds)
-      .values({ catalog: 'modrinth', versionId: 'e3hsPc1o', java: 25, readAt: new Date() })
-    const reader = () => new JarNeedsReader({ db: h.db, formats: new LibraryFileFormats() })
-    const fabric = {
-      java: 25,
-      api: null,
-      mod: { ids: ['spark'], depends: ['fabric-api-base'], carriesJars: true },
-      native: {
-        fabric: {
-          ids: ['spark'],
-          depends: ['fabric-api-base'],
-          carriesJars: true,
-          version: null,
-          environment: 'both' as const,
-          complete: true,
-          requirements: [{ id: 'fabric-api-base', versions: ['*'] }],
-        },
-      },
-    }
-    expect((await reader().of('modrinth', [spark])).get('e3hsPc1o')).toEqual(fabric)
-    // Kept, and read from there next time.
-    cdn.files.clear()
-    expect((await reader().of('modrinth', [spark])).get('e3hsPc1o')).toEqual(fabric)
-  })
+  test('metadata-only jars need one directory read', () => metadataOnly(h, cdn))
+
+  test('a Fabric mod says the mods it requires, and one read before that is read again', () =>
+    fabricMetadata(h, cdn))
 })
 
 // The create page's picker asks for every release at once: Create's own jar lists 12,500 files,
@@ -212,3 +173,81 @@ describe.skipIf(!hasDatabase)('many big jars at once', () => {
     expect((peak - before) / (1024 * 1024)).toBeLessThan(384)
   }, 120_000)
 })
+
+async function metadataOnly(h: Harness, cdn: Cdn) {
+  cdn.files.set(
+    '/metadata-only.jar',
+    Buffer.from(zipBytes({ 'fabric.mod.json': utf8(JSON.stringify({ id: 'metadata_only', version: '1' })) })),
+  )
+  const formats = new LibraryFileFormats()
+  const reads = spyOn(formats, 'readRemoteZip')
+  try {
+    const reader = new JarNeedsReader({ db: h.db, formats })
+    const found = await reader.of('modrinth', [version('metadata-only', `${cdn.url}/metadata-only.jar`)])
+    expect(found.get('metadata-only')?.java).toBeNull()
+    expect(found.get('metadata-only')?.mod?.ids).toEqual(['metadata_only'])
+    expect(reads).toHaveBeenCalledTimes(1)
+  } finally {
+    reads.mockRestore()
+  }
+}
+
+async function fabricMetadata(h: Harness, cdn: Cdn) {
+  const at = (versionId: string, path: string) => version(versionId, `${cdn.url}${path}`)
+  // spark 1.10.187-fabric's metadata (e3hsPc1o), cut to what this reads.
+  const fabricModJson = {
+    id: 'spark',
+    entrypoints: { main: ['me.lucko.spark.fabric.FabricSparkMod'] },
+    depends: { fabricloader: '>=0.18.4', 'fabric-api-base': '*', 'fabric-permissions-api-v0': '*' },
+    jars: [{ file: 'META-INF/jars/fabric-permissions-api-0.7.0.jar' }],
+  }
+  cdn.files.set(
+    '/spark-fabric.jar',
+    Buffer.from(
+      zipBytes({
+        'fabric.mod.json': utf8(JSON.stringify(fabricModJson)),
+        'me/lucko/spark/fabric/FabricSparkMod.class': BENTOBOX_3_23_3_MAIN,
+      }),
+    ),
+  )
+  const spark = at('e3hsPc1o', '/spark-fabric.jar')
+  // As a row kept before the mods were read left it: the Java alone.
+  await h.db
+    .insert(schema.catalogVersionNeeds)
+    .values({ catalog: 'modrinth', versionId: 'e3hsPc1o', java: 25, readAt: new Date() })
+  const reader = () => new JarNeedsReader({ db: h.db, formats: new LibraryFileFormats() })
+  const fabric = {
+    java: 25,
+    api: null,
+    mod: { ids: ['spark'], depends: ['fabric-api-base'], carriesJars: true },
+    native: {
+      fabric: {
+        ids: ['spark'],
+        depends: ['fabric-api-base'],
+        carriesJars: true,
+        version: null,
+        environment: 'both' as const,
+        complete: true,
+        requirements: [{ id: 'fabric-api-base', versions: ['*'] }],
+      },
+    },
+  }
+  expect((await reader().of('modrinth', [spark])).get('e3hsPc1o')).toEqual(fabric)
+  for (const missing of ['modIds', 'nativeMetadata', 'fileSha512'] as const) {
+    await h.db
+      .update(schema.catalogVersionNeeds)
+      .set({ [missing]: null })
+      .where(eq(schema.catalogVersionNeeds.versionId, spark.versionId))
+    expect((await reader().of('modrinth', [spark])).get(spark.versionId)).toEqual(fabric)
+    const row = await h.db.query.catalogVersionNeeds.findFirst({
+      where: (t, { eq }) => eq(t.versionId, spark.versionId),
+    })
+    expect(row?.fileSha512).toBe(spark.file.sha512)
+    expect(row?.nativeMetadata).toEqual(fabric.native)
+  }
+  const other = at('other-spark', '/spark-fabric.jar')
+  await reader().of('modrinth', [other, spark])
+  // Kept, and read from there next time, matched to each version's own digest.
+  cdn.files.clear()
+  expect((await reader().of('modrinth', [other, spark])).get('e3hsPc1o')).toEqual(fabric)
+}

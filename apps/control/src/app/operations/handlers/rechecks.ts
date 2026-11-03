@@ -9,9 +9,8 @@
  */
 import type { AppliedConfigJson, Db } from '@blockly/db'
 import type { MinecraftServer } from '../../../domain/server/server.ts'
-import { ArtifactUnavailable } from '../../artifacts/service.ts'
 import { PermanentFailure } from '../../errors.ts'
-import { IncompatibleMods, ValidationUnavailable } from '../../mods/validation-runtime.ts'
+import { configurationRefusal } from '../../mods/configuration-preflight.ts'
 import type { AccessPolicy } from '../../policy/access-policy.ts'
 import type { DesiredRuntime } from '../../servers/specs.ts'
 import type { OperationContext } from '../runner.ts'
@@ -55,12 +54,7 @@ export function rechecks(deps: {
         await ctx?.step('checking_mods')
       })
     } catch (error) {
-      if (
-        error instanceof ArtifactUnavailable ||
-        error instanceof IncompatibleMods ||
-        error instanceof ValidationUnavailable
-      )
-        throw new PermanentFailure(error.message)
+      if (configurationRefusal(error)) throw new PermanentFailure(error.message)
       throw error
     }
   }
