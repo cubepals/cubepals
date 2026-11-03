@@ -645,7 +645,7 @@ jobs:
   # The required aggregate rejects missing work and unexpected skips, including failed dependencies.
   check:
     needs: [changes, licenses, baseline, static, test, quality, mutation, mutation_quality, worker, images, reporter, fleet]
-    if: always()
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
