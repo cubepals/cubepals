@@ -5,7 +5,7 @@
 import { describe, expect, test } from 'bun:test'
 import type { ProgressSink, RuntimeHandle, RuntimeKey, RuntimeSpec } from '../../app/ports/runtime.ts'
 import { recordingTarget } from '../../testing/archive-target.ts'
-import { flyClient } from './client.ts'
+import { type FlySchemas, flyClient } from './client.ts'
 import { FakeFly, type Json } from './fake-fly.ts'
 import { HELPER_LIFETIME_MS } from './fly-runtime/helper-machine.ts'
 import { FlyRuntime } from './fly-runtime.ts'
@@ -498,3 +498,30 @@ describe('FlyRuntime failures', () => {
     ])
   })
 })
+
+test('repeated provisioning preserves storage when inventory omits optional mount details', async () => {
+  for (const omitted of ['mounts', 'empty mounts']) {
+    let partial = false
+    const s = await provisioned(async (call, response) => {
+      if (!partial || call !== `GET ${at('/machines')}`) return response
+      return inventoryWithoutMounts(response, omitted === 'empty mounts')
+    })
+    partial = true
+    expect(await s.runtime.ensureProvisioned(KEY, { regionKey: 'eu-central' }, spec(), s.progress)).toBe(
+      s.handle,
+    )
+    expect(s.fake.volumes.get(APP)).toHaveLength(1)
+    expect(s.fake.machines.get(APP)).toHaveLength(1)
+  }
+})
+
+async function inventoryWithoutMounts(response: Response, empty: boolean): Promise<Response> {
+  const machines = (await response.json()) as FlySchemas['Machine'][]
+  for (const machine of machines) {
+    const config = machine.config
+    if (!config) continue
+    if (empty) config.mounts = []
+    else delete config.mounts
+  }
+  return Response.json(machines, { status: response.status, headers: response.headers })
+}
