@@ -4,7 +4,7 @@
 
 /** What the settings kept as code write: the fields GitHub takes, and only what changed. */
 import { describe, expect, test } from 'bun:test'
-import { kept, plan, protectionKept, protectionPlan, type Ruleset } from './repo-settings.ts'
+import { kept, plan, protectionFile, protectionKept, protectionPlan, type Ruleset } from './repo-settings.ts'
 
 const main: Ruleset = {
   name: 'main',
@@ -178,5 +178,20 @@ describe("a branch's protection kept as code", () => {
       { kind: 'protect', name: 'main', protection: live, signatures: true },
     ])
     expect(protectionPlan('main', unsigned, null)[0]).toMatchObject({ signatures: false })
+  })
+})
+
+describe("a branch's file", () => {
+  test('that holds the whole shape is read as it is', () => {
+    const live = protectionKept(answered)
+    expect(protectionFile('main.json', JSON.parse(JSON.stringify(live)))).toEqual(live)
+  })
+
+  test('that lacks a key the PUT requires, or holds one it does not take, is refused by name', () => {
+    const { restrictions: _, ...partial } = protectionKept(answered)
+    expect(() => protectionFile('main.json', partial)).toThrow('main.json lacks restrictions')
+    expect(() => protectionFile('main.json', { ...protectionKept(answered), url: 'x' })).toThrow(
+      "main.json holds url, which GitHub doesn't take",
+    )
   })
 })

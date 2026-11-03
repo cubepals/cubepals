@@ -216,11 +216,30 @@ function wantedRulesets(): Ruleset[] {
   })
 }
 
+/** Every key a branch's file holds: what the PUT requires, its switches and signed commits. */
+const PROTECTION_KEYS = [
+  'required_status_checks',
+  'required_pull_request_reviews',
+  'restrictions',
+  ...TOGGLES,
+] as const
+
+/** A branch's file as a protection, refused by name when it lacks a key or holds one GitHub doesn't take. */
+export function protectionFile(file: string, value: Answer): Protection {
+  const missing = PROTECTION_KEYS.filter((key) => !(key in value))
+  const unknown = Object.keys(value).filter((key) => !(PROTECTION_KEYS as readonly string[]).includes(key))
+  if (missing.length || unknown.length)
+    throw new Error(
+      `${file} ${[missing.length && `lacks ${missing.join(', ')}`, unknown.length && `holds ${unknown.join(', ')}, which GitHub doesn't take`].filter(Boolean).join(' and ')}. \`export\` prints the whole shape.`,
+    )
+  return sorted(value) as Protection
+}
+
 /** The branches the files protect, each named by its file. */
 function wantedProtections(): { branch: string; protection: Protection }[] {
   return files(BRANCHES_DIR).map(({ file, value }) => ({
     branch: file.replace(/\.json$/, ''),
-    protection: sorted(value) as Protection,
+    protection: protectionFile(file, value),
   }))
 }
 
