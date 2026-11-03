@@ -562,6 +562,28 @@ async function operationRecords(q: ServerQueries, owner: UserActor, server: Mine
     startedAt: operation.startedAt?.toISOString() ?? null,
   }
   expect((await q.get(owner, server.id)).activeOperation).toEqual(view)
+  expect(Object.hasOwn((await q.get(owner, server.id)).activeOperation ?? {}, 'modCheckSeconds')).toBe(false)
+  const checkedAt = new Date()
+  for (const [steps, seconds] of [
+    [[{ step: 'checking_mods', at: checkedAt.toISOString() }], null],
+    [
+      [
+        { step: 'checking_mods', at: checkedAt.toISOString() },
+        { step: 'loading_world', at: new Date(checkedAt.getTime() + 7 * SECOND_MS).toISOString() },
+      ],
+      7,
+    ],
+  ] as const) {
+    await h.db
+      .update(schema.serverOperations)
+      .set({ steps: [...steps] })
+      .where(eq(schema.serverOperations.id, operation.id))
+    expect((await q.get(owner, server.id)).activeOperation).toEqual({ ...view, modCheckSeconds: seconds })
+  }
+  await h.db
+    .update(schema.serverOperations)
+    .set({ steps: null })
+    .where(eq(schema.serverOperations.id, operation.id))
   await h.db
     .update(schema.backups)
     .set({ tier: 'snapshot', trigger: 'manual', snapshotHandle: 'fixture-snapshot' })

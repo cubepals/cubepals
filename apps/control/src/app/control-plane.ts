@@ -181,21 +181,21 @@ export function composeControlPlane(ports: ControlPlanePorts, settings: ControlP
   // server service reaches for setups only when a server is being made, so it takes a getter.
   let setups: SetupService
   const servers = new MinecraftServerService({
-    ...ports,
+    db,
     policy,
     transitions,
+    events,
+    addressing: ports.addressing,
+    regions: ports.regions,
     placement,
+    jobs: ports.jobs,
+    loaderBuilds: ports.loaderBuilds,
     setups: () => setups,
   })
   const notices = new OwnerNotices({ ...ports, ...settings, servers })
 
-  const { artifacts, modValidation, configuration } = artifactServices(
-    ports,
-    settings,
-    specs,
-    links,
-    () => contents,
-  )
+  const checks = artifactServices(ports, settings, specs, links, () => contents)
+  const { artifacts, modValidation, configuration } = checks
   const revisions = new RevisionService({
     db,
     policy,
@@ -241,13 +241,19 @@ export function composeControlPlane(ports: ControlPlanePorts, settings: ControlP
     curation: () => curation,
   })
   const curation: PackCuration = new PackCuration({
-    ...ports,
+    db,
+    catalog: ports.catalog,
+    archives: ports.archives,
+    formats: ports.formats,
     contents,
+    capabilities: ports.capabilities,
+    jobs: ports.jobs,
     pin: (projectId, versionId) => setups.pinnedPack(projectId, versionId),
     resolve: (target, wanted) => mods.resolveNew(target, wanted),
+    loaderBuilds: ports.loaderBuilds,
+    ...(settings.curatedPacks === undefined ? {} : { packs: settings.curatedPacks }),
+    ...(settings.ownPacks === undefined ? {} : { own: settings.ownPacks }),
     verify: (checked) => configuration.release(checked),
-    packs: settings.curatedPacks,
-    own: settings.ownPacks,
   })
   const queries = new ServerQueries({
     ...ports,
@@ -270,16 +276,7 @@ export function composeControlPlane(ports: ControlPlanePorts, settings: ControlP
     configured: { admins: settings.adminEmails ?? [], signupCap: settings.signupCap ?? true },
   })
   const billing = new BillingService({ ...ports, db, policy, accounts, webOrigin: settings.webOrigin })
-  const backups = new BackupService({
-    ...ports,
-    transitions,
-    policy,
-    artifacts,
-    official,
-    mods,
-    ports,
-    configuration,
-  })
+  const backups = new BackupService({ ...ports, ...checks, transitions, policy, official, mods, ports })
   const worlds = new WorldService({ db, transitions, events, providers: runtime.providers })
   const reconciler = new AccessReconciler({ db, runtime, console: ports.console, profiles, specs, events })
   const consoleService = new ConsoleService({ db, policy, runtime, console: ports.console, specs })
