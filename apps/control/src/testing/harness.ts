@@ -216,19 +216,18 @@ const settingsFrom = ({
   officialServerFiles,
   stopCheatersProblem,
   templatesKeptMs,
-  productionCuration,
-  curatedPacks,
-  ownPacks,
 }: HarnessOptions) => ({
   officialServerFiles,
   stopCheatersProblem,
-  curatedPacks: productionCuration ? curatedPacks : (curatedPacks ?? []),
-  ownPacks: productionCuration ? ownPacks : (ownPacks ?? []),
   templatesKeptMs: templatesKeptMs ?? 0,
   bootTimeouts: provider?.bootTimeouts ?? { runningMs: 5_000, readyMs: 3_000, resumeMs: 1_000 },
   wakeWaitMs: provider?.wakeWaitMs ?? 5_000,
   ...(room === undefined ? {} : { room }),
 })
+
+/** Test catalogs default to empty; production review uses the configured catalog. */
+const curationFor = <T>(options: HarnessOptions, packs: readonly T[] | undefined) =>
+  options.productionCuration ? packs : (packs ?? [])
 
 /** Operation tests need Postgres; like the lock tests, they run where DATABASE_URL is set. */
 export const hasDatabase = Boolean(process.env.DATABASE_URL)
@@ -345,6 +344,8 @@ export async function startHarness(options: HarnessOptions = {}): Promise<Harnes
       mirrorCatalogArtifacts: options.mirrorCatalogArtifacts ?? false,
       adminEmails: options.adminEmails ?? [],
       webOrigin: 'http://localhost:3000',
+      curatedPacks: curationFor(options, options.curatedPacks),
+      ownPacks: curationFor(options, options.ownPacks),
       ...settingsFrom(options),
     },
   )

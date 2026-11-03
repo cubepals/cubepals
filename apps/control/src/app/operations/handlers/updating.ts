@@ -12,11 +12,9 @@ import type { Db } from '@blockly/db'
 import { describeChanges } from '../../../domain/revision/revision.ts'
 import type { MinecraftServer } from '../../../domain/server/server.ts'
 import { resetHeartsCommand } from '../../../minecraft/lifesteal.ts'
-import { ArtifactUnavailable } from '../../artifacts/service.ts'
 import type { BackupRecord } from '../../backups/persistence.ts'
 import type { BackupService } from '../../backups/service.ts'
 import { aside, inFull, PermanentFailure } from '../../errors.ts'
-import { IncompatibleMods, ValidationUnavailable } from '../../mods/validation-runtime.ts'
 import type { ServerConsole } from '../../ports/minecraft.ts'
 import type { RuntimeHandle } from '../../ports/runtime.ts'
 import type { Runtimes } from '../../runtimes/router.ts'
@@ -31,7 +29,7 @@ import { NoLongerApplies, type OperationHandler, type OperationResult } from '..
 import { appliedConfig, type ServerBinding } from './binding.ts'
 import type { GameConsole } from './game-console.ts'
 import { type GoingBack, NotPutBack } from './going-back.ts'
-import type { Rechecks } from './rechecks.ts'
+import { configurationRefusal, type Rechecks } from './rechecks.ts'
 import { RESTARTING_FOR_A_CHANGE, type RestartNotice, restartNotice } from './restart-notice.ts'
 import { warnBeforeRestart } from './restart-warning.ts'
 import type { WorldCopies } from './world-copies.ts'
@@ -107,16 +105,6 @@ async function wentBack(
   }
 }
 
-function configurationRefusal(
-  error: unknown,
-): error is ArtifactUnavailable | IncompatibleMods | ValidationUnavailable {
-  return (
-    error instanceof ArtifactUnavailable ||
-    error instanceof IncompatibleMods ||
-    error instanceof ValidationUnavailable
-  )
-}
-
 export function updating(deps: {
   db: Db
   runtime: Pick<Runtimes, 'apply' | 'stop' | 'exec'>
@@ -144,6 +132,7 @@ export function updating(deps: {
     transitions,
     specs,
     boot,
+    configuration,
     bindingOf,
     startCompute,
     booted,
@@ -199,7 +188,7 @@ export function updating(deps: {
       )
         return { status: 'succeeded' }
       try {
-        await deps.configuration.check(desired.revision, desired, () => ctx.step('checking_mods'))
+        await configuration.check(desired.revision, desired, () => ctx.step('checking_mods'))
       } catch (error) {
         if (!configurationRefusal(error)) throw error
         // Nothing was touched: the server keeps running what it ran, and should run it.

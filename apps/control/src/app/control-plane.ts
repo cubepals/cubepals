@@ -226,12 +226,14 @@ export function composeControlPlane(ports: ControlPlanePorts, settings: ControlP
   const contents = new PackContents({ db, formats: ports.formats, catalog: ports.catalog, jarChecks })
   const packs = new PackService({
     ...ports,
+    db,
     policy,
     builder: new PackBuilder({ ...ports, jarChecks }),
     worlds: () => backups.newWorlds,
   })
   setups = new SetupService({
     ...ports,
+    db,
     mods,
     providers: runtime.providers,
     contents,
@@ -249,6 +251,7 @@ export function composeControlPlane(ports: ControlPlanePorts, settings: ControlP
   })
   const queries = new ServerQueries({
     ...ports,
+    db,
     service: servers,
     setups,
     packs,
@@ -268,9 +271,8 @@ export function composeControlPlane(ports: ControlPlanePorts, settings: ControlP
   })
   const billing = new BillingService({ ...ports, db, policy, accounts, webOrigin: settings.webOrigin })
   const backups = new BackupService({
-    db,
+    ...ports,
     transitions,
-    events,
     policy,
     artifacts,
     official,
