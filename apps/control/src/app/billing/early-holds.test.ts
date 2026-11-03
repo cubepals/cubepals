@@ -60,28 +60,7 @@ const open = (checkouts: number, readAt?: Date) =>
 const lastCheckout = () => [...w.checkouts.values()].at(-1)?.asked
 
 describe.skipIf(!hasDatabase)('the price a checkout holds', () => {
-  test('a missed refresh keeps the checkout price and still counts paid holds', async () => {
-    await open(2)
-    const owner = await w.h.user('Before interruption')
-    await w.h.app.billing.offer(owner, 'core')
-    await w.standing(owner, randomUUID(), { product_id: EARLY_CORE })
-    const later = await w.h.user('During interruption')
-    const overflow = await w.h.user('After remaining room')
-    const start = Date.now()
-    setSystemTime(new Date(start + 2 * DAY_MS))
-    try {
-      expect(await w.h.app.billing.offer(later, 'core')).toMatchObject({
-        priceCents: 700,
-        productId: EARLY_CORE,
-      })
-      expect((await w.h.app.billing.offer(overflow, 'core')).productId).toBeNull()
-      const checkout = await w.h.app.billing.startCheckout(later, 'core', CONSENT)
-      expect(lastCheckout()?.products).toEqual([EARLY_CORE])
-      expect(checkout).toHaveProperty('url')
-    } finally {
-      setSystemTime()
-    }
-  })
+  test('a missed refresh keeps the checkout price and still counts paid holds', missedRefresh)
   test('with no room, a month is the plan’s own price, sold on its own product with a code allowed', async () => {
     const owner = await w.h.user('Closed')
     expect(await w.h.app.billing.offer(owner, 'core')).toMatchObject({ priceCents: 999, productId: null })
@@ -290,3 +269,26 @@ describe.skipIf(!hasDatabase)('plan changes at the held price', () => {
     expect(await w.h.app.billing.switchable(owner)).toBeNull()
   })
 })
+
+async function missedRefresh() {
+  await open(2)
+  const owner = await w.h.user('Before interruption')
+  await w.h.app.billing.offer(owner, 'core')
+  await w.standing(owner, randomUUID(), { product_id: EARLY_CORE })
+  const later = await w.h.user('During interruption')
+  const overflow = await w.h.user('After remaining room')
+  const start = Date.now()
+  setSystemTime(new Date(start + 2 * DAY_MS))
+  try {
+    expect(await w.h.app.billing.offer(later, 'core')).toMatchObject({
+      priceCents: 700,
+      productId: EARLY_CORE,
+    })
+    expect((await w.h.app.billing.offer(overflow, 'core')).productId).toBeNull()
+    const checkout = await w.h.app.billing.startCheckout(later, 'core', CONSENT)
+    expect(lastCheckout()?.products).toEqual([EARLY_CORE])
+    expect(checkout).toHaveProperty('url')
+  } finally {
+    setSystemTime()
+  }
+}
