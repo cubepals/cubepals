@@ -59,6 +59,14 @@ test('affected baseline files still reject every measured coverage regression', 
   assert.equal(checkCoverage(evidence(), covered(), [], undefined, new Set([path])).failures.length, 6)
 })
 
+test('measured legacy debt remains visible independently of which behavior gates the change', () => {
+  const result = checkCoverage(evidence(), covered(), [], undefined, new Set(), {}, new Set([path]))
+  assert.deepEqual(result.failures, [])
+  assert.equal(result.legacyDeficits.length, 3)
+  const unmeasured = checkCoverage(evidence(), covered(), [], undefined, new Set(), {}, new Set())
+  assert.deepEqual(unmeasured.legacyDeficits, [])
+})
+
 test('an empty baseline scope cannot waive changed-source floors or regressions', () => {
   assert.equal(checkCoverage(evidence(), covered(), [path], undefined, new Set()).failures.length, 9)
   assert.throws(() => checkCoverage(evidence(), covered(), [], undefined, []), /verified scope/)
