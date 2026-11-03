@@ -53,7 +53,8 @@ using locations bound to the exact Git comparison. A small edit does not have to
 unrelated legacy function. Changed decisions require their outcomes; untested changed behavior
 still fails. Deletions retain conservative scope for remaining containing code.
 
-Unchanged affected code preserves its measured baseline with the same selected test oracles.
+Unchanged code reached by edited test oracles preserves its measured baseline. Verified source
+changes enforce their changed behavior without gating on unrelated legacy coverage fluctuations.
 Whole-file legacy deficits remain visible in full main/audit reports. A scoped PR reports its
 measured dependency closure separately; unselected files are not represented as covered or
 passing. New code is inventoried even when no test imports it. Complete audits retain the full
@@ -156,7 +157,8 @@ Missing tests for changed source still fail;
 callers cannot omit a source edit from the supplied diff. Comparison metadata remains bound to
 the authoritative base and head SHAs from the protected workflow.
 
-Coverage has its own unchanged conservative impact analysis and baseline ratchet. Functional
+Coverage reuses the verified impact analysis for changed subjects and edited test-oracle
+dependencies. Uncertain mappings retain the broader baseline ratchet. Functional
 suites, coverage floors, test-policy checks, builds and live Fleet E2E remain release gates.
 Legacy mutation debt is checked in the separate **Mutation audit** workflow: scheduled runs use
 seven daily partitions covering the whole inventory each week; manual full audits remain available.

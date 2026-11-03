@@ -37,10 +37,11 @@ fixture or any other skip still fails. The corrected fixture uses a complete fut
 and executes every case. Test clocks and source files are never rewritten for this compatibility.
 
 Coverage's aggregate independently reconstructs its comparison from Git after downloading test
-artifacts. Existing-test and production edits retain the complete baseline ratchet. Verified test
+artifacts. Production edits enforce changed behavior; existing-test edits retain the verified
+baseline ratchet for their oracle dependencies. Uncertain mappings retain full comparisons. Verified test
 additions and quality-only inputs preserve the old isolated test inputs, so timing differences in
 unchanged code do not constitute a regression. Dependency-only updates compare the affected oracle
-closures. Every module remains measured, legacy deficits remain visible, and changed-source floors
+closures. Selected modules remain measured, legacy deficits remain visible, and changed-source floors
 always apply. Missing Git identity or mismatched base coverage cannot establish a narrower scope.
 
 `quality-policy.yml` reads the controller from the pull request's base commit and reads proposed
@@ -324,6 +325,10 @@ locations; new files retain complete coverage floors. JaCoCo uses its actual lin
 locations with completeness checks. Missing reports, tests, counters, source hashes and required
 jobs remain failures. Mutation scope remains changed behavior; exhaustive audits remain scheduled
 and explicitly available.
+Coverage comparison reuses `coverage-impact.mjs`: verified changed subjects and edited test-oracle
+dependencies gate the change. Merely executing a broader fallback suite does not turn unrelated
+coverage fluctuations into new obligations. Measured legacy deficits remain visible independently
+of the comparison scope; uncertain mappings retain the broader comparison.
 
 Partial comparisons measure the same selected base/head oracles. A validated full-suite baseline
 cannot replace a partial oracle measurement: aggregate coverage cannot prove which individual

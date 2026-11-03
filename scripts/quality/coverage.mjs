@@ -5,7 +5,7 @@
 /**
  * Validates and merges branch evidence without trusting the runner's aggregate percentage.
  * Missing files, shards, counters or source identities fail closed. Changed/new modules meet
- * per-file floors; production and existing-test edits retain the complete measured-base ratchet.
+ * changed-behavior floors; edited test oracles retain their verified measured-base ratchet.
  * Git-proved unchanged inputs can scope comparisons without discarding any measured module.
  * Legacy deficits are reported individually, never converted into an invented passing baseline.
  */
@@ -183,6 +183,7 @@ export function checkCoverage(
   currentInventory,
   baselineFiles = null,
   rangesByFile = null,
+  measuredFiles = null,
 ) {
   validateReport(report)
   validateReport(base)
@@ -199,6 +200,8 @@ export function checkCoverage(
   const changedSet = new Set(changed)
   if (baselineFiles !== null && !(baselineFiles instanceof Set))
     throw new Error('Baseline comparison files must come from a verified scope')
+  if (measuredFiles !== null && !(measuredFiles instanceof Set))
+    throw new Error('Measured files must come from the verified execution scope')
   const failures = []
   const legacyDeficits = []
   const unaffectedBaselineFiles = []
@@ -218,7 +221,11 @@ export function checkCoverage(
       const prior = previousMetrics?.[name]
       if (touched && current.percent < floor)
         failures.push(`${entry.path}: ${name} ${current.percent.toFixed(2)}% is below ${floor}%`)
-      if ((!touched || scoped) && (!rangesByFile || compare) && metrics[name].percent < floor)
+      if (
+        (!touched || scoped) &&
+        (measuredFiles === null || measuredFiles.has(entry.path)) &&
+        metrics[name].percent < floor
+      )
         legacyDeficits.push({ path: entry.path, metric: name, ...metrics[name], floor })
       if ((!touched || !scoped) && compare && prior && current.percent + Number.EPSILON < prior.percent)
         failures.push(
@@ -302,21 +309,18 @@ export function main(values) {
       identity && process.env.QUALITY_EXECUTION_SCOPE === 'affected'
         ? testPlan(resolve(flags['--root']), identity.base, identity.head)
         : null
-    const selected =
-      plan && !plan.impact.complete
-        ? new Set(plan.impact.measured.flat())
-        : comparison
-          ? new Set(comparison.files)
-          : null
+    const measured = plan && !plan.impact.complete ? new Set(plan.impact.measured.flat()) : null
+    const selected = comparison ? new Set(comparison.files) : measured
     const subjects = changed.filter((path) => report.files[path])
     const ranges = identity
       ? coverageLineRanges(resolve(flags['--root']), identity, subjects, report.files)
       : null
-    result = checkCoverage(report, base, changed, current, selected, ranges)
+    result = checkCoverage(report, base, changed, current, selected, ranges, measured)
     if (plan && !plan.impact.complete)
       result.selection = {
         mode: plan.mode,
-        measured: [...selected],
+        measured: [...measured],
+        compared: [...selected],
         legacyDebt: 'Unselected legacy coverage is reported by the full main and scheduled audits.',
       }
     if (comparison) result.baselineScope = comparison
