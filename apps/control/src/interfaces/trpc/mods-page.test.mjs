@@ -492,11 +492,22 @@ async function packMovesWorld() {
 
 async function uploadsItsOwnJar() {
   const page = await openMods({ uploads: true })
+  let releaseCheck
+  const checking = new Promise((resolve) => {
+    releaseCheck = resolve
+  })
+  const run = page.h.app.jarChecks.run.bind(page.h.app.jarChecks)
+  const check = spyOn(page.h.app.jarChecks, 'run').mockImplementation(async (...args) => {
+    await checking
+    return run(...args)
+  })
   try {
     const ownSection = [...document.querySelectorAll('section')].find(
       (section) => section.querySelector('h2')?.textContent === 'Your own mods',
     )
     expect(ownSection).toBeDefined()
+    const within = (text) =>
+      [...ownSection.querySelectorAll('button')].find((item) => item.textContent.trim() === text)
     const file = new page.browser.File([fabricJar('own', { depends: { minecraft: '26.3' } })], 'own.jar', {
       type: 'application/java-archive',
     })
@@ -507,11 +518,16 @@ async function uploadsItsOwnJar() {
       input.files = transfer.files
       input.dispatchEvent(new page.browser.Event('change', { bubbles: true }))
     })
+    await until(
+      () => [...ownSection.querySelectorAll('.bk-badge')].some((badge) => badge.textContent === 'Checking…'),
+      20 * SECOND_MS,
+    )
+    expect(within('Add')?.disabled).toBe(true)
+    expect(document.querySelector('dialog')).toBeNull()
+    await act(async () => releaseCheck())
     await until(() => document.body.textContent.includes('Add own.jar?'), 20 * SECOND_MS)
     expect(document.querySelector('input[value="empty"]').checked).toBe(true)
     await act(async () => button('Cancel').click())
-    const within = (text) =>
-      [...ownSection.querySelectorAll('button')].find((item) => item.textContent.trim() === text)
     await until(() => within('Add') !== undefined)
     await act(async () => within('Add').click())
     await until(() => document.querySelector('dialog') !== null)
@@ -522,6 +538,8 @@ async function uploadsItsOwnJar() {
     expect(page.mutations.some((call) => call.path.endsWith('/mods.deleteUpload'))).toBe(true)
     expect(page.mutations.filter((call) => call.path.endsWith('/mods.change'))).toHaveLength(0)
   } finally {
+    releaseCheck()
+    check.mockRestore()
     await page.close()
   }
 }
