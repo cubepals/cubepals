@@ -5,7 +5,8 @@
 /**
  * The account page as a subscriber reads it: their own plan's card and the plan section say the
  * price and hours their subscription holds, by the month or by the year, while the other cards say
- * what a new subscriber is offered now.
+ * what a new subscriber is offered now. Their own plan's card is the dark one, and a larger plan is
+ * got with the app's own button.
  */
 import { describe, expect, test } from 'bun:test'
 import type { AccountOverviewView, EntitlementsView, MeView, PublicPlan } from '@blockly/contracts'
@@ -200,23 +201,59 @@ function drawn(overview: AccountOverviewView): string {
   )
 }
 
-/** One plan's card on the page. */
+/** One plan's card on the page, from its opening tag. */
 const cardOf = (html: string, name: string) =>
-  html.slice(html.indexOf(`aria-label="${name}"`)).split('</section>')[0] ?? ''
+  html.slice(html.lastIndexOf('<section', html.indexOf(`aria-label="${name}"`))).split('</section>')[0] ?? ''
+
+/** A card's price, large, as the app's cards write it. */
+const priceIn = (card: string) => card.match(/class="type-display-md bk-num">([^<]*)</)?.[1]
+
+/** Whether a card is the dark one. */
+const dark = (card: string) => /^<section [^>]*data-paid/.test(card)
+
+/** A Core account by the month, otherwise as `overviewOf` has it. */
+const onCore = (): AccountOverviewView => {
+  const overview = overviewOf({ billed: { ...byTheMonth, planKey: 'core' }, year: null })
+  return { ...overview, plan: { ...overview.plan, key: 'core' }, entitlements: { ...held, plan: 'core' } }
+}
+/** An account still on the free trial, otherwise as `overviewOf` has it. */
+const onTrial = (): AccountOverviewView => {
+  const overview = overviewOf({ billed: null, year: null })
+  return { ...overview, plan: { ...overview.plan, key: 'free' }, entitlements: { ...held, plan: 'free' } }
+}
 
 describe('a subscriber’s own plan on the account page', () => {
   test('its card says the price and hours they hold, and the other cards what is offered now', () => {
     const html = drawn(overviewOf({ billed: byTheMonth, year: null }))
     const yours = cardOf(html, 'Plus')
     expect(yours).toContain('Yours')
-    expect(yours).toContain('<strong>$12.34</strong> a month')
+    expect(priceIn(yours)).toBe('$12.34')
     expect(yours).toContain('77 hours of play each month')
-    expect(yours).not.toContain('<strong>$25</strong>')
     expect(yours).not.toContain('120 hours')
     const other = cardOf(html, 'Core')
     expect(other).not.toContain('Yours')
-    expect(other).toContain('then $9.99 a month')
+    expect(priceIn(other)).toBe('$9.99')
     expect(other).toContain('40 hours of play each month')
+  })
+
+  test('their own plan is the dark card, whichever it is, and the others are light', () => {
+    const plus = drawn(overviewOf({ billed: byTheMonth, year: null }))
+    expect([dark(cardOf(plus, 'Plus')), dark(cardOf(plus, 'Core'))]).toEqual([true, false])
+    const core = drawn(onCore())
+    expect([dark(cardOf(core, 'Core')), dark(cardOf(core, 'Plus'))]).toEqual([true, false])
+    // On the free trial, the plan it starts is theirs.
+    const trial = drawn(onTrial())
+    expect(cardOf(trial, 'Core')).toContain('Your free trial')
+    expect([dark(cardOf(trial, 'Core')), dark(cardOf(trial, 'Plus'))]).toEqual([true, false])
+  })
+
+  test('a larger plan is got with the app’s own button, by the month at checkout', () => {
+    const plus = cardOf(drawn(onCore()), 'Plus')
+    expect(plus).toMatch(
+      /<a class="bk-btn bk-btn--primary[^"]*"[^>]*href="\/checkout\?plan=plus&amp;[^"]*">Get Plus</,
+    )
+    expect(plus).not.toContain('bl-btn')
+    expect(plus).not.toContain('term=year')
   })
 
   test('the plan section says the subscription by the month', () => {

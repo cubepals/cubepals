@@ -7,8 +7,8 @@
  * landing, printed in the landing's ink on paper in a stepped frame (landing/blocks.css). One
  * surface, in the order people read a price: the plan's picture and name, what it costs, its one
  * button, a few lines of what you get (`PixelIcon`), and the rest in its details. The plan the free
- * trial starts is the paper card, the other the ink one. Its words are plan-details.tsx's. The
- * account page gives the person's own plan as they hold it (`asHeld`).
+ * trial starts is the paper card, the other the ink one. Its words are plan-details.tsx's. Not for
+ * the account page, which has `PlanCard`.
  */
 import type { PublicPlan } from '@blockly/contracts'
 import Link from 'next/link'
@@ -50,8 +50,6 @@ export function OfferCard({
   mark,
   start,
   checkout,
-  action,
-  current,
 }: {
   plan: PublicPlan
   plans: readonly PublicPlan[]
@@ -64,15 +62,11 @@ export function OfferCard({
   /** On the plan the trial starts: where Start free goes. */
   start?: CardLink | undefined
   /** Where buying the plan goes, by the month or for a year. */
-  checkout?: (term: 'month' | 'year') => CardLink
-  /** Account-specific upgrade or downgrade action; null keeps this row empty. */
-  action?: ReactNode
-  /** The account's plan, marked as theirs; the card says the price and hours `plan` gives. */
-  current?: boolean | 'trial'
+  checkout: (term: 'month' | 'year') => CardLink
 }) {
   const sells = forSale(plan)
-  const month = sells ? checkout?.('month') : undefined
-  const year = sells && plan.yearlyPriceCents ? checkout?.('year') : undefined
+  const month = sells ? checkout('month') : undefined
+  const year = sells && plan.yearlyPriceCents ? checkout('year') : undefined
   return (
     <section
       className={`bl-frame ${styles.card} ${trial ? '' : styles.paid}`}
@@ -83,9 +77,6 @@ export function OfferCard({
       <div className={styles.head}>
         {pictureOf(plan)}
         <p className={`bl-game ${styles.name}`}>{plan.name}</p>
-        {current && (
-          <span className={styles.current}>{current === 'trial' ? 'Your free trial' : 'Yours'}</span>
-        )}
         <p className={`type-body ${styles.pitch}`}>{offerPitch(plan, plans)}</p>
       </div>
       <div className={styles.offer}>
@@ -100,11 +91,7 @@ export function OfferCard({
         </p>
         <Then plan={plan} trial={trial} year={year} />
       </div>
-      {action !== undefined ? (
-        <div className={styles.accountAction}>{action}</div>
-      ) : (
-        <CardButton name={plan.name} start={trial ? start : undefined} month={month} />
-      )}
+      <CardButton name={plan.name} start={trial ? start : undefined} month={month} />
       <ul className={styles.points}>
         {offerPoints(plan, bedrock).map((point) => (
           <li key={point.said} className="type-body">

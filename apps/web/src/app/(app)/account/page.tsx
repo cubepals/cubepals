@@ -32,15 +32,14 @@ import {
   Modal,
   Note,
   PageSkeleton,
+  PlanCard,
   Skeleton,
   Tip,
 } from '../../../ui'
-import { OfferCard, PlanCards } from '../../../ui/plan-card'
-import { ctaMark, planMark, seenMark } from '../../(public)/steps'
+import { ctaMark, seenMark } from '../../(public)/steps'
 import { FreeHoursUsed } from '../free-hours-used'
 import { PlusOffer } from '../plus-offer'
 import { planAction } from './plan-action'
-import { usePlanPresentation } from './plan-presentation'
 import { PriceSwitch } from './price-switch'
 
 /** The signed-in person's plan: what it allows, what they use of it, and upgrading or managing it. */
@@ -696,7 +695,6 @@ function Includes({ overview }: { overview: AccountOverviewView }) {
  */
 function Plans({ overview }: { overview: AccountOverviewView }) {
   const trpc = useTRPC()
-  const bedrock = usePlanPresentation()
   const plans = useQuery(trpc.billing.plans.queryOptions())
   const sells = overview.features.find((f) => f.feature === 'billing')?.available === true
   if (plans.data === undefined) return null
@@ -709,28 +707,20 @@ function Plans({ overview }: { overview: AccountOverviewView }) {
   }
   return (
     <FormSection title="Plans">
-      <PlanCards>
+      <div className="bk-plans">
         {cards.map((plan) => (
-          <OfferCard
+          <PlanCard
             key={plan.key}
             plan={asHeld(plan, overview.entitlements)}
-            plans={plans.data}
-            bedrock={bedrock}
             trial={plan === starter ? trial : undefined}
             current={yours(plan)}
+            // Only the player's own plan is dark, so the eye lands on theirs.
+            solid={yours(plan) !== false}
             mark={seenMark(`plan_${plan.key}`)}
-            checkout={
-              sells
-                ? (term) => ({
-                    href: checkoutHref({ plan: plan.key, term, reason: 'account' }),
-                    mark: planMark(plan.key, term),
-                  })
-                : undefined
-            }
-            action={planAction(plan, plans.data, overview, sells) ?? null}
+            action={planAction(plan, plans.data, overview, sells)}
           />
         ))}
-      </PlanCards>
+      </div>
     </FormSection>
   )
 }
