@@ -28,6 +28,8 @@ Players know this product as **Cubepals**, at `cubepals.com`. **Blockly** is its
 
 Fraud and abuse tuning, costs and margins, competitors, pricing history, strategy and vendor trials never go in this repository, its commits, PRs or issues: code reads such numbers from private configuration, with a harmless default ([CLAUDE.md](CLAUDE.md)).
 
+Nor does anything about a maintainer personally: their other work, their accounts, and the tools and connectors a session happens to have.
+
 ## The website's runtime
 
 `next` and `@opennextjs/cloudflare` move together, only for a security fix or a feature the site needs, and merge only after the pull request's staging preview serves the site's pages ([CLAUDE.md](CLAUDE.md)).
@@ -133,6 +135,7 @@ Production deploys from the **Deploy production** workflow, on GitHub's machine 
 - **See it through.** Watch the run to the end, ask production for `/`, `/pricing`, `/sign-in` and `/api/health`, and say what went out.
 - **Back first, cause after.** If production fails after a deploy, run the workflow's `rollback` at once, then find the cause.
 - **Values live in the private records,** in the encrypted bundle the workflow opens. A value changed anywhere else is lost; change it there. Never print one.
+- **What production does is in PostHog.** The control plane and the website send their events and errors to the project in PostHog's EU cloud ([docs/configuration.md](docs/configuration.md)); production alone sends any. It is the project's only analytics and observability service. Another such service a session can reach isn't Cubepals': never read Cubepals' data from it, send any to it, or name it here.
 
 ## Staging
 
