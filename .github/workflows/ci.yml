@@ -23,6 +23,10 @@ on:
         default: false
   workflow_dispatch:
     inputs:
+      affected_comparison:
+        description: Benchmark affected checks on a non-main branch
+        type: boolean
+        default: false
       comparison_base:
         description: Exact ancestor SHA for a representative runtime benchmark
         type: string
@@ -36,10 +40,14 @@ permissions:
   contents: read
 
 # Required ruleset workflows must finish their evidence. Each main commit gets its own group so
-# another push cannot replace a pending main run; PR revisions queue behind their running check.
+# another push cannot replace a pending main run; superseded PR revisions are cancelled.
 concurrency:
   group: ci-${{ github.event_name }}-${{ github.event.pull_request.number || github.event.merge_group.head_sha || (github.event_name == 'push' && github.sha) || github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  QUALITY_EXECUTION_SCOPE: ${{ (github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && github.ref != 'refs/heads/main' && inputs.affected_comparison == true)) && 'affected' || 'full' }}
+  QUALITY_FULL_AUDIT: ${{ inputs.full_quality == true }}
 
 jobs:
   # Unrelated jobs may skip, but `check` still reports and verifies each classification.
@@ -50,77 +58,41 @@ jobs:
       contents: read
       pull-requests: read
     outputs:
-      # The queue tests everything: what a merge changes is what the commits ahead of it changed too.
-      code: ${{ (inputs.full_quality == true || github.event_name == 'merge_group' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 'true' || steps.filter.outputs.code }}
-      reporter: ${{ (inputs.full_quality == true || github.event_name == 'merge_group' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 'true' || steps.reporter.outputs.reporter }}
-      fleet: ${{ (inputs.full_quality == true || github.event_name == 'merge_group' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 'true' || steps.fleet.outputs.fleet }}
+      code: ${{ steps.plan.outputs.code }}
+      reporter: ${{ steps.plan.outputs.reporter }}
+      fleet: ${{ steps.plan.outputs.fleet }}
+      worker: ${{ steps.plan.outputs.worker }}
+      images: ${{ steps.plan.outputs.images }}
+      tooling: ${{ steps.plan.outputs.tooling }}
+      terraform: ${{ steps.plan.outputs.terraform }}
+      complete: ${{ steps.plan.outputs.complete }}
+      services: ${{ steps.plan.outputs.services }}
+      mutation: ${{ steps.plan.outputs.mutation }}
+      matrix: ${{ steps.plan.outputs.matrix }}
+      scope: ${{ steps.plan.outputs.scope }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 0
       - name: Every pull request commit has a verified signature
         if: github.event_name == 'pull_request'
         env:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: node scripts/quality/check-signatures.mjs --pr "$PR_NUMBER"
-      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
-        id: filter
-        if: github.event_name != 'merge_group' && github.event_name != 'schedule' && github.event_name != 'workflow_dispatch'
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
-          predicate-quantifier: every
-          filters: |
-            code:
-              - '**'
-              - '!*.md'
-              - '!docs/**'
-              - '!brand/**'
-              - '!.github/ISSUE_TEMPLATE/**'
-              - '!.github/CODEOWNERS'
-              - '!.github/pull_request_template.md'
-              - '!.github/dependabot.yml'
-      # Its own step: under `every` above, a file would have to match all of these at once.
-      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
-        id: reporter
-        if: github.event_name != 'merge_group' && github.event_name != 'schedule' && github.event_name != 'workflow_dispatch'
-        with:
-          filters: |
-            reporter:
-              - 'apps/reporter/**'
-              - '.github/workflows/ci.yml'
-              - 'scripts/quality/reporter*'
-
-      # Fleet's contracts, fixtures, dependency resolution and runtime setup all affect its live
-      # evidence. Keep this conservative; web/edge/reporter-only source changes can skip it.
-      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
-        id: fleet
-        if: github.event_name != 'merge_group' && github.event_name != 'schedule' && github.event_name != 'workflow_dispatch'
-        with:
-          filters: |
-            fleet:
-              - 'apps/control/**'
-              - 'packages/**'
-              - 'scripts/**'
-              - 'tools/**'
-              - '**/package.json'
-              - '**/bun.lock'
-              - '**/bun.lockb'
-              - '**/package-lock.json'
-              - '**/npm-shrinkwrap.json'
-              - '**/yarn.lock'
-              - '**/pnpm-lock.yaml'
-              - '**/bunfig.toml'
-              - '**/tsconfig*.json'
-              - '*.{js,cjs,mjs,ts,cts,mts,json,jsonc,toml,yml,yaml}'
-              - '.node-version'
-              - '.bun-version'
-              - '.nvmrc'
-              - '.tool-versions'
-              - '.npmrc'
-              - '.yarnrc*'
-              - '.env*'
-              - '.github/workflows/ci.yml'
-              - '.github/workflows/fleet.yml'
+          bun-version: 1.4.3
+      - run: bun run quality:install
+      - name: Identify the exact tested comparison
+        env:
+          QUALITY_BASE_REF: ${{ github.event_name == 'workflow_dispatch' && inputs.comparison_base || github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before || 'HEAD^' }}
+          QUALITY_PR_HEAD: ${{ github.event.pull_request.head.sha || '' }}
+        run: node scripts/quality/prepare.mjs coverage/quality
+      - name: Plan required checks and affected dependencies
+        id: plan
+        run: node scripts/quality/ci-plan.mjs coverage/quality
 
   fleet:
     needs: changes
@@ -164,20 +136,27 @@ jobs:
       - run: bun run check:structure
       - run: bun run check:deprecated
       - name: Quality gates reject missing evidence and policy tampering
+        if: needs.changes.outputs.tooling == 'true'
+        env:
+          QUALITY_EXECUTION_SCOPE: full
         run: |
           node --test scripts/quality/*.test.mjs
           python3 scripts/quality/reporter_test.py
       - name: Real defects and superficial tests are rejected
+        if: needs.changes.outputs.tooling == 'true'
+        env:
+          QUALITY_EXECUTION_SCOPE: full
         run: |
           node scripts/quality/behavior-proof.mjs
           node scripts/quality/mutation-selftest.mjs
       # A workflow GitHub can't parse fails without running and is easy to miss.
       - name: Workflows parse and their scripts pass shellcheck
+        if: needs.changes.outputs.tooling == 'true'
         run: |
           bash <(curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/v1.7.12/scripts/download-actionlint.bash) 1.7.12
           ./actionlint -color
       - name: Keep executable quality proof evidence
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && needs.changes.outputs.tooling == 'true' }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: test-quality-proofs
@@ -187,17 +166,19 @@ jobs:
           if-no-files-found: error
           retention-days: 14
       - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        if: needs.changes.outputs.terraform == 'true' || needs.changes.outputs.tooling == 'true'
         id: terraform_setup
         continue-on-error: true
         with:
           terraform_version: 1.15.3
           terraform_wrapper: false
       - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
-        if: steps.terraform_setup.outcome == 'failure'
+        if: (needs.changes.outputs.terraform == 'true' || needs.changes.outputs.tooling == 'true') && steps.terraform_setup.outcome == 'failure'
         with:
           terraform_version: 1.15.3
           terraform_wrapper: false
       - name: Terraform is formatted and valid against its providers
+        if: needs.changes.outputs.terraform == 'true' || needs.changes.outputs.tooling == 'true'
         run: |
           terraform fmt -check -recursive infra/terraform
           for tf_environment in staging production; do
@@ -212,6 +193,7 @@ jobs:
       # state: a variable or secret the stack reads and an environment doesn't give fails here, not
       # at the next apply. Two changes that pass alone and break together fail in the merge queue.
       - name: Terraform plans for each environment
+        if: needs.changes.outputs.terraform == 'true' || needs.changes.outputs.tooling == 'true'
         run: bun scripts/terraform-plan.ts
 
   # The website as the Cloudflare Worker production runs: OpenNext's build, wrangler's bundle of the
@@ -222,7 +204,7 @@ jobs:
   worker:
     name: Web app builds as a Worker
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    if: needs.changes.outputs.worker == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -271,7 +253,7 @@ jobs:
   images:
     name: Images build and start
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    if: needs.changes.outputs.images == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -376,7 +358,7 @@ jobs:
   baseline:
     name: Resolve a trusted baseline
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.complete == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -439,48 +421,14 @@ jobs:
   test:
     name: Tests, ${{ matrix.quality }} / ${{ matrix.partition }}
     needs: [changes, baseline]
-    if: needs.changes.outputs.code == 'true'
+    if: ${{ !cancelled() && needs.changes.result == 'success' && needs.changes.outputs.code == 'true' && (needs.baseline.result == 'success' || needs.baseline.result == 'skipped') }}
     strategy:
       fail-fast: false
-      max-parallel: ${{ (github.event_name == 'schedule' || inputs.full_quality == true) && 2 || 17 }}
-      matrix:
-        include:
-          - quality: lifecycle
-            partition: 0
-          - quality: lifecycle
-            partition: 1
-          - quality: lifecycle
-            partition: 2
-          - quality: providers
-            partition: 0
-          - quality: providers
-            partition: 1
-          - quality: worlds
-            partition: 0
-          - quality: worlds
-            partition: 1
-          - quality: worlds
-            partition: 2
-          - quality: mods
-            partition: 0
-          - quality: access
-            partition: 0
-          - quality: access
-            partition: 1
-          - quality: access
-            partition: 2
-          - quality: web
-            partition: 0
-          - quality: rest
-            partition: 0
-          - quality: rest
-            partition: 1
-          - quality: rest
-            partition: 2
-          - quality: rest
-            partition: 3
+      matrix: ${{ fromJSON(needs.changes.outputs.matrix) }}
     uses: ./.github/workflows/quality-runner.yml
     with:
+      scope: ${{ needs.changes.outputs.scope }}
+      services: ${{ matrix.services }}
       kind: native
       group: ${{ matrix.quality }}
       partition: ${{ matrix.partition }}
@@ -490,7 +438,7 @@ jobs:
   mutation:
     name: Mutation runner ${{ matrix.partition }}
     needs: [changes, quality]
-    if: needs.changes.outputs.code == 'true'
+    if: ${{ !cancelled() && needs.changes.result == 'success' && needs.quality.result == 'success' && needs.changes.outputs.code == 'true' && needs.changes.outputs.mutation == 'true' }}
     strategy:
       fail-fast: false
       max-parallel: ${{ (github.event_name == 'schedule' || inputs.full_quality == true) && 2 || 4 }}
@@ -498,6 +446,8 @@ jobs:
         partition: [0, 1, 2, 3]
     uses: ./.github/workflows/quality-runner.yml
     with:
+      scope: ${{ needs.changes.outputs.scope }}
+      services: ${{ needs.changes.outputs.services == 'true' }}
       kind: mutation
       partition: ${{ matrix.partition }}
       full_quality: ${{ inputs.full_quality == true }}
@@ -507,7 +457,7 @@ jobs:
   quality:
     name: Per-file test quality
     needs: [changes, test, baseline]
-    if: needs.changes.outputs.code == 'true'
+    if: ${{ !cancelled() && needs.changes.result == 'success' && needs.changes.outputs.code == 'true' && needs.test.result == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -577,7 +527,7 @@ jobs:
   mutation_quality:
     name: Every mutation partition is complete
     needs: [changes, mutation]
-    if: needs.changes.outputs.code == 'true'
+    if: ${{ !cancelled() && needs.changes.result == 'success' && needs.mutation.result == 'success' && needs.changes.outputs.mutation == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -695,7 +645,7 @@ jobs:
   # The required aggregate rejects missing work and unexpected skips, including failed dependencies.
   check:
     needs: [changes, licenses, baseline, static, test, quality, mutation, mutation_quality, worker, images, reporter, fleet]
-    if: always()
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

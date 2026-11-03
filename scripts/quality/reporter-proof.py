@@ -77,7 +77,8 @@ def prove(root, output):
                           "        if (n <= 0) return false;\n"
                           "        return n > 10;\n    }\n}" + suffix)
         gradle("uncovered-code", ["test", "jacocoTestReport"])
-        failures, _ = reporter.compare_coverage(scratch / JACOCO, baseline, [EVENTS], scratch)
+        failures, _ = reporter.compare_coverage(scratch / JACOCO, baseline, [EVENTS], scratch,
+                                               {EVENTS: [{"start": prefix.count("\n") + 1, "end": len(events.read_text().splitlines())}]})
         if not any(EVENTS in failure for failure in failures):
             raise RuntimeError("the uncovered method and decisions were not rejected")
         (output / "uncovered-code-rejection.json").write_text(json.dumps(failures, indent=2) + "\n")

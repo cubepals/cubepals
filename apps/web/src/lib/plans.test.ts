@@ -6,7 +6,8 @@ import { describe, expect, test } from 'bun:test'
 import type { PublicPlan } from '@blockly/contracts'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { extraHourOf, forSale, hoursPoint, PlanCard, pitchOf, planPoints, priceOf } from '../ui/plans.tsx'
+import { OfferCard } from '../ui/plan-card.tsx'
+import { dollars, extraHourOf, forSale, hoursPoint, pitchOf, planPoints, priceOf } from '../ui/plans.tsx'
 import { daysSaid, hoursAgainSaid, hoursSaid } from './plans.ts'
 
 const free: PublicPlan = {
@@ -70,6 +71,9 @@ const plus: PublicPlan = {
   restsAfterDays: 30,
   deletedAfterDays: null,
 }
+
+const offer = (plan: PublicPlan, options: Partial<Parameters<typeof OfferCard>[0]> = {}) =>
+  createElement(OfferCard, { plan, plans: [free, core, plus], bedrock: true, ...options })
 
 type Card = Parameters<typeof renderToStaticMarkup>[0]
 /** A card as the page gets it. */
@@ -160,24 +164,23 @@ describe('plans as people read them', () => {
     expect(hoursAgainSaid([])).toBe('the hours start again')
   })
 
-  test('the account page says the free trial on Core, after its hours, as the public pages do', () => {
-    const points = pointsOf(createElement(PlanCard, { plan: core, trial: free }))
-    // The plans' own numbers, so the test follows whatever the plans say.
+  test('the shared card says the free trial on Core after its hours', () => {
+    const points = pointsOf(offer(core, { trial: free }))
     const hours = points.findIndex((point) => point.includes(hoursPoint(core)))
     expect(hours).toBeGreaterThanOrEqual(0)
     const trial = points[hours + 1] ?? ''
     for (const part of ['Starts with a free trial: ', hoursPoint(free), ', no card'])
       expect(trial).toContain(part)
-    expect(htmlOf(createElement(PlanCard, { plan: plus }))).not.toContain('free trial')
+    expect(htmlOf(offer(plus))).not.toContain('free trial')
   })
 
-  test('someone on the free trial finds it on the plan it starts', () => {
-    expect(htmlOf(createElement(PlanCard, { plan: core, trial: free, current: 'trial' }))).toContain(
-      'Your free trial',
-    )
-    const plusYours = htmlOf(createElement(PlanCard, { plan: plus, current: true }))
-    expect(plusYours).toContain('Yours')
-    expect(plusYours).not.toContain('Your free trial')
+  test('marking the current plan keeps its advertised price and hours', () => {
+    const yours = htmlOf(offer(plus, { current: true, action: null }))
+    expect(yours).toContain('Yours')
+    expect(yours).toContain(dollars(plus.monthlyPriceCents))
+    expect(yours).toContain(hoursPoint(plus))
+    expect(yours).not.toContain('Your free trial')
+    expect(htmlOf(offer(core, { trial: free, current: 'trial', action: null }))).toContain('Your free trial')
   })
 
   test('days as people say them', () => {

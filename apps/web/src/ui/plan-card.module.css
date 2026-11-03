@@ -84,7 +84,7 @@
 /* The plan's picture and its name in the game's face, and the line under them. */
 .head {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: var(--space-4) var(--space-12);
 }
@@ -114,6 +114,15 @@
   grid-column: 1 / -1;
   margin: 0;
   color: var(--plan-card-quiet);
+}
+
+.current {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.accountAction > * {
+  width: 100%;
 }
 
 /* What it costs, large, and the one quiet line under it. */
@@ -151,6 +160,11 @@
 }
 /* Get Plus: the lit indigo, with the deep indigo below it. */
 .paid .lit {
+  --btn-fill: var(--night);
+  --btn-shadow: var(--torch);
+}
+
+.paid .accountAction {
   --btn-fill: var(--night);
   --btn-shadow: var(--torch);
 }

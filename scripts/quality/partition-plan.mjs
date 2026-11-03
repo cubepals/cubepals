@@ -7,6 +7,7 @@ import { execFileSync } from 'node:child_process'
 import { readFileSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { ciImpact } from './ci-impact.mjs'
 import { rotationSubjects } from './mutation-scope.mjs'
 import { groupOf, groups } from './shards.mjs'
 
@@ -54,28 +55,52 @@ export function costs(root) {
   return JSON.parse(readFileSync(resolve(root, 'scripts/quality/runtime-costs.json'), 'utf8'))
 }
 
-export function testPlan(root, base, head = git(root, 'rev-parse', 'HEAD')) {
+export function testPlan(
+  root,
+  base,
+  head = git(root, 'rev-parse', 'HEAD'),
+  mode = process.env.QUALITY_EXECUTION_SCOPE ?? 'full',
+) {
   for (const sha of [base, head])
     if (!/^[a-f0-9]{40}$/.test(sha)) throw new Error('Partition commits must be exact SHAs')
   const list = (sha) => git(root, 'ls-tree', '-r', '--name-only', sha).split('\n').filter(isNativeTest)
   const baseTests = list(base),
     headTests = list(head)
-  const union = [...new Set([...baseTests, ...headTests])]
+  const impact = ciImpact(root, base, head, mode)
+  const selectedBase = new Set(impact.tests[0]),
+    selectedHead = new Set(impact.tests[1])
+  const union = [...new Set([...impact.tests[0], ...impact.tests[1]])]
   const weights = costs(root).tests
   return {
-    version: 1,
+    version: 2,
     base,
     head,
+    mode,
+    impact: { ...impact, tests: undefined },
     groups: Object.fromEntries(
       Object.keys(groups).map((group) => [
         group,
         {
-          baseTests: baseTests.filter((path) => groupOf(path) === group).sort(),
-          headTests: headTests.filter((path) => groupOf(path) === group).sort(),
+          baseInventory: baseTests.filter((path) => groupOf(path) === group).sort(),
+          headInventory: headTests.filter((path) => groupOf(path) === group).sort(),
+          baseTests: baseTests.filter((path) => groupOf(path) === group && selectedBase.has(path)).sort(),
+          headTests: headTests.filter((path) => groupOf(path) === group && selectedHead.has(path)).sort(),
           partitions: balance(
             union.filter((path) => groupOf(path) === group),
             weights,
-            nativePartitions[group],
+            impact.complete
+              ? nativePartitions[group]
+              : Math.max(
+                  1,
+                  Math.min(
+                    nativePartitions[group],
+                    Math.ceil(
+                      union
+                        .filter((path) => groupOf(path) === group)
+                        .reduce((sum, path) => sum + (weights[path] ?? 1), 0) / 180,
+                    ),
+                  ),
+                ),
           ),
         },
       ]),
@@ -87,11 +112,14 @@ export function selectedTests(plan, root, group, index, tests) {
   const sha = git(root, 'rev-parse', 'HEAD')
   const side = sha === plan.base ? 'baseTests' : sha === plan.head ? 'headTests' : null
   const own = plan.groups?.[group]
-  if (plan.version !== 1 || !side || !own || !Number.isSafeInteger(index) || !own.partitions[index])
+  if (plan.version !== 2 || !side || !own || !Number.isSafeInteger(index) || !own.partitions[index])
     throw new Error('Foreign or invalid test partition')
-  if (JSON.stringify([...tests].sort()) !== JSON.stringify(own[side]))
+  if (
+    JSON.stringify([...tests].sort()) !==
+    JSON.stringify(own[side === 'baseTests' ? 'baseInventory' : 'headInventory'])
+  )
     throw new Error('Partition inventory differs from the checkout')
-  const selected = new Set(own.partitions[index])
+  const selected = new Set(own.partitions[index].filter((path) => own[side].includes(path)))
   return tests.filter((path) => selected.has(path))
 }
 

@@ -37,10 +37,11 @@ fixture or any other skip still fails. The corrected fixture uses a complete fut
 and executes every case. Test clocks and source files are never rewritten for this compatibility.
 
 Coverage's aggregate independently reconstructs its comparison from Git after downloading test
-artifacts. Existing-test and production edits retain the complete baseline ratchet. Verified test
+artifacts. Production edits enforce changed behavior; existing-test edits retain the verified
+baseline ratchet for their oracle dependencies. Uncertain mappings retain full comparisons. Verified test
 additions and quality-only inputs preserve the old isolated test inputs, so timing differences in
 unchanged code do not constitute a regression. Dependency-only updates compare the affected oracle
-closures. Every module remains measured, legacy deficits remain visible, and changed-source floors
+closures. Selected modules remain measured, legacy deficits remain visible, and changed-source floors
 always apply. Missing Git identity or mismatched base coverage cannot establish a narrower scope.
 
 `quality-policy.yml` reads the controller from the pull request's base commit and reads proposed
@@ -102,10 +103,13 @@ must protect its new repository-controlled inputs too.
 
 ## Incremental test obligations and legacy code
 
-New and changed executable production files must meet 80% branch, 90% function/method, and 90%
-line coverage, plus an 80% mutation floor on changed executable lines (whole files when new). Modifying deficient source requires closing its coverage
-evidence gap; one-line edits and moves do not waive those floors. Unchanged legacy files retain
-measured coverage through a non-regression ratchet. The initial complete hosted measurement,
+New executable production files must meet 80% branch, 90% function/method and 90% line coverage.
+Existing-file edits apply those floors to Git-bound changed executable locations, with an 80%
+mutation floor on changed executable lines. Untested changed behavior still fails, while a small
+edit does not acquire unrelated legacy coverage debt. Unchanged affected files preserve coverage
+against the same selected test oracles. Complete main/audit reports retain visible legacy debt;
+scoped PRs explicitly distinguish their measured dependency closure from unselected files.
+The initial complete hosted measurement,
 using the earlier six-shard layout, covered 1,163 source files:
 715 had 1,675 legacy metric deficits (605 branch, 566 function, and 504 line deficits).
 Those deficits are visible debt, not evidence
@@ -128,8 +132,10 @@ and removes the fragment before the next process starts. Tracked source, tests, 
 configuration must match their input snapshot after every file, and the runtime manifest hash
 must remain unchanged. This preserves original-test evidence across later test executions and
 avoids shared native module state. There is no fallback to shared Bun module realms.
-The seven coverage groups are lifecycle, providers, worlds, mods, web, access, and rest; the
-aggregate requires all seven reports. Fresh processes still share files and external services:
+The seven logical groups are lifecycle, providers, worlds, mods, web, access, and rest. The
+aggregate independently reconstructs the selected base/head inventories and every required
+partition. Groups with no selected tests are marked explicitly empty; they do not certify tests.
+Full main/audit runs retain the complete inventory. Fresh processes still share files and external services:
 process isolation is not a security sandbox and does not prevent malicious filesystem writes.
 The Java reporter runs PIT for changed classes and scores their changed lines; full audits score every line.
 
@@ -302,3 +308,29 @@ PR label, input, environment variable, or file that authorizes an exception. An 
 must install a reviewed policy update through the independently administered protection
 mechanism, restore/verify the required controls, and run the adversarial checks again. Keep
 policy updates separate from feature changes so the exact trust-root change can be reviewed.
+
+## Feedback proportional to runtime impact
+
+`check-plan.mjs` classifies required work; `ci-impact.mjs` binds it to both Git trees and their
+real module graphs. `ci-selection.mjs` retains consumers from either revision, including tests
+whose imports were removed. Uncertain mappings widen the relevant runtime. The same plan drives
+partition selection, service prerequisites, profile validation and the required job aggregate.
+There is no per-PR opt-out. Quality/controller changes retain complete tests and adversarial proof.
+Manual non-main runs can request `affected_comparison` with an exact `comparison_base` to measure
+the PR path without opening another PR or deploying application changes. Main always retains its
+complete comparison, and `full_quality` still broadens either path into the complete audit.
+
+`changed-coverage.mjs` and `coverage-lines.mjs` select existing-file counters from verified Git
+locations; new files retain complete coverage floors. JaCoCo uses its actual line and method
+locations with completeness checks. Missing reports, tests, counters, source hashes and required
+jobs remain failures. Mutation scope remains changed behavior; exhaustive audits remain scheduled
+and explicitly available.
+Coverage comparison reuses `coverage-impact.mjs`: verified changed subjects and edited test-oracle
+dependencies gate the change. Merely executing a broader fallback suite does not turn unrelated
+coverage fluctuations into new obligations. Measured legacy deficits remain visible independently
+of the comparison scope; uncertain mappings retain the broader comparison.
+
+Partial comparisons measure the same selected base/head oracles. A validated full-suite baseline
+cannot replace a partial oracle measurement: aggregate coverage cannot prove which individual
+tests supplied it. Complete runs continue to reuse only exact, independently validated baseline
+artifacts. No cached result invents a passing test or skips an applicable required check.

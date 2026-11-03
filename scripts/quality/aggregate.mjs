@@ -24,10 +24,22 @@ export function verifyJobs(needs) {
   for (const name of required) if (!needs[name]) throw new Error(`Missing CI job: ${name}`)
   if (needs.changes.result !== 'success' || needs.licenses.result !== 'success')
     throw new Error('Change detection and licenses must succeed')
-  const { code, reporter, fleet } = needs.changes.outputs ?? {}
-  if ([code, reporter, fleet].some((value) => !['true', 'false'].includes(value)))
+  const { code, reporter, fleet, worker, images, complete, mutation } = needs.changes.outputs ?? {}
+  if (
+    [code, reporter, fleet, worker, images, complete, mutation].some(
+      (value) => !['true', 'false'].includes(value),
+    )
+  )
     throw new Error('Missing change classification')
-  const classifications = { reporter, fleet }
+  const classifications = {
+    reporter,
+    fleet,
+    worker,
+    images,
+    baseline: code === 'true' && complete === 'true' ? 'true' : 'false',
+    mutation,
+    mutation_quality: mutation,
+  }
   for (const name of [
     'baseline',
     'static',

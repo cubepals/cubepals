@@ -6,10 +6,10 @@
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
-import { matchesGlob } from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
 import { verifyJobs } from './aggregate.mjs'
+import { classifyChanges } from './check-plan.mjs'
 import { inventory } from './inventory.mjs'
 import { nativePartitions } from './partition-plan.mjs'
 import { checkJUnit } from './run-shard.mjs'
@@ -34,7 +34,19 @@ const clean = () =>
       key,
       {
         result: 'success',
-        ...(key === 'changes' ? { outputs: { code: 'true', reporter: 'true', fleet: 'true' } } : {}),
+        ...(key === 'changes'
+          ? {
+              outputs: {
+                code: 'true',
+                reporter: 'true',
+                fleet: 'true',
+                worker: 'true',
+                images: 'true',
+                complete: 'true',
+                mutation: 'true',
+              },
+            }
+          : {}),
       },
     ]),
   )
@@ -58,7 +70,15 @@ test('required CI rejects every non-success state, missing result and missing ch
 
 test('documentation-only changes still require licenses and permit only classified skips', () => {
   const needs = clean()
-  needs.changes.outputs = { code: 'false', reporter: 'false', fleet: 'false' }
+  needs.changes.outputs = {
+    code: 'false',
+    reporter: 'false',
+    fleet: 'false',
+    worker: 'false',
+    images: 'false',
+    complete: 'false',
+    mutation: 'false',
+  }
   for (const job of [
     'baseline',
     'static',
@@ -91,7 +111,15 @@ test('Fleet can skip only when its own classification permits it', () => {
     assert.throws(() => verifyJobs(needs), /Missing change classification/)
   }
   const prose = clean()
-  prose.changes.outputs = { code: 'false', reporter: 'false', fleet: 'true' }
+  prose.changes.outputs = {
+    code: 'false',
+    reporter: 'false',
+    fleet: 'true',
+    worker: 'false',
+    images: 'false',
+    complete: 'false',
+    mutation: 'false',
+  }
   for (const job of [
     'baseline',
     'static',
@@ -132,10 +160,8 @@ test('the real aggregate CLI rejects absent, skipped or failed required Fleet wo
 
 test('the actual Fleet classifier includes shared inputs without running for unrelated app source', () => {
   const workflow = readFileSync(new URL('../../.github/workflows/ci.yml', import.meta.url), 'utf8')
-  const section = workflow.match(/\n {12}fleet:\n((?: {14}- '[^']+'\n)+)/)?.[1]
-  assert.ok(section, 'Fleet path classification must exist')
-  const patterns = [...section.matchAll(/- '([^']+)'/g)].map((match) => match[1])
-  const selected = (path) => patterns.some((pattern) => matchesGlob(path, pattern))
+  assert.match(workflow, /fleet: \$\{\{ steps.plan.outputs.fleet \}\}/)
+  const selected = (path) => classifyChanges([path]).fleet
   for (const path of [
     'apps/control/src/infra/fleet/fleet-runtime.ts',
     'apps/control/src/testing/fleet.ts',
@@ -168,10 +194,8 @@ test('the actual Fleet classifier includes shared inputs without running for unr
     'README.md',
   ])
     assert.equal(selected(path), false, `${path} is unrelated to the live Fleet runtime`)
-  assert.match(
-    workflow,
-    /fleet: \$\{\{ .*merge_group.*schedule.*workflow_dispatch.*steps\.fleet\.outputs\.fleet/,
-  )
+  assert.equal(classifyChanges([], { full: true }).fleet, true)
+  assert.match(workflow, /QUALITY_FULL_AUDIT: \$\{\{ inputs.full_quality == true \}\}/)
   assert.match(
     workflow,
     /\n {2}fleet:\n {4}needs: changes\n {4}if: needs\.changes\.outputs\.fleet == 'true'\n {4}uses: \.\/\.github\/workflows\/fleet\.yml/,
@@ -233,15 +257,11 @@ test('the access split preserves every actual source and test in exactly one par
 
 test('the workflow schedules every partition and requires the same number of evidence shards', () => {
   const workflow = readFileSync(new URL('../../.github/workflows/ci.yml', import.meta.url), 'utf8')
-  const matrix = [...workflow.matchAll(/^\s+- quality: ([a-z]+)\n\s+partition: (\d+)$/gm)].map((match) => [
-    match[1],
-    Number(match[2]),
-  ])
-  const expected = Object.entries(nativePartitions).flatMap(([group, count]) =>
-    Array.from({ length: count }, (_, index) => [group, index]),
+  assert.match(workflow, /matrix: \$\{\{ fromJSON\(needs.changes.outputs.matrix\) \}\}/)
+  assert.equal(
+    Object.values(nativePartitions).reduce((a, b) => a + b, 0),
+    17,
   )
-  assert.deepEqual(matrix, expected)
-  assert.deepEqual([...new Set(matrix.map(([group]) => group))].sort(), Object.keys(groups).sort())
   const counts = [...workflow.matchAll(/--expected-shards (\d+)/g)].map((match) => Number(match[1]))
   assert.deepEqual(counts, [Object.keys(groups).length, Object.keys(groups).length])
   assert.match(workflow, /partition: \[0, 1, 2, 3\]/)
@@ -276,4 +296,39 @@ test('nested describe suites retain failure and skip enforcement', () => {
       ),
     /did not report/,
   )
+})
+
+test('scoped website feedback still requires real native, coverage, mutation and Worker success', () => {
+  const needs = clean()
+  Object.assign(needs.changes.outputs, {
+    complete: 'false',
+    images: 'false',
+    fleet: 'false',
+    reporter: 'false',
+  })
+  for (const key of ['baseline', 'images', 'fleet', 'reporter']) needs[key].result = 'skipped'
+  assert.equal(verifyJobs(needs), true)
+  for (const key of ['test', 'quality', 'mutation', 'mutation_quality', 'worker']) {
+    for (const result of ['failure', 'skipped', 'cancelled']) {
+      needs[key].result = result
+      assert.throws(() => verifyJobs(needs), /expected success/)
+    }
+    needs[key].result = 'success'
+  }
+})
+
+test('superseded PR runs cancel while main groups retain their exact commit identity', () => {
+  const workflow = readFileSync(new URL('../../.github/workflows/ci.yml', import.meta.url), 'utf8')
+  assert.match(workflow, /cancel-in-progress: \$\{\{ github.event_name == 'pull_request' \}\}/)
+  assert.match(workflow, /github.event_name == 'push' && github.sha/)
+})
+
+test('optional baseline skips cannot propagate past explicitly required quality dependencies', () => {
+  const workflow = readFileSync(new URL('../../.github/workflows/ci.yml', import.meta.url), 'utf8')
+  for (const name of ['test', 'quality', 'mutation', 'mutation_quality']) {
+    const block = workflow.match(new RegExp(`^  ${name}:\\n(?:(?!^  [a-z_]+:)[\\s\\S])*`, 'm'))?.[0]
+    assert.ok(block, `Missing required job ${name}`)
+    assert.match(block, /if: \$\{\{ !cancelled\(\)/, name)
+    assert.match(block, /needs\.changes\.result == 'success'/, name)
+  }
 })
