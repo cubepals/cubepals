@@ -14,6 +14,7 @@ import { Cdn } from '../../testing/cdn.ts'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
 import { utf8, zipBytes } from '../../testing/uploads.ts'
 import { recordCompilation } from './compilation-records.ts'
+import { ModService } from './service.ts'
 
 describe.skipIf(!hasDatabase)('compiler explanation records', () => {
   let h: Harness
@@ -89,6 +90,17 @@ describe.skipIf(!hasDatabase)('compiler explanation records', () => {
       omitted: [],
       conflicts: refused.conflicts,
     })
+    const owner = await h.user('Explained mod change', 'plus')
+    const { id } = await h.create(owner, { loader: 'fabric' })
+    await h.until(id, 'running')
+    await h.settled(id)
+    expect(h.app.mods).toBeInstanceOf(ModService)
+    const proposed = await h.app.mods.plan(owner, id, { add: wanted })
+    expect(proposed.kind).toBe('ok')
+    if (proposed.kind !== 'ok') throw new Error('The same native evidence must resolve for a server')
+    expect(proposed.decisions).toEqual(plan.decisions)
+    const unchanged = await h.app.mods.plan(owner, id, {})
+    expect(Object.hasOwn(unchanged, 'decisions')).toBe(false)
   }, 30_000)
 
   test('an incomplete resolution never becomes completed compiler evidence', () => incompleteCompilation(h))
