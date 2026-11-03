@@ -2,26 +2,26 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-/** Proposed revisions and curated packs use the same real planner, runtime proof and learned exclusions. */
+/** Application composition verifies proposed revisions and curated packs through the same queued proof and learned exclusions. */
 import { afterAll, beforeAll, describe, expect, mock, spyOn, test } from 'bun:test'
 import { createHash, randomUUID } from 'node:crypto'
 import { SECOND_MS } from '@blockly/contracts/durations'
 import { type CuratedFactsJson, schema } from '@blockly/db'
 import { eq } from 'drizzle-orm'
-import { planThatRuns } from '../../domain/account/entitlements.ts'
-import type { PinnedModpack } from '../../domain/mods/modpack.ts'
-import { MEMORY_TIERS } from '../../domain/server/size.ts'
-import { LibraryFileFormats } from '../../infra/formats/file-formats.ts'
-import { INDEX_FILE } from '../../minecraft/mrpack.ts'
-import { Cdn } from '../../testing/cdn.ts'
-import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
-import { utf8, zipBytes } from '../../testing/uploads.ts'
-import type { Checked } from '../curation/check-outcome.ts'
-import { PackContents } from '../packs/contents.ts'
-import { loadRevision } from '../servers/persistence.ts'
-import { ConfigurationPreflight } from './configuration-preflight.ts'
-import { validationKey } from './validation-plan.ts'
-import { IncompatibleMods } from './validation-runtime.ts'
+import { planThatRuns } from '../domain/account/entitlements.ts'
+import type { PinnedModpack } from '../domain/mods/modpack.ts'
+import { MEMORY_TIERS } from '../domain/server/size.ts'
+import { LibraryFileFormats } from '../infra/formats/file-formats.ts'
+import { INDEX_FILE } from '../minecraft/mrpack.ts'
+import { Cdn } from '../testing/cdn.ts'
+import { type Harness, hasDatabase, startHarness } from '../testing/harness.ts'
+import { utf8, zipBytes } from '../testing/uploads.ts'
+import type { Checked } from './curation/check-outcome.ts'
+import { ConfigurationPreflight } from './mods/configuration-preflight.ts'
+import { validationKey } from './mods/validation-plan.ts'
+import { IncompatibleMods } from './mods/validation-runtime.ts'
+import { PackContents } from './packs/contents.ts'
+import { loadRevision } from './servers/persistence.ts'
 
 describe.skipIf(!hasDatabase)('shared configuration preflight', () => {
   let h: Harness
