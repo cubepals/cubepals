@@ -40,7 +40,7 @@ export function addMonths(at: Date, months: number): Date {
   moved.setUTCDate(1)
   moved.setUTCMonth(moved.getUTCMonth() + months)
   const last = new Date(Date.UTC(moved.getUTCFullYear(), moved.getUTCMonth() + 1, 0)).getUTCDate()
-  moved.setUTCDate(Math.min(day, last))
+  moved.setUTCDate(Math.min(last, day))
   return moved
 }
 
