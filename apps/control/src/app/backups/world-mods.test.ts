@@ -42,6 +42,7 @@ const COLLECTIVE = fabricJar('collective', { name: 'Collective' })
 const SODIUM = fabricJar('sodium', { name: 'Sodium' })
 const BROKEN = fabricJar('broken', { name: 'Broken' })
 const ZOOMIFY = fabricJar('zoomify', { name: 'Zoomify' })
+const NATIVE_CLIENT = fabricJar('native_client', { name: 'Native client', environment: 'client' })
 const VEIN_MINER = fabricJar('veinminer', { name: 'Vein Miner' })
 
 let h: Harness
@@ -95,6 +96,7 @@ beforeAll(async () => {
   publish('sodium', 'Sodium', SODIUM, 'client_only')
   publish('zoomify', 'Zoomify', ZOOMIFY, 'client_only_server_optional', ['kotlin-lang-forge'])
   publish('broken', 'Broken', BROKEN, 'server_only', ['missing'])
+  publish('native-client', 'Native client', NATIVE_CLIENT, 'server_only')
 }, 30_000)
 
 afterAll(async () => {
@@ -268,7 +270,11 @@ async function restoreEarlierClientImport(): Promise<void> {
   const read = await brought(
     owner,
     id,
-    await instance({ 'zoomify.jar': ZOOMIFY, 'treeharvester.jar': TREE_HARVESTER }),
+    await instance({
+      'zoomify.jar': ZOOMIFY,
+      'native-client.jar': NATIVE_CLIENT,
+      'treeharvester.jar': TREE_HARVESTER,
+    }),
   )
   expect(read.status).toBe('ready')
   if (read.status !== 'ready') throw new Error('World not ready')
@@ -289,6 +295,12 @@ async function restoreEarlierClientImport(): Promise<void> {
           catalog: [
             ...mods.catalog,
             { name: 'Zoomify', fileName: 'zoomify.jar', projectId: 'zoomify', versionId: 'zoomify-1' },
+            {
+              name: 'Native client',
+              fileName: 'native-client.jar',
+              projectId: 'native-client',
+              versionId: 'native-client-1',
+            },
           ],
           forPlayers: [],
         },
@@ -299,6 +311,10 @@ async function restoreEarlierClientImport(): Promise<void> {
   expect(seen.status === 'ready' ? seen.playedWith?.mods?.forPlayers : []).toContainEqual({
     name: 'Zoomify',
     fileName: 'zoomify.jar',
+  })
+  expect(seen.status === 'ready' ? seen.playedWith?.mods?.forPlayers : []).toContainEqual({
+    name: 'Native client',
+    fileName: 'native-client.jar',
   })
   await h.app.backups.restoreBackup(owner, id, backup.id, randomUUID(), {
     withConfiguration: false,
