@@ -4,11 +4,11 @@
 
 name: Repository settings
 
-# The repository's rulesets as `.github/settings/rulesets/` holds them (scripts/repo-settings.ts).
-# A merge to main that changes them applies them; by hand, `plan` says what an apply would change
-# and `export` prints the live rulesets as the files would hold them. Only main's own code runs,
-# with the Cubepals app's token, scoped to administering this repository: a pull request, a fork
-# or another branch never gets it.
+# The repository's rulesets and branch protection as `.github/settings/` holds them
+# (scripts/repo-settings.ts). A merge to main that changes them applies them; by hand, `plan` says
+# what an apply would change and `export` prints the live settings as the files would hold them.
+# Only main's own code runs, with the Cubepals app's token, scoped to administering this
+# repository: a pull request, a fork or another branch never gets it.
 on:
   push:
     branches: [main]
@@ -30,7 +30,7 @@ on:
 permissions:
   contents: read
 
-# One change of the rulesets at a time; a second waits for the first.
+# One change of the settings at a time; a second waits for the first.
 concurrency:
   group: repo-settings
   cancel-in-progress: false
@@ -55,7 +55,7 @@ jobs:
           client-id: ${{ vars.CUBEPALS_APP_CLIENT_ID }}
           private-key: ${{ secrets.CUBEPALS_APP_PRIVATE_KEY }}
           permission-administration: write
-      - name: Rulesets
+      - name: Rulesets and branch protection
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
           COMMAND: ${{ inputs.command || 'apply' }}
