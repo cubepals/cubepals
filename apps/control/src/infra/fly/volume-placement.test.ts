@@ -13,6 +13,7 @@ import {
 } from '../../app/ports/runtime.ts'
 import { type FlySchemas, flyClient } from './client.ts'
 import { FakeFly } from './fake-fly.ts'
+import { ensureVolume } from './fly-runtime/volumes.ts'
 import { FlyRuntime } from './fly-runtime.ts'
 import { decodeHandle } from './handle.ts'
 
@@ -55,7 +56,7 @@ function fixture() {
     handle: async () => {},
   }
   const key = randomUUID() as RuntimeKey
-  return { fake, runtime, spec, progress, key, volumes, steps }
+  return { fake, runtime, spec, progress, key, volumes, steps, client }
 }
 
 test('every game allocation requests the same compute as its machine, without replacing existing storage', async () => {
@@ -114,5 +115,18 @@ test('an archive restore refused for capacity cleans its empty copy and keeps th
   ).rejects.toBeInstanceOf(RuntimeAtLimit)
   expect(f.steps).toContain('waiting_for_room')
   expect(f.fake.volumes.get(app)?.map((volume) => volume.id)).toEqual(before)
+  expect((await f.runtime.observe(handle)).state).toBe('running')
+})
+
+test('volume discovery without placement hints keeps and grows the existing world disk', async () => {
+  const f = fixture()
+  const handle = await f.runtime.ensureProvisioned(f.key, { regionKey: 'here' }, f.spec, f.progress)
+  const { app, volumeId } = decodeHandle(handle)
+  if (volumeId === null) throw new Error('The running server has no world volume')
+  const volume = await ensureVolume(f.client, app, 'fra', 10, 30)
+  expect(volume.id).toEqual(volumeId)
+  expect(f.fake.volumes.get(app)).toHaveLength(1)
+  expect(f.volumes).toHaveLength(1)
+  expect(f.fake.volumes.get(app)?.[0]?.size_gb).toBe(10)
   expect((await f.runtime.observe(handle)).state).toBe('running')
 })
