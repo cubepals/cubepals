@@ -93,6 +93,38 @@ describe('decide', () => {
     expect(decide(stopped, { type: 'apply' })).toEqual({ kind: 'accept', to: stopped, operation: null })
   })
 
+  test('correcting a failed configuration starts it and restores accept every retained world state', () => {
+    expect(decide(at('failed'), { type: 'apply' })).toEqual({
+      kind: 'accept',
+      to: at('starting'),
+      operation: 'start',
+    })
+    for (const status of ['running', 'stopped', 'failed'] as const)
+      expect(decide(at(status), { type: 'restore' })).toEqual({
+        kind: 'accept',
+        to: at('restoring'),
+        operation: 'restore',
+      })
+  })
+
+  test('every failed phase resumes its original operation', () => {
+    for (const [phase, operation] of [
+      ['provisioning', 'provision'],
+      ['starting', 'start'],
+      ['stopping', 'stop'],
+      ['updating', 'apply'],
+      ['restoring', 'restore'],
+      ['relocating', 'relocate'],
+    ] as const) {
+      const failure = { during: phase, message: 'Interrupted', operationId: 'attempt' }
+      expect(decide(at('failed', { failure }), { type: 'retry' })).toEqual({
+        kind: 'accept',
+        to: at(phase),
+        operation,
+      })
+    }
+  })
+
   test('retry resumes the phase that failed', () => {
     const failed = at('failed', { failure: { during: 'updating', message: 'boom', operationId: 'op' } })
     expect(decide(failed, { type: 'retry' })).toEqual({

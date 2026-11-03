@@ -196,6 +196,27 @@ async function registeredChecks(register: boolean) {
       [key],
     )
     expect(queued.rows[0]?.state).toBe(states.created)
+    const packKey = randomUUID()
+    await db.transaction((tx) => jobs.enqueuePackImport(tx, packKey))
+    const packJob = await pool.query<{ name: string }>(
+      "SELECT name FROM pgboss.job WHERE data->>'importId' = $1",
+      [packKey],
+    )
+    const queue = await boss.getQueue(queued.rows[0]?.name as string)
+    const packQueue = await boss.getQueue(packJob.rows[0]?.name as string)
+    for (const field of ['policy', 'retryLimit', 'retryDelay', 'expireInSeconds'] as const)
+      expect(queue?.[field]).toBe(packQueue?.[field])
+    const rolledBack = randomUUID()
+    const interrupted = new Error('The owning transaction was rolled back')
+    await expect(
+      db.transaction(async (tx) => {
+        await jobs.enqueueModValidation(tx, rolledBack)
+        throw interrupted
+      }),
+    ).rejects.toBe(interrupted)
+    expect(
+      (await pool.query("SELECT id FROM pgboss.job WHERE data->>'importId' = $1", [rolledBack])).rows,
+    ).toEqual([])
     await workJarChecks(boss, async () => {})
     if (register) {
       const deadline = Date.now() + 5 * SECOND_MS
