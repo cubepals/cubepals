@@ -11,7 +11,6 @@
  */
 import type { AccountOverviewView, PublicPlan } from '@blockly/contracts'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import Link from 'next/link'
 import type { ReactNode } from 'react'
 import { messageOf, useTRPC } from '../../../lib/api'
 import { checkoutHref } from '../../../lib/checkout'
@@ -36,13 +35,13 @@ export function planAction(
   const rank = (key: string) => plans.findIndex((each) => each.key === key)
   if (rank(plan.key) > rank(overview.plan.key))
     return (
-      <Link
-        className="bl-btn bl-btn--lg bl-btn--lit"
+      <Button
+        variant="primary"
         href={checkoutHref({ plan: plan.key, reason: 'account' })}
         {...planMark(plan.key, 'month')}
       >
         Get {plan.name}
-      </Link>
+      </Button>
     )
   const paying = billed?.status === 'active' && billed.planKey === overview.plan.key
   if (!paying || billed.cancelAtPeriodEnd || billed.periodEnd === null || billed.movesTo) return undefined

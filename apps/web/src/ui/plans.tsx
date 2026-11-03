@@ -3,9 +3,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import type { PublicPlan } from '@blockly/contracts'
+import { Check } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { SOURCE_URL } from './brand'
 import { OutLink } from './out-link'
+import { Badge } from './surfaces'
 import { Tip } from './tip'
 
 /**
@@ -115,6 +117,16 @@ export function TrialPoint({ trial }: { trial: PublicPlan }) {
   )
 }
 
+/** A card's points, with the free trial right after the hours of the plan it starts. */
+function pointsOf(plan: PublicPlan, trial: PublicPlan | undefined): { key: string; said: ReactNode }[] {
+  return planPoints(plan).flatMap((point) => {
+    const said = { key: point, said: <PlanPoint plan={plan} point={point} /> }
+    return trial && point === hoursPoint(plan)
+      ? [said, { key: 'trial', said: <TrialPoint trial={trial} /> }]
+      : [said]
+  })
+}
+
 /**
  * How much play a month's hours are, in evenings rather than numbers. A multiplayer session runs
  * about an hour and a half on average and a player plays about 11 hours a month (industry figures,
@@ -215,3 +227,63 @@ export function eachOf(
 
 /** A price as it is said: "$0", "$15 a month". */
 export const priceOf = (cents: number): string => (cents === 0 ? '$0' : `${dollars(cents)} a month`)
+
+/**
+ * One paid plan as the account page shows it, the free trial said on the plan it starts, as the
+ * public pages do. The public pages have their own card (`plan-card.tsx`).
+ */
+export function PlanCard({
+  plan,
+  trial,
+  current = false,
+  action,
+  mark,
+  bedrock = false,
+  solid = plan.monthlyPriceCents > 0,
+  note,
+}: {
+  plan: PublicPlan
+  /** The free trial, on the plan it starts. */
+  trial?: PublicPlan | undefined
+  /** Whether Bedrock is on, for the card's first line (`lib/bedrock.ts`). */
+  bedrock?: boolean
+  /** The card is the dark one: the player's own plan. */
+  solid?: boolean
+  /** Small print that belongs to this plan, under its details. */
+  note?: ReactNode
+  /** The plan the person is on, marked as theirs; `'trial'` on the plan whose free trial they're on. */
+  current?: boolean | 'trial'
+  action?: ReactNode
+  /** The page's mark for the card coming into view, so it is counted (app/(public)/steps.ts). */
+  mark?: Readonly<Record<`data-${string}`, string>>
+}) {
+  const shared = eachOf(plan)
+  return (
+    <section className="bk-plan" aria-label={plan.name} data-paid={solid || undefined} {...mark}>
+      <div className="bk-row bk-wrap" style={{ gap: 'var(--space-8)', justifyContent: 'space-between' }}>
+        <h3 className="type-eyebrow">{plan.name}</h3>
+        {current && <Badge tone="grass">{current === 'trial' ? 'Your free trial' : 'Yours'}</Badge>}
+      </div>
+      <p className="type-heading-sm bk-plan__pitch">{pitchOf(plan, bedrock)}</p>
+      <p className="bk-plan__price">
+        <span className="type-display-md bk-num">{dollars(plan.monthlyPriceCents)}</span>
+        {plan.monthlyPriceCents > 0 && <span className="type-body-sm"> a month</span>}
+      </p>
+      {shared && (
+        <p className="type-body-sm bk-plan__each">
+          {shared.each} each, shared by {shared.friends} friends.
+        </p>
+      )}
+      <ul className="bk-plan__points">
+        {pointsOf(plan, trial).map((point) => (
+          <li key={point.key} className="type-body-sm">
+            <Check size={16} strokeWidth={2.25} aria-hidden />
+            {point.said}
+          </li>
+        ))}
+      </ul>
+      {note && <p className="type-body-sm bk-plan__each">{note}</p>}
+      {action && <div className="bk-plan__action">{action}</div>}
+    </section>
+  )
+}

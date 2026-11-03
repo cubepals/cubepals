@@ -2781,6 +2781,74 @@ details[open] > .bk-disclosure::before {
 }
 
 /* ─── Plans ─────────────────────────────────────────────────────────────────────────────── */
+/* Side by side where the page has room for both, one above the other where it doesn't. */
+.bk-plans {
+  display: grid;
+  gap: var(--space-20);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+}
+.bk-plan {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-24);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12);
+  color: var(--ink-muted);
+}
+.bk-plan[data-paid] {
+  background: var(--surface-forest);
+  border-color: var(--surface-forest);
+  color: var(--ink-inverse-muted);
+}
+.bk-plan .type-eyebrow {
+  color: var(--ink-subtle);
+}
+.bk-plan[data-paid] .type-eyebrow {
+  color: var(--ink-inverse-muted);
+}
+.bk-plan__price {
+  color: var(--ink);
+}
+.bk-plan__price .type-body-sm {
+  color: var(--ink-muted);
+}
+.bk-plan[data-paid] .bk-plan__price .type-body-sm {
+  color: var(--ink-inverse-muted);
+}
+.bk-plan__each {
+  color: var(--ink-muted);
+}
+.bk-plan[data-paid] .bk-plan__each {
+  color: var(--ink-inverse-muted);
+}
+.bk-plan[data-paid] .bk-plan__price,
+.bk-plan[data-paid] .bk-plan__pitch {
+  color: var(--ink-inverse);
+}
+.bk-plan__points {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+.bk-plan__points li {
+  display: flex;
+  gap: var(--space-8);
+  align-items: flex-start;
+}
+.bk-plan__points svg {
+  flex: none;
+  margin-block-start: 2px;
+  color: var(--grass);
+}
+.bk-plan__action {
+  margin-block-start: auto;
+  padding-block-start: var(--space-8);
+}
 /* A plan's details on the public pages: a quiet line that opens the rest in place, in the card's own ink. */
 .bk-plan-more summary {
   display: inline-flex;
@@ -2810,6 +2878,11 @@ details[open] > .bk-disclosure::before {
   flex-direction: column;
   gap: var(--space-8);
 }
+/* The dark card's own ink: grass is near-black in the light theme, which vanishes on it. */
+.bk-plan[data-paid] .bk-plan__points svg {
+  color: var(--ink-inverse);
+}
+
 /* Where a pack's file is dropped: the whole area takes the drop, the button inside picks one. */
 .bk-drop {
   display: grid;
