@@ -13,6 +13,7 @@ import {
   packNameOf,
   packNotes,
   packTierFor,
+  playersOnlyIn,
   runsOn,
   someNames,
 } from './pack-build.ts'
@@ -39,6 +40,17 @@ describe('where a pack’s jar runs', () => {
     expect(jarSide({ catalog: 'unknown', metadata: { environment: 'client' } })).toBe('client')
     expect(jarSide({ metadata: { environment: 'server' } })).toBe('server')
     expect(jarSide({})).toBe('both')
+  })
+
+  test('one only players’ games run is left to them, unless another mod of the pack requires it', () => {
+    const playersOnly = playersOnlyIn([
+      { dependencies: [{ projectId: 'companion', versionId: null, kind: 'required' }] },
+      { dependencies: [{ projectId: 'zoom', versionId: null, kind: 'optional' }] },
+    ])
+    expect(playersOnly('client', { projectId: 'companion' })).toBe(false)
+    expect(playersOnly('client', { projectId: 'zoom' })).toBe(true)
+    expect(playersOnly('client', undefined)).toBe(true)
+    expect(playersOnly('both', { projectId: 'zoom' })).toBe(false)
   })
 })
 

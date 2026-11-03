@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import type { ModEnvironment } from '../domain/mods/catalog.ts'
+import type { CatalogVersion, ModEnvironment } from '../domain/mods/catalog.ts'
 import type { MemoryTier } from '../domain/server/size.ts'
 import { serverEnvironment } from './mods.ts'
 import type { PackLoader } from './mrpack.ts'
@@ -33,6 +33,22 @@ export function jarSide(evidence: {
   if (evidence.metadata?.environment === 'client') return 'client'
   if (evidence.metadata?.environment === 'server') return 'server'
   return 'both'
+}
+
+/**
+ * Which of a pack's jars are left to players' games, from the catalog's record of every jar it
+ * holds (`published`): one only players' games run (`jarSide`), unless a mod of the pack requires
+ * its project, whatever the jar says of itself. A server mod that needs a client companion the
+ * catalog marks optional on servers (`client_only_server_optional`) is given it.
+ */
+export function playersOnlyIn(
+  published: Iterable<Pick<CatalogVersion, 'dependencies'>>,
+): (side: ReturnType<typeof jarSide>, version: Pick<CatalogVersion, 'projectId'> | undefined) => boolean {
+  const needed = new Set<string>()
+  for (const version of published)
+    for (const dependency of version.dependencies)
+      if (dependency.kind === 'required' && dependency.projectId) needed.add(dependency.projectId)
+  return (side, version) => side === 'client' && !(version !== undefined && needed.has(version.projectId))
 }
 
 /**

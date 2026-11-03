@@ -429,7 +429,7 @@ headers and incomplete archives go through the existing strict parser. Gzip and 
 existing readers.
 
 A `client_only_server_optional` catalog version stays in players' games when a world or pack is
-brought in. A server companion is optional. This avoids resolving the union of unrelated loader
+brought in, unless another mod of the pack requires it. A server companion is optional. This avoids resolving the union of unrelated loader
 dependencies for a client mod: Zoomify's universal 2.17.0 release lists KotlinLangForge as required,
 although that dependency has no Fabric version. Earlier world imports are reclassified from their
 exact catalog versions when displayed and played, so they do not need another upload. A real
