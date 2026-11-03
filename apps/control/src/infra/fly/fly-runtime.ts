@@ -98,8 +98,8 @@ import {
   EXPORT_VOLUME_NAME,
   ensureVolume,
   fitVolume,
+  gameVolume,
   readVolume,
-  VOLUME_NAME,
   volumeReady,
 } from './fly-runtime/volumes.ts'
 import {
@@ -284,7 +284,7 @@ export class FlyRuntime implements MinecraftRuntime {
       this.#fly,
       app,
       region,
-      spec.storage.sizeGb,
+      { sizeGb: spec.storage.sizeGb, memoryMb: spec.resources.memoryMb },
       this.snapshotLifetimeDays,
       { mounted: existing?.config?.mounts?.[0]?.volume, ...volumesOf(storage) },
     )
@@ -429,23 +429,18 @@ export class FlyRuntime implements MinecraftRuntime {
       volume = await createVolume(
         this.#fly,
         ref.app,
-        {
-          name: VOLUME_NAME,
+        gameVolume(spec.resources.memoryMb, {
           region: ref.region,
           size_gb: Math.max(snapshot.sizeGb, spec.storage.sizeGb),
           snapshot_id: snapshot.snapshotId,
-        },
+        }),
         this.snapshotLifetimeDays,
       )
     } else {
       volume = await createVolume(
         this.#fly,
         ref.app,
-        {
-          name: VOLUME_NAME,
-          region: ref.region,
-          size_gb: spec.storage.sizeGb,
-        },
+        gameVolume(spec.resources.memoryMb, { region: ref.region, size_gb: spec.storage.sizeGb }),
         this.snapshotLifetimeDays,
       )
       const volumeId = idOf(volume, 'a volume')
@@ -490,12 +485,11 @@ export class FlyRuntime implements MinecraftRuntime {
       const volume = await createVolume(
         this.#fly,
         ref.app,
-        {
-          name: VOLUME_NAME,
+        gameVolume(spec.resources.memoryMb, {
           region,
           size_gb: Math.max(snapshot.sizeGb, spec.storage.sizeGb),
           snapshot_id: snapshot.snapshotId,
-        },
+        }),
         this.snapshotLifetimeDays,
       )
       return this.#replace(ref, volume, region, spec, progress, { hostLost: true, ...options })
@@ -510,12 +504,11 @@ export class FlyRuntime implements MinecraftRuntime {
     const fork = await createVolume(
       this.#fly,
       ref.app,
-      {
-        name: VOLUME_NAME,
+      gameVolume(spec.resources.memoryMb, {
         region,
         size_gb: Math.max(source?.size_gb ?? 0, spec.storage.sizeGb),
         source_volume_id: volumeId,
-      },
+      }),
       this.snapshotLifetimeDays,
     )
     return this.#replace(ref, fork, region, spec, progress)

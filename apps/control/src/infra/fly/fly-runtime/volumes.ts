@@ -11,13 +11,24 @@
 
 import { MINUTE_MS } from '@blockly/contracts/durations'
 import type { FlyClient, FlySchemas } from '../client.ts'
+import { guestFor } from '../machine-config.ts'
 import { saysBound } from '../refusals.ts'
 import { idOf, must, succeeded } from './responses.ts'
 
 type Volume = FlySchemas['Volume']
 type CreateVolumeRequest = FlySchemas['CreateVolumeRequest']
 
-export const VOLUME_NAME = 'minecraft_data'
+const VOLUME_NAME = 'minecraft_data'
+
+/**
+ * A world volume as Fly is asked for it: on a host with room for the machine it is made for.
+ * Fly picks a volume's host when it makes it, and a machine its host can't fit is refused there
+ * later (`volume_placement_capacity`), so the volume carries the machine's own guest.
+ */
+export const gameVolume = (
+  memoryMb: number,
+  request: Omit<CreateVolumeRequest, 'name' | 'compute'>,
+): CreateVolumeRequest => ({ name: VOLUME_NAME, compute: guestFor(memoryMb), ...request })
 /** A snapshot's world, made for an export to pack, beside the archive it writes. */
 export const EXPORT_VOLUME_NAME = 'blockly_export'
 const VOLUME_GONE = new Set([
@@ -41,10 +52,11 @@ export async function ensureVolume(
   fly: FlyClient,
   app: string,
   region: string,
-  sizeGb: number,
+  size: { sizeGb: number; memoryMb: number },
   retentionDays: number,
   known: { mounted?: string; held?: string | null; kept?: readonly string[] } = {},
 ): Promise<Volume> {
+  const { sizeGb, memoryMb } = size
   const kept = new Set(known.kept ?? [])
   const existing =
     (await liveVolume(fly, app, known.mounted)) ??
@@ -56,7 +68,7 @@ export async function ensureVolume(
   }
   if (kept.size > 0 && (await dataVolume(fly, app)) !== null)
     throw new Error(`${app} holds only the storage kept from before a rebuild, which it doesn't boot`)
-  return createVolume(fly, app, { name: VOLUME_NAME, region, size_gb: sizeGb }, retentionDays)
+  return createVolume(fly, app, gameVolume(memoryMb, { region, size_gb: sizeGb }), retentionDays)
 }
 
 /** The volume, where it is there and not going away. */
