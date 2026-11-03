@@ -9,9 +9,8 @@
  */
 
 import { z } from 'zod'
-import type { ExecResult, ProgressSink } from '../../../app/ports/runtime.ts'
+import type { ExecResult } from '../../../app/ports/runtime.ts'
 import type { FlyClient, FlySchemas } from '../client.ts'
-import type { FlyRef } from '../handle.ts'
 import { META } from '../machine-config.ts'
 import { saysClaimed, saysNotYet, saysReplacing } from '../refusals.ts'
 import { lastExit } from './observation.ts'
@@ -570,35 +569,4 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 function seconds(timeout: string | undefined): number {
   const match = /^(\d+)s$/.exec(timeout ?? '')
   return match ? Number(match[1]) : 90
-}
-
-export async function provisionMachine(
-  fly: FlyClient,
-  input: Pick<FlyRef, 'deployment' | 'app' | 'region'> & {
-    volume: FlySchemas['Volume']
-    existing: Machine | null
-    secretsVersion: number | undefined
-    progress: ProgressSink
-    configFor: (volumeId: string, machine: Machine | null) => MachineConfig
-  },
-): Promise<{ machine: Machine; volumeId: string }> {
-  const { deployment, app, region, volume, existing, secretsVersion, progress, configFor } = input
-  const volumeId = idOf(volume, 'a volume')
-
-  await progress.step('compute')
-  let machine = await minecraftMachine(fly, app, existing?.id ?? null)
-  const config = configFor(volumeId, machine)
-  if (machine === null)
-    machine = await createMachine(fly, app, volume.region ?? region, config, secretsVersion, 'minecraft')
-  else if (machine.config?.metadata?.[META.digest] !== config.metadata?.[META.digest])
-    machine = await updateMachine(
-      fly,
-      deployment,
-      app,
-      idOf(machine, 'a machine'),
-      config,
-      secretsVersion,
-      true,
-    )
-  return { machine, volumeId }
 }

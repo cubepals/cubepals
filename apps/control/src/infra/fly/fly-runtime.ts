@@ -14,6 +14,7 @@
  * - `prices.ts`: an hour and a month of a server, at Fly's list prices.
  * - `regions.ts`: the product's regions on Fly's, and whether one has room.
  * - `room.ts`: waiting for a machine while the organization is at its machine limit.
+ * - `adoption.ts`: a released world's handle before compute or storage is placed.
  * - `apps.ts`: a server's Fly app, its name, its Flycast address and its secrets.
  * - `volumes.ts`: the volumes a server's world lives on.
  * - `snapshots.ts`: a volume's snapshots, taken and accounted for.
@@ -49,6 +50,7 @@ import type {
 } from '../../app/ports/runtime.ts'
 import { RuntimeUnsupported } from '../../app/ports/runtime.ts'
 import type { FlyClient, FlySchemas } from './client.ts'
+import { adoptedHandle } from './fly-runtime/adoption.ts'
 import {
   appName,
   deleteApp,
@@ -74,7 +76,6 @@ import {
   exec,
   machineOnVolume,
   minecraftMachine,
-  provisionMachine,
   readMachine,
   sleepMachine,
   startMachine,
@@ -217,15 +218,8 @@ export class FlyRuntime implements MinecraftRuntime {
    * a world here makes sure of the app and its Flycast address, as a wake does.
    */
   async adopt(key: RuntimeKey, placement: Placement, spec: RuntimeSpec): Promise<RuntimeHandle> {
-    return encodeHandle({
-      deployment: this.#deployment,
-      serverId: key,
-      app: appName(this.#deployment, key),
-      region: flyRegion(this.#regions, placement),
-      volumeId: null,
-      machineId: null,
-      ports: portsOf(spec),
-    })
+    const region = flyRegion(this.#regions, placement)
+    return adoptedHandle(this.#deployment, key, region, portsOf(spec))
   }
 
   async ensureProvisioned(
@@ -289,16 +283,31 @@ export class FlyRuntime implements MinecraftRuntime {
       this.snapshotLifetimeDays,
       { mounted: existing?.config?.mounts?.[0]?.volume, ...volumesOf(storage) },
     )
-    return provisionMachine(this.#fly, {
-      deployment: this.#deployment,
-      app,
-      region,
-      volume,
-      existing,
-      secretsVersion,
-      progress,
-      configFor: (volumeId, machine) => this.#config(key, spec, volumeId, machine),
-    })
+    const volumeId = idOf(volume, 'a volume')
+
+    await progress.step('compute')
+    let machine = await minecraftMachine(this.#fly, app, existing?.id ?? null)
+    const config = this.#config(key, spec, volumeId, machine)
+    if (machine === null)
+      machine = await createMachine(
+        this.#fly,
+        app,
+        volume.region ?? region,
+        config,
+        secretsVersion,
+        'minecraft',
+      )
+    else if (machine.config?.metadata?.[META.digest] !== config.metadata?.[META.digest])
+      machine = await updateMachine(
+        this.#fly,
+        this.#deployment,
+        app,
+        idOf(machine, 'a machine'),
+        config,
+        secretsVersion,
+        true,
+      )
+    return { machine, volumeId }
   }
 
   /**
