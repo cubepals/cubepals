@@ -6,7 +6,7 @@
 
 /**
  * The early price on the platform page: the room for its checkouts as last set from outside, what
- * a checkout of each plan takes, until when it holds, the checkout pages holding it now, and the
+ * a checkout of each plan takes, when its refresh is due, the checkout pages holding it now, and the
  * switch that closes it now and keeps it closed until an admin opens it again. Only what the
  * control plane holds; what sets the room is not here.
  */
@@ -38,7 +38,7 @@ export function EarlyPrice({ view }: { view: PlatformControlsView }) {
   const set =
     room.setAt === null
       ? 'Never set.'
-      : `Set ${whenTaken(room.setAt, now).toLowerCase()}${room.validUntil ? `, ${holds ? 'holding until' : 'and ran out at'} ${new Date(room.validUntil).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}` : ''}.`
+      : `Set ${whenTaken(room.setAt, now).toLowerCase()}${room.validUntil ? `, ${holds ? 'refresh due at' : 'refresh overdue since'} ${new Date(room.validUntil).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}` : ''}.`
   return (
     <FormSection
       title="Early price"
@@ -53,7 +53,11 @@ export function EarlyPrice({ view }: { view: PlatformControlsView }) {
       <FormRow
         label="Room"
         description={set}
-        control={<span className="type-body bk-num">{points(open && holds ? room.roomPoints : 0)}</span>}
+        control={
+          <span className="type-body bk-num">
+            {points(open && room.validUntil !== null ? room.roomPoints : 0)}
+          </span>
+        }
       />
       <FormRow
         label="A checkout takes"

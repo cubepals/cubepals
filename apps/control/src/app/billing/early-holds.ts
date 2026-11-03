@@ -80,7 +80,7 @@ async function roomLeft(q: Queryable, room: EarlyRoom, now: Date): Promise<numbe
     .select({ points: sum(holds.points) })
     .from(holds)
     .where(counting(room, now))
-  return roomNow(room, now) - Number(taken?.points ?? 0)
+  return roomNow(room) - Number(taken?.points ?? 0)
 }
 
 export class EarlyHolds {
@@ -100,7 +100,7 @@ export class EarlyHolds {
    * early leaves the plan's own price.
    */
   async offer(userId: string, planKey: string, now = new Date()): Promise<PlanOffer> {
-    const product = await this.#earlyWhereRoom(planKey, now)
+    const product = await this.#earlyWhereRoom(planKey)
     return this.#db.transaction(async (tx) => {
       // The room and every hold on it are decided one checkout at a time.
       await tx
@@ -136,7 +136,7 @@ export class EarlyHolds {
    * while the room left takes a checkout of it and `spare` more besides, or the plan's own.
    */
   async peek(planKey: string, spare = 0, now = new Date()): Promise<PlanOffer> {
-    const product = await this.#earlyWhereRoom(planKey, now)
+    const product = await this.#earlyWhereRoom(planKey)
     if (product === null) return planOwn(planKey)
     const room = await readEarlyRoom(this.#db)
     const points = pointsOf(room, planKey)
@@ -156,11 +156,11 @@ export class EarlyHolds {
    * The plan's early product now, asked of the provider only while the room is set for a checkout
    * of the plan; null where it isn't, none is sold, or the provider can't say.
    */
-  async #earlyWhereRoom(planKey: string, now: Date): Promise<EarlyProduct | null> {
+  async #earlyWhereRoom(planKey: string): Promise<EarlyProduct | null> {
     const billing = this.#caps.billing
     const room = await readEarlyRoom(this.#db)
     const points = pointsOf(room, planKey)
-    if (!billing || points < 1 || roomNow(room, now) < points) return null
+    if (!billing || points < 1 || roomNow(room) < points) return null
     try {
       return await billing.earlyProduct(planKey)
     } catch (error) {

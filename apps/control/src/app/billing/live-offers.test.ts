@@ -51,6 +51,14 @@ describe.skipIf(!hasDatabase)('the price a new subscriber is told', () => {
     expect((await core())?.priceCents).toBe(999)
   })
 
+  test('a missed refresh keeps the public offer until a successful update replaces it', async () => {
+    await open(10)
+    await w.h.db.update(schema.platformControls).set({ earlyValidUntil: new Date(Date.now() - MINUTE_MS) })
+    expect(await core()).toEqual({ plan: 'core', priceCents: 700, includedHours: 90 })
+    await open(0)
+    expect(await core()).toEqual({ plan: 'core', priceCents: 999, includedHours: 40 })
+  })
+
   test('the public endpoint says the price and hours, kept a minute, and nothing else', async () => {
     await open(10)
     const app = createPublicApp({

@@ -137,9 +137,9 @@ export const platformControls = pgTable(
     createsFullSince: ts('creates_full_since'),
     /**
      * Room for checkouts at an early price, in points, as an operator last set it, and the points
-     * one checkout of Core and of Plus takes from it (`app/billing/early-room.ts`). It holds until
-     * `earlyValidUntil` and counts as none after, so with nothing renewing it the room closes by
-     * itself. None until it is set.
+     * one checkout of Core and of Plus takes from it (`app/billing/early-room.ts`).
+     * `earlyValidUntil` says when a refresh is due; the last accepted setting remains in force
+     * until replaced or explicitly closed. None until it is set.
      */
     earlyRoomPoints: integer('early_room_points').notNull().default(0),
     earlyPointsCore: integer('early_points_core').notNull().default(0),
