@@ -22,22 +22,19 @@ const PLACEMENT_REFUSED = {
 }
 
 test('a volume placement refusal is a host with no room, not a failure', async () => {
-  const endpoint = Bun.serve({
-    port: 0,
-    fetch: () => Response.json(PLACEMENT_REFUSED, { status: HTTP.HTTP_STATUS_PRECONDITION_FAILED }),
+  // Fly's client, given its answer as the in-memory Fly gives its own.
+  const client = flyClient('test', {
+    pace: { perSecond: 1000, burst: 1000 },
+    fetch: (async () =>
+      Response.json(PLACEMENT_REFUSED, { status: HTTP.HTTP_STATUS_PRECONDITION_FAILED })) as never,
   })
-  try {
-    const client = flyClient('test', { baseUrl: endpoint.url.toString() })
-    const result = await client.POST('/v1/apps/{app_name}/machines', {
-      params: { path: { app_name: 'capacity-test' } },
-      body: {},
-    })
-    expect(result.error).toMatchObject({ status: VOLUME_PLACEMENT_CAPACITY_STATUS })
-    expect(() => launched(result, 'creating the machine')).toThrow(RuntimeFull)
-    expect(() => launched(result, 'starting its machine', true)).toThrow(HostFull)
-  } finally {
-    endpoint.stop(true)
-  }
+  const result = await client.POST('/v1/apps/{app_name}/machines', {
+    params: { path: { app_name: 'capacity-test' } },
+    body: {},
+  })
+  expect(result.error).toMatchObject({ status: VOLUME_PLACEMENT_CAPACITY_STATUS })
+  expect(() => launched(result, 'creating the machine')).toThrow(RuntimeFull)
+  expect(() => launched(result, 'starting its machine', true)).toThrow(HostFull)
 })
 
 test('every world volume asks for the guest of the machine it is made for', async () => {
