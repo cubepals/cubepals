@@ -5,11 +5,11 @@
 /** Upload, worker progress and Play through the real React hooks, browser events and tRPC router. */
 import { afterAll, afterEach, beforeAll, expect, test } from 'bun:test'
 import { readFileSync } from 'node:fs'
-import { createRequire } from 'node:module'
 import type { ServerView, WorldImportView } from '@blockly/contracts'
 import { answered } from '@blockly/control/testing/answered'
 import { refusing } from '@blockly/control/testing/refusing'
 import { type QueryClient, useQueryClient } from '@tanstack/react-query'
+import { Window } from 'happy-dom'
 import { act, createElement } from 'react'
 import type { Root } from 'react-dom/client'
 import { ApiProvider } from '../../../../lib/api'
@@ -43,8 +43,9 @@ let failure: string | null = null
 let root: Root | undefined
 let queries: QueryClient
 let host: HTMLElement
-const quality = createRequire(new URL('../../../../../../../tools/quality/package.json', import.meta.url))
-let window: ReturnType<typeof quality>
+let window: Window
+/** A bubbling event from the test's own window, typed as the DOM's. */
+const domEvent = (type: string) => new window.Event(type, { bubbles: true }) as unknown as Event
 let original: Map<string, unknown>
 let calls: Array<{ service: string; method: string; args: unknown[] }> = []
 let closed = 0
@@ -52,7 +53,7 @@ const realFetch = globalThis.fetch
 let endpoint: ReturnType<typeof Bun.serve>
 
 beforeAll(() => {
-  window = new (quality('happy-dom').Window)({ url: 'http://localhost:3000' })
+  window = new Window({ url: 'http://localhost:3000' })
   const keys = [
     'window',
     'document',
@@ -302,7 +303,7 @@ test('choosing another world of a launcher instance updates what will be sent', 
   if (!select) throw new Error('An instance with two worlds must ask which one')
   await act(async () => {
     select.value = 'Prism/.minecraft/saves/Second/'
-    select.dispatchEvent(new window.Event('change', { bubbles: true }))
+    select.dispatchEvent(domEvent('change'))
   })
   expect(text()).toContain('Second')
   await click('Upload')
@@ -319,7 +320,7 @@ async function pickMods(files: Array<{ path: string; file: File }>) {
   })
   Object.defineProperty(input, 'files', { value: picked, configurable: true })
   await act(async () => {
-    input.dispatchEvent(new window.Event('change', { bubbles: true }))
+    input.dispatchEvent(domEvent('change'))
   })
 }
 
@@ -337,7 +338,7 @@ test('a modded world asks for its companions, accepts their folder and can leave
   if (!name) throw new Error('The world must offer an optional name')
   await act(async () => {
     Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set?.call(name, 'Our Life')
-    name.dispatchEvent(new window.Event('input', { bubbles: true }))
+    name.dispatchEvent(domEvent('input'))
   })
   state = { status: 'refused', fileName: 'Life.tar', importId, message: 'The world cannot be read.' }
   await click('Upload without its mods')
@@ -354,7 +355,7 @@ test('a ready world can be sent again from its instance when its mods were missi
   if (!launcher) throw new Error('The launcher must be selectable')
   await act(async () => {
     launcher.value = 'prism'
-    launcher.dispatchEvent(new window.Event('change', { bubbles: true }))
+    launcher.dispatchEvent(domEvent('change'))
   })
   await until(() => document.querySelector('input[type="file"]') !== null)
   await pickMods([held('empty/readme.txt', new File(['empty'], 'readme.txt'))])

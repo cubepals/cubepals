@@ -2,5 +2,5 @@
 linker = "hoisted"
 
 [test]
-# These controllers run once under Node through test:quality and the CI static job.
+# The signing checks' tests run under Node, in CI's static job.
 pathIgnorePatterns = ["scripts/quality/*.test.mjs"]

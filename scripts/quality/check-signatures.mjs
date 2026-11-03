@@ -3,10 +3,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Reject unsigned commits before push and in the required change-detection job. Local signatures
- * must verify cryptographically; GitHub-created signatures can be checked through GitHub when
- * its public signing key is absent locally. API failures never count as verified signatures.
- * Historical commits already on main are outside a pull request's signing boundary.
+ * Reject unsigned commits before push and in the required change-detection job. Before a push, a
+ * commit must carry a signature, and one this machine can check must be good. One it can't check,
+ * such as a signing service's or a key it has no allowed-signers entry for, goes on: GitHub is
+ * what verifies it, in the pull request's check, since a commit not yet pushed has no answer
+ * there. Historical commits already on main are outside a pull request's signing boundary.
  */
 
 import { execFileSync } from 'node:child_process'
@@ -44,10 +45,26 @@ function beforePush() {
       commits.add(sha)
   }
   for (const sha of commits) {
-    const status = git('show', '-s', '--format=%G?', sha)
-    if (['G', 'U'].includes(status)) continue
-    if (status !== 'E') throw new Error(`Commit ${sha} has no valid signature. Sign it before pushing.`)
-    requireVerified([api(`repos/cubepals/cubepals/commits/${sha}`)])
+    if (!signed(sha)) throw new Error(`Commit ${sha} has no valid signature. Sign it before pushing.`)
+    // G and U are good; E and N, signed but not checkable here, are GitHub's to verify.
+    const status = execFileSync('git', ['show', '-s', '--format=%G?', sha], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim()
+    if (!['G', 'U', 'E', 'N'].includes(status))
+      throw new Error(`Commit ${sha} has no valid signature (${status}). Sign it again before pushing.`)
+  }
+}
+/** Whether a commit carries a signature at all, checkable here or not. */
+function signed(sha) {
+  return /^gpgsig(-sha256)? /m.test(git('cat-file', 'commit', sha).split('\n\n')[0])
+}
+/** The repository's commit.gpgsign, false when it isn't set. */
+function signingEnabled() {
+  try {
+    return git('config', '--bool', '--get', 'commit.gpgsign') === 'true'
+  } catch {
+    return false
   }
 }
 if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) {
@@ -55,7 +72,7 @@ if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) 
     const [mode, number] = process.argv.slice(2)
     if (mode === '--pre-push') beforePush()
     else if (mode === '--config') {
-      if (git('config', '--bool', '--get', 'commit.gpgsign') !== 'true') {
+      if (!signingEnabled()) {
         throw new Error('Signing must be enabled: git config --local commit.gpgsign true')
       }
     } else if (mode === '--pr' && /^\d+$/.test(number)) {
