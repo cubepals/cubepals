@@ -47,9 +47,10 @@ name: Second eye
 #
 # The gate job sets one status, "Second eye gate", on every pull request's head for a ruleset to
 # require: it passes at once when no sensitive path changed, and otherwise fails until a review
-# has finished, saying that it waits for v0id-user to request one. When Codex gave no review and
-# Claude answers with an explicit HTTP 429, this optional review is skipped with an availability
-# notice; every other failure still fails.
+# has finished, saying that it waits for v0id-user to request one. On a draft it is skipped: it
+# sets nothing while the draft waits, and marking it ready for review sets it. When Codex gave no
+# review and Claude answers with an explicit HTTP 429, this optional review is skipped with an
+# availability notice; every other failure still fails.
 on:
   pull_request:
     types: [opened, reopened, labeled, synchronize, ready_for_review]
@@ -539,7 +540,8 @@ jobs:
 
   # The status a ruleset requires. It runs after the others, whatever they did, and says what
   # became of the review: passed at once when no sensitive path changed, failed while a sensitive
-  # change waits for v0id-user to request one, passed once the review has finished.
+  # change waits for v0id-user to request one, passed once the review has finished, and nothing on
+  # a draft that waits.
   gate:
     name: Set the second eye gate
     needs: [sensitive, mark, review, comment]
@@ -578,6 +580,7 @@ jobs:
           REVIEW: ${{ needs.review.result }}
           COMMENT: ${{ needs.comment.result }}
           UNAVAILABLE: ${{ needs.review.outputs.unavailable }}
+          DRAFT: ${{ github.event.pull_request.draft }}
           SHA: ${{ fromJSON(needs.review.outputs.reviewed || '{}').sha || github.event.pull_request.head.sha }}
           REPO: ${{ github.repository }}
         run: bun scripts/second-eye-gate.ts

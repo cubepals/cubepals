@@ -137,9 +137,23 @@ describe('statusFor', () => {
     expect(statusFor({ ...unavailable, review: 'failure', comment: 'success' })?.state).toBe('failure')
   })
 
-  test('a review that did not finish, or waits for a draft, fails', () => {
+  test('a review that did not finish fails, on a draft too', () => {
     expect(statusFor({ ...none, mark: 'success', review: 'failure' })?.description).toContain("didn't finish")
-    expect(statusFor({ ...none, mark: 'success' })?.description).toContain('ready for review')
+    expect(statusFor({ ...none, mark: 'success', review: 'cancelled', draft: true })?.state).toBe('failure')
+  })
+
+  test('a draft that waits is skipped: no status, neither failed nor pending', () => {
+    expect(statusFor({ ...none, draft: true })).toBeUndefined()
+    // The mark job held the review back until the draft is ready.
+    expect(statusFor({ ...none, mark: 'success' })).toBeUndefined()
+  })
+
+  test('a draft still passes on what passed and fails on a broken path check', () => {
+    expect(statusFor({ ...none, sensitive: 'false', draft: true })?.state).toBe('success')
+    expect(
+      statusFor({ ...none, mark: 'success', review: 'success', comment: 'success', draft: true })?.state,
+    ).toBe('success')
+    expect(statusFor({ ...none, sensitive: '', draft: true })?.state).toBe('failure')
   })
 
   test('a path check that failed is not a pass', () => {

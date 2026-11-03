@@ -159,6 +159,23 @@ test('unavailability sets an explicit skipped status, while failed notices canno
   expect(calls.at(-1)?.body).toMatchObject({ state: 'failure' })
 })
 
+test('a draft that waits writes no status, and the same draft once ready fails until reviewed', async () => {
+  Object.assign(process.env, { DRAFT: 'true', MARK: 'skipped', REVIEW: 'skipped', COMMENT: 'skipped' })
+  const notice = spyOn(console, 'warn').mockImplementation(() => {})
+  try {
+    await runSecondEyeGate()
+    expect(calls).toHaveLength(0)
+    expect(notice).toHaveBeenCalledWith(
+      '::notice::A draft: the second eye gate is set when it is ready for review.',
+    )
+  } finally {
+    notice.mockRestore()
+  }
+  process.env.DRAFT = 'false'
+  await runSecondEyeGate()
+  expect(calls.at(-1)?.body).toMatchObject({ state: 'failure' })
+})
+
 test('path analysis includes renamed sensitive files and fails closed at the API listing limit', async () => {
   process.env.MODE = 'paths'
   files = [{ filename: 'readme.md', previous_filename: 'apps/edge/front.ts' }]

@@ -9,7 +9,10 @@
  *
  * A pull request that touches none of the sensitive paths passes at once. One that does fails
  * until v0id-user has asked for the review (the needs-second-eye label, an "@claude review"
- * line, or a run by hand) and it has finished. A proved provider HTTP 429 instead skips the
+ * line, or a run by hand) and it has finished. A draft isn't asking to be merged, so its gate is
+ * skipped: nothing is set while it waits, and marking it ready for review sets the gate again. A
+ * draft still fails on what did go wrong (a review asked for that didn't finish, a path check that
+ * broke) and passes on a finished review. A proved provider HTTP 429 instead skips the
  * optional review after publishing an availability notice. Other failures still block it. It starts
  * by itself only on a same-repository pull request that v0id-user opened and that touches a
  * sensitive path; anyone else's never spends the subscription unasked.
@@ -77,6 +80,8 @@ export interface Outcome {
   comment: string
   /** Set only by the trusted result classifier after the model returns HTTP 429. */
   unavailable?: string
+  /** True when the pull request is a draft as the event saw it. */
+  draft?: boolean
 }
 
 /** What the status says, or nothing when this run has nothing to add. */
@@ -96,10 +101,11 @@ export function statusFor(
       state: 'failure',
       description: "Couldn't tell whether this touches a path that needs a second eye.",
     }
-  if (outcome.mark === 'success' && outcome.review === 'skipped')
-    return { state: 'failure', description: 'Waits for the pull request to be ready for review.' }
-  if (outcome.mark === 'success')
+  if (outcome.mark === 'success' && outcome.review !== 'skipped')
     return { state: 'failure', description: "The second eye didn't finish. v0id-user can request it again." }
+  // A draft, or a review the mark job held back until the draft is ready: skipped, not failed.
+  // ready_for_review runs the gate again.
+  if (outcome.draft || outcome.mark === 'success') return undefined
   return {
     state: 'failure',
     description: `Touches a path that needs a second eye. Waits for ${MAINTAINER} to request it.`,
@@ -149,8 +155,11 @@ async function writeStatus(repo: string): Promise<void> {
     review: process.env.REVIEW ?? '',
     comment: process.env.COMMENT ?? '',
     unavailable: process.env.UNAVAILABLE ?? '',
+    draft: process.env.DRAFT === 'true',
   })
   const sha = process.env.SHA ?? ''
+  if (!state && process.env.DRAFT === 'true')
+    console.warn('::notice::A draft: the second eye gate is set when it is ready for review.')
   if (!state || !/^[0-9a-f]{40}$/.test(sha)) return
   if (state.state === 'failure') {
     // A review that already passed on this commit stands: an event that asks for none (a label
