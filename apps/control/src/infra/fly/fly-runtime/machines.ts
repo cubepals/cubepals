@@ -11,6 +11,7 @@
 import { z } from 'zod'
 import type { ExecResult, ProgressSink } from '../../../app/ports/runtime.ts'
 import type { FlyClient, FlySchemas } from '../client.ts'
+import type { FlyRef } from '../handle.ts'
 import { META } from '../machine-config.ts'
 import { saysClaimed, saysNotYet, saysReplacing } from '../refusals.ts'
 import { lastExit } from './observation.ts'
@@ -571,13 +572,9 @@ function seconds(timeout: string | undefined): number {
   return match ? Number(match[1]) : 90
 }
 
-/** The Minecraft machine on its allocated volume, created or brought to the requested configuration. */
 export async function provisionMachine(
   fly: FlyClient,
-  input: {
-    deployment: string
-    app: string
-    region: string
+  input: Pick<FlyRef, 'deployment' | 'app' | 'region'> & {
     volume: FlySchemas['Volume']
     existing: Machine | null
     secretsVersion: number | undefined
