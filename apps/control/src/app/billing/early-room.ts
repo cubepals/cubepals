@@ -6,7 +6,8 @@
  * Room for checkouts at an early price, as an operator sets it on the controls row: the room in
  * points, the points one checkout of each plan takes, and until when the setting holds. What the
  * room should be is decided outside the control plane; here it is only kept, capped and timed.
- * Room past its time counts as none, so the early price closes by itself when nothing renews it.
+ * The last successful setting stays in force until replaced or explicitly closed. A missed
+ * refresh must not change what a checkout costs.
  * Each change of room or points is audited.
  *
  * An admin can close it, and it stays closed, whatever is set, until one opens it again
@@ -25,7 +26,7 @@ export interface EarlyRoom {
   roomPoints: number
   /** What one checkout of each plan takes from the room. */
   points: Record<EarlyPlan, number>
-  /** When the setting stops holding, and the room counts as none; null before any was set. */
+  /** When the next refresh is due; null before any setting has been accepted. */
   validUntil: Date | null
   /**
    * When the figures it was worked out from were read, as its setter said, or else when it was set.
@@ -38,9 +39,8 @@ export interface EarlyRoom {
 }
 
 /**
- * How far ahead a setting may hold. It is meant to be renewed every few minutes, so one that
- * reaches further is refused: a stopped setter, or a token in the wrong hands, keeps the room open
- * this long at most.
+ * How far ahead a refresh may be scheduled. A stale setting remains available, with checkout
+ * holds still counted from its original read timestamp, until a successful update replaces it.
  */
 const EARLY_ROOM_MOST_AHEAD_MS = 2 * HOUR_MS
 
@@ -74,9 +74,9 @@ export async function readEarlyRoom(q: Queryable): Promise<EarlyRoom> {
   }
 }
 
-/** The room there is now: none while an admin has it closed, once its setting's time has passed, or before one was set. */
-export const roomNow = (room: EarlyRoom, now: Date): number =>
-  room.closedSince === null && room.validUntil !== null && room.validUntil > now ? room.roomPoints : 0
+/** The last accepted room: none before it is set or while an admin has it closed. */
+export const roomNow = (room: EarlyRoom): number =>
+  room.closedSince === null && room.validUntil !== null ? room.roomPoints : 0
 
 /**
  * An admin closes the early price now, or opens it again: closed, the room counts as none whatever
