@@ -86,6 +86,29 @@ A value that belongs to another system is taken from that system, never typed ou
 
 `bun run check:structure` finds JSON-RPC error numbers and SQLSTATE strings written out as literals, and units of time written out instead of imported from `@blockly/contracts/durations`.
 
+## Autonomy
+
+An agent a maintainer runs takes its work end to end, on the maintainer's access. It doesn't hand back a step it can take.
+
+- **It merges its own pull request** once CI's `check` and the Second eye gate pass, and, for the website's runtime, once the staging preview serves its pages. It squash-merges with the expected head. An open pull request is unfinished work: it merges, or it closes with the reason and what replaces it.
+- **It fixes main.** A red run on `main`, a nightly or a scheduled run is its to fix when it finds one, in a pull request of its own.
+- **It deploys production** after its change merges and a nightly has passed with it ([Production](#production)).
+- **It changes the repository's settings** in `.github/settings/`: rulesets in `rulesets/`, branch protection in `branches/`. A merge applies them (`repo-settings.yml`, with the Cubepals app's token), and `export` prints what is live. A ruleset or protection changed by hand is undone by the next apply; change the file.
+- **It decides what the core rule leaves to Blockly,** says in the pull request what it chose and why, and moves on. It asks a maintainer only for money, anything one-way on production or its data, anything public that speaks for Cubepals, and the steps this guide reserves (`staging.ts down`, rewriting published history).
+
+This is for agents the maintainer runs. A pull request from anyone else gets no secret, no deploy and no second eye, and only a maintainer merges it.
+
+## Guardrails
+
+What keeps an agent with that access from making work for the maintainer:
+
+- **No new gate without asking.** A new required check, CI job or test system (coverage, mutation testing, baselines) is a maintainer's decision. CI's time is a budget: a change that slows a pull request's CI says by how much, and one that adds more than a minute asks first.
+- **A change does what its title says.** What a player sees, what the edge caches and what a plan includes change only in a pull request whose title says so. A refactor or cleanup keeps behavior.
+- **One change per pull request, from main.** A branch doesn't build on another open pull request's branch. It waits for that one to merge, then brings in main.
+- **Fix forward, small.** A bug in merged work gets its own pull request, with a test that fails without the fix.
+- **Only what is true.** A pull request or commit says what changed and how it was checked. It never claims an approval, review or authorization nobody gave, and never says a check passed that didn't run.
+- **Stuck is a report, not a loop.** After three tries at the same failure, stop pushing: write down what fails, what was tried and what it looks like, and ask.
+
 ## CI
 
 A change isn't done when its PR is green. It is done when the runs it starts on `main` are green too.
@@ -104,9 +127,9 @@ authorization and an expected-head check; leave merged history alone.
 
 ## Production
 
-Production deploys from the **Deploy production** workflow, on GitHub's machine ([docs/production.md](docs/production.md#deploy-from-github)). An agent deploys it itself when a maintainer asks for a deploy: it runs the workflow and sees it through, rather than handing the button back.
+Production deploys from the **Deploy production** workflow, on GitHub's machine ([docs/production.md](docs/production.md#deploy-from-github)). An agent deploys it itself, when a maintainer asks and after its own change merges: it runs the workflow and sees it through, rather than handing the button back.
 
-- **Only a nightly.** `apply` takes a commit a nightly passed on staging: the newest, unless one is named. `gh workflow run deploy-production.yml -f command=apply`, then `gh run watch`.
+- **Only a nightly.** `apply` takes a commit a nightly passed on staging: the newest, unless one is named. A change that can't wait for tonight's runs the nightly itself (`gh workflow run nightly.yml`), then `gh workflow run deploy-production.yml -f command=apply`, then `gh run watch`.
 - **See it through.** Watch the run to the end, ask production for `/`, `/pricing`, `/sign-in` and `/api/health`, and say what went out.
 - **Back first, cause after.** If production fails after a deploy, run the workflow's `rollback` at once, then find the cause.
 - **Values live in the private records,** in the encrypted bundle the workflow opens. A value changed anywhere else is lost; change it there. Never print one.
