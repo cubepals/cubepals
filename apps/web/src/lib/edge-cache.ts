@@ -9,7 +9,7 @@
  * cookie is nobody, so its page is the same for everyone and is kept, in the Workers Cache API,
  * which costs nothing.
  *
- * - Only the landing page, pricing, the guides and the policies (`PUBLIC_PAGES`), and only a plain
+ * - Only the guides and the policies (`PUBLIC_PAGES`), and only a plain
  *   GET for the document. A request with a session cookie, any other page, and Next's own
  *   navigation requests (RSC) go to Next and keep its `private, no-store`.
  * - A kept page is fresh for `FRESH_S`, as long as the plans it shows are kept (lib/plans.ts);
@@ -19,18 +19,16 @@
  * - A page the render marked partial (lib/partial-render.ts: its plans couldn't be read) is
  *   answered as Next made it and never kept, and a good copy already kept stays when a new render
  *   comes back partial.
- * - The landing page has two forms, the film and a phone's own (next.config.ts sends a phone the
- *   second at the same address), so it is kept once for each.
+ * - The homepage and pricing page always render current offers, without a cached document.
  *
  * Not what Next renders, nor the scripts and pictures, which `_next/static` already serves
  * immutable.
  */
 import { DAY_S, MINUTE_S, SECOND_MS } from '@blockly/contracts/durations'
-import { PHONE_AGENT, PHONE_HINT } from '../landing/phone/agent'
 import { PARTIAL } from './partial-render'
 
-/** The landing page, pricing, the guides and the policies: the same for everyone signed out. */
-const PUBLIC_PAGES = /^\/(?:pricing|guides(?:\/[a-z0-9-]+)?|legal(?:\/[a-z0-9-]+)?)?$/
+/** Guides and policies can be kept. Pages with live offers must always render afresh. */
+const PUBLIC_PAGES = /^\/(?:guides(?:\/[a-z0-9-]+)?|legal(?:\/[a-z0-9-]+)?)$/
 
 /** better-auth's session cookies, under whatever prefix the deployment gives them. */
 const SESSION_COOKIE = /(?:^|;\s*)[^=;]*\.session_(?:token|data)=/
@@ -50,11 +48,6 @@ export interface EdgeCache {
   put(key: Request, response: Response): Promise<void>
 }
 
-const PHONE = {
-  agent: new RegExp(`^${PHONE_AGENT}$`),
-  hint: new RegExp(`^${PHONE_HINT}$`),
-}
-
 /**
  * The key a request's page is kept under in this version of the Worker, or null when it is never
  * kept: not a public page, not a plain GET for the document, or from someone signed in.
@@ -66,13 +59,7 @@ function edgeKey(request: Request, version: string | undefined): Request | null 
   const headers = request.headers
   if (SESSION_COOKIE.test(headers.get('cookie') ?? '')) return null
   if (headers.has('rsc') || headers.has('next-router-prefetch') || url.searchParams.has('_rsc')) return null
-  const phone =
-    PHONE.agent.test(headers.get('user-agent') ?? '') ||
-    PHONE.hint.test(headers.get('sec-ch-ua-mobile') ?? '')
-  const form = url.pathname === '/' && phone ? 'phone' : 'page'
-  return new Request(
-    `${url.origin}/__edge/${encodeURIComponent(version)}/${form}${url.pathname}${url.search}`,
-  )
+  return new Request(`${url.origin}/__edge/${encodeURIComponent(version)}/page${url.pathname}${url.search}`)
 }
 
 /**

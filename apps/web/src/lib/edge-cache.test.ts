@@ -61,11 +61,11 @@ function edge() {
 }
 
 describe('the pages kept at the edge', () => {
-  test('a signed-out visitor gets the landing page from the edge after the first', async () => {
+  test('a signed-out visitor gets a guide from the edge after the first', async () => {
     const site = edge()
-    const first = await site.ask('/')
+    const first = await site.ask('/guides')
     expect(first.response.headers.get(EDGE)).toBe('miss')
-    const second = await site.ask('/', { cookie: 'ph_phc_x_posthog=%7B%7D' })
+    const second = await site.ask('/guides', { cookie: 'ph_phc_x_posthog=%7B%7D' })
     expect(second.response.headers.get(EDGE)).toBe('hit')
     expect(second.body).toBe(first.body)
     expect(site.made()).toBe(1)
@@ -74,9 +74,9 @@ describe('the pages kept at the edge', () => {
     )
   })
 
-  test('pricing, the guides and the policies are kept too', async () => {
+  test('the guides and the policies are kept', async () => {
     const site = edge()
-    for (const path of ['/pricing', '/guides', '/guides/minecraft-server-cost', '/legal', '/legal/terms']) {
+    for (const path of ['/guides', '/guides/minecraft-server-cost', '/legal', '/legal/terms']) {
       await site.ask(path)
       expect((await site.ask(path)).response.headers.get(EDGE)).toBe('hit')
     }
@@ -84,7 +84,7 @@ describe('the pages kept at the edge', () => {
 
   test('someone signed in is never answered from the edge, nor kept there', async () => {
     const site = edge()
-    await site.ask('/')
+    await site.ask('/guides')
     for (const path of ['/', '/pricing', '/guides', '/legal/terms']) {
       const { response, body } = await site.ask(path, { cookie: SIGNED_IN })
       expect(response.headers.get('cache-control')).toBe(NEXT_PRIVATE)
@@ -116,45 +116,51 @@ describe('the pages kept at the edge', () => {
 
   test("Next's own navigation requests go to Next", async () => {
     const site = edge()
-    await site.ask('/', { rsc: '1' })
+    await site.ask('/guides', { rsc: '1' })
     await site.ask('/?_rsc=x1')
     await site.ask('/pricing', { 'next-router-prefetch': '1' })
     expect(site.kept.size).toBe(0)
   })
 
-  test("a phone's landing page is kept apart from the film's", async () => {
+  test('desktop and phone pricing pages always render the current offers', async () => {
     const site = edge()
-    expect((await site.ask('/')).body).toContain('film')
-    expect((await site.ask('/', { 'user-agent': IPHONE })).body).toContain('phone')
-    expect((await site.ask('/', { 'sec-ch-ua-mobile': '?1', 'user-agent': IPHONE })).body).toContain('phone')
-    expect((await site.ask('/')).body).toContain('film')
-    expect(site.made()).toBe(2)
+    const devices: Record<string, string>[] = [{}, { 'user-agent': IPHONE }]
+    for (const path of ['/', '/pricing']) {
+      for (const headers of devices) {
+        const first = await site.ask(path, headers)
+        const second = await site.ask(path, headers)
+        expect(second.body).not.toBe(first.body)
+        expect(second.response.headers.get('cache-control')).toBe(NEXT_PRIVATE)
+        expect(second.response.headers.has(EDGE)).toBe(false)
+      }
+    }
+    expect(site.kept.size).toBe(0)
   })
 
   test('a new deploy never answers with the last one’s pages', async () => {
     const site = edge()
-    await site.ask('/', {}, 'v1')
-    expect((await site.ask('/', {}, 'v2')).response.headers.get(EDGE)).toBe('miss')
+    await site.ask('/guides', {}, 'v1')
+    expect((await site.ask('/guides', {}, 'v2')).response.headers.get(EDGE)).toBe('miss')
     expect(site.made()).toBe(2)
     // Without a version the Worker can't tell deploys apart, so nothing is kept.
-    await site.ask('/', {}, '')
+    await site.ask('/guides', {}, '')
     expect(site.made()).toBe(3)
   })
 
   test('a page past its time is answered while a new one is made', async () => {
     const site = edge()
-    await site.ask('/')
+    await site.ask('/guides')
     site.pass(FRESH_S * SECOND_MS + 1)
-    const stale = await site.ask('/')
+    const stale = await site.ask('/guides')
     expect(stale.response.headers.get(EDGE)).toBe('stale')
     expect(stale.body).toBe('<html>film 1</html>')
     expect(site.made()).toBe(2)
-    expect((await site.ask('/')).body).toBe('<html>film 2</html>')
+    expect((await site.ask('/guides')).body).toBe('<html>film 2</html>')
   })
 
   test('an answer that sets a cookie is never kept', async () => {
     const kept = new Map<string, Response>()
-    const response = await fromEdge(new Request(`${ORIGIN}/`), {
+    const response = await fromEdge(new Request(`${ORIGIN}/guides`), {
       version: 'v1',
       cache: { match: async () => undefined, put: async (key, value) => void kept.set(key.url, value) },
       render: async () =>
@@ -175,10 +181,10 @@ describe('a page made without its plans', () => {
     return { url: `http://127.0.0.1:${server.port}`, stop: () => server.stop(true) }
   }
 
-  /** The Worker's own render of /pricing: the real plans read, inside the real mark. */
+  /** The Worker's own render of a guide: the real plans read, inside the real mark. */
   async function pricing(cache: EdgeCache, pass: () => number, pending: Promise<unknown>[]) {
     const response = await fromEdge(
-      new Request(`${ORIGIN}/pricing`, { headers: { 'user-agent': DESKTOP } }),
+      new Request(`${ORIGIN}/guides/minecraft-server-cost`, { headers: { 'user-agent': DESKTOP } }),
       {
         version: 'v1',
         cache,

@@ -6,7 +6,6 @@
 
 import {
   type AccountOverviewView,
-  asHeld,
   type PublicPlan,
   sameSitePath,
   UPGRADE_REASONS,
@@ -32,14 +31,15 @@ import {
   Modal,
   Note,
   PageSkeleton,
-  PlanCard,
   Skeleton,
   Tip,
 } from '../../../ui'
+import { OfferCard, PlanCards } from '../../../ui/plan-card'
 import { ctaMark, planMark, seenMark } from '../../(public)/steps'
 import { FreeHoursUsed } from '../free-hours-used'
 import { PlusOffer } from '../plus-offer'
 import { planAction } from './plan-action'
+import { usePlanPresentation } from './plan-presentation'
 import { PriceSwitch } from './price-switch'
 
 /** The signed-in person's plan: what it allows, what they use of it, and upgrading or managing it. */
@@ -477,6 +477,17 @@ function Plan({ overview }: { overview: AccountOverviewView }) {
         <Note tone="info">{billing.message}</Note>
       )}
       <Owed extra={overview.usage.extra} />
+      {overview.plan.billed !== null &&
+        overview.plan.billed.status !== 'ended' &&
+        overview.plan.billed.planKey === overview.plan.key &&
+        overview.plan.year === null && (
+          <p className="type-body-sm">
+            Your current subscription: {money(overview.entitlements.monthlyPriceCents)} a month
+            {overview.entitlements.includedUnits === null
+              ? '.'
+              : ` with ${overview.entitlements.includedUnits} hours of play each month.`}
+          </p>
+        )}
       {billing?.available && (
         <p className="type-body-sm" style={{ color: 'var(--ink-muted)' }}>
           Got a gift code? <Link href="/redeem">Redeem it</Link>.
@@ -677,6 +688,7 @@ function Includes({ overview }: { overview: AccountOverviewView }) {
  */
 function Plans({ overview }: { overview: AccountOverviewView }) {
   const trpc = useTRPC()
+  const bedrock = usePlanPresentation()
   const plans = useQuery(trpc.billing.plans.queryOptions())
   const sells = overview.features.find((f) => f.feature === 'billing')?.available === true
   if (plans.data === undefined) return null
@@ -689,20 +701,28 @@ function Plans({ overview }: { overview: AccountOverviewView }) {
   }
   return (
     <FormSection title="Plans">
-      <div className="bk-plans">
+      <PlanCards>
         {cards.map((plan) => (
-          <PlanCard
+          <OfferCard
             key={plan.key}
-            plan={asHeld(plan, overview.entitlements)}
+            plan={plan}
+            plans={plans.data}
+            bedrock={bedrock}
             trial={plan === starter ? trial : undefined}
             current={yours(plan)}
-            // Only the player's own plan is dark, so the eye lands on theirs.
-            solid={yours(plan) !== false}
             mark={seenMark(`plan_${plan.key}`)}
-            action={planAction(plan, plans.data, overview, sells)}
+            checkout={
+              sells
+                ? (term) => ({
+                    href: checkoutHref({ plan: plan.key, term, reason: 'account' }),
+                    mark: planMark(plan.key, term),
+                  })
+                : undefined
+            }
+            action={planAction(plan, plans.data, overview, sells) ?? null}
           />
         ))}
-      </div>
+      </PlanCards>
     </FormSection>
   )
 }
