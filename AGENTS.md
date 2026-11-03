@@ -109,6 +109,17 @@ What keeps an agent with that access from making work for the maintainer:
 - **Only what is true.** A pull request or commit says what changed and how it was checked. It never claims an approval, review or authorization nobody gave, and never says a check passed that didn't run.
 - **Stuck is a report, not a loop.** After three tries at the same failure, stop pushing: write down what fails, what was tried and what it looks like, and ask.
 
+## Code Review Rules
+
+What a reviewer of a pull request here reports, Codex's GitHub review included, and what the second eye's Claude checks too (`.github/second-eye.md`). Only what was checked against the code and is wrong:
+
+- **Bugs:** wrong behaviour, broken edge cases, races, errors swallowed.
+- **Security:** access checks, secrets, injection, untrusted input.
+- **Data or money:** data lost or corrupted, migrations, billing, hours.
+- **This guide's rules:** the core rule, the name rules, the structure rules, and business internals put anywhere public.
+
+Never praise, a summary of the diff, style, or anything CI already reports.
+
 ## CI
 
 A change isn't done when its PR is green. It is done when the runs it starts on `main` are green too.

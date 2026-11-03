@@ -60,7 +60,7 @@ beforeEach(() => {
     'COMMENT_AUTHOR',
     'REVIEWER',
     'MODEL',
-    'EFFORT',
+    'SOURCE',
     'FALLBACK',
   ])
     delete process.env[key]
@@ -255,6 +255,10 @@ test('a completed review publishes its actual verdict, and a later head keeps it
 test('the published review names the reviewer the workflow says wrote it', async () => {
   process.env.REVIEW = JSON.stringify({ verdict: 'merge', findings: [] })
   process.env.REVIEWED = JSON.stringify({ sha: SHA, files: 1, additions: 1, deletions: 0 })
+  process.env.PREVIOUS = JSON.stringify({
+    sha: HEAD,
+    findings: [{ severity: 'low', file: 'a', line: 1, problem: 'p' }],
+  })
   const published = async () => {
     calls = []
     comments = []
@@ -262,18 +266,23 @@ test('the published review names the reviewer the workflow says wrote it', async
     const post = calls.find((call) => call.path.endsWith('/comments') && call.method === 'POST')
     return (post?.body as { body: string } | undefined)?.body ?? ''
   }
-  Object.assign(process.env, { REVIEWER: 'codex', MODEL: 'gpt-6.1-sol', EFFORT: 'medium' })
+  const source = `https://github.com/${REPO}/pull/42#pullrequestreview-9`
+  Object.assign(process.env, { REVIEWER: 'codex', SOURCE: source })
   const codex = await published()
   expect(codex).toContain('AI review by Codex')
-  expect(codex).toContain('| **Reviewer** | Codex · `gpt-6.1-sol`, medium effort ·')
-  Object.assign(process.env, { REVIEWER: 'claude', MODEL: 'claude-test', EFFORT: '', FALLBACK: 'failed' })
+  expect(codex).toContain(`| **Reviewer** | Codex · [its review on this pull request](${source}) ·`)
+  // Codex's review doesn't settle the earlier findings, so the comment doesn't claim it did.
+  expect(codex).not.toContain('Since the last review')
+  Object.assign(process.env, { REVIEWER: 'claude', MODEL: 'claude-test', SOURCE: '', FALLBACK: 'silent' })
   const claude = await published()
   expect(claude).toContain('AI review by Claude')
   expect(claude).toContain(
-    '| **Reviewer** | Claude · `claude-test` · in place of Codex, which gave no review ·',
+    "| **Reviewer** | Claude · `claude-test` · in place of Codex, which didn't review this commit ·",
   )
+  expect(claude).toContain('Since the last review')
   process.env.FALLBACK = 'anything else'
   expect(await published()).toContain('| **Reviewer** | Claude · `claude-test` · [Workflow run]')
+  delete process.env.PREVIOUS
 })
 
 test('review publication defaults missing metadata and keeps an existing correct verdict label', async () => {

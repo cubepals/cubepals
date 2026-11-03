@@ -4,32 +4,31 @@
 
 name: Second eye
 
-# A second reviewer for a sensitive pull request. Codex reviews first, as CODEX_MODEL at
-# CODEX_EFFORT effort, with the repository's OPENAI_API_KEY. When Codex gives no review (the key
-# isn't set, it fails or times out, or its answer isn't in the review's shape), Claude reviews in
-# its place, on the maintainer's Claude subscription (CLAUDE_CODE_OAUTH_TOKEN). The comment names
-# the reviewer that wrote it, and says when Claude stood in for Codex. It runs only when v0id-user
-# asks: by adding the needs-second-eye label, by a comment with a line starting "@claude review",
-# or with `gh workflow run second-eye.yml -f pr=<number>`. Anyone else's label, comment or re-run
-# skips it, so nobody else can spend either account. What the reviewer looks for and how it
-# answers is .github/second-eye.md, which is its whole prompt, and .github/second-eye.schema.json
-# is the shape of its answer; both reviewers get the same two.
+# A second reviewer for a sensitive pull request. Codex reviews first: its own GitHub review, which
+# runs on the maintainer's Codex plan on OpenAI's servers once code review is on for this
+# repository in Codex's settings. The review job waits up to CODEX_WAIT_MINUTES for that review of
+# the commit it read (scripts/second-eye-codex.ts) and makes it the answer. When none comes in
+# time, Claude reviews in its place, on the maintainer's Claude subscription
+# (CLAUDE_CODE_OAUTH_TOKEN). The comment names the reviewer that wrote it, links Codex's own review,
+# and says when Claude stood in. It runs only when v0id-user asks: by adding the needs-second-eye
+# label, by a comment with a line starting "@claude review", or with
+# `gh workflow run second-eye.yml -f pr=<number>`. Anyone else's label, comment or re-run skips it,
+# so nobody else can spend the subscription. What Claude looks for and how it answers is
+# .github/second-eye.md, its whole prompt, and .github/second-eye.schema.json is the answer's shape.
 #
-# One pass covers the whole pull request: the turns Claude may use grow with the number of changed
-# files (TURNS_BASE plus TURNS_PER_FILE each, up to TURNS_MOST), and the answer has no cap on the
-# findings. A later pass is given the findings of the earlier one, read from the data block the
-# comment keeps, and settles each (fixed, gone or still open) before it looks for more, whichever
-# reviewer wrote them.
+# One pass of Claude covers the whole pull request: the turns it may use grow with the number of
+# changed files (TURNS_BASE plus TURNS_PER_FILE each, up to TURNS_MOST), and the answer has no cap
+# on the findings. A later pass of Claude is given the findings of the earlier one, read from the
+# data block the comment keeps, and settles each (fixed, gone or still open) before it looks for
+# more. A review by Codex stands on its own.
 #
-# The jobs that can write never meet either model. The review job holds read-only tokens: it
-# checks out the commit this workflow came from (the default branch, or for a label or a push the
-# pull request itself, which already wrote this file), saves the pull request's description and
-# diff as data in .second-eye/, and runs the reviewer. Codex runs in its read-only permission
-# profile: it may read the workspace and run commands that change nothing, with no network, and
-# the OpenAI key stays in the action's proxy, out of its reach. Claude has no shell and no tool but
-# reading files in the workspace. The answer is JSON in a fixed shape. The comment job writes it as
-# Cubepals' bot (github-actions[bot] without the app), editing its earlier review instead of adding
-# one, and labels the pull request review/ai-merge or review/ai-fix-first.
+# The jobs that can write never meet Claude. The review job holds read-only tokens: it checks out
+# the commit this workflow came from (the default branch, or for a label or a push the pull
+# request itself, which already wrote this file), saves the pull request's description and diff
+# as data in .second-eye/, reads Codex's review through the API, and runs Claude with no shell and
+# no tool but reading files in the workspace. The answer is JSON in a fixed shape. The comment job
+# writes it as Cubepals' bot (github-actions[bot] without the app), editing its earlier review
+# instead of adding one, and labels the pull request review/ai-merge or review/ai-fix-first.
 #
 # It follows the pull request: once it has been asked for (the pull request carries
 # needs-second-eye, or a verdict label), each push v0id-user makes reviews the new head again. The
@@ -48,7 +47,7 @@ name: Second eye
 # The gate job sets one status, "Second eye gate", on every pull request's head for a ruleset to
 # require: it passes at once when no sensitive path changed, and otherwise fails until a review
 # has finished, saying that it waits for v0id-user to request one. On a draft it is skipped: it
-# sets nothing while the draft waits, and marking it ready for review sets it. When Codex gave no
+# sets nothing while the draft waits, and marking it ready for review sets it. When Codex didn't
 # review and Claude answers with an explicit HTTP 429, this optional review is skipped with an
 # availability notice; every other failure still fails.
 on:
@@ -219,7 +218,7 @@ jobs:
       && needs.mark.result == 'success'
       && needs.mark.outputs.review == 'true'
     runs-on: ubuntu-latest
-    # The quiet window, Codex's review (25 minutes at most) and Claude's in its place.
+    # The quiet window, the wait for Codex's review and Claude's in its place.
     timeout-minutes: 90
     permissions:
       actions: read
@@ -232,15 +231,13 @@ jobs:
       previous: ${{ steps.pull.outputs.previous }}
       reviewer: ${{ steps.reviewer.outputs.reviewer }}
       model: ${{ steps.reviewer.outputs.model }}
-      effort: ${{ steps.reviewer.outputs.effort }}
+      source: ${{ steps.reviewer.outputs.source }}
       fallback: ${{ steps.reviewer.outputs.fallback }}
       unavailable: ${{ steps.result.outputs.unavailable }}
     env:
       PR: ${{ github.event.pull_request.number || github.event.issue.number || inputs.pr }}
-      # The first reviewer. Only whether the key is set reaches the job's environment, never the key.
-      CODEX_MODEL: gpt-6.1-sol
-      CODEX_EFFORT: medium
-      CODEX_SET_UP: ${{ secrets.OPENAI_API_KEY != '' }}
+      # How long Codex's own review of the commit is waited for before Claude reviews instead.
+      CODEX_WAIT_MINUTES: 15
     steps:
       # A push waits briefly for the pushes right after it (a burst of commits), and the job that
       # wakes to a newer push stands down (the next step). Five minutes catches a burst without
@@ -319,8 +316,7 @@ jobs:
         if: steps.newer.outputs.superseded != 'true'
         with:
           bun-version: 1.4.3
-      # The prompt, the answer's shape for Claude, and the same shape for Codex without maxLength,
-      # which OpenAI's strict schemas don't take.
+      # The prompt and the answer's shape, for Claude.
       - name: Load the rules
         id: rules
         if: steps.newer.outputs.superseded != 'true'
@@ -329,36 +325,23 @@ jobs:
           {
             echo "prompt<<$delimiter"; cat .github/second-eye.md; echo "$delimiter"
             echo "schema=$(jq -c . .github/second-eye.schema.json)"
-            echo "codex_schema=$(jq -c 'walk(if type == "object" then del(.maxLength) else . end)' .github/second-eye.schema.json)"
           } >> "$GITHUB_OUTPUT"
-      # Codex reviews first. The action keeps the key in a proxy Codex can't read, takes sudo away
-      # from the runner for the rest of the job (nothing after it needs sudo), and runs Codex in the
-      # read-only permission profile: it reads and searches the workspace and runs commands that
-      # change nothing, with no network. Anything short of an answer in the review's shape hands
-      # the review to Claude.
-      - name: Review with Codex
-        id: codex
-        if: steps.newer.outputs.superseded != 'true' && env.CODEX_SET_UP == 'true'
-        continue-on-error: true
-        timeout-minutes: 25
-        uses: openai/codex-action@bdf19a4a223ec2549a3e2274a0cf61556bc07675 # v1.13
-        with:
-          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
-          codex-version: 0.164.0
-          model: ${{ env.CODEX_MODEL }}
-          effort: ${{ env.CODEX_EFFORT }}
-          permission-profile: ':read-only'
-          prompt-file: .github/second-eye.md
-          output-schema: ${{ steps.rules.outputs.codex_schema }}
-      - name: Read Codex's answer
+      # Codex reviews first, with its own GitHub review on the Codex plan. This waits for that
+      # review of the commit read above and makes it the answer. When none comes in
+      # CODEX_WAIT_MINUTES, or this step fails, Claude reviews in its place.
+      - name: Wait for Codex's review
         id: answer
         if: steps.newer.outputs.superseded != 'true'
+        continue-on-error: true
+        timeout-minutes: 20
         env:
-          MODE: codex
-          OUTCOME: ${{ steps.codex.outcome }}
-          MESSAGE: ${{ steps.codex.outputs['final-message'] }}
-        run: bun scripts/second-eye-result.ts
-      # Claude, when Codex gave no review, may read files in the workspace and nothing else: no
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PULL: ${{ env.PR }}
+          SHA: ${{ fromJSON(steps.pull.outputs.reviewed).sha }}
+          WAIT_MINUTES: ${{ env.CODEX_WAIT_MINUTES }}
+        run: bun scripts/second-eye-codex.ts
+      # Claude, when Codex didn't review, may read files in the workspace and nothing else: no
       # shell, no edits, no web, and no path where a secret lives (the process's environment, the
       # home directory's settings, the runner's files, the git config the action writes its token
       # into).
@@ -425,24 +408,24 @@ jobs:
               (.permission_denials // [] | .[] | "Refused: \(.tool_name) \(.tool_input.file_path // .tool_input.path // .tool_input.pattern // "" | gsub("[\\r\\n]+"; " "))"),
               (select(.is_error == true) | if env.UNAVAILABLE == "true" then "::notice::Automated review unavailable. Skipped for this commit." else "::error::\(.result // "no result" | gsub("[\\r\\n]+"; " ")) (\(.terminal_reason // .subtype // "unknown"), HTTP \(.api_error_status // "none"))" end)' \
             "$EXECUTION_FILE"
-      # Which reviewer wrote the review, for the comment: Codex with its model and effort, or
-      # Claude with the model its run's first message names and why Codex didn't review (off: no
-      # key; failed: no review in the answer's shape). Only the characters a model's name has, so
-      # nothing else reaches the comment.
+      # Which reviewer wrote the review, for the comment: Codex with a link to its own review, or
+      # Claude with the model its run's first message names, in Codex's place. Only the characters a
+      # model's name has, and only a GitHub address, so nothing else reaches the comment.
       - name: Name the reviewer
         id: reviewer
         if: steps.newer.outputs.superseded != 'true'
         env:
           CODEX: ${{ steps.answer.outputs.codex }}
+          SOURCE: ${{ steps.answer.outputs.url }}
           EXECUTION_FILE: ${{ steps.claude.outputs.execution_file }}
         run: |
           if [ "$CODEX" = answered ]; then
-            { echo "reviewer=codex"; echo "model=$CODEX_MODEL"; echo "effort=$CODEX_EFFORT"; } >> "$GITHUB_OUTPUT"
+            source="$(printf '%s' "$SOURCE" | grep -E '^https://github\.com/[^[:space:]]+$' || true)"
+            { echo "reviewer=codex"; echo "source=$source"; } >> "$GITHUB_OUTPUT"
           elif [ -n "$EXECUTION_FILE" ]; then
             model="$(jq -r '[.[] | select(.type == "system" and .subtype == "init")][0].model // ""' "$EXECUTION_FILE" | tr -cd '[:alnum:]._-')"
-            { echo "reviewer=claude"; echo "model=$model"; echo "fallback=$CODEX"; } >> "$GITHUB_OUTPUT"
+            { echo "reviewer=claude"; echo "model=$model"; echo "fallback=silent"; } >> "$GITHUB_OUTPUT"
           fi
-
   comment:
     name: Comment
     needs: review
@@ -487,7 +470,7 @@ jobs:
           PREVIOUS: ${{ needs.review.outputs.previous }}
           REVIEWER: ${{ needs.review.outputs.reviewer }}
           MODEL: ${{ needs.review.outputs.model }}
-          EFFORT: ${{ needs.review.outputs.effort }}
+          SOURCE: ${{ needs.review.outputs.source }}
           FALLBACK: ${{ needs.review.outputs.fallback }}
           NOTICE: ${{ needs.review.outputs.unavailable == 'true' && 'unavailable' || '' }}
           REPO: ${{ github.repository }}
