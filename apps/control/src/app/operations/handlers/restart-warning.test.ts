@@ -6,6 +6,7 @@
 import { describe, expect, test } from 'bun:test'
 import { announce, LIST_UUIDS } from '../../../minecraft/console.ts'
 import type { ConsoleTarget } from '../../ports/minecraft.ts'
+import { RESTARTING, RESTARTING_FOR_A_CHANGE } from './restart-notice.ts'
 import { COUNTDOWN, restartLine, warnBeforeRestart } from './restart-warning.ts'
 
 const target: ConsoleTarget = { endpoint: { host: 'game.test', port: 25575 }, passwords: ['secret'] }
@@ -38,22 +39,36 @@ const two =
 describe('the countdown before a restart', () => {
   test('counts down to whoever is on: ten seconds, then three, then the restart', async () => {
     const g = game(two)
-    expect(await warnBeforeRestart(g.console, target, g.pause)).toBe(2)
-    expect(g.heard).toEqual([LIST_UUIDS, announce(restartLine(10)), announce(restartLine(3))])
+    expect(await warnBeforeRestart(g.console, target, RESTARTING_FOR_A_CHANGE, g.pause)).toBe(2)
+    expect(g.heard).toEqual([
+      LIST_UUIDS,
+      announce(restartLine(10, RESTARTING_FOR_A_CHANGE)),
+      announce(restartLine(3, RESTARTING_FOR_A_CHANGE)),
+    ])
     expect(g.paused).toEqual([7000, 3000])
   })
 
-  test('says why, and when they can come back', () => {
+  test('a change says why, and when they can come back', () => {
     expect(COUNTDOWN).toEqual([10, 3])
-    expect(restartLine(10)).toBe(
+    expect(restartLine(10, RESTARTING_FOR_A_CHANGE)).toBe(
       'The server restarts in 10 seconds for a change its owner made. You can join again in about a minute.',
     )
-    expect(restartLine(3)).toBe('Restarting in 3 seconds. See you in a minute.')
+    expect(restartLine(3, RESTARTING_FOR_A_CHANGE)).toBe('Restarting in 3 seconds. See you in a minute.')
+  })
+
+  test('a plain restart claims no change', async () => {
+    expect(restartLine(10, RESTARTING)).toBe(
+      'The server restarts in 10 seconds. You can join again in about a minute.',
+    )
+    expect(restartLine(3, RESTARTING)).toBe('Restarting in 3 seconds. See you in a minute.')
+    const g = game(two)
+    await warnBeforeRestart(g.console, target, RESTARTING, g.pause)
+    expect(g.heard.join('\n')).not.toContain('change')
   })
 
   test('nobody on: no line, no wait', async () => {
     const g = game('There are 0 of a max of 10 players online:')
-    expect(await warnBeforeRestart(g.console, target, g.pause)).toBe(0)
+    expect(await warnBeforeRestart(g.console, target, RESTARTING, g.pause)).toBe(0)
     expect(g.heard).toEqual([LIST_UUIDS])
     expect(g.paused).toEqual([])
   })
@@ -61,20 +76,20 @@ describe('the countdown before a restart', () => {
   test('a game that doesn’t say who is on delays nothing', async () => {
     for (const answer of [new Error('Connection refused'), 'Unknown or incomplete command']) {
       const g = game(answer)
-      expect(await warnBeforeRestart(g.console, target, g.pause)).toBe(0)
+      expect(await warnBeforeRestart(g.console, target, RESTARTING, g.pause)).toBe(0)
       expect(g.paused).toEqual([])
     }
   })
 
   test('a line that doesn’t get through still waits out the countdown', async () => {
     const g = game(two, true)
-    expect(await warnBeforeRestart(g.console, target, g.pause)).toBe(2)
+    expect(await warnBeforeRestart(g.console, target, RESTARTING, g.pause)).toBe(2)
     expect(g.paused).toEqual([7000, 3000])
   })
 
   test('waits for real when no pause is given', async () => {
     const g = game('There are 0 of a max of 10 players online:')
     // Nobody on, so the real wait is never reached: the default is only the clock.
-    expect(await warnBeforeRestart(g.console, target)).toBe(0)
+    expect(await warnBeforeRestart(g.console, target, RESTARTING)).toBe(0)
   })
 })

@@ -44,7 +44,7 @@ export function gameConsole(deps: {
    */
   const windDown = async (server: MinecraftServer, handle: RuntimeHandle, why?: string): Promise<boolean> => {
     if (why !== undefined) {
-      await warnBeforeRestart(deps.console, consoleTarget(server, handle))
+      await warnBeforeRestart(deps.console, consoleTarget(server, handle), why)
       await notice.sendOff(server, handle, why)
     }
     await deps.access.reconcile(server, handle, 'import').catch(() => undefined)
