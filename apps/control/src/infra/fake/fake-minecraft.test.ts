@@ -311,6 +311,7 @@ describe('a start', () => {
     const m = await machine(env)
     await minecraft.start(m)
     expect(await minecraft.jars(m.key)).toEqual(['forced.jar', 'keep.jar'])
+    expect(await startupBanners(minecraft, m.key)).toHaveLength(1)
     expect(await minecraft.file(m.key, 'config/a.txt')).toBe('server a')
     expect(await minecraft.file(m.key, 'skip.txt')).toBeNull()
     expect(await minecraft.file(m.key, '.modrinth-modpack-manifest.json')).toBe(
@@ -767,3 +768,7 @@ describe('the log', () => {
     expect(await minecraft.jars(m.key)).toEqual([])
   })
 })
+
+async function startupBanners(minecraft: FakeMinecraft, key: string) {
+  return (await lines(minecraft, key)).filter((line) => line.includes('Starting minecraft server version'))
+}

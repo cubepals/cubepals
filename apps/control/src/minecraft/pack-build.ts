@@ -17,11 +17,9 @@ import { compareVersions } from './versions.ts'
  */
 
 /**
- * Where a jar of a pack runs, from the best evidence there is. The catalog's own record of that
- * exact file comes first: Modrinth's per-version environment is right far more often than a pack's
- * marks (Better MC 4 marks 63 mods made for players' games as needed on the server).
- * Then what the jar says of itself. With neither, it runs on both sides, which is what almost
- * every mod does.
+ * Where a jar of a pack runs: its loader's explicit declaration, then the catalog's record of
+ * that exact file. A pack's own marks are not side evidence (Better MC 4 marks client mods as
+ * server requirements). Without either source, both sides remain possible.
  */
 export function jarSide(evidence: {
   catalog?: ModEnvironment | null
@@ -32,9 +30,9 @@ export function jarSide(evidence: {
   if (side !== null) return side
   // An optional server companion is not needed to bring a player's world or pack to a server.
   if (evidence.catalog === 'client_only_server_optional') return 'client'
-  if (evidence.catalog && evidence.catalog !== 'unknown')
-    return serverEnvironment(evidence.catalog) ?? 'client'
-  return 'both'
+  return evidence.catalog && evidence.catalog !== 'unknown'
+    ? (serverEnvironment(evidence.catalog) ?? 'client')
+    : 'both'
 }
 
 /**

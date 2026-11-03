@@ -315,7 +315,7 @@
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/control/src/domain/server/lifecycle.ts › function decide": {
-      "n": 43,
+      "n": 47,
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/control/src/infra/auth/github-sign-in.test.ts › describe.skipIf GitHub sign-in › beforeAll › globalThis.fetch = (async (input: string | URL | Request, in…": {
@@ -917,7 +917,7 @@
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/control/src/app/control-plane.ts › function composeControlPlane": {
-      "n": 215,
+      "n": 217,
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/control/src/app/curation/catalog-check.ts › function checkCatalogRelease": {
@@ -1101,7 +1101,7 @@
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/control/src/infra/fake/fake-minecraft.test.ts › describe a start": {
-      "n": 146,
+      "n": 147,
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/control/src/infra/fake/fake-minecraft.test.ts › describe the console": {
@@ -1197,7 +1197,7 @@
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/control/src/testing/harness.ts › function startHarness": {
-      "n": 168,
+      "n": 170,
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/web/src/app/(app)/servers/[id]/backups/page.tsx › function Backups": {

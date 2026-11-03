@@ -49,6 +49,23 @@ describe.skipIf(!hasDatabase)('mods from two catalogs', () => {
       ],
     )
 
+  test('native declarations retain their exact artifact hash in the migrated catalog cache', async () => {
+    const file = cdn.file(randomUUID())
+    const versionId = randomUUID()
+    await h.db.insert(schema.catalogVersionNeeds).values({
+      catalog: 'modrinth',
+      versionId,
+      fileSha512: file.sha512,
+      nativeMetadata: {},
+      readAt: new Date(),
+    })
+    const row = await h.db.query.catalogVersionNeeds.findFirst({
+      where: (t, { eq }) => eq(t.versionId, versionId),
+    })
+    expect(row?.fileSha512).toBe(file.sha512)
+    expect(row?.nativeMetadata).toEqual({})
+  })
+
   test('a plugin from Hangar sits beside one from Modrinth: pinned to its catalog, installed, refreshed', async () => {
     publish('hangar:2087', 'OldCombatMechanics', 'hangar:31271')
     publish('chunky', 'Chunky', 'chunky-1')

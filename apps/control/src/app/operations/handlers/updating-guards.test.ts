@@ -15,8 +15,9 @@ import { resetHeartsCommand } from '../../../minecraft/lifesteal.ts'
 import { Cdn } from '../../../testing/cdn.ts'
 import { hasDatabase, startHarness } from '../../../testing/harness.ts'
 import { ArtifactUnavailable } from '../../artifacts/service.ts'
+import { IncompatibleMods, ValidationUnavailable } from '../../mods/validation-runtime.ts'
 import { RuntimeRouter } from '../../runtimes/router.ts'
-import { loadRuntime, saveLifecycle } from '../../servers/persistence.ts'
+import { loadRevision, loadRuntime, saveLifecycle, setDesired } from '../../servers/persistence.ts'
 import { NoLongerApplies, type OperationContext } from '../runner.ts'
 import { serverBinding } from './binding.ts'
 import { gameConsole } from './game-console.ts'
@@ -36,11 +37,11 @@ afterAll(async () => {
   )
 }, 30 * SECOND_MS)
 
-async function fixture() {
+async function fixture(loader?: 'fabric') {
   harness ??= startHarness()
   const h = await harness
-  const owner = await h.user()
-  const created = await h.create(owner)
+  const owner = await h.user('Guard', loader ? 'plus' : 'free')
+  const created = await h.create(owner, loader ? { loader } : {})
   const server = await h.until(created.id, 'running')
   const [operation] = await h.settled(server.id)
   if (!operation) throw new Error('Provisioning must leave an operation')
@@ -82,7 +83,7 @@ async function fixture() {
     reached: () => null,
     stillApplies: async () => true,
   }
-  return { h, server, runtime, binding, deps, ctx, steps }
+  return { h, owner, server, runtime, binding, deps, ctx, steps }
 }
 
 async function missingBinding() {
@@ -176,10 +177,14 @@ async function persistsSuccessfulBoot() {
   const decision = decide(server.lifecycle, { type: 'apply' })
   if (decision.kind !== 'accept') throw new Error('The running fixture must accept its update')
   ctx.server = await h.db.transaction((tx) => saveLifecycle(tx, server, decision.to))
+  const hearts = h.minecraft.path(server.id, 'plugins/LifeStealZ/userData.db')
+  await mkdir(dirname(hearts), { recursive: true })
+  await writeFile(hearts, 'existing season')
   const outcome = spyOn(h.app.transitions, 'outcome')
   const retained = spyOn(h.app.backups, 'enforceRetention')
   try {
     expect(await updating(deps).run(ctx)).toEqual({ status: 'succeeded' })
+    expect(await readFile(hearts, 'utf8')).toBe('existing season')
     expect(outcome).toHaveBeenCalledTimes(1)
     expect(outcome.mock.calls[0]?.[2]).toEqual({ type: 'updated', running: true })
     expect((await h.server(server.id)).lifecycle.status).toBe('running')
@@ -278,7 +283,7 @@ async function refusesCorruptHearts(mode: 'normal' | 'stopped' | 'fatal' | 'canc
   }
   expect(result.status).toBe('failed')
   if (result.status !== 'failed') throw new Error('The corrupt hearts path must stop the new season')
-  expect(result.detail).toContain(refused.stderr.trim())
+  expect(result.detail).toBe(`Resetting the hearts failed: ${refused.stderr.trim()}`)
   expect(result.detail).toContain('Resetting the hearts failed')
   expect(rolledBack).toBe(true)
   expect(steps).toContain('rolling_back')
@@ -319,17 +324,23 @@ async function unavailableArtifact() {
   const applied = spyOn(deps.runtime, 'apply')
   try {
     const previous = (await binding.bindingOf(server.id)).applied
-    const result = await updating({
-      ...deps,
-      configuration: {
-        check: async () => {
-          throw problem
+    for (const refusal of [
+      problem,
+      new IncompatibleMods('Native conflict'),
+      new ValidationUnavailable('Check unavailable'),
+    ]) {
+      const result = await updating({
+        ...deps,
+        configuration: {
+          check: async () => {
+            throw refusal
+          },
         },
-      },
-    }).run(ctx)
-    expect(result).toEqual({ status: 'failed', reason: `Nothing changed: ${problem.message}` })
-    expect(restored).toHaveBeenCalledWith(server, previous)
-    expect(applied).not.toHaveBeenCalled()
+      }).run(ctx)
+      expect(result).toEqual({ status: 'failed', reason: `Nothing changed: ${refusal.message}` })
+      expect(restored).toHaveBeenCalledWith(server, previous)
+      expect(applied).not.toHaveBeenCalled()
+    }
     const unexpected = new Error('The artifact service did not answer')
     await expect(
       updating({
@@ -408,6 +419,11 @@ async function replacementDuringBoot() {
 
 describe.skipIf(!hasDatabase)('updating handler guard boundaries', () => {
   test(
+    'shows the native mod check before saving or changing compute',
+    checksNativeBeforeChanges,
+    30 * SECOND_MS,
+  )
+  test(
     'keeps an unchanged configuration live without another boot',
     unchangedConfigurationStaysLive,
     30 * SECOND_MS,
@@ -444,3 +460,35 @@ describe.skipIf(!hasDatabase)('updating handler guard boundaries', () => {
   )
   test('lets a cancelled boot escape without rolling it back', cancelledBoot, 30 * SECOND_MS)
 })
+
+async function checksNativeBeforeChanges() {
+  const { h, owner, server, deps, ctx, steps } = await fixture('fabric')
+  const cdn = new Cdn()
+  await cdn.start()
+  const revision = await loadRevision(h.db, server.desiredRevisionId)
+  const proposed = {
+    ...revision,
+    id: crypto.randomUUID(),
+    number: revision.number + 1,
+    basedOnRevisionId: revision.id,
+    reason: 'mods_changed' as const,
+    mods: [cdn.publish('phase-check')],
+  }
+  await h.db.insert(schema.serverRevisions).values(proposed)
+  await h.db.transaction((tx) => setDesired(tx, server, { revisionId: proposed.id }))
+  try {
+    const current = await h.server(server.id)
+    const decision = decide(current.lifecycle, { type: 'apply' })
+    if (decision.kind !== 'accept') throw new Error('The running fixture must accept its update')
+    ctx.server = await h.db.transaction((tx) => saveLifecycle(tx, current, decision.to))
+    expect(await updating(deps).run(ctx)).toEqual({ status: 'succeeded' })
+    expect(steps).toContain('checking_mods')
+    expect(steps.indexOf('checking_mods')).toBeLessThan(steps.indexOf('saving'))
+    expect(steps.indexOf('checking_mods')).toBeLessThan(steps.indexOf('compute'))
+    await h.app.servers.stop(owner, server.id, crypto.randomUUID())
+    await h.until(server.id, 'stopped')
+    await h.settled(server.id)
+  } finally {
+    cdn.close()
+  }
+}

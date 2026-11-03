@@ -55,15 +55,21 @@ export function rechecks(deps: {
         await ctx?.step('checking_mods')
       })
     } catch (error) {
-      if (
-        error instanceof ArtifactUnavailable ||
-        error instanceof IncompatibleMods ||
-        error instanceof ValidationUnavailable
-      )
-        throw new PermanentFailure(error.message)
+      if (configurationRefusal(error)) throw new PermanentFailure(error.message)
       throw error
     }
   }
 
   return { stillAllowed, mayBoot, preflight }
+}
+
+/** Recognized preflight refusals leave a player runtime untouched; unexpected faults still escape. */
+export function configurationRefusal(
+  error: unknown,
+): error is ArtifactUnavailable | IncompatibleMods | ValidationUnavailable {
+  return (
+    error instanceof ArtifactUnavailable ||
+    error instanceof IncompatibleMods ||
+    error instanceof ValidationUnavailable
+  )
 }
