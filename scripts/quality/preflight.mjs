@@ -15,13 +15,16 @@ const expected = manifest.packageManager?.replace(/^bun@/, '')
 const actual = execFileSync('bun', ['--version'], { encoding: 'utf8' }).trim()
 if (actual !== expected) throw new Error('The test runner does not match the pinned Bun version')
 requireQuality.resolve('happy-dom')
-const services = [
-  ['DATABASE_URL', 5432],
-  ['NATS_TEST_URL', 4222],
-  ['S3_TEST_ENDPOINT', 9000],
-  ['PEBBLE_TEST_URL', 14000],
-  ['CHALLTESTSRV_TEST_URL', 8055],
-]
+const services =
+  process.env.QUALITY_SERVICES === 'false'
+    ? []
+    : [
+        ['DATABASE_URL', 5432],
+        ['NATS_TEST_URL', 4222],
+        ['S3_TEST_ENDPOINT', 9000],
+        ['PEBBLE_TEST_URL', 14000],
+        ['CHALLTESTSRV_TEST_URL', 8055],
+      ]
 const reachable = (host, port) =>
   new Promise((resolve) => {
     const socket = createConnection({ host, port })

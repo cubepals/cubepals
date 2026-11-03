@@ -9,6 +9,12 @@ on:
       kind:
         required: true
         type: string
+      scope:
+        type: string
+        default: full
+      services:
+        type: boolean
+        default: true
       group:
         type: string
         default: all
@@ -32,7 +38,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: mirror.gcr.io/library/postgres:17-alpine
+        image: ${{ inputs.services && 'mirror.gcr.io/library/postgres:17-alpine' || '' }}
         env:
           POSTGRES_USER: blockly
           POSTGRES_PASSWORD: blockly
@@ -45,6 +51,8 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     env:
+      QUALITY_EXECUTION_SCOPE: ${{ inputs.scope }}
+      QUALITY_SERVICES: ${{ inputs.services }}
       GROUP: ${{ inputs.group }}
       PARTITION: ${{ inputs.partition }}
       DATABASE_URL: postgres://blockly:blockly@127.0.0.1:5432/blockly
@@ -63,6 +71,7 @@ jobs:
       # tagged with the names the runtime asks for: nothing comes from Docker Hub, whose outages
       # failed runs. Alpine is Google's mirror of Docker Hub's, curl the curl project's own on Quay.
       - name: Pull the test images
+        if: inputs.services
         run: |
           for image in mirror.gcr.io/library/nats:2.15.0 ghcr.io/rustfs/rustfs:1.0.0 ghcr.io/letsencrypt/pebble-challtestsrv:2.10.1 ghcr.io/letsencrypt/pebble:2.10.1 mirror.gcr.io/library/alpine:3.22 quay.io/curl/curl:8.22.0; do
             for wait in 2 5 10 20 40 0; do
@@ -76,6 +85,7 @@ jobs:
       # The edge's tests run a real mc-router: the one the edge's image is built with, copied out
       # of the image apps/edge/Dockerfile names.
       - name: Fetch mc-router
+        if: inputs.services
         run: |
           image=$(sed -n 's/^FROM \(ghcr\.io\/itzg\/mc-router[^ ]*\) AS router$/\1/p' apps/edge/Dockerfile)
           for wait in 2 5 10 20 40 0; do
@@ -87,13 +97,16 @@ jobs:
           docker cp mc-router:/mc-router "$RUNNER_TEMP/mc-router"
           echo "MC_ROUTER_BIN=$RUNNER_TEMP/mc-router" >> "$GITHUB_ENV"
       - name: Start NATS
+        if: inputs.services
         run: docker run -d --name nats -p 4222:4222 mirror.gcr.io/library/nats:2.15.0 --user blockly-test --pass fm2_blockly_test
       - name: Start an S3 store
+        if: inputs.services
         run: >-
           docker run -d --name s3 -p 9000:9000 -e RUSTFS_ACCESS_KEY=blockly-test
           -e RUSTFS_SECRET_KEY=blockly-test-secret ghcr.io/rustfs/rustfs:1.0.0
       # Let's Encrypt's test CA, validating DNS-01 against its own DNS test server.
       - name: Start Pebble and its DNS test server
+        if: inputs.services
         run: |
           docker network create acme
           docker run -d --name challtestsrv --network acme -p 8055:8055 \
@@ -120,6 +133,7 @@ jobs:
       - run: bun run quality:install
       - run: bun run labels:install
       - name: Create the test bucket
+        if: inputs.services
         run: |
           for _ in $(seq 1 60); do
             curl -sf -o /dev/null --aws-sigv4 aws:amz:auto:s3 --user blockly-test:blockly-test-secret \
@@ -128,13 +142,14 @@ jobs:
           done
           exit 1
       - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        if: inputs.services
         id: terraform_setup
         continue-on-error: true
         with:
           terraform_version: 1.15.3
           terraform_wrapper: false
       - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
-        if: steps.terraform_setup.outcome == 'failure'
+        if: inputs.services && steps.terraform_setup.outcome == 'failure'
         with:
           terraform_version: 1.15.3
           terraform_wrapper: false

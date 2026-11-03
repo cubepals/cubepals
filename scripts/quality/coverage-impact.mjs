@@ -5,8 +5,9 @@
 /**
  * Baseline comparisons for unchanged inputs. Verified additive tests and quality-only changes
  * cannot weaken earlier isolated tests. Dependency-only updates retain comparisons for the
- * source closures of tests that load an updated package. Every other change retains the full
- * baseline ratchet, and changed-source floors are always enforced by coverage.mjs.
+ * source closures of tests that load an updated package. Ordinary source edits retain the
+ * changed subjects and edited-oracle dependencies; uncertain mappings retain the full ratchet.
+ * Changed-source floors are always enforced by coverage.mjs.
  */
 import { execFileSync } from 'node:child_process'
 import { sourceFiles } from './inventory.mjs'
@@ -43,5 +44,9 @@ export function baselineComparison(root, comparison, changed, currentInventory, 
     return { ...comparison, reason: 'dependency-only affected oracle closures', files: scope.subjects }
   if (scope.subjects.length === 0)
     return { ...comparison, reason: 'verified additive tests or quality-only inputs', files: [] }
-  return null
+  return {
+    ...comparison,
+    reason: 'changed behavior and verified existing-oracle dependencies',
+    files: scope.subjects,
+  }
 }
