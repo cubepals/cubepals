@@ -1,0 +1,62 @@
+# SPDX-FileCopyrightText: 2026 The Cubepals Authors
+#
+# SPDX-License-Identifier: AGPL-3.0-only
+
+name: Repository settings
+
+# The repository's rulesets as `.github/settings/rulesets/` holds them (scripts/repo-settings.ts).
+# A merge to main that changes them applies them; by hand, `plan` says what an apply would change
+# and `export` prints the live rulesets as the files would hold them. Only main's own code runs,
+# with the Cubepals app's token, scoped to administering this repository: a pull request, a fork
+# or another branch never gets it.
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/settings/**'
+      - 'scripts/repo-settings.ts'
+      - '.github/workflows/repo-settings.yml'
+  workflow_dispatch:
+    inputs:
+      command:
+        description: What to do
+        type: choice
+        options:
+          - plan
+          - export
+          - apply
+        default: plan
+
+permissions:
+  contents: read
+
+# One change of the rulesets at a time; a second waits for the first.
+concurrency:
+  group: repo-settings
+  cancel-in-progress: false
+
+jobs:
+  settings:
+    name: "Settings: ${{ inputs.command || 'apply' }}"
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.3
+      - name: The Cubepals app's token, for this repository's administration only
+        id: app
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.CUBEPALS_APP_CLIENT_ID }}
+          private-key: ${{ secrets.CUBEPALS_APP_PRIVATE_KEY }}
+          permission-administration: write
+      - name: Rulesets
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          COMMAND: ${{ inputs.command || 'apply' }}
+        run: bun scripts/repo-settings.ts "$COMMAND"
