@@ -494,7 +494,7 @@ export const workPackImports = (boss: PgBoss, packs: Importer, pollingIntervalSe
   workImports(boss, PACK_IMPORT, packs, pollingIntervalSeconds)
 
 /** Uses the same bounded queue/retry protocol as other heavy import work. */
-const workModValidation = (boss: PgBoss, validator: Importer, pollingIntervalSeconds = 2) =>
+const workModValidation = (boss: PgBoss, validator: Importer, pollingIntervalSeconds: number) =>
   workImports(boss, MOD_VALIDATION, validator, pollingIntervalSeconds)
 
 /** Reads uploaded worlds and brings each to its server, as packs are read. */
