@@ -36,6 +36,7 @@ const server = {
 test('the check shows elapsed time without a fabricated countdown or completion bar', () => {
   const progress = presentProgress(operation, server)
   if (!progress) throw new Error('The compatibility check needs progress')
+  expect(progress.title).toBe('Checking the server’s mods')
   expect(progress.expectedSeconds).toBeNull()
   expect(progress.steps[0]).toMatchObject({ state: 'active', indeterminate: true })
   const now = Date.parse(operation.startedAt) + 90 * SECOND_MS
@@ -61,4 +62,24 @@ test('a queued check without a worker start time counts from its actual creation
   const waiting = { ...operation, startedAt: null }
   const now = Date.parse(waiting.createdAt) + 60 * SECOND_MS
   expect(wakeLine({ ...server, activeOperation: waiting }, now)).toContain('60s elapsed')
+})
+
+// A worker can update the duration before advancing the step; the active check still has no ETA.
+test('active and queued checks keep an unknown finish even when other timing is available', () => {
+  const checking = { ...operation, modCheckSeconds: 91 }
+  expect(presentProgress(checking, server)?.expectedSeconds).toBeNull()
+  expect(
+    wakeLine({ ...server, activeOperation: checking }, Date.parse(checking.startedAt) + 90 * SECOND_MS),
+  ).toContain('90s elapsed')
+  expect(presentProgress({ ...operation, step: 'starting' }, server)?.expectedSeconds).toBeNull()
+})
+
+test('a new server uses the world preparation estimate and adds completed check time', () => {
+  const provision = {
+    ...operation,
+    kind: 'provision' as const,
+    step: 'starting' as const,
+    modCheckSeconds: 12,
+  }
+  expect(presentProgress(provision, server)?.expectedSeconds).toBe(192)
 })

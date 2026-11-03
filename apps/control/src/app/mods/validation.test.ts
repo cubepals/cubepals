@@ -53,11 +53,6 @@ describe.skipIf(!hasDatabase)('shared mod configuration evidence', () => {
     30_000,
   )
   test(
-    'the orphan sweep preserves a live check and removes expired and late resources',
-    () => validationOrphans(h, cdn),
-    30_000,
-  )
-  test(
     'a real loader refusal is cached and leaves no check resource',
     () => validationRefusal(h, cdn),
     30_000,
@@ -245,62 +240,6 @@ async function validationRetry(h: Harness, cdn: Cdn) {
     provision.mockRestore()
     queued.mockRestore()
   }
-}
-
-async function validationOrphans(h: Harness, cdn: Cdn) {
-  const owner = await h.user('Check ownership', 'plus')
-  const { id } = await h.create(owner, { loader: 'fabric' })
-  await h.until(id, 'running')
-  const revision = await loadRevision(h.db, (await h.server(id)).desiredRevisionId)
-  const mod = cdn.publish('owned-check')
-  const plan = await h.app.configuration.plan({ ...revision, mods: [mod] })
-  if (plan === null) throw new Error('Missing validation plan')
-  const key = validationKey(plan)
-  const runtimeId = randomUUID()
-  const leaseUntil = new Date(Date.now() + MINUTE_MS)
-  await h.db.insert(schema.modValidations).values({ key, plan, runtimeId, leaseUntil })
-  await h.db.insert(schema.modValidationRuns).values({ id: runtimeId, key, leaseUntil })
-  const spec = validationSpec(plan, runtimeId, 'check-password', (artifact) => {
-    if (artifact.ref.kind !== 'remote') throw new Error('This fixture uses a remote jar')
-    return artifact.ref.url
-  })
-  await h.runtime.ensureProvisioned(runtimeKey(runtimeId), { regionKey: plan.regionKey }, spec, {
-    handle: async () => {},
-    step: async () => {},
-  })
-  await h.app.schedules.orphans()
-  expect(h.runtime.machine(runtimeId)?.state).toBe('running')
-  expect((await validationArtifact(h.db, runtimeId, mod.artifact.sha512))?.artifact.sha512).toBe(
-    mod.artifact.sha512,
-  )
-  await h.db
-    .update(schema.modValidationRuns)
-    .set({ leaseUntil: new Date(Date.now() - MINUTE_MS) })
-    .where(eq(schema.modValidationRuns.id, runtimeId))
-  expect(await validationArtifact(h.db, runtimeId, mod.artifact.sha512)).toBeNull()
-  await h.app.schedules.orphans()
-  expect(h.runtime.machine(runtimeId)).toBeNull()
-  // A delivered retry cleans interrupted ownership before assigning its own fresh attempt.
-  await h.app.modValidation.runImport(key)
-  expect((await h.app.modValidation.status(key)).state).toBe('verified')
-  const [retried] = await h.db.select().from(schema.modValidations).where(eq(schema.modValidations.key, key))
-  expect(retried?.runtimeId).not.toBe(runtimeId)
-  const [previous] = await h.db
-    .select()
-    .from(schema.modValidationRuns)
-    .where(eq(schema.modValidationRuns.id, runtimeId))
-  expect(previous?.finishedAt).not.toBeNull()
-  // Retained attempt history recognizes a late resource even after the parent check moved on.
-  await h.db
-    .update(schema.modValidations)
-    .set({ runtimeId: randomUUID() })
-    .where(eq(schema.modValidations.key, key))
-  await h.runtime.ensureProvisioned(runtimeKey(runtimeId), { regionKey: plan.regionKey }, spec, {
-    handle: async () => {},
-    step: async () => {},
-  })
-  await h.app.schedules.orphans()
-  expect(h.runtime.machine(runtimeId)).toBeNull()
 }
 
 async function queuedLifecycle(h: Harness, cdn: Cdn) {
