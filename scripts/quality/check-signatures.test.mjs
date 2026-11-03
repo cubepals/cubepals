@@ -19,8 +19,10 @@ afterEach(() => {
 function fixture() {
   const dir = mkdtempSync(join(tmpdir(), 'commit-signatures-'))
   directories.push(dir)
+  // The machine's own Git settings, such as a signing program, stay out of the fixture.
+  const env = { ...process.env, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' }
   const git = (...args) =>
-    execFileSync('git', args, { cwd: dir, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] }).trim()
+    execFileSync('git', args, { cwd: dir, env, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] }).trim()
   git('init', '-b', 'main')
   git('config', 'user.name', 'Signing fixture')
   git('config', 'user.email', 'signing-fixture@example.invalid')
@@ -31,6 +33,7 @@ function fixture() {
   const hook = (mode, input = '') =>
     spawnSync(process.execPath, [join(import.meta.dirname, 'check-signatures.mjs'), mode], {
       cwd: dir,
+      env,
       input,
       encoding: 'utf8',
     })
@@ -62,8 +65,25 @@ test('a cryptographically verified SSH signature passes without auditing old mai
   git('commit', '--allow-empty', '-m', 'Signed change')
   assert.equal(push().status, 0)
 })
+test('a signature this machine cannot check is left for GitHub to verify', () => {
+  const { dir, git, push } = fixture()
+  const key = join(dir, 'fixture-key')
+  execFileSync('ssh-keygen', ['-t', 'ed25519', '-N', '', '-f', key], { stdio: 'ignore' })
+  git('config', 'gpg.format', 'ssh')
+  git('config', 'user.signingkey', key)
+  git('config', 'commit.gpgsign', 'true')
+  git('commit', '--allow-empty', '-m', 'Signed by a key with no allowed-signers entry')
+  assert.equal(push().status, 0)
+})
 test('disabled signing fails the commit hook', () => {
   const { hook } = fixture()
+  const result = hook('--config')
+  assert.equal(result.status, 1)
+  assert.match(result.stderr, /Signing must be enabled/)
+})
+test('signing that was never set fails the commit hook with the same words', () => {
+  const { git, hook } = fixture()
+  git('config', '--unset', 'commit.gpgsign')
   const result = hook('--config')
   assert.equal(result.status, 1)
   assert.match(result.stderr, /Signing must be enabled/)
