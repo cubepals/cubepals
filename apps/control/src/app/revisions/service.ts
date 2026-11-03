@@ -240,8 +240,8 @@ export class RevisionService {
    * Whether the server lets Bedrock players in (`ServerSettings.bedrock`): Floodgate, and the Via
    * plugins its version needs, which Cubepals adds as it starts. Only Paper runs them. They are
    * Cubepals' own, never the owner's plugins, so no plan counts them. The change restarts a running
-   * server only while nobody is on it; with players on, it is saved and the server takes it at its
-   * next start.
+   * server at once only while nobody is on it, unless the owner says so; with players on, it waits
+   * for everyone to leave, and the server restarts with it then.
    *
    * Plain Minecraft lets them in too. On Mojang's own server, letting them in moves it onto Paper in
    * the same change, which a start applies as any change of server type: a snapshot first, and back

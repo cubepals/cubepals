@@ -8,9 +8,10 @@
  * restart waits. Drift (`operations/schedules/drift.ts`) brings it once nobody is on, a stop brings
  * it at the next start, and the owner can take it now or drop it from the server's page.
  *
- * Here: what waits, as the page shows it (`waitingChanges`), and the owner's two ways out of it
- * (`WaitingChanges`). Whether a change waits is `restart-wait.ts`'s; making it is each service's
- * own (`revisions/service.ts`, `stop-cheaters/service.ts`).
+ * Here: what waits, as the page shows it (`waitingChanges`), what of it drift brings that its
+ * digest doesn't see (`ownersWaiting`), and the owner's two ways out of it (`WaitingChanges`).
+ * Whether a change waits is `restart-wait.ts`'s; making it is each service's own
+ * (`revisions/service.ts`, `stop-cheaters/service.ts`).
  */
 import type { WaitingChangesView } from '@blockly/contracts'
 import { type AppliedConfigJson, type Db, type Queryable, schema, type Tx } from '@blockly/db'
@@ -21,9 +22,9 @@ import { type Actor, authorize, requestedBy } from '../actor.ts'
 import { AppError } from '../errors.ts'
 import type { EventBus } from '../ports/events.ts'
 import { saveStopCheaters } from '../stop-cheaters/persistence.ts'
-import { stopCheatersWaiting } from '../stop-cheaters/waiting.ts'
+import { ownersStopCheatersWaiting, stopCheatersWaiting } from '../stop-cheaters/waiting.ts'
 import { insertRevision, loadRevision, lockServer, setDesired } from './persistence.ts'
-import { loadApplied, showsAtNextStart } from './restart-wait.ts'
+import { loadApplied, restartsFor, showsAtNextStart } from './restart-wait.ts'
 import { loadChangeFacts, loadRevisionFields } from './revision-reads.ts'
 import type { ServerTransitions } from './transitions.ts'
 
@@ -48,6 +49,29 @@ export async function waitingChanges(
   const stopCheaters = await stopCheatersWaiting(q, server, applied)
   if (changes.length === 0 && size === null && stopCheaters === null) return null
   return { changes, size, stopCheaters }
+}
+
+/**
+ * What drift brings to a running server once nobody is on it (`operations/schedules/drift.ts`)
+ * beyond what its digest sees: the owner's changes that wait for everyone to leave. Other versions
+ * and Bedrock come with the revision, though the digest leaves their plugins out, and Stop cheaters
+ * as the owner switched it, which only a boot places. What only the server list shows, and what
+ * Cubepals changed itself, wait for the next start. Null where nothing of the owner's waits.
+ */
+export async function ownersWaiting(
+  q: Queryable,
+  server: MinecraftServer,
+  applied: AppliedConfigJson | null,
+): Promise<{ revisionId: string; stopCheaters: 'on' | 'off' | 'ours' | null } | null> {
+  if (server.lifecycle.status !== 'running' || applied === null) return null
+  const restarts =
+    applied.revisionId !== server.desiredRevisionId &&
+    restartsFor(
+      await loadChangeFacts(q, applied.revisionId),
+      await loadChangeFacts(q, server.desiredRevisionId),
+    )
+  const stopCheaters = await ownersStopCheatersWaiting(q, server, applied)
+  return restarts || stopCheaters !== null ? { revisionId: server.desiredRevisionId, stopCheaters } : null
 }
 
 /** What running `to` where `from` runs changes that a restart brings: all of it but what only the server list shows. */
