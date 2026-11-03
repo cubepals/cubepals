@@ -18,6 +18,25 @@ const IPHONE =
 const NEXT_PRIVATE = 'private, no-cache, no-store, max-age=0, must-revalidate'
 const SIGNED_IN = '__Secure-blockly-prod.session_token=abc.def; ph_phc_x_posthog=%7B%7D'
 
+test('a network error response is returned without rebuilding or caching it', async () => {
+  const failure = Response.error()
+  const response = await fromEdge(new Request(`${ORIGIN}/guides`), {
+    version: 'v1',
+    cache: {
+      match: async () => undefined,
+      put: async () => {
+        throw new Error('A network error cannot enter the cache')
+      },
+    },
+    render: async () => failure,
+    later: () => {
+      throw new Error('A network error cannot schedule a cache write')
+    },
+  })
+  expect(response.type).toBe(failure.type)
+  expect(response.status).toBe(failure.status)
+})
+
 /** A Worker's cache, a clock, and a Next that says which page it made and how many it has. */
 function edge() {
   const kept = new Map<string, Response>()
