@@ -3,10 +3,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * What a plan card on the public pages says: a paid plan's few lines of what you get on its face,
+ * What every plan card says: a paid plan's few lines of what you get on its face,
  * and everything else in its details, opened in place. The free trial has no card of its own, here
- * or on the account page: it is how the first paid plan starts (`cardsOf`). Not for the account
- * page's cards, which list a plan's points.
+ * or on the account page: it is how the first paid plan starts (`cardsOf`).
  */
 import type { PublicPlan } from '@blockly/contracts'
 import type { ReactNode } from 'react'
