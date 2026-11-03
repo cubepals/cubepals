@@ -4,15 +4,14 @@
 
 /** Confirmation explains the real restart timing and blocks a change until its prerequisites are ready. */
 import { expect, test } from 'bun:test'
-import { createRequire } from 'node:module'
 import type { RestartWhen, ServerView } from '@blockly/contracts'
 import { SECOND_MS } from '@blockly/contracts/durations'
+import { Window } from 'happy-dom'
 import { act, createElement } from 'react'
 import { ConfirmChange, whatHappens } from './shared'
 
-const quality = createRequire(new URL('../../../../../../../../tools/quality/package.json', import.meta.url))
 function browserScope() {
-  const browser = new (quality('happy-dom').Window)({ url: 'http://localhost/settings' })
+  const browser = new Window({ url: 'http://localhost/settings' })
   const globals = {
     window: browser,
     document: browser.document,

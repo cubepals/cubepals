@@ -4,18 +4,17 @@
 
 /** Restart dialogs retain the owner's choice, close on success, and clear a previous refusal. */
 import { expect, test } from 'bun:test'
-import { createRequire } from 'node:module'
 import type { RestartWhen, ServerView } from '@blockly/contracts'
 import { SECOND_MS } from '@blockly/contracts/durations'
 import { refusing } from '@blockly/control/testing/refusing'
+import { Window } from 'happy-dom'
 import { act, createElement, Fragment } from 'react'
 import type { Root } from 'react-dom/client'
 import { failedWith } from '../../../../../lib/failed-call'
 import { useRestartAsk } from './restart-ask'
 
-const quality = createRequire(new URL('../../../../../../../../tools/quality/package.json', import.meta.url))
 function browserScope() {
-  const browser = new (quality('happy-dom').Window)({ url: 'http://localhost/settings' })
+  const browser = new Window({ url: 'http://localhost/settings' })
   const globals = {
     window: browser,
     document: browser.document,

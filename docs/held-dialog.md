@@ -135,24 +135,9 @@ a dialog, with the waking line read through `WakingLine.waking`. It is written a
 a child process against a stand-in control plane, a join to a booting server has its login
 finished at 4 s, hears the dialog and is transferred to the address it dialled, and one to a
 server that resumes in half a second is passed on as before (`held-dialog.test.ts`). It can't
-merge as it is, for two reasons:
-
-- **The coverage gate refuses any change to `agent.ts`** until the whole file is measured.
-- **`agent.ts` is at 796 of its 800 lines**, and the wiring takes it to 812, so something has
-  to move out of it first, in a `Move:` change of its own, which meets the same gate.
-
-The ways through, in order:
-
-1. **Measure the agent where its tests already run it.** Four test files start it as a child
-   process and drive real joins through it (`concurrent-joins`, `held-wake-line`,
-   `hold-frames`, `visits`). Its coverage is zero only because the child isn't instrumented.
-   Running the child under the same preload and merging its counters is a change to the quality
-   infrastructure, which only a reviewed policy update can make (`scripts/quality/README.md`).
-2. **Move the waiting room out of the agent, into a module tested in-process.** The move itself
-   changes `agent.ts`, so it meets the same gate: `agent.ts` must first be imported in-process
-   by tests that bring the whole file to the floors.
-3. **A maintainer merges the wiring over the gate's refusal for `agent.ts`,** once the staging
-   proof below has passed.
+merge as it is: **`agent.ts` is at 796 of its 800 lines**, and the wiring takes it to 812. The
+waiting room moves out of the agent first, into a module of its own, in a `Move:` change; the
+wiring follows once the staging proof below has passed.
 
 ## Proving it
 
