@@ -7,8 +7,8 @@
  * landing, printed in the landing's ink on paper in a stepped frame (landing/blocks.css). One
  * surface, in the order people read a price: the plan's picture and name, what it costs, its one
  * button, a few lines of what you get (`PixelIcon`), and the rest in its details. The plan the free
- * trial starts is the paper card, the other the ink one. Its words are plan-details.tsx's. Not for
- * the account's current subscription terms, which belong in its plan summary.
+ * trial starts is the paper card, the other the ink one. Its words are plan-details.tsx's. The
+ * account page gives the person's own plan as they hold it (`asHeld`).
  */
 import type { PublicPlan } from '@blockly/contracts'
 import Link from 'next/link'
@@ -67,7 +67,7 @@ export function OfferCard({
   checkout?: (term: 'month' | 'year') => CardLink
   /** Account-specific upgrade or downgrade action; null keeps this row empty. */
   action?: ReactNode
-  /** The account's plan, without changing the offer's price or hours. */
+  /** The account's plan, marked as theirs; the card says the price and hours `plan` gives. */
   current?: boolean | 'trial'
 }) {
   const sells = forSale(plan)
