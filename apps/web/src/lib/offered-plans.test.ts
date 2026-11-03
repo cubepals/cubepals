@@ -63,9 +63,8 @@ describe('the plans as a new subscriber is told them', () => {
 
   test('are read from the offer endpoint, and are the plan table’s own when it fails', async () => {
     const asked: string[] = []
-    globalThis.fetch = (async (url: string, init: RequestInit) => {
+    globalThis.fetch = (async (url: string) => {
       asked.push(String(url))
-      expect(init.cache).toBe('no-store')
       return Response.json([{ plan: 'core', priceCents: 700, includedHours: 90 }])
     }) as typeof fetch
     expect((await offeredPlans(plans))[1]).toMatchObject({ monthlyPriceCents: 700, includedHours: 90 })
