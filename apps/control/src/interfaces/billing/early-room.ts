@@ -34,7 +34,7 @@ const view = (room: EarlyRoom) => ({
 })
 
 /**
- * `PUT /api/billing/early-room`: the room, each plan's points and until when they hold, in one
+ * `PUT /api/billing/early-room`: the room, each plan's points and when they are due again, in one
  * JSON body, behind its own bearer token (EARLY_ROOM_TOKEN), compared in constant time. That token
  * opens nothing else, and nothing else opens this. Answers what is held after it; a refusal says why.
  */

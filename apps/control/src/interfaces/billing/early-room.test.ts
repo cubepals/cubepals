@@ -4,9 +4,9 @@
 
 /**
  * The room for early checkouts, as an operator sets it through its own route: its token and
- * nothing else opens it, room above the cap and settings that reach too far are refused, room past
- * its time counts as none, it counts from when its figures were read, and each change of room or
- * points is audited while a renewal isn't.
+ * nothing else opens it, room above the cap and settings due again too far ahead are refused, it
+ * counts from when its figures were read, and each change of room or points is audited while a
+ * renewal isn't.
  */
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { MINUTE_MS } from '@blockly/contracts/durations'
@@ -57,7 +57,7 @@ describe.skipIf(!hasDatabase)('the room for early checkouts', () => {
   test('is none until it is set', async () => {
     const room = await readEarlyRoom(h.db)
     expect(room).toMatchObject({ roomPoints: 0, validUntil: null })
-    expect(roomNow(room, new Date())).toBe(0)
+    expect(roomNow(room)).toBe(0)
   })
 
   test('only its own token sets it', async () => {
@@ -66,15 +66,14 @@ describe.skipIf(!hasDatabase)('the room for early checkouts', () => {
     expect((await readEarlyRoom(h.db)).roomPoints).toBe(0)
   })
 
-  test('holds what it is set to until its time, and none after', async () => {
+  test('holds what it is set to, and when it is due again', async () => {
     const until = inAWhile(30)
     const answer = await put(setting({ validUntil: until }))
     expect(answer.status).toBe(200)
     expect(await answer.json()).toMatchObject({ roomPoints: 1200, points: { core: 300, plus: 900 } })
     const room = await readEarlyRoom(h.db)
     expect(room.validUntil?.toISOString()).toBe(new Date(until).toISOString())
-    expect(roomNow(room, new Date())).toBe(1200)
-    expect(roomNow(room, new Date(Date.now() + 31 * MINUTE_MS))).toBe(0)
+    expect(roomNow(room)).toBe(1200)
   })
 
   test('counts from when its figures were read, where the setter says', async () => {

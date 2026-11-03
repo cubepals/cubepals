@@ -5,10 +5,10 @@
 'use client'
 
 /**
- * The early price on the platform page: the room for its checkouts as last set from outside, what
- * a checkout of each plan takes, until when it holds, the checkout pages holding it now, and the
- * switch that closes it now and keeps it closed until an admin opens it again. Only what the
- * control plane holds; what sets the room is not here.
+ * The early price on the platform page: the room for its checkouts as last set from outside, which
+ * holds until the next setting, what a checkout of each plan takes, when it is due to be set again,
+ * the checkout pages holding it now, and the switch that closes it now and keeps it closed until an
+ * admin opens it again. Only what the control plane holds; what sets the room is not here.
  */
 import type { PlatformControlsView } from '@blockly/contracts'
 import { MINUTE_MS } from '@blockly/contracts/durations'
@@ -33,12 +33,12 @@ export function EarlyPrice({ view }: { view: PlatformControlsView }) {
     }),
   )
   const room = view.earlyRoom
-  const holds = room.validUntil !== null && new Date(room.validUntil).getTime() > now
+  const overdue = room.validUntil !== null && new Date(room.validUntil).getTime() <= now
   const open = room.closedSince === null
   const set =
     room.setAt === null
       ? 'Never set.'
-      : `Set ${whenTaken(room.setAt, now).toLowerCase()}${room.validUntil ? `, ${holds ? 'holding until' : 'and ran out at'} ${new Date(room.validUntil).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}` : ''}.`
+      : `Set ${whenTaken(room.setAt, now).toLowerCase()}${room.validUntil ? `, ${overdue ? 'next setting overdue since' : 'next setting due by'} ${new Date(room.validUntil).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}` : ''}.`
   return (
     <FormSection
       title="Early price"
@@ -53,7 +53,7 @@ export function EarlyPrice({ view }: { view: PlatformControlsView }) {
       <FormRow
         label="Room"
         description={set}
-        control={<span className="type-body bk-num">{points(open && holds ? room.roomPoints : 0)}</span>}
+        control={<span className="type-body bk-num">{points(open ? room.roomPoints : 0)}</span>}
       />
       <FormRow
         label="A checkout takes"

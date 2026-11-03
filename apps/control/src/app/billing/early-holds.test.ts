@@ -6,8 +6,9 @@
  * The price a checkout will charge, held while its page is open: an early price while the room
  * takes one more checkout of the plan, the plan's own otherwise; holds that never take more than
  * the room, however many open at once; a hold kept on reopening, let go for a year or another plan,
- * returned when it runs out; and the same choice for a plan bought over a smaller one, a move to a
- * smaller one, and a subscription on its plan's own price taking the early one.
+ * returned when it runs out; a room that holds as last set while nobody sets it again; and the same
+ * choice for a plan bought over a smaller one, a move to a smaller one, and a subscription on its
+ * plan's own price taking the early one.
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, setSystemTime, test } from 'bun:test'
 import { randomUUID } from 'node:crypto'
@@ -179,6 +180,27 @@ describe.skipIf(!hasDatabase)('the price a checkout holds', () => {
       w.h.app.billing.startCheckout(owner, 'core', { ...CONSENT, priceCents: 999 }),
     ).rejects.toThrow(/\$7\.00 a month now/)
     expect(lastCheckout()?.external_customer_id).not.toBe(owner.userId)
+  })
+})
+
+describe.skipIf(!hasDatabase)('a room nobody sets again', () => {
+  test('holds as last set past its due time, less what was paid since', async () => {
+    await open(2)
+    const paid = await w.h.user('Paid before')
+    await w.h.app.billing.offer(paid, 'core')
+    await w.standing(paid, randomUUID(), { product_id: EARLY_CORE })
+    const later = await w.h.user('Two days on')
+    const past = await w.h.user('Past the room')
+    setSystemTime(new Date(Date.now() + 2 * DAY_MS))
+    try {
+      expect(await w.h.app.billing.offer(later, 'core')).toMatchObject({
+        priceCents: 700,
+        productId: EARLY_CORE,
+      })
+      expect((await w.h.app.billing.offer(past, 'core')).productId).toBeNull()
+    } finally {
+      setSystemTime()
+    }
   })
 })
 

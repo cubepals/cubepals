@@ -4,9 +4,10 @@
 
 /**
  * Room for checkouts at an early price, as an operator sets it on the controls row: the room in
- * points, the points one checkout of each plan takes, and until when the setting holds. What the
- * room should be is decided outside the control plane; here it is only kept, capped and timed.
- * Room past its time counts as none, so the early price closes by itself when nothing renews it.
+ * points, the points one checkout of each plan takes, and when it is due to be set again. What the
+ * room should be is decided outside the control plane; here it is only kept and capped. A setting
+ * holds until the next one replaces it, past its due time too: when its setter stops, the room
+ * stays as last set, and checkouts paid since keep counting against it.
  * Each change of room or points is audited.
  *
  * An admin can close it, and it stays closed, whatever is set, until one opens it again
@@ -25,7 +26,7 @@ export interface EarlyRoom {
   roomPoints: number
   /** What one checkout of each plan takes from the room. */
   points: Record<EarlyPlan, number>
-  /** When the setting stops holding, and the room counts as none; null before any was set. */
+  /** When it is due to be set again; past it, it still holds. Null before any was set. */
   validUntil: Date | null
   /**
    * When the figures it was worked out from were read, as its setter said, or else when it was set.
@@ -38,9 +39,8 @@ export interface EarlyRoom {
 }
 
 /**
- * How far ahead a setting may hold. It is meant to be renewed every few minutes, so one that
- * reaches further is refused: a stopped setter, or a token in the wrong hands, keeps the room open
- * this long at most.
+ * How far ahead the next setting may be due. Settings are meant to come every few minutes, so a due
+ * time further out is refused: a setter that stops shows as overdue on the platform page within this.
  */
 const EARLY_ROOM_MOST_AHEAD_MS = 2 * HOUR_MS
 
@@ -74,9 +74,8 @@ export async function readEarlyRoom(q: Queryable): Promise<EarlyRoom> {
   }
 }
 
-/** The room there is now: none while an admin has it closed, once its setting's time has passed, or before one was set. */
-export const roomNow = (room: EarlyRoom, now: Date): number =>
-  room.closedSince === null && room.validUntil !== null && room.validUntil > now ? room.roomPoints : 0
+/** The room there is now: as last set (none before one was), or none while an admin has it closed. */
+export const roomNow = (room: EarlyRoom): number => (room.closedSince === null ? room.roomPoints : 0)
 
 /**
  * An admin closes the early price now, or opens it again: closed, the room counts as none whatever
@@ -105,7 +104,7 @@ export async function setEarlyClosed(db: Db, by: string, closed: boolean): Promi
   })
 }
 
-/** Sets the room, refusing what is past `maxPoints` or holds too far ahead. */
+/** Sets the room, refusing what is past `maxPoints` or due again too far ahead. */
 export class EarlyRoomControl {
   readonly #db: Db
   readonly #maxPoints: number
@@ -116,9 +115,9 @@ export class EarlyRoomControl {
   }
 
   /**
-   * The room, the points of each plan and until when they hold, all at once. Room above the
-   * configured cap is refused, so a bug or a token in the wrong hands can't open more than that;
-   * so are points no checkout could take (none, or more than the cap), and a time already passed
+   * The room, the points of each plan and when it is due to be set again, all at once. Room above
+   * the configured cap is refused, so a bug or a token in the wrong hands can't open more than that;
+   * so are points no checkout could take (none, or more than the cap), and a due time already passed
    * or further ahead than `EARLY_ROOM_MOST_AHEAD_MS`. `readAt`, when the figures behind it were read,
    * is no later than now and no more than an hour before.
    */
@@ -136,7 +135,7 @@ export class EarlyRoomControl {
         throw new AppError('invalid_choice', `A ${plan} checkout takes from 1 to ${this.#maxPoints} points.`)
     }
     if (next.validUntil <= now || next.validUntil.getTime() > now.getTime() + EARLY_ROOM_MOST_AHEAD_MS)
-      throw new AppError('invalid_choice', 'The room holds until a time within the next two hours.')
+      throw new AppError('invalid_choice', 'The room is due to be set again within the next two hours.')
     const readAt = next.readAt ?? now
     if (readAt > now || readAt.getTime() < now.getTime() - HOUR_MS)
       throw new AppError('invalid_choice', 'The figures behind the room were read within the last hour.')

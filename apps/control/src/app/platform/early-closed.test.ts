@@ -7,8 +7,8 @@
  * the switch that closes it now and keeps it closed whatever is set from outside, until an admin
  * opens it again; each audited, and refused to anyone else.
  */
-import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
-import { MINUTE_MS } from '@blockly/contracts/durations'
+import { afterAll, beforeAll, beforeEach, describe, expect, setSystemTime, test } from 'bun:test'
+import { DAY_MS, MINUTE_MS } from '@blockly/contracts/durations'
 import { schema } from '@blockly/db'
 import { and, eq } from 'drizzle-orm'
 import { hasDatabase } from '../../testing/harness.ts'
@@ -70,6 +70,20 @@ describe.skipIf(!hasDatabase)('the early price on the platform page', () => {
     expect(audited.map((row) => row.action)).toEqual(
       expect.arrayContaining(['platform.early_room_closed', 'platform.early_room_opened']),
     )
+  })
+
+  test('past its due time it holds as last set, and an admin still closes it', async () => {
+    await open()
+    const before = await w.h.user('Overdue')
+    const after = await w.h.user('Overdue, closed')
+    setSystemTime(new Date(Date.now() + 2 * DAY_MS))
+    try {
+      expect((await w.h.app.billing.offer(before, 'core')).productId).toBe(EARLY_CORE)
+      await w.h.app.platform.setEarlyClosed(ADMIN, true)
+      expect((await w.h.app.billing.offer(after, 'core')).productId).toBeNull()
+    } finally {
+      setSystemTime()
+    }
   })
 
   test('is no one else’s to see or close', async () => {

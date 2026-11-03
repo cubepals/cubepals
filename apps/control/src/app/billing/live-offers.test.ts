@@ -7,8 +7,8 @@
  * room takes that checkout and two more, the plan's own otherwise, and from the public endpoint
  * nothing but the price and hours.
  */
-import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
-import { MINUTE_MS } from '@blockly/contracts/durations'
+import { afterAll, beforeAll, beforeEach, describe, expect, setSystemTime, test } from 'bun:test'
+import { DAY_MS, MINUTE_MS } from '@blockly/contracts/durations'
 import { schema } from '@blockly/db'
 import { createPublicApp } from '../../interfaces/http/public.ts'
 import { hasDatabase } from '../../testing/harness.ts'
@@ -49,6 +49,16 @@ describe.skipIf(!hasDatabase)('the price a new subscriber is told', () => {
     // Holds take from the room the page reads too.
     await w.h.app.billing.offer(await w.h.user('Holds'), 'core')
     expect((await core())?.priceCents).toBe(999)
+  })
+
+  test('stays the early price past the room’s due time, while nothing sets it again', async () => {
+    await open(10)
+    setSystemTime(new Date(Date.now() + 2 * DAY_MS))
+    try {
+      expect(await core()).toEqual({ plan: 'core', priceCents: 700, includedHours: 90 })
+    } finally {
+      setSystemTime()
+    }
   })
 
   test('the public endpoint says the price and hours, kept a minute, and nothing else', async () => {

@@ -58,8 +58,9 @@ export interface PlatformControlsView {
   runtimeKeys: { version: number; previousVersions: number[]; behind: number }
   /**
    * The room for checkouts at an early price, as last set from outside: the room and what a
-   * checkout of each plan takes, in points, until when it holds and when it was set; whether an
-   * admin has it closed; and the checkout pages holding an early price now, with what they took.
+   * checkout of each plan takes, in points, when it is due to be set again (it holds past that) and
+   * when it was set; whether an admin has it closed; and the checkout pages holding an early price
+   * now, with what they took.
    */
   earlyRoom: {
     roomPoints: number
