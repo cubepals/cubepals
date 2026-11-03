@@ -53,7 +53,7 @@ export function addMonths(at: Date, months: number): Date {
 export function monthsKept(order: Pick<BillingOrder, 'netCents' | 'refundedCents'>): number {
   if (order.netCents <= 0) return order.refundedCents > 0 ? 0 : YEAR_MONTHS
   const left = Math.max(0, order.netCents - order.refundedCents)
-  return Math.floor((YEAR_MONTHS * left) / order.netCents)
+  return Math.floor((left * YEAR_MONTHS) / order.netCents)
 }
 
 /**
