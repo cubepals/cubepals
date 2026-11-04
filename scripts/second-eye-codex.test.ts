@@ -71,6 +71,9 @@ test('a line comment becomes a finding: the title the problem, the rest the why'
   expect(findingOf({ ...p1, line: null, original_line: 12 }).line).toBe(12)
   expect(findingOf({ ...p1, line: null, original_line: null }).line).toBe(1)
   expect(findingOf({ ...p1, body: '' }).problem).toBe("See Codex's review.")
+  const nested = findingOf({ ...p1, body: 'Breaks <scr<b>ipt>alert(1)</script> here\n<<img src=x>>' })
+  expect(nested.problem).toBe('Breaks iptalert(1) here')
+  expect(JSON.stringify(nested)).not.toMatch(/[<>]/)
 })
 
 test("a finding keeps to the lengths Claude's answers have", () => {

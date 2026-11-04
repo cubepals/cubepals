@@ -71,13 +71,17 @@ export function severityOf(body: string): Severity {
 
 /** Codex's Markdown as plain lines: no images or badges, tags, emphasis or feedback prompt. */
 function plainLines(body: string): string[] {
-  return body
-    .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
-    .replace(/<[^>]+>/g, '')
-    .replace(/\*\*|__/g, '')
-    .split('\n')
-    .map((line) => line.trim())
-    .filter((line) => line && !/^Useful\? React with/i.test(line))
+  return (
+    body
+      .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
+      .replace(/<[^>]*>/g, '')
+      // A tag split around another (<scr<b>ipt>) survives one pass: no angle bracket is kept at all.
+      .replace(/[<>]/g, '')
+      .replace(/\*\*|__/g, '')
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line && !/^Useful\? React with/i.test(line))
+  )
 }
 
 /** One of Codex's line comments as a finding: its first line the problem, the rest the why. */
