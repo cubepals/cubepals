@@ -77,6 +77,10 @@ forwarded identity out of every public handshake. The server sees a player joini
 they chose, and logs them in as it would anyone. This is wherever the reconnect lands, on any
 edge machine.
 
+That is for the transfers the edge itself starts, and only those, once the dialog is wired in.
+Until then, and for a transfer any other server sends, the front door passes the handshake on as
+it came, and the server refuses it unless it accepts transfers.
+
 What it gives up: a server can't tell that another server sent a player. Vanilla only uses that
 to decide whether to trust cookies another server stored, and Cubepals' servers set none. A
 plugin that reads cookies on a transfer won't be asked to. Who can reach a server doesn't
@@ -124,10 +128,11 @@ every piece of logic here lives in its own tested module:
 | `dialog-hold.ts` | The dialog hold's packets: finishing the login, the dialog, keep-alive, transfer, disconnect; who gets one |
 | `hold-packet-ids.ts`, `hold-packets.json` | The ids, by protocol, from each release's own report |
 | `nbt.ts` | The NBT the dialog and the disconnect are written in |
-| `forwarding.ts` | The front door's rewrite of a transfer into a join |
+| `forwarding.ts` | The front door's handshake, where the edge's own transfers are to become joins |
 
-The front door's rewrite runs as soon as this ships: `front.ts` already calls
-`withoutForwarding` on every public handshake.
+The front door's rewrite comes with the wiring, for the edge's own transfers only. Until then
+`withoutForwarding`, which `front.ts` calls on every public handshake, passes a transfer on as
+it came.
 
 What is left is the wiring in the agent's `hold`: `speakWhile` in place of its own query
 interval, and at the end a transfer or a configuration disconnect where `speakWhile` handed back

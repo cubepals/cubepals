@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-/** What the front door passes on of a handshake: no forwarded identity, and no transfer. */
+/** What the front door passes on of a handshake: no forwarded identity, and a transfer as it came. */
 import { expect, test } from 'bun:test'
 import { withoutForwarding } from './forwarding.ts'
 import { packet, string, varInt } from './notice.ts'
@@ -44,27 +44,25 @@ test('bytes that are not a whole handshake come back as they were', () => {
 const transferred = (address: string, port = [0x63, 0xdd]) =>
   Uint8Array.from([...packet(0, [...varInt(776), ...string(address), ...port, 3]), ...after])
 
-test('a transfer goes on as a plain join, to the same address and port, with what follows untouched', () => {
-  expect(Array.from(withoutForwarding(transferred('a.play.test')))).toEqual(Array.from(join('a.play.test')))
-  const elsewhere = Uint8Array.from([
-    ...packet(0, [...varInt(776), ...string('a.play.test'), 0x01, 0xbb, 2]),
-    ...after,
-  ])
-  expect(Array.from(withoutForwarding(transferred('a.play.test', [0x01, 0xbb])))).toEqual(
-    Array.from(elsewhere),
-  )
+test('a transfer goes on as it came, still a transfer, whatever its port', () => {
+  for (const port of [
+    [0x63, 0xdd],
+    [0x01, 0xbb],
+  ]) {
+    const bytes = transferred('a.play.test', port)
+    expect(withoutForwarding(bytes)).toBe(bytes)
+  }
 })
 
-test('a transfer that carries forwarding loses both', () => {
+test('a transfer that carries forwarding loses the forwarding and stays a transfer', () => {
   expect(Array.from(withoutForwarding(transferred('a.play.test\0^Floodgate^x')))).toEqual(
-    Array.from(join('a.play.test')),
+    Array.from(transferred('a.play.test')),
   )
 })
 
-test('a transfer from a Forge client keeps its marker and becomes a join', () => {
-  expect(Array.from(withoutForwarding(transferred('a.play.test\0FML3\0')))).toEqual(
-    Array.from(join('a.play.test\0FML3\0')),
-  )
+test('a transfer from a Forge client is left as it is, marker and all', () => {
+  const bytes = transferred('a.play.test\0FML3\0')
+  expect(withoutForwarding(bytes)).toBe(bytes)
 })
 
 test('a ping, and a handshake whose intent does not end it, are left as they are', () => {
@@ -92,7 +90,7 @@ test('a packet that isn’t a handshake, or one not all here, is left as it is, 
 })
 
 test('a handshake that is only its own packet, with nothing after, is rewritten too', () => {
-  const alone = packet(0, [...varInt(776), ...string('a.play.test'), 0x63, 0xdd, 3])
+  const alone = handshake('a.play.test\0^Floodgate^x')
   expect(Array.from(withoutForwarding(alone))).toEqual(Array.from(handshake('a.play.test')))
 })
 
