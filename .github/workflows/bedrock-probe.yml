@@ -1,0 +1,93 @@
+# SPDX-FileCopyrightText: 2026 The Cubepals Authors
+#
+# SPDX-License-Identifier: AGPL-3.0-only
+
+# Temporary: probes the staging edge's RakNet port from a runner, which can send UDP. Removed
+# before this branch's pull request.
+name: Bedrock probe
+
+on:
+  push:
+    branches: [claude/eager-goodall-atvoh9]
+    paths: [.github/workflows/bedrock-probe.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      EDGE: 37.16.28.151
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.3
+      - run: bun install --frozen-lockfile
+        working-directory: tools/bedrock-join
+      - name: Capture
+        run: |
+          sudo tcpdump -i any -nn -U -w probe.pcap "host $EDGE or icmp" > /dev/null 2>&1 &
+          sleep 2
+      - name: Probe
+        shell: python3 {0}
+        run: |
+          import json, os, socket, struct, time
+          HOST, PORT = os.environ['EDGE'], 19132
+          MAGIC = bytes.fromhex('00ffff00fefefefefdfdfdfd12345678')
+          IP_MTU_DISCOVER, DONT, DO = 10, 0, 2
+          def ping():
+              return b'\x01' + struct.pack('>q', int(time.time() * 1000)) + MAGIC + os.urandom(8)
+          def ocr1(mtu):
+              body = b'\x05' + MAGIC + bytes([11])
+              return body + b'\x00' * (mtu - 28 - len(body))
+          def probe(kind, payload, df, wait=2.0, sock=None):
+              s = sock or socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+              if sock is None:
+                  s.setsockopt(socket.IPPROTO_IP, IP_MTU_DISCOVER, DO if df else DONT)
+                  s.bind(('0.0.0.0', 0))
+              s.settimeout(wait)
+              began, err, reply = time.time(), None, None
+              try:
+                  s.sendto(payload, (HOST, PORT))
+              except OSError as e:
+                  err = str(e)
+              try:
+                  data, _ = s.recvfrom(4096)
+                  reply = [hex(data[0]), len(data), round((time.time() - began) * 1000)]
+              except socket.timeout:
+                  pass
+              print(json.dumps({'kind': kind, 'bytes': len(payload), 'df': df, 'port': s.getsockname()[1], 'err': err, 'reply': reply}), flush=True)
+              return s, reply
+          deadline = time.time() + 180
+          while time.time() < deadline:
+              _, reply = probe('wait-ping', ping(), False)
+              if reply:
+                  break
+              time.sleep(3)
+          for round_ in range(4):
+              for kind, payload in (('ping', ping()), ('ocr1-576', ocr1(576)), ('ocr1-1200', ocr1(1200)), ('ocr1-1492', ocr1(1492))):
+                  for df in (False, True):
+                      probe(kind, payload, df)
+                      time.sleep(1.2)
+          # One socket: a ping, then opens from the same socket, as a client after a server list ping.
+          s, _ = probe('same-ping', ping(), False)
+          for mtu in (576, 1200, 576):
+              probe(f'same-ocr1-{mtu}', ocr1(mtu), False, sock=s)
+              time.sleep(1.2)
+      - name: Join through the address
+        working-directory: tools/bedrock-join
+        run: timeout 150 bun join.ts --address probe.play.staging.cubepals.com --timeout 60 --hold 1 || true
+      - name: Join through the IPv4
+        working-directory: tools/bedrock-join
+        run: timeout 150 bun join.ts --address probe.play.staging.cubepals.com --connect "$EDGE:19132" --timeout 60 --hold 1 || true
+      - name: What went over the wire
+        if: always()
+        run: |
+          sudo pkill tcpdump || true
+          sleep 1
+          sudo tcpdump -nn -v -r probe.pcap 2>/dev/null | head -600
