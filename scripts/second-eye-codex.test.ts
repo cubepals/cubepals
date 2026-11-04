@@ -83,7 +83,7 @@ test("Codex's summary state is read only from its own account's comment", () => 
   expect(codexSummaryOf([summary(state(done), 'someone', 'User')])).toBeUndefined()
   expect(codexSummaryOf([summary('<!-- codex-review-state:v1 {nope} -->')])).toBeUndefined()
   expect(codexSummaryOf([summary('Thanks!')])).toBeUndefined()
-  const escaped = state(done).replace(/(?<=v1 )[^]*?(?= -->)/, (json) =>
+  const escaped = state(done).replace(/(?<=v1 )[\s\S]*?(?= -->)/, (json) =>
     json.replaceAll('{', '&#123;').replaceAll('}', '&#125;'),
   )
   expect(escaped).toContain('&#123;')
