@@ -20,6 +20,7 @@ describe('a world download', () => {
       '^cache(\\/|$)',
       '^\\.[^/]',
       '^cubepals-download\\.txt$',
+      '^plugins\\/floodgate\\/key\\.pem$',
     ])
   })
 
@@ -67,6 +68,7 @@ describe('a world download', () => {
     ],
     modpack: ['.modrinth-modpack-manifest.json', 'mods/create.jar', 'kubejs/mods/nested.jar'],
     note: ['cubepals-download.txt'],
+    bedrock: ['plugins/floodgate/key.pem'],
   }
   for (const [kind, paths] of Object.entries(leftOut))
     test(`leaves out what ${kind} installed`, () => {
@@ -99,6 +101,7 @@ describe('a world download', () => {
       'kubejs/server_scripts/recipes.js',
       'plugins/Essentials/config.yml',
       'plugins/LuckPerms/luckperms-h2.mv.db',
+      'plugins/floodgate/config.yml',
       'mods/',
       'mods/.installed.json',
       'resources.zip',
