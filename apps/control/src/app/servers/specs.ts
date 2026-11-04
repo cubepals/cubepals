@@ -243,7 +243,7 @@ export class RuntimeSpecs {
     // What drift leaves for the next start, a machine asleep can leave too: it wakes as it slept.
     // But not without the Via plugins it should have, or with ones turned off: a sleeping server
     // may never stop, so its wake boots once to place them. A newer pin of the same ones waits
-    // for its next boot. One that places none wakes on the drift digest alone, as before them.
+    // for its next boot. One that places none adds nothing for them.
     // How they are named on disk is in it too: one asleep on jars named as the image names its
     // own, which the image could remove as it started (`carried.ts`), boots once to have them.
     // So do the files Cubepals owns, where they are newer than its revision's: a server that only
@@ -253,13 +253,19 @@ export class RuntimeSpecs {
       filesDigest(starting.files) === filesDigest(revision.files) ? [] : [filesDigest(starting.files)]
     // Stop cheaters the same way: on, or turned off, a machine asleep boots once for it.
     const grim = stop.placed === null ? [] : [`stop-cheaters:${stop.placed.jar?.artifact.sha512 ?? 'own'}`]
-    const startOnly = [...(compat.length === 0 ? [] : [compat.join(','), COMPAT_PREFIX]), ...grim, ...newer]
-    const resumesOn =
-      startOnly.length === 0
-        ? driftDigest
-        : createHash('sha256')
-            .update(`${driftDigest} ${startOnly.join(' ')}`)
-            .digest('hex')
+    // And what the server list shows of it, the icon and message its owner sets (`IDENTITY_ENV`):
+    // one asleep on others boots for them, which a change to either does at once in the background
+    // (`refresh.ts`), so a player's wake still resumes. One asleep on the same wakes as it slept.
+    const shown = `identity:${identityDigest(labelled.env)}`
+    const startOnly = [
+      ...(compat.length === 0 ? [] : [compat.join(','), COMPAT_PREFIX]),
+      ...grim,
+      ...newer,
+      shown,
+    ]
+    const resumesOn = createHash('sha256')
+      .update(`${driftDigest} ${startOnly.join(' ')}`)
+      .digest('hex')
     const spec = { ...labelled, resumesOn }
     return {
       revision,
@@ -275,6 +281,12 @@ export class RuntimeSpecs {
     }
   }
 }
+
+/** What the server list shows of a server, its icon and message as its spec gives them, as one digest. */
+const identityDigest = (env: Readonly<Record<string, string>>): string =>
+  createHash('sha256')
+    .update(JSON.stringify(IDENTITY_ENV.map((name) => [name, env[name] ?? null])))
+    .digest('hex')
 
 /** A revision's carried files, by path and content, in any order, as one digest. */
 const filesDigest = (files: readonly CarriedFile[]): string =>

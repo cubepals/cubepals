@@ -334,10 +334,9 @@ the application saves first, as it does for any runtime.
 - A frozen server holds its memory as a running one does: the node counts it against what it
   gives out, and placement against the node's room (§5).
 - A new spec while it sleeps that names the same `resumesOn` (it differs only in what the server
-  reads as it starts: its message, its picture, its plan's limits) waits: the server stays
-  asleep with its memory, the answer is `outcome: "deferred"`, the copy's `pendingSpecDigest`
-  names the spec, and the node puts it in place at the server's next boot. A resume keeps it
-  waiting. Any other new spec replaces the copy, stopping it first, and the memory is gone.
+  reads as it starts, such as its plan's limits) waits: the server stays asleep with its memory,
+  the answer is `outcome: "deferred"`, the copy's `pendingSpecDigest` names the spec, and the node
+  puts it in place at the server's next boot. A resume keeps it waiting. Any other new spec replaces the copy, stopping it first, and the memory is gone.
 - Stop, kill, fence and delete reach it as they reach a running server: a stop's signal arrives
   as it thaws, so it saves on the way out. Exec needs a running process, and is `409 not_running`.
 - The memory goes with the host: after a reboot the copy reads `stopped`, is never resumed, and

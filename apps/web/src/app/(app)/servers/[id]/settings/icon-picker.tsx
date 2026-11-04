@@ -117,7 +117,8 @@ export function IconPicker({ choice }: { choice: IconChoice }) {
       </div>
       {problem === null ? (
         <span className="bk-field__help">
-          Shown on the server’s page, and in Minecraft’s server list after the next start.
+          Shown on the server’s page, and in Minecraft’s server list from the next start. A sleeping server
+          starts in the background to show it.
         </span>
       ) : (
         <span className="bk-field__error" role="alert">

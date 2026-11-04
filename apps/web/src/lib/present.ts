@@ -23,6 +23,7 @@ import type { PillStatus, ProvisioningStep } from '../ui'
 import { broughtJourney } from './brought-journey'
 import { etaLine as operationEtaLine } from './operation-eta'
 import { outOfPlay } from './out-of-play'
+import { refreshJourney } from './refresh-journey'
 import { restoreSeconds } from './restore-pace'
 
 /**
@@ -370,7 +371,7 @@ export function presentProgress(
   changes: readonly RevisionChangeView[] = [],
 ): Progress | null {
   const plain = operation.step === 'rolling_back' ? GOING_BACK[operation.kind] : JOURNEYS[operation.kind]
-  const journey = broughtJourney(operation) ?? plain
+  const journey = broughtJourney(operation) ?? refreshJourney(operation, plain) ?? plain
   if (!journey) return null
   const step = operation.step ?? 'queued'
   const current = Math.max(

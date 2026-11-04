@@ -19,7 +19,7 @@ import { ConfirmChange, useChanged } from './shared'
 /**
  * What the owner calls their world, says about it, and picks or gives for its picture, plus the address
  * friends type. None of it restarts anything; the icon reaches Minecraft's server list at the
- * next start.
+ * next start, which a sleeping server has at once, in the background (`refresh-journey.ts`).
  */
 export function Identity({ view }: { view: ServerView }) {
   // Above the fields, which start over once a change lands: "Saved" outlives that.

@@ -122,6 +122,7 @@ export class RevisionService {
   readonly #artifacts: ArtifactService
   readonly #providers: readonly string[]
   readonly #builds: LoaderBuilds
+  readonly #refresh: (serverId: string) => Promise<unknown>
 
   constructor(deps: {
     db: Db
@@ -133,6 +134,8 @@ export class RevisionService {
     /** The runtimes this deployment runs: a binding to another is foreign. */
     providers: readonly string[]
     loaderBuilds: LoaderBuilds
+    /** Starts a server asleep to show a new server list message (`servers/refresh.ts`). */
+    refresh: (serverId: string) => Promise<unknown>
   }) {
     this.#db = deps.db
     this.#policy = deps.policy
@@ -141,16 +144,18 @@ export class RevisionService {
     this.#artifacts = deps.artifacts
     this.#providers = deps.providers
     this.#builds = deps.loaderBuilds
+    this.#refresh = deps.refresh
   }
 
-  changeSettings(
+  async changeSettings(
     actor: Actor,
     serverId: string,
     game: GameSettings,
     requestId: string,
     options: ChangeOptions = {},
   ) {
-    return this.#change(actor, serverId, requestId, 'apply', options, async (_tx, server, desired) => {
+    let shown = false
+    const done = this.#change(actor, serverId, requestId, 'apply', options, async (_tx, server, desired) => {
       // A page from before the setting left it out: the server keeps what it had.
       const keepInventory = game.keepInventory ?? desired.settings.keepInventory
       const settings: ServerSettings = {
@@ -173,8 +178,13 @@ export class RevisionService {
       }
       const changes = describeChanges(desired, draft)
       if (changes.length === 0) return null
+      // A new message shows at once on a server asleep, which starts in the background for it.
+      shown = settings.motd !== desired.settings.motd
       return { draft, audit: { action: 'server.settings_changed', data: { changes } } }
     })
+    const saved = await done
+    if (shown) await this.#refresh(serverId)
+    return saved
   }
 
   /**

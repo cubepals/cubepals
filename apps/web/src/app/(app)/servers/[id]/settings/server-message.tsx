@@ -84,7 +84,7 @@ export function ServerMessage({
           })
         }
         error={problem}
-        help="Shown under the name in your friends’ server list, from the server’s next start. Select some words and pick a colour or style, or type & codes like &6 for gold."
+        help="Shown under the name in your friends’ server list, from the server’s next start; a sleeping server starts in the background to show it. Select some words and pick a colour or style, or type & codes like &6 for gold."
       />
       <StyleBar
         field={field}
