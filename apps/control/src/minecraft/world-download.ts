@@ -11,6 +11,7 @@
  * here; the archive is read and rewritten by a port.
  */
 
+import { FLOODGATE_KEY_FILE } from './bedrock.ts'
 import { isAddedJar } from './uploads.ts'
 
 /** What a download leaves out, by path in the archive, and why. Everything else goes in. */
@@ -29,6 +30,10 @@ export const LEFT_OUT_OF_DOWNLOADS: readonly { path: RegExp; why: string }[] = [
   {
     path: /^cubepals-download\.txt$/,
     why: 'the note an earlier download carried, written again for this one',
+  },
+  {
+    path: new RegExp(`^${FLOODGATE_KEY_FILE.replaceAll('.', '\\.')}$`),
+    why: 'the key Floodgate shares with the edge to let Bedrock players in: Cubepals’, not the world’s, and a server that starts with the world is given it again',
   },
 ]
 
