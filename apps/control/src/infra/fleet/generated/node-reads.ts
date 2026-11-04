@@ -1,4 +1,4 @@
-// Generated from infra/fleet/node-reads.openapi.json (sha256 20b2097db89729fa2b3ec08ba2f53b231fc6e8c2c2f8c9c1b3e57e5d741a9292) by tools/openapi.
+// Generated from infra/fleet/node-reads.openapi.json (sha256 dac99c0205b8efe94f23fb26f7b51f1d33c3a5271ffbe2ceafad046dbeb2cc93) by tools/openapi.
 // Do not edit. Regenerate with `bun run openapi:generate`; update the spec with `bun scripts/blocklyd.ts bump <version>`.
 
 export type paths = Record<string, never>;
@@ -263,6 +263,12 @@ export interface components {
         /** @description The blocklyd the control plane wants the node to run, at `GET /fleet/v1/blocklyd`. */
         UpgradeOffer: {
             sha256: string;
+            /**
+             * @description The release's Ed25519 signature of `version` and `sha256`, in hex: its `blocklyd.sig`,
+             *     which the control plane passes on (upgrade/trust.rs). A node that lists `signed-upgrade`
+             *     installs nothing without it.
+             */
+            signature?: string | null;
             version: string;
         };
         /**

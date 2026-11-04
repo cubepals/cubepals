@@ -11,7 +11,7 @@
 # blocklyd, which the node endpoint hands to hosts as they join (FLEET_BLOCKLYD_BIN): one release
 # of cubepals/blocklyd, static (musl), pinned by digest. `bun scripts/blocklyd.ts bump <version>`
 # moves this line and the copies of the release's files beside the fleet adapter together.
-FROM ghcr.io/cubepals/blocklyd:0.3.6@sha256:4309ff87437cd3d8d9ac77b6953247919f1e943641ffba888914a2a13d341148 AS blocklyd
+FROM ghcr.io/cubepals/blocklyd:0.3.7@sha256:3fbdf78e00b3b755efd8b4a81e4f34915ce19763e7a77d5dc3c659fd9de05993 AS blocklyd
 
 # The join reporter, the Paper plugin Cubepals places on servers (apps/reporter): built here from
 # its sources with the Gradle its wrapper names, and stored as an artifact as the control plane
@@ -56,8 +56,11 @@ COPY --from=reporter /build/build/libs/cubepals-reporter.jar apps/control/assets
 # Cubepals' lockup, which every shared link's picture carries (src/interfaces/http/card.ts).
 COPY brand/png/lockup-horizontal.png brand/png/lockup-horizontal.png
 # What the node endpoint serves joining hosts: join.sh and daemon.json are in src/infra/fleet, and
-# blocklyd itself is the pinned release's. Its licence (FSL-1.1-ALv2) goes with it.
+# blocklyd itself is the pinned release's. Its licence (FSL-1.1-ALv2) goes with it, and so does its
+# release signature, which upgrade offers carry to nodes that take only a signed blocklyd
+# (join-routes.ts reads it beside the binary).
 COPY --from=blocklyd /blocklyd /usr/local/lib/blocklyd/blocklyd
+COPY --from=blocklyd /blocklyd.sig /usr/local/lib/blocklyd/blocklyd.sig
 COPY --from=blocklyd /LICENSE.md /usr/local/lib/blocklyd/LICENSE.md
 USER node
 WORKDIR /app/apps/control
