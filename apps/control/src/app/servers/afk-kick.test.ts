@@ -4,9 +4,11 @@
 
 /** An idle-kick choice belongs to one server and reaches only that server's next start. */
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
+import { randomUUID } from 'node:crypto'
 import { schema } from '@blockly/db'
 import { and, eq } from 'drizzle-orm'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
+import { PAYING } from '../billing/persistence.ts'
 
 describe.skipIf(!hasDatabase)('server idle-kick choices', () => {
   let h: Harness
@@ -40,9 +42,12 @@ describe.skipIf(!hasDatabase)('server idle-kick choices', () => {
     expect((await h.server(first.id)).version).toBe(version + 1)
     await h.app.afkKick.set(owner, first.id, 0)
     expect((await h.server(first.id)).version).toBe(version + 1)
-    const audit = await h.db.select().from(schema.auditLog).where(and(
-      eq(schema.auditLog.subjectId, first.id), eq(schema.auditLog.action, 'server.afk_kick_set'),
-    ))
+    const audit = await h.db
+      .select()
+      .from(schema.auditLog)
+      .where(
+        and(eq(schema.auditLog.subjectId, first.id), eq(schema.auditLog.action, 'server.afk_kick_set')),
+      )
     expect(audit).toHaveLength(1)
     expect(audit[0]).toMatchObject({ subjectType: 'server', data: { minutes: 0 } })
     await h.app.afkKick.set(owner, first.id, 45)
@@ -57,9 +62,13 @@ describe.skipIf(!hasDatabase)('server idle-kick choices', () => {
     const stranger = await h.user('Stranger idle', 'plus')
     const server = await h.create(owner, { name: 'Private idle' })
     await expect(h.app.afkKick.set(stranger, server.id, 0)).rejects.toMatchObject({ name: 'NotFound' })
-    await expect(h.app.afkKick.set({ kind: 'system', reason: 'reconcile' }, server.id, 0)).rejects.toMatchObject({ name: 'NotFound' })
+    await expect(
+      h.app.afkKick.set({ kind: 'system', reason: 'reconcile' }, server.id, 0),
+    ).rejects.toMatchObject({ name: 'NotFound' })
     for (const minutes of [-1, 3, 121, 5.5, Number.NaN])
-      await expect(h.app.afkKick.set(owner, server.id, minutes)).rejects.toMatchObject({ code: 'invalid_choice' })
+      await expect(h.app.afkKick.set(owner, server.id, minutes)).rejects.toMatchObject({
+        code: 'invalid_choice',
+      })
     expect((await h.server(server.id)).afkKickMinutes).toBeNull()
     const free = await h.user('Free idle')
     const trial = await h.create(free, { name: 'Free idle' })
@@ -67,9 +76,42 @@ describe.skipIf(!hasDatabase)('server idle-kick choices', () => {
     expect((await h.server(trial.id)).afkKickMinutes).toBeNull()
   }, 30_000)
 
+  test('after a downgrade the owner can reset an earlier choice without choosing a new override', async () => {
+    const owner = await h.user('Downgraded idle', 'plus')
+    const server = await h.create(owner, { name: 'Downgraded idle' })
+    await h.app.afkKick.set(owner, server.id, 0)
+    await h.db
+      .update(schema.accountStanding)
+      .set({ plan: 'free' })
+      .where(eq(schema.accountStanding.userId, owner.userId))
+    await expect(h.app.afkKick.set(owner, server.id, 30)).rejects.toMatchObject({ code: 'not_entitled' })
+    expect((await h.server(server.id)).afkKickMinutes).toBe(0)
+    await h.app.afkKick.set(owner, server.id, null)
+    expect((await h.server(server.id)).afkKickMinutes).toBeNull()
+    expect((await h.app.specs.desired(h.db, await h.server(server.id))).spec.env.PLAYER_IDLE_TIMEOUT).toBe('15')
+  }, 30_000)
+
+  test('a paid subscription allows the choice even when the stored account plan is free', async () => {
+    const owner = await h.user('Paying idle')
+    await h.db.insert(schema.billingSubscriptions).values({
+      userId: owner.userId,
+      provider: 'local',
+      externalCustomerId: randomUUID(),
+      externalSubscriptionId: randomUUID(),
+      planKey: 'plus',
+      status: PAYING[0] ?? '',
+    })
+    const server = await h.create(owner, { name: 'Paid idle' })
+    await h.app.afkKick.set(owner, server.id, 30)
+    expect((await h.server(server.id)).afkKickMinutes).toBe(30)
+  }, 30_000)
+
   test('a new server ignores the legacy account choice and uses its plan', async () => {
     const owner = await h.user('Legacy idle', 'plus')
-    await h.db.update(schema.accountStanding).set({ afkKickMinutes: 0 }).where(eq(schema.accountStanding.userId, owner.userId))
+    await h.db
+      .update(schema.accountStanding)
+      .set({ afkKickMinutes: 0 })
+      .where(eq(schema.accountStanding.userId, owner.userId))
     const server = await h.create(owner, { name: 'New idle' })
     expect(server.afkKickMinutes).toBeNull()
     expect((await h.app.specs.desired(h.db, server)).spec.env.PLAYER_IDLE_TIMEOUT).toBe('15')

@@ -11,7 +11,7 @@ import { SetAfkKickInput } from '@blockly/contracts'
 import { type Db, schema } from '@blockly/db'
 import { eq } from 'drizzle-orm'
 import { entitlementsOf } from '../../domain/account/entitlements.ts'
-import { lockStanding } from '../accounts/persistence.ts'
+import { loadStanding, lockStanding } from '../accounts/persistence.ts'
 import { type Actor, authorize, requestedBy } from '../actor.ts'
 import { AppError, NotFound } from '../errors.ts'
 import type { EventBus } from '../ports/events.ts'
@@ -33,9 +33,9 @@ export class AfkKick {
       if (server.deletedAt !== null) throw new NotFound('Server')
       if (!SetAfkKickInput.shape.minutes.safeParse(minutes).success)
         throw new AppError('invalid_choice', 'An AFK kick is between 5 and 120 minutes, or never.')
-      const standing = await lockStanding(tx, server.ownerId)
-      if (standing === null) throw new NotFound('Account')
-      if (!entitlementsOf(standing).mayChooseAfkKick)
+      if ((await lockStanding(tx, server.ownerId)) === null) throw new NotFound('Account')
+      const standing = await loadStanding(tx, server.ownerId)
+      if (minutes !== null && !entitlementsOf(standing).mayChooseAfkKick)
         throw new AppError('not_entitled', 'Your plan keeps Cubepals’ own AFK kick. Plus lets you set it.')
       if (server.afkKickMinutes === minutes) return
       const version = server.version + 1

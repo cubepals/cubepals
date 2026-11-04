@@ -50,41 +50,61 @@ function IdleKick({ view, plan }: { view: ServerView; plan: EntitlementsView }) 
     <FormSection title="Idle players" description="These choices apply only to this server.">
       <FormRow
         label="Kick players who stand still"
-        description={`${outcome.said === 'done' ? 'Saved. ' : ''}${effective === 0 ? 'Somebody idle keeps this server awake and spends your play time until they leave.' : 'Somebody idle still spends your play time. Kicked players can join again straight away.'} Changes apply the next time this server starts.`}
+        description={`${outcome.said === 'done' ? 'Saved. ' : ''}${
+          effective === 0
+            ? 'Somebody idle keeps this server awake and spends your play time until they leave.'
+            : 'Somebody idle still spends your play time. Kicked players can join again straight away.'
+        } Changes apply the next time this server starts.`}
         control={
           <select
             aria-label="Kick players who stand still"
             className="bk-selectctl bk-num"
             style={{ inlineSize: 'auto' }}
             value={minutes ?? 'default'}
-            disabled={save.isPending || !plan.mayChooseAfkKick}
+            disabled={save.isPending || (!plan.mayChooseAfkKick && minutes === null)}
             onChange={(event) => choose(event.target.value)}
           >
             <option value="default">Plan default: after {plan.playerIdleKickMinutes} minutes</option>
             {choices.map((n) => (
-              <option key={n} value={n}>After {n} minutes</option>
+              <option key={n} value={n} disabled={!plan.mayChooseAfkKick}>
+                After {n} minutes
+              </option>
             ))}
-            <option value={0}>Never</option>
+            <option value={0} disabled={!plan.mayChooseAfkKick}>Never</option>
           </select>
         }
       />
-      {!plan.mayChooseAfkKick && <p className="bk-field__help">Your plan keeps the default idle kick.</p>}
+      {!plan.mayChooseAfkKick && (
+        <p className="bk-field__help">
+          Choosing an idle kick comes with a paid plan. You can return to the plan default.
+        </p>
+      )}
       <Modal
         open={asking}
         onClose={() => setAsking(false)}
         title="Never kick players who stand still?"
         actions={
           <>
-            <Button variant="ghost" onClick={() => setAsking(false)}>Keep kicking them</Button>
-            <Button variant="primary" disabled={save.isPending} onClick={() => save.mutate({ serverId: view.id, minutes: 0 })}>
+            <Button variant="ghost" onClick={() => setAsking(false)}>
+              Keep kicking them
+            </Button>
+            <Button
+              variant="primary"
+              disabled={save.isPending}
+              onClick={() => save.mutate({ serverId: view.id, minutes: 0 })}
+            >
               {save.isPending ? 'Saving…' : 'Never kick'}
             </Button>
           </>
         }
       >
-        <p>Somebody idle keeps {view.name} awake, so it keeps using your play time for as long as they stay, even when nobody is playing. This changes only this server, from its next start.</p>
+        <p>
+          Somebody idle keeps {view.name} awake, so it keeps using your play time for as long as they stay,
+          even when nobody is playing. This changes only this server, from its next start.
+        </p>
+        {save.isError && <Note tone="danger">{messageOf(save.error)}</Note>}
       </Modal>
-      {save.isError && <Note tone="danger">{messageOf(save.error)}</Note>}
+      {!asking && save.isError && <Note tone="danger">{messageOf(save.error)}</Note>}
     </FormSection>
   )
 }

@@ -268,7 +268,6 @@ export interface AccountOverviewView {
     giftNext: { planKey: string; months: number; startsAt: string; endsAt: string; continues: boolean } | null
   }
   entitlements: EntitlementsView
-  /** What the owner has set for themselves, where their plan lets them. */
   usage: {
     servers: number
     running: number

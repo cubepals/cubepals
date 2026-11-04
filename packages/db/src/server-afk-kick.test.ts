@@ -21,7 +21,9 @@ test.skipIf(!base)('idle-kick choices are copied to each existing server once', 
     await client.query('CREATE TABLE account_standing (user_id text PRIMARY KEY, afk_kick_minutes integer)')
     await client.query('CREATE TABLE minecraft_servers (id text PRIMARY KEY, owner_id text NOT NULL)')
     await client.query("INSERT INTO account_standing VALUES ('never', 0), ('custom', 45), ('default', NULL)")
-    await client.query("INSERT INTO minecraft_servers VALUES ('one', 'never'), ('two', 'never'), ('three', 'custom'), ('four', 'default'), ('five', 'missing')")
+    await client.query(
+      "INSERT INTO minecraft_servers VALUES ('one', 'never'), ('two', 'never'), ('three', 'custom'), ('four', 'default'), ('five', 'missing')",
+    )
     const migration = readFileSync(new URL('../migrations/0109_server_afk_kick.sql', import.meta.url), 'utf8')
     await client.query(migration)
     const { rows } = await client.query('SELECT id, afk_kick_minutes FROM minecraft_servers ORDER BY id')
