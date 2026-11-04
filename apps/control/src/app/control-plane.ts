@@ -201,15 +201,7 @@ export function composeControlPlane(ports: ControlPlanePorts, settings: ControlP
     jobs: ports.jobs,
     locks: ports.locks,
   })
-  const revisions = new RevisionService({
-    db,
-    policy,
-    transitions,
-    events,
-    artifacts,
-    providers: runtime.providers,
-    loaderBuilds: ports.loaderBuilds,
-  })
+  const revisions = revisionService(ports, { policy, transitions, artifacts })
   const catalog = new CatalogSync({ db, catalog: ports.catalog })
   const listings = new ListingService({
     ...ports,
@@ -402,6 +394,24 @@ export function composeControlPlane(ports: ControlPlanePorts, settings: ControlP
     joins: new JoinService({ ...ports, ...settings }),
     stopCheaters: new StopCheatersService({ db, policy, transitions, events }),
     feed: new ConsoleFeed(db, ports.logs, runtime.providers, ports.limits),
+  })
+}
+
+/** Boot configuration changes, on the ports' database and runtimes (`revisions/service.ts`). */
+function revisionService(
+  ports: ControlPlanePorts,
+  parts: { policy: AccessPolicy; transitions: ServerTransitions; artifacts: ArtifactService },
+) {
+  const { db, events, runtime } = ports
+  const { policy, transitions, artifacts } = parts
+  return new RevisionService({
+    db,
+    policy,
+    transitions,
+    events,
+    artifacts,
+    providers: runtime.providers,
+    loaderBuilds: ports.loaderBuilds,
   })
 }
 
