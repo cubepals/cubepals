@@ -135,25 +135,31 @@ export function severityOf(body: string): Severity {
   return 'low'
 }
 
-/** `text` with every HTML tag gone, stripped until none is left, and no stray angle bracket. */
-function withoutTags(text: string): string {
+/** The tags Codex wraps its own markup in: its badge sits in <sub>, and a line may break with <br>. */
+const CODEX_TAG = /<\/?sub>|<br\s*\/?>/gi
+
+/**
+ * `text` without Codex's own tags, removed until none is left, since one pass leaves a tag split
+ * around another (<su<sub>b>). Any other angle bracket is code, such as Array<string>, and stays:
+ * the comment escapes it when it writes the text.
+ */
+function withoutCodexTags(text: string): string {
   let before: string
   let after = text
-  // One pass leaves a tag split around another (<scr<b>ipt>), so it repeats until nothing changes.
   do {
     before = after
-    after = before.replace(/<[^<>]*>/g, '')
+    after = before.replace(CODEX_TAG, '')
   } while (after !== before)
-  return after.replace(/[<>]/g, '')
+  return after
 }
 
-/** Codex's Markdown as plain lines: no images or badges, tags, emphasis or feedback prompt. */
+/** Codex's Markdown as plain lines: no images or badges, its tags and hidden markers, emphasis or feedback prompt. */
 function plainLines(body: string): string[] {
-  return withoutTags(body.replace(/!\[[^\]]*\]\([^)]*\)/g, ''))
+  return withoutCodexTags(body.replace(/!\[[^\]]*\]\([^)]*\)/g, ''))
     .replace(/\*\*|__/g, '')
     .split('\n')
     .map((line) => line.trim())
-    .filter((line) => line && !/^Useful\? React with/i.test(line))
+    .filter((line) => line && !/^Useful\? React with/i.test(line) && !/^<!--.*-->$/.test(line))
 }
 
 /** One of Codex's line comments as a finding: its first line the problem, the rest the why. */
