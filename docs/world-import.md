@@ -41,8 +41,10 @@ Before the plan:
   archive under its bytes, and the server's first start unpacks it where its world goes
   (`World.startsOn`, `minecraft/starter.ts`), before the steps that lay a world out for its server
   type. The server starts on a disk with room for the world and, while it unpacks, the archive
-  beside it (`diskForBroughtWorld`), up to the plan's largest; a world brought before its server is
-  held to what that leaves. The store keeps the archive while a server has the world, and a month
+  beside it, which the start deletes once the world is in place; the world and the server's own
+  files are below the line the disk grows at, so playing it never finds the disk outgrown at once
+  (`diskForBroughtWorld`), up to the plan's largest. A world brought before its server is held to
+  what that leaves. The store keeps the archive while a server has the world, and a month
   for one not made yet; another world brought for a new server lets the one before go once it is
   ready.
 - **Step 4, a modded world's pack, is in.** A world played with mods (a modded server type in its

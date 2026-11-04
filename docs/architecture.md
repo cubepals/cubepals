@@ -1034,8 +1034,9 @@ Outcomes are written down in `job_health`, the successes of a minute together:
   plan doesn't run, and the servers started last beyond its running limit (§15.5 billing).
 - `usage-close`: closes power intervals for servers seen stopped.
 - `store-sweep`: hourly. Servers idle past their plan's days → `store` (§15.5 stored worlds).
-- `disk-check`: every 10 minutes. Running servers whose plan grows disks are measured; one that
-  needs room now is told in game and restarted onto a bigger disk (§15.5 storage).
+- `disk-check`: every 10 minutes. Running servers whose plan grows disks are measured; one past
+  where its disk grows has the bigger disk recorded for its next start and plays on, and only one
+  about to fill the disk it is on is told in game and restarted onto it (§15.5 storage).
 - `retention-sweep`: daily. Warns, then deletes Free worlds unplayed for a year (§15.5 retention).
 - `joins-sweep`: every 10 minutes. Deletes joins and signals older than 35 days, and clears a
   join's `source` once it is 50 minutes old (§5 Joins).
@@ -2340,10 +2341,18 @@ the same table through `GET /api/public/plans` and `billing.plans`. The size beh
 whatever its size). Each stop measures what the world takes (`du` over the runtime's exec, kept as
 `disk_used_bytes`). Once a world leaves less than a fifth of its disk, or 1.5 GB, free, the next
 start gives it one the world fills to about 70% (at least 2 GB more), up to the plan's most
-(`grownDisk`). A world can grow gigabytes an hour while a group explores, so `disk-check` measures
-running servers every 10 minutes too, and one that needs room now is told in game and restarted
-onto the bigger disk (the restart applies the spec, and Fly extends the volume): a disk never runs
-full with players on it. Free's world border keeps it far inside its 3 GB.
+(`grownDisk`, the line `growthLineBytes`). What is measured is the server's whole folder: the
+world, and the server's own files beside it (`SERVER_FILES_BYTES`: its jar and libraries, a
+modpack's mods, its logs). A world can grow gigabytes an hour while a group explores, so
+`disk-check` measures running servers every 10 minutes too. One past the line has its bigger disk
+recorded and plays on: servers sleep when nobody is on, and the next start brings it. Only one the
+disk itself (`df`) says has less than a gigabyte left, and that a restart would give more, is told
+in game and restarted onto the bigger disk at once (the restart applies the spec, and Fly extends
+the volume): a disk never runs full with players on it, and nobody is turned out for room they
+don't need yet. A world brought for a new server, or brought back from a download, starts on a
+disk where it and the server's own files are below the line (`diskForBroughtWorld`,
+`diskForWorld`), so its first measure never finds it outgrown. Free's world border keeps it far
+inside its 3 GB.
 `storage.paidForGb` (Plus 10 GB) is the world data a plan covers; an account past it is the
 `worlds_outgrow_plan` admin alert, and nothing is done to its servers.
 

@@ -16,7 +16,7 @@
  *
  * Parts (`fake-runtime/`):
  * - `archive.ts`: a storage directory to and from an archive store, as a gzipped tar.
- * - `command.ts`: one program run on this computer, for `exec` and for packing archives.
+ * - `command.ts`: one program run on this computer, for `exec` and packing archives, or a disk reported.
  * - `handle.ts`: the strings it issues as handles and snapshot handles.
  * - `hold.ts`: the next few calls of a verb, held until a test lets them go.
  * - `sleep.ts`: machines asleep with their memory kept, and the switches tests flip for them.
@@ -44,7 +44,7 @@ import type {
 } from '../../app/ports/runtime.ts'
 import { RuntimeFull, RuntimeUnsupported } from '../../app/ports/runtime.ts'
 import { exportArchive } from './fake-runtime/archive.ts'
-import { run } from './fake-runtime/command.ts'
+import { reportedDisk, run } from './fake-runtime/command.ts'
 import { FakeHandles } from './fake-runtime/handle.ts'
 import { Hold } from './fake-runtime/hold.ts'
 import { holds, type MachineState, observedAs, Sleeps } from './fake-runtime/sleep.ts'
@@ -151,7 +151,7 @@ export class FakeRuntime implements MinecraftRuntime {
   #noRoom: string | null = null
   #snapshotFailure: string | null = null
   #releaseFailure: { reason: string; partway: boolean } | null = null
-  /** What `du` reports for a server's world, in KB, in place of the real directory's size. */
+  /** What `du` reports for a server's world, in KB, in place of the real directory's size; `df` too. */
   readonly #diskUsage = new Map<string, number>()
   #restoreFailure: { reason: string; after: 'storage' | 'compute' } | null = null
   readonly #heldStops = new Hold()
@@ -420,10 +420,8 @@ export class FakeRuntime implements MinecraftRuntime {
     if (box.state !== 'running') throw new Error('The machine is not running')
     const mount = box.spec.storage.mountPath
     const [program = 'true', ...args] = command.map((part) => rebase(part, mount, box.dir))
-    const reported = this.#diskUsage.get(box.key)
-    if (program === 'du' && reported !== undefined)
-      return { exitCode: 0, stdout: `${reported}\t${mount}\n`, stderr: '' }
-    return run(program, args, timeoutSeconds * 1000, { tolerateFailure: true })
+    const reported = reportedDisk(program, this.#diskUsage.get(box.key), box.spec.storage)
+    return reported ?? run(program, args, timeoutSeconds * 1000, { tolerateFailure: true })
   }
 
   async decommission(handle: RuntimeHandle): Promise<void> {
@@ -701,7 +699,7 @@ export class FakeRuntime implements MinecraftRuntime {
    * Every release fails with this message, until it is set back to null: at once, or `partway`,
    * with the compute already gone and the storage still there.
    */
-  /** A world as big as a test needs it, without writing gigabytes: what `du` says, in KB; null: the real size. */
+  /** A world as big as a test needs, unwritten: what `du` says, in KB, and `df` with it; null: the real. */
   reportDiskUsage(key: string, kilobytes: number | null): void {
     if (kilobytes === null) this.#diskUsage.delete(key)
     else this.#diskUsage.set(key, kilobytes)

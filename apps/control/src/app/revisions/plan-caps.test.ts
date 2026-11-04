@@ -213,42 +213,6 @@ describe.skipIf(!hasDatabase)('plan limits on configurations', () => {
     expect(h.runtime.machine(large.id)?.spec.storage.sizeGb).toBe(15)
   }, 60_000)
 
-  test('a world that outgrows its disk while people play gets a bigger one then, not at its next start', async () => {
-    const payer = await h.user('Explorer', 'plus')
-    const { id } = await h.create(payer, { name: 'Far Lands' })
-    await h.until(id, 'running')
-    await h.settled(id)
-    expect(h.runtime.machine(id)?.spec.storage.sizeGb).toBe(5)
-    const GB_IN_KB = 2 ** 20
-    try {
-      // Plenty of room: nothing happens.
-      h.runtime.reportDiskUsage(id, 2 * GB_IN_KB)
-      expect(await h.app.schedules.diskCheck()).toBe(0)
-      // Less than 1.5 GB left: players are told, and it restarts onto a disk with room again.
-      h.runtime.reportDiskUsage(id, Math.round(3.8 * GB_IN_KB))
-      expect(await h.app.schedules.diskCheck()).toBe(1)
-      await h.settled(id, 30_000)
-      await h.until(id, 'running')
-      expect(h.runtime.machine(id)?.spec.storage.sizeGb).toBe(7)
-      expect(h.minecraft.said(id).some((line) => line.includes('needs more room'))).toBe(true)
-      // Measured again with the room it has now: nothing more.
-      expect(await h.app.schedules.diskCheck()).toBe(0)
-    } finally {
-      h.runtime.reportDiskUsage(id, null)
-    }
-    // Free never grows, so it is never checked.
-    const free = await h.user('Walker')
-    const plain = await h.create(free, { name: 'Small Lands' })
-    await h.until(plain.id, 'running')
-    await h.settled(plain.id)
-    h.runtime.reportDiskUsage(plain.id, Math.round(2.9 * GB_IN_KB))
-    try {
-      expect(await h.app.schedules.diskCheck()).toBe(0)
-    } finally {
-      h.runtime.reportDiskUsage(plain.id, null)
-    }
-  }, 90_000)
-
   test('a plan change reaches a running server at its next start, never by restarting it', async () => {
     const owner = await h.user('Steve', 'plus')
     const { id } = await h.create(owner, { name: 'Unbothered' })
