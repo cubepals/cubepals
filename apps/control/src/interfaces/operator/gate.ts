@@ -6,6 +6,7 @@ import { timingSafeEqual } from 'node:crypto'
 import type { Hono } from 'hono'
 import { z } from 'zod'
 import type { OperatorActor } from '../../app/actor.ts'
+import { note } from '../../app/diagnostics/context.ts'
 import { AppError, NotFound } from '../../app/errors.ts'
 
 /**
@@ -20,6 +21,7 @@ export function gate(app: Hono, base: string, token: string): void {
     const given = Buffer.from(c.req.header('authorization') ?? '')
     if (given.length !== expected.length || !timingSafeEqual(given, expected))
       return c.json({ error: 'unauthorized' }, 401)
+    note({ detail: { operator: operatorOf(c).name } })
     await next()
   })
   app.onError((error, c) => {
@@ -28,6 +30,8 @@ export function gate(app: Hono, base: string, token: string): void {
       return c.json({ error: { code: 'not_found', message: error.message } }, 404)
     if (error instanceof z.ZodError)
       return c.json({ error: { code: 'invalid', message: z.prettifyError(error) } }, 400)
+    // What the operator reads is the message; the log keeps the whole of it.
+    console.error(`operator API: ${c.req.method} ${c.req.path} failed`, error)
     return c.json({ error: { code: 'failed', message: (error as Error).message } }, 500)
   })
 }

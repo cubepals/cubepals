@@ -10,7 +10,9 @@
  *
  * One tool for each `scripts/ops.ts` command: accounts, a server's life, its console, identity,
  * mods and players pages, Browse and its allowlist, the platform switches, uploaded jars' malware
- * checks, joins and their signals, and production's health.
+ * checks, joins and their signals, production's health, and diagnosis: one account's trouble, what
+ * ran slow or failed and whose it was, and the database now. Its instructions tell an agent where
+ * to start.
  * Each calls the same `/ops/v1` route the command does, and answers with the API's JSON. Tools that
  * can't be undone, or take something away from a player, say so first in their description, and
  * take a `confirm` that names what they act on again (`lib/operator-inputs.ts`): nothing is called
@@ -24,6 +26,7 @@
  * or error (`withoutSecrets`).
  */
 import { join } from 'node:path'
+import { DIAGNOSTIC_GROUPS, DIAGNOSTIC_KINDS, STATEMENT_ORDERS } from '@blockly/contracts/diagnostics'
 import { McpServer, type ToolCallback } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
@@ -46,7 +49,15 @@ if (!process.env.OPERATOR_API || !process.env.OPERATOR_TOKEN) {
   process.exit(1)
 }
 
-const server = new McpServer({ name: 'cubepals-ops', version: '1.0.0' })
+/** How an agent finds out why someone is having a bad time, first call first. */
+const INSTRUCTIONS = [
+  'For one person: account_diagnose with their email gives their servers, failed and slow operations, joins that stopped short, signals, and what ran slow or failed for them. Then join_get for one join, operation_get for one operation, console_read for a server’s log.',
+  'For a group or the whole platform: diagnostics_summary grouped by name (which query or procedure), account (who it touched most), server or origin (what it ran under), then diagnostics_list narrowed to one of them.',
+  'For the database itself: database_now (connections, what runs long or waits on a lock, the statements that took the most time, tables read by sequential scans). A slow query’s name (q:…) and statement in diagnostics match the statement database_now lists.',
+  'Nothing here changes anything unless its description says it does.',
+].join('\n')
+
+const server = new McpServer({ name: 'cubepals-ops', version: '1.0.0' }, { instructions: INSTRUCTIONS })
 
 const NOT_UNDONE = 'Destructive: '
 const account = Line.min(1).describe('The account’s email address, or its id')
@@ -552,6 +563,7 @@ tool(
     since: Line.optional().describe('An ISO moment'),
     slow: z.number().optional().describe('Slower than this many seconds'),
     status: Line.optional().describe('succeeded or failed'),
+    server: serverId.optional().describe('Only those on this server'),
     limit: z.number().int().min(1).max(200).optional(),
   },
   (filters) => ['GET', `/operations${query(filters)}`],
@@ -562,6 +574,68 @@ tool(
   'One operation, and where its time went step by step.',
   { operationId: z.uuid() },
   (a) => ['GET', `/operations/${a.operationId}`],
+  read,
+)
+
+// ─── Diagnosis ──────────────────────────────────────────────────────────────────────────────────
+
+const narrowed = {
+  account: account.optional(),
+  server: serverId.optional(),
+  kind: z.enum(DIAGNOSTIC_KINDS).optional().describe('query, procedure (a tRPC call) or request (HTTP)'),
+  name: Line.optional().describe('Exactly: a query’s shape (q:…), a procedure’s path, or a route template'),
+  origin: Line.optional().describe(
+    'What it ran under, from its start: trpc:servers, operation:start, schedule:',
+  ),
+  failed: z
+    .boolean()
+    .optional()
+    .describe('Only failed ones (true), or only slow ones that didn’t fail (false)'),
+  since: moment.optional().describe('An ISO moment; a day ago unless given'),
+  until: moment.optional(),
+}
+tool(
+  'account_diagnose',
+  'Everything known about why one account is having a bad time: who it is, its servers, the operations on them that failed or ran slowest, joins that stopped before the world, signals on its servers, and what ran slow or failed in the control plane for it, grouped by what and newest. Start here for one person.',
+  { account, since: moment.optional().describe('An ISO moment; a day ago unless given') },
+  (a) => ['GET', `/accounts/${encodeURIComponent(a.account)}/diagnosis${query({ since: a.since })}`],
+  read,
+)
+tool(
+  'diagnostics_list',
+  'What ran slow or failed, the newest first: slow or failed queries (with their statement, parameters never included), tRPC procedures and HTTP requests, each with the account, server and request it was for.',
+  { ...narrowed, limit: z.number().int().min(1).max(500).optional() },
+  ({ failed, ...a }) => [
+    'GET',
+    `/diagnostics${query({ ...a, failed: failed === undefined ? undefined : String(failed) })}`,
+  ],
+  read,
+)
+tool(
+  'diagnostics_summary',
+  'What ran slow or failed, grouped: by name (which query or procedure), account (whom it touched), server, origin or kind, the most first, each with p50, p95 and max, how many failed, how many accounts and servers, and its slowest record in full. For a group of people or the whole platform.',
+  {
+    ...narrowed,
+    by: z.enum(DIAGNOSTIC_GROUPS).optional().describe('What to group by; name unless given'),
+    limit: z.number().int().min(1).max(200).optional(),
+  },
+  ({ failed, ...a }) => [
+    'GET',
+    `/diagnostics/summary${query({ ...a, failed: failed === undefined ? undefined : String(failed) })}`,
+  ],
+  read,
+)
+tool(
+  'database_now',
+  'The database as it is now: who holds connections, queries running over a second or waiting on a lock and who holds it, the statements that took the most time since pg_stat_statements was reset (or why it can’t say), and the tables sequential scans read the most rows from.',
+  {
+    order: z
+      .enum(STATEMENT_ORDERS)
+      .optional()
+      .describe('Statements by total time (the default), mean, calls or max'),
+    limit: z.number().int().min(1).max(100).optional(),
+  },
+  (a) => ['GET', `/database${query(a)}`],
   read,
 )
 

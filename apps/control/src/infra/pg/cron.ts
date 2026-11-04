@@ -52,6 +52,8 @@ export const CRON: Record<ScheduledJob | WorkerHeartbeat, string> = {
   'joins-sweep': '*/10 * * * *',
   // What looked wrong in joins, raised within a minute (`app/joins/signals.ts`).
   signals: '* * * * *',
+  // What ran slow or failed, past its 14 days (`app/diagnostics/`): hourly keeps the table short.
+  'diagnostics-sweep': '43 * * * *',
   // A day's spend against its limit. At the most the platform runs at
   // once, ten minutes between passes is about 35 cents past the limit before it pauses.
   'spend-watchdog': '*/10 * * * *',

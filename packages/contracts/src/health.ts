@@ -142,6 +142,8 @@ export const HealthOperationsInput = z.object({
   /** Only those that took at least this long, in seconds. */
   slowerThan: z.number().min(0).optional(),
   status: z.enum(['queued', 'running', 'succeeded', 'failed', 'cancelled']).optional(),
+  /** Only those on this server. */
+  server: z.uuid().optional(),
   limit: z.number().int().min(1).max(200).default(50),
 })
 export type HealthOperationsInput = z.infer<typeof HealthOperationsInput>

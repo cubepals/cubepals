@@ -28,4 +28,9 @@ export interface Telemetry {
   realtimeConnected(transport: 'webtransport' | 'websocket', outcome: string, ms: number): void
   /** The realtime role's open connections, read as the monitor scrapes. */
   observeRealtime(read: () => { browsers: number; tails: number }): void
+  /**
+   * Tells `listener` of each query the query pool runs, as it ends: its text as sent (parameters
+   * as `$1`, never their values), how long it took, and what it failed with (null if it didn't).
+   */
+  watchQueries(listener: (statement: unknown, ms: number, error: unknown) => void): void
 }

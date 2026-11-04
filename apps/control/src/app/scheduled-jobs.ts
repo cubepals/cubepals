@@ -10,10 +10,22 @@
 
 import { dollars } from '../domain/policy/spend.ts'
 import type { ControlPlane } from './control-plane.ts'
+import { within } from './diagnostics/context.ts'
 import type { Schedule } from './ports/jobs.ts'
 
 /** What each scheduled job does; `infra/pg/jobs.ts` says when each runs. */
 export function scheduledJobs(
+  app: ControlPlane,
+  provider: { fleet?: { runtime: { upkeep(): Promise<void> } } },
+): Schedule[] {
+  // Each pass runs as work of its own, so what it does slowly is known by its job (`diagnostics/`).
+  return schedules(app, provider).map(
+    (schedule) =>
+      ({ ...schedule, run: () => within({ origin: `schedule:${schedule.job}` }, schedule.run) }) as Schedule,
+  )
+}
+
+function schedules(
   app: ControlPlane,
   provider: { fleet?: { runtime: { upkeep(): Promise<void> } } },
 ): Schedule[] {
@@ -60,6 +72,11 @@ export function scheduledJobs(
       says: (n) => `forgot ${n} joins, signals and addresses`,
     },
     { job: 'signals', run: () => app.joins.raiseSignals(), says: (n) => `raised ${n}` },
+    {
+      job: 'diagnostics-sweep',
+      run: () => app.diagnostics.sweep(),
+      says: (n) => `forgot ${n} slow or failed records`,
+    },
     { job: 'listing-eligibility-sweep', run: () => app.listings.sweep() },
     {
       job: 'standing-sweep',

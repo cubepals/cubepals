@@ -156,6 +156,8 @@ export interface OperationFilter {
   timedOnly?: boolean
   slowerThan?: number
   status?: OperationRow['status']
+  /** Only operations on these servers. */
+  serverIds?: readonly string[]
   order: 'newest' | 'slowest'
   limit: number
 }
@@ -178,6 +180,8 @@ export async function findOperations(
   if (filter.kind !== undefined) where.push(sql`${healthKind} = ${filter.kind}`)
   if (filter.timedOnly) where.push(sql`o.kind in ${TIMED}`)
   if (filter.status !== undefined) where.push(sql`o.status = ${filter.status}`)
+  if (filter.serverIds !== undefined)
+    where.push(filter.serverIds.length === 0 ? sql`false` : sql`o.server_id in ${[...filter.serverIds]}`)
   if (filter.slowerThan !== undefined)
     where.push(
       sql`extract(epoch from coalesce(o.finished_at, ${now}::timestamptz) - o.created_at) >= ${filter.slowerThan}`,

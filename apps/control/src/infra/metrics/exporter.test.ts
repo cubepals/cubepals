@@ -40,6 +40,7 @@ const listener = new Hono()
   .get('/api/public/servers/:slug', (c) => c.json({ slug: c.req.param('slug') }))
   .get('/api/public/names/:name/face.png', (c) => c.body(null, 404))
   .get('/api/health/live', (c) => c.json({ ok: true }))
+  .get('/ops/v1/health', (c) => c.json({ servers: 0 }))
   .get('/api/boom/:id', () => {
     throw new Error('boom')
   })
@@ -77,6 +78,7 @@ async function drive(telemetry: Telemetry, boss: PgBoss) {
     `/api/boom/${SERVER_ID}`,
     `/${ADDRESS}/${PLAYER}`,
     '/api/health/live',
+    '/ops/v1/health',
   ])
     await listener.request(path, { headers: { 'x-forwarded-for': ADDRESS } })
   await listener.request(`/api/public/servers/${PLAYER}`, { method: 'PROPFIND' })
@@ -175,6 +177,8 @@ describe.skipIf(!hasDatabase)('the metrics endpoint, of requests, the database a
     expect(scrape).not.toContain(
       'http_server_request_duration_count{listener="api",http_route="/api/health/live"',
     )
+    // The operators' health reads the platform: timed, not a liveness check.
+    expect(scrape).toContain(`http_server_request_duration_count${labels('/ops/v1/health', 'GET', '2xx')} 1`)
     expect(scrape).toContain(
       'rpc_server_call_duration_count{rpc_system="trpc",rpc_method="servers.list",status_class="4xx"} 1',
     )

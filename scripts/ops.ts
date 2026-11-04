@@ -72,7 +72,7 @@
  *                                                   servers now, how long work takes, what failed,
  *                                                   the slowest, and the money
  *   bun scripts/ops.ts operations [--kind wake] [--since 24h|7d|<ISO>] [--slow <seconds>]
- *                                 [--status failed] [--limit n] [--json]
+ *                                 [--status failed] [--server <id>] [--limit n] [--json]
  *                                                   operations, the newest first
  *   bun scripts/ops.ts operation <op>               one operation, and where its time went
  *   bun scripts/ops.ts joins [--server <id|slug>] [--player <name|uuid>] [--address <name>]
@@ -85,6 +85,21 @@
  *                                                   the open signals, oldest first, one a line, and
  *                                                   nothing at all while none is open; --since adds
  *                                                   those closed since
+ *   bun scripts/ops.ts diagnose <email|id> [--since 24h|7d|<ISO>] [--json]
+ *                                                   one account's trouble as an incident report: its
+ *                                                   servers, failed and slow operations, joins that
+ *                                                   stopped short, signals, and what ran slow or
+ *                                                   failed for it
+ *   bun scripts/ops.ts diagnostics [summary [--by name|account|server|origin|kind]]
+ *                      [--account <email|id>] [--server <id>] [--kind query|procedure|request]
+ *                      [--name <q:…|path|route>] [--origin <start>] [--failed true|false]
+ *                      [--since 24h|7d|<ISO>] [--until <ISO>] [--limit n] [--json]
+ *                                                   what ran slow or failed, with whose it was, the
+ *                                                   newest first; or grouped, the most first
+ *   bun scripts/ops.ts database [--order total|mean|calls|max] [--limit n] [--json]
+ *                                                   the database now: connections, what runs long or
+ *                                                   waits, the statements that took the most time,
+ *                                                   and the tables sequential scans read most
  *
  * With --production, it reaches production through `fly proxy` with production's own values
  * (scripts/lib/production-reach.ts). Otherwise OPERATOR_API and OPERATOR_TOKEN say where, as for
@@ -94,8 +109,16 @@
  *
  * Parts (`ops/`):
  * - `join-report.ts`: a join as an incident report, and the one-line forms of joins and signals.
+ * - `diagnostics-report.ts`: an account's trouble as an incident report, what ran slow or failed
+ *   one a line and grouped, and the database now.
  */
 import type { HealthOperationView, HealthView, HealthWindow, OperationStepsView } from '@blockly/contracts'
+import type {
+  AccountDiagnosisView,
+  DatabaseView,
+  DiagnosticsSummaryView,
+  DiagnosticView,
+} from '@blockly/contracts/diagnostics'
 import { DAY_MS, HOUR_MS, MINUTE_MS } from '@blockly/contracts/durations'
 import type { JoinDetailView, JoinView, SignalView } from '@blockly/contracts/join-records'
 import { z } from 'zod'
@@ -103,6 +126,7 @@ import { healthReport, operationLine, stepsReport } from './lib/health-report.ts
 import { flags, operatorCli, withoutSecrets } from './lib/operator-cli.ts'
 import { ConsoleCommand, namesServer, PLATFORM } from './lib/operator-inputs.ts'
 import { reachProduction } from './lib/production-reach.ts'
+import { databaseReport, diagnosisReport, diagnosticLine, summaryReport } from './ops/diagnostics-report.ts'
 import { joinLine, joinReport, signalLine } from './ops/join-report.ts'
 
 const [command = 'help', ...rest] = process.argv.slice(2).filter((arg) => arg !== '--production')
@@ -427,7 +451,7 @@ switch (command) {
   }
   case 'operations': {
     const query = new URLSearchParams()
-    for (const name of ['kind', 'slow', 'status', 'limit']) {
+    for (const name of ['kind', 'slow', 'status', 'server', 'limit']) {
       const given = option(name)
       if (given !== undefined) query.set(name, given)
     }
@@ -486,9 +510,65 @@ switch (command) {
     else for (const signal of signals) say(signalLine(signal))
     break
   }
+  case 'diagnose': {
+    const from = option('since')
+    const query = from === undefined ? '' : `?since=${encoded(since(from))}`
+    const view = (await api(
+      'GET',
+      `/accounts/${encoded(first('an email or an account id'))}/diagnosis${query}`,
+    )) as AccountDiagnosisView
+    if (option('json')) show(view)
+    else for (const line of diagnosisReport(view)) say(line)
+    break
+  }
+  case 'diagnostics': {
+    const grouped = positional[0] === 'summary'
+    const query = new URLSearchParams()
+    for (const name of [
+      'account',
+      'server',
+      'kind',
+      'name',
+      'origin',
+      'failed',
+      'limit',
+      ...(grouped ? ['by'] : []),
+    ]) {
+      const given = option(name)
+      if (given !== undefined) query.set(name, given)
+    }
+    for (const name of ['since', 'until']) {
+      const given = option(name)
+      if (given !== undefined) query.set(name, since(given))
+    }
+    if (grouped) {
+      const summary = (await api('GET', `/diagnostics/summary?${query}`)) as DiagnosticsSummaryView
+      if (option('json')) show(summary)
+      else for (const line of summaryReport(summary)) say(line)
+      break
+    }
+    const { diagnostics } = (await api('GET', `/diagnostics?${query}`)) as { diagnostics: DiagnosticView[] }
+    if (option('json')) show(diagnostics)
+    else {
+      for (const d of diagnostics) say(diagnosticLine(d))
+      say(`${diagnostics.length} found`)
+    }
+    break
+  }
+  case 'database': {
+    const query = new URLSearchParams()
+    for (const name of ['order', 'limit']) {
+      const given = option(name)
+      if (given !== undefined) query.set(name, given)
+    }
+    const database = (await api('GET', `/database?${query}`)) as DatabaseView
+    if (option('json')) show(database)
+    else for (const line of databaseReport(database)) say(line)
+    break
+  }
   default:
     say(
-      'bun scripts/ops.ts [--production] accounts|account|plan|limits|create|server|start|stop|retry|trash|untrash|rest|purge|console|identity|message|mods|players|whitelist|operator|helper|ban|pardon|moderation|listing|notice|official|allowlist|platform|jars|health|operations|operation|joins|join|signals',
+      'bun scripts/ops.ts [--production] accounts|account|plan|limits|create|server|start|stop|retry|trash|untrash|rest|purge|console|identity|message|mods|players|whitelist|operator|helper|ban|pardon|moderation|listing|notice|official|allowlist|platform|jars|health|operations|operation|joins|join|signals|diagnose|diagnostics|database',
     )
     say('See the top of scripts/ops.ts, and docs/production.md.')
     if (command !== 'help') process.exit(1)

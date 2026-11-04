@@ -6,11 +6,13 @@
  * The database as this process sees it: each pool's connections (in use, idle, the most it may
  * hold, and requests waiting for one), and how long each query on the query pool took and, if it
  * failed, the class of its SQLSTATE. Names and labels are OpenTelemetry's database conventions
- * (`db.client.*`); a query is known by the statement it opens with, never by its text.
+ * (`db.client.*`); a query is known by the statement it opens with, never by its text. Each query
+ * is also told, text and all, to whoever listens (`hearQueries`), whether or not metrics are served.
  *
  * Not for what Postgres itself says of its load (`postgres.ts`), or for pg-boss's own timings,
  * which pg-boss reports itself.
  */
+import { AsyncResource } from 'node:async_hooks'
 import { SECOND_MS } from '@blockly/contracts/durations'
 import { metrics } from '@opentelemetry/api'
 import type { Pool, PoolClient } from 'pg'
@@ -64,37 +66,60 @@ const errorClassOf = (error: unknown): string => {
 /**
  * Times every query `client` runs, by both of node-postgres's forms: with a callback, as the
  * pool's own `query` calls it, and as a promise, as a transaction's queries are. A cursor or
- * stream runs as it is read, and is left untimed.
+ * stream runs as it is read, and is left untimed. `done` runs in the async context the query was
+ * asked in, not the socket's that answered it, so whoever listens can tell whose it was.
  */
-function timeQueries(client: PoolClient, done: (operation: string, error: unknown, began: number) => void) {
+function timeQueries(client: PoolClient, done: (statement: unknown, error: unknown, began: number) => void) {
   const query = client.query.bind(client) as Query
   client.query = ((...args: unknown[]) => {
     const [first] = args
     if (typeof (first as { submit?: unknown } | null)?.submit === 'function') return query(...args)
-    const operation = operationOf(
-      typeof first === 'string' ? first : (first as { text?: unknown } | null)?.text,
-    )
+    const statement = typeof first === 'string' ? first : (first as { text?: unknown } | null)?.text
     const began = performance.now()
     const callback = args.at(-1)
-    if (typeof callback === 'function')
+    if (typeof callback === 'function') {
+      const asked = AsyncResource.bind((run: () => void) => run())
       return query(...args.slice(0, -1), (error: unknown, result: unknown) => {
-        done(operation, error, began)
+        asked(() => done(statement, error ?? null, began))
         callback(error, result)
       })
+    }
     const running = query(...args) as Promise<unknown>
     running.then(
-      () => done(operation, null, began),
-      (error: unknown) => done(operation, error, began),
+      () => done(statement, null, began),
+      (error: unknown) => done(statement, error, began),
     )
     return running
   }) as PoolClient['query']
 }
 
+/** Hears each query the query pool runs, as it ends (`Telemetry.watchQueries`). */
+export type QueryListener = (statement: unknown, ms: number, error: unknown) => void
+
 /**
- * Registers the pools' gauges and times the query pool's queries. Call before the pool opens its
- * first connection: one opened before is never timed.
+ * Tells every listener added to the returned list of each query `queries` runs. Call before the
+ * pool opens its first connection: one opened before is never heard.
  */
-export function measurePools(role: string, queries: Pool, boss: PgBoss): void {
+export function hearQueries(queries: Pool): QueryListener[] {
+  const listeners: QueryListener[] = []
+  // The pool's own `query` asks for a client with a callback, which node-postgres may call from
+  // whichever query just released one: bound here, it runs where `query` was called.
+  const connect = queries.connect.bind(queries) as (callback?: unknown) => unknown
+  queries.connect = ((callback?: unknown) =>
+    connect(
+      typeof callback === 'function' ? AsyncResource.bind(callback as () => void) : callback,
+    )) as Pool['connect']
+  queries.on('connect', (client) =>
+    timeQueries(client, (statement, error, began) => {
+      const ms = performance.now() - began
+      for (const listener of listeners) listener(statement, ms, error)
+    }),
+  )
+  return listeners
+}
+
+/** Registers the pools' gauges, and times the query pool's queries as `listeners` hear them. */
+export function measurePools(role: string, queries: Pool, boss: PgBoss, listeners: QueryListener[]): void {
   const meter = metrics.getMeter('cubepals')
   const duration = meter.createHistogram('db.client.operation.duration', {
     description:
@@ -103,14 +128,12 @@ export function measurePools(role: string, queries: Pool, boss: PgBoss): void {
     advice: { explicitBucketBoundaries: QUERY_BUCKETS },
   })
   const pool = { 'db.system.name': 'postgresql', 'db.client.connection.pool.name': 'queries', role }
-  queries.on('connect', (client) =>
-    timeQueries(client, (operation, error, began) =>
-      duration.record((performance.now() - began) / SECOND_MS, {
-        ...pool,
-        'db.operation.name': operation,
-        ...(error ? { 'error.type': errorClassOf(error) } : {}),
-      }),
-    ),
+  listeners.push((statement, ms, error) =>
+    duration.record(ms / SECOND_MS, {
+      ...pool,
+      'db.operation.name': operationOf(statement),
+      ...(error ? { 'error.type': errorClassOf(error) } : {}),
+    }),
   )
 
   const counts: Record<string, () => Counts | null> = {

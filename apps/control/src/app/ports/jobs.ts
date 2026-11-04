@@ -34,6 +34,7 @@ export type ScheduledJob =
   | 'free-play-links'
   | 'known-addresses'
   | 'joins-sweep'
+  | 'diagnostics-sweep'
   | 'signals'
   | 'spend-watchdog'
   | 'creates-room'

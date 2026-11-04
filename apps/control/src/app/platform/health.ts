@@ -125,12 +125,27 @@ export class PlatformHealth {
         ...(input.kind === undefined ? {} : { kind: input.kind }),
         ...(input.slowerThan === undefined ? {} : { slowerThan: input.slowerThan }),
         ...(input.status === undefined ? {} : { status: input.status }),
+        ...(input.server === undefined ? {} : { serverIds: [input.server] }),
         order: 'newest',
         limit: input.limit,
       },
       now,
     )
     return rows.map(operationView)
+  }
+
+  /** On `serverIds` since `since`: the operations that failed, newest first, and the slowest to succeed. */
+  async ofServers(
+    actor: Actor,
+    serverIds: readonly string[],
+    since: Date,
+    now = new Date(),
+  ): Promise<{ failed: HealthOperationView[]; slowest: HealthOperationView[] }> {
+    allowed(actor)
+    const find = (status: 'failed' | 'succeeded', order: 'newest' | 'slowest') =>
+      findOperations(this.#db, { since, serverIds, status, order, limit: 10 }, now)
+    const [failed, slowest] = await Promise.all([find('failed', 'newest'), find('succeeded', 'slowest')])
+    return { failed: failed.map(operationView), slowest: slowest.map(operationView) }
   }
 
   /** One operation and where its time went. */

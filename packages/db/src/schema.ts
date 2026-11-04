@@ -35,6 +35,7 @@
  * - `fleet.ts`: the fleet runtime's own state.
  * - `edge.ts`: the edges that route players, and how far each one's routes go.
  * - `joins.ts`: every join as one row, the signals raised on them, and each server's last boot report.
+ * - `diagnostics.ts`: what ran slow or failed, and whose it was.
  */
 
 export * from './schema/access.ts'
@@ -46,6 +47,7 @@ export * from './schema/backups.ts'
 export * from './schema/billing.ts'
 export * from './schema/catalog.ts'
 export * from './schema/chip-ins.ts'
+export * from './schema/diagnostics.ts'
 export * from './schema/edge.ts'
 export * from './schema/fleet.ts'
 export * from './schema/free-play.ts'
