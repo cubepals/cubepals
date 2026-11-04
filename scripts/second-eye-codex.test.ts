@@ -13,10 +13,10 @@ import {
   codexReviewsOf,
   codexSummaryOf,
   findingOf,
-  finishedClean,
   type GitHubComment,
   type GitHubReview,
   type GitHubReviewComment,
+  outcomeFor,
   severityOf,
   waitFor,
   writeCodexAnswer,
@@ -90,22 +90,27 @@ test("Codex's summary state is read only from its own account's comment", () => 
   expect(codexSummaryOf([summary(escaped)])?.state.code_review).toMatchObject(done)
 })
 
-test('a finished review with no findings of this commit is clean, and nothing else is', () => {
+test('only every review of this commit finished counts: clean, findings, or not yet', () => {
   const read = (body: string) => codexSummaryOf([summary(body)])?.state ?? {}
-  expect(finishedClean(read(state(done)), SHA)).toBe(true)
-  expect(finishedClean(read(state({ ...done, status: 'running', has_any_findings: null })), SHA)).toBe(false)
-  expect(finishedClean(read(state({ ...done, has_any_findings: true })), SHA)).toBe(false)
-  expect(finishedClean(read(state({ ...done, commit_sha: OTHER })), SHA)).toBe(false)
+  const sec = (status: string, has_any_findings: boolean | null, commit_sha = SHA) => ({
+    commit_sha,
+    has_any_findings,
+    status,
+  })
+  expect(outcomeFor(read(state(done)), SHA)).toBe('clean')
+  expect(outcomeFor(read(state({ ...done, has_any_findings: true })), SHA)).toBe('findings')
+  expect(outcomeFor(read(state({ ...done, status: 'running', has_any_findings: null })), SHA)).toBeUndefined()
+  expect(outcomeFor(read(state({ ...done, commit_sha: OTHER })), SHA)).toBeUndefined()
+  // A code review with findings while the security review of the same commit still runs isn't the answer yet.
   expect(
-    finishedClean(read(state(done, { commit_sha: SHA, has_any_findings: null, status: 'running' })), SHA),
-  ).toBe(false)
-  expect(
-    finishedClean(read(state(done, { commit_sha: SHA, has_any_findings: true, status: 'completed' })), SHA),
-  ).toBe(false)
-  expect(
-    finishedClean(read(state(done, { commit_sha: SHA, has_any_findings: false, status: 'completed' })), SHA),
-  ).toBe(true)
-  expect(finishedClean({}, SHA)).toBe(false)
+    outcomeFor(read(state({ ...done, has_any_findings: true }, sec('running', null))), SHA),
+  ).toBeUndefined()
+  expect(outcomeFor(read(state(done, sec('running', null))), SHA)).toBeUndefined()
+  expect(outcomeFor(read(state(done, sec('completed', true))), SHA)).toBe('findings')
+  expect(outcomeFor(read(state(done, sec('completed', false))), SHA)).toBe('clean')
+  // A security review of an older commit doesn't hold this one back.
+  expect(outcomeFor(read(state(done, sec('running', null, OTHER))), SHA)).toBe('clean')
+  expect(outcomeFor({}, SHA)).toBeUndefined()
 })
 
 test('P0 is high, P1 medium, anything else low', () => {
@@ -214,6 +219,25 @@ test('the answer, the silence and a GitHub error are written as the workflow rea
     expect(readFileSync(output, 'utf8')).toBe(
       `codex=answered\nurl=https://github.com/cubepals/cubepals/pull/42#issuecomment-7\nreview=${JSON.stringify(codexAnswer([]))}\n`,
     )
+    rmSync(output)
+    // Line reviews already posted while the security review still runs: not the answer yet.
+    reviews = [review(5, CODEX_BOT, SHA), review(6, CODEX_BOT, SHA)]
+    comments = [
+      summary(
+        state(
+          { ...done, has_any_findings: true },
+          { commit_sha: SHA, has_any_findings: null, status: 'running' },
+        ),
+      ),
+    ]
+    await writeCodexAnswer(env)
+    expect(readFileSync(output, 'utf8')).toBe('codex=silent\nurl=\nreview=\n')
+    rmSync(output)
+    // Findings announced, but the line review isn't on the pull request yet.
+    reviews = []
+    comments = [summary(state({ ...done, has_any_findings: true }))]
+    await writeCodexAnswer(env)
+    expect(readFileSync(output, 'utf8')).toBe('codex=silent\nurl=\nreview=\n')
     rmSync(output)
     reviews = [review(5, CODEX_BOT, SHA), review(6, CODEX_BOT, SHA)]
     await writeCodexAnswer(env)

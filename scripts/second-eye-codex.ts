@@ -9,7 +9,8 @@
  * account keeps a summary comment whose hidden state says which commit it reviewed and whether it
  * found anything; with findings it also posts a GitHub review of line comments, and without any it
  * reacts 👍 and posts none. This waits for either answer about the commit the second eye is
- * reviewing and turns it into the second eye's answer: each line comment a finding (P0 high, P1
+ * reviewing, once the summary shows every review of that commit finished (code, and security when
+ * it runs), and turns it into the second eye's answer: each line comment a finding (P0 high, P1
  * medium, anything else low), the verdict "fix first" when one is high or medium, and "merge" when
  * Codex finished the commit with no findings. When Codex hasn't answered for the commit by the
  * deadline, this answers nothing, and Claude reviews in its place.
@@ -105,14 +106,19 @@ export function codexSummaryOf(comments: GitHubComment[]): { url: string; state:
   return undefined
 }
 
-/** True when Codex finished reviewing `sha` and found nothing, nor did a security review of it. */
-export function finishedClean(state: CodexState, sha: string): boolean {
+/**
+ * What Codex's summary says about `sha`: every review of it finished, with findings or clean, or
+ * not finished yet (undefined). Its code review must have finished on `sha`, and so must a
+ * security review of `sha` when one runs; until then line reviews already posted aren't the answer.
+ */
+export function outcomeFor(state: CodexState, sha: string): 'findings' | 'clean' | undefined {
   const code = state.code_review
-  if (code?.commit_sha !== sha || code.status !== 'completed' || code.has_any_findings !== false) return false
+  if (code?.commit_sha !== sha || code.status !== 'completed' || code.has_any_findings == null)
+    return undefined
   const security = state.security_review
-  return (
-    security?.commit_sha !== sha || (security.status === 'completed' && security.has_any_findings === false)
-  )
+  const here = security?.commit_sha === sha
+  if (here && (security.status !== 'completed' || security.has_any_findings == null)) return undefined
+  return code.has_any_findings || (here && security.has_any_findings) ? 'findings' : 'clean'
 }
 
 /** Codex marks each line comment P0 (breaks something) or P1 (should be fixed). */
@@ -210,20 +216,19 @@ export async function writeCodexAnswer(
   const found = await wait(
     async () => {
       try {
-        const reviews = codexReviewsOf(await all<GitHubReview>(`repos/${repo}/pulls/${pull}/reviews`), sha)
-        if (reviews.length) {
-          const comments: GitHubReviewComment[] = []
-          for (const review of reviews)
-            comments.push(
-              ...(await all<GitHubReviewComment>(
-                `repos/${repo}/pulls/${pull}/reviews/${review.id}/comments`,
-              )),
-            )
-          return { url: reviews.at(-1)?.html_url ?? '', review: codexAnswer(comments) }
-        }
         const summary = codexSummaryOf(await all<GitHubComment>(`repos/${repo}/issues/${pull}/comments`))
-        if (summary && finishedClean(summary.state, sha)) return { url: summary.url, review: codexAnswer([]) }
-        return undefined
+        const outcome = summary && outcomeFor(summary.state, sha)
+        if (!summary || !outcome) return undefined
+        if (outcome === 'clean') return { url: summary.url, review: codexAnswer([]) }
+        // Findings: Codex's line reviews of this commit, once they're on the pull request.
+        const reviews = codexReviewsOf(await all<GitHubReview>(`repos/${repo}/pulls/${pull}/reviews`), sha)
+        if (!reviews.length) return undefined
+        const comments: GitHubReviewComment[] = []
+        for (const review of reviews)
+          comments.push(
+            ...(await all<GitHubReviewComment>(`repos/${repo}/pulls/${pull}/reviews/${review.id}/comments`)),
+          )
+        return { url: reviews.at(-1)?.html_url ?? '', review: codexAnswer(comments) }
       } catch (error) {
         console.warn(
           `::warning::Looking for Codex's review failed: ${String(error).replace(/[\r\n]+/g, ' ')}`,
