@@ -5,15 +5,14 @@
 name: Second eye
 
 # A second reviewer for a sensitive pull request. Codex reviews first: its own GitHub review, which
-# runs on the maintainer's Codex plan on OpenAI's servers once code review is on for this
-# repository in Codex's settings. The review job waits up to CODEX_WAIT_MINUTES for that review of
-# the commit it read (scripts/second-eye-codex.ts) and makes it the answer. When none comes in
-# time, Claude reviews in its place, on the maintainer's Claude subscription
-# (CLAUDE_CODE_OAUTH_TOKEN). The comment names the reviewer that wrote it, links Codex's own review,
-# and says when Claude stood in. It runs only when v0id-user asks: by adding the needs-second-eye
-# label, by a comment with a line starting "@claude review", or with
+# runs on OpenAI's servers through its GitHub app once code review is on for this repository in
+# Codex's settings. The review job waits up to CODEX_WAIT_MINUTES for that review of the commit it
+# read (scripts/second-eye-codex.ts) and makes it the answer. When none comes in time, Claude
+# reviews in its place, with CLAUDE_CODE_OAUTH_TOKEN. The comment names the reviewer that wrote
+# it, links Codex's own review, and says when Claude stood in. It runs only when v0id-user asks:
+# by adding the needs-second-eye label, by a comment with a line starting "@claude review", or with
 # `gh workflow run second-eye.yml -f pr=<number>`. Anyone else's label, comment or re-run skips it,
-# so nobody else can spend the subscription. What Claude looks for and how it answers is
+# so nobody else can spend that token. What Claude looks for and how it answers is
 # .github/second-eye.md, its whole prompt, and .github/second-eye.schema.json is the answer's shape.
 #
 # One pass of Claude covers the whole pull request: the turns it may use grow with the number of
@@ -326,7 +325,7 @@ jobs:
             echo "prompt<<$delimiter"; cat .github/second-eye.md; echo "$delimiter"
             echo "schema=$(jq -c . .github/second-eye.schema.json)"
           } >> "$GITHUB_OUTPUT"
-      # Codex reviews first, with its own GitHub review on the Codex plan. This waits for that
+      # Codex reviews first, with its own GitHub review. This waits for that
       # review of the commit read above and makes it the answer. When none comes in
       # CODEX_WAIT_MINUTES, or this step fails, Claude reviews in its place.
       - name: Wait for Codex's review
