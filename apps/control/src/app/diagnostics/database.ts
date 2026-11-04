@@ -104,7 +104,8 @@ async function statements(
       top: rows.map(({ hit, read, ...row }) => ({
         ...row,
         cacheHit: hit + read === 0 ? null : hit / (hit + read),
-        query: (row.query ?? '').slice(0, QUERY_CHARS),
+        // Postgres takes values out of ordinary statements, but not of every kind (`SET`).
+        query: textOf(row.query),
       })),
     }
   } catch (error) {

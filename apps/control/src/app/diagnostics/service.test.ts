@@ -10,7 +10,7 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { DAY_MS, MINUTE_MS } from '@blockly/contracts/durations'
 import { schema } from '@blockly/db'
-import { eq } from 'drizzle-orm'
+import { eq, sql } from 'drizzle-orm'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
 import type { DiagnosticRecord } from './recorder.ts'
 import { DIAGNOSTICS_KEPT_DAYS, DiagnosticsService } from './service.ts'
@@ -160,5 +160,14 @@ describe.skipIf(!hasDatabase)('the database now', () => {
       expect(database.statements.top.length).toBeLessThanOrEqual(5)
       for (const statement of database.statements.top) expect(statement.calls).toBeGreaterThan(0)
     } else expect(database.statements.why).toContain('pg_stat_statements')
+  })
+
+  test('says no value a statement Postgres kept as it was carried', async () => {
+    // A `SET` is a statement Postgres counts with its value in it.
+    for (let i = 0; i < 50; i++) await h.db.execute(sql.raw("set application_name = 'private-value-x'"))
+    const { statements } = await new DiagnosticsService(h.db).database({ order: 'calls', limit: 100 })
+    if (!statements.available) return
+    expect(statements.top.some((s) => s.query.startsWith('set application_name'))).toBe(true)
+    for (const statement of statements.top) expect(statement.query).not.toContain('private-value-x')
   })
 })
