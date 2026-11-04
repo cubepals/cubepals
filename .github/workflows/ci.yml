@@ -252,7 +252,7 @@ jobs:
         run: ./gradlew build --no-daemon --console=plain
 
   # The suite spends most of its time waiting on the job queue's half-second poll, test after test,
-  # so it is split across machines: every fourth file to each, each with its own services.
+  # so it is split across machines by what each group tests, each with its own services.
   test:
     name: Tests, ${{ matrix.group }}
     needs: changes
@@ -260,8 +260,10 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
-      # Grouped by what they test, near even in time (main's run on 2026-10-09: 50 to 160 seconds each,
-      # the web app's far less).
+      # Grouped by what they test. The test step's seconds on main's run of 2026-11-04 (41755839405),
+      # with the last group's split as its files' times add up: Server lifecycle 562, Backups 384,
+      # Accounts 374, Billing 353, Machine providers 261, Mods 97, Web app 81. A job adds about 45 to
+      # its test step. Split a group again when it passes the slowest by much.
       matrix:
         include:
           - group: Server lifecycle
@@ -274,9 +276,11 @@ jobs:
             paths: apps/control/src/app/mods apps/control/src/app/packs apps/control/src/app/curation apps/control/src/app/listings
           - group: Web app, edge and scripts
             paths: apps/web apps/edge scripts
+          - group: Billing, edge routing, anti-cheat and platform
+            paths: apps/control/src/app/billing apps/control/src/app/edge apps/control/src/app/stop-cheaters apps/control/src/app/platform
           # Every test no group above names, so a new one is never left out.
-          - group: Accounts, billing and the rest of the control plane
-            paths: . :!apps/control/src/app/operations :!apps/control/src/infra/fly :!apps/control/src/infra/docker :!apps/control/src/infra/boat :!apps/control/src/infra/fleet :!apps/control/src/infra/s3 :!apps/control/src/app/runtimes :!apps/control/src/app/backups :!apps/control/src/app/revisions :!apps/control/src/app/worlds :!apps/control/src/app/servers :!apps/control/src/app/setups :!apps/control/src/app/console :!apps/control/src/app/players :!apps/control/src/app/uploads :!apps/control/src/app/artifacts :!apps/control/src/app/mods :!apps/control/src/app/packs :!apps/control/src/app/curation :!apps/control/src/app/listings :!apps/web :!apps/edge :!scripts
+          - group: Accounts and the rest of the control plane
+            paths: . :!apps/control/src/app/operations :!apps/control/src/infra/fly :!apps/control/src/infra/docker :!apps/control/src/infra/boat :!apps/control/src/infra/fleet :!apps/control/src/infra/s3 :!apps/control/src/app/runtimes :!apps/control/src/app/backups :!apps/control/src/app/revisions :!apps/control/src/app/worlds :!apps/control/src/app/servers :!apps/control/src/app/setups :!apps/control/src/app/console :!apps/control/src/app/players :!apps/control/src/app/uploads :!apps/control/src/app/artifacts :!apps/control/src/app/mods :!apps/control/src/app/packs :!apps/control/src/app/curation :!apps/control/src/app/listings :!apps/web :!apps/edge :!scripts :!apps/control/src/app/billing :!apps/control/src/app/edge :!apps/control/src/app/stop-cheaters :!apps/control/src/app/platform
     services:
       postgres:
         image: mirror.gcr.io/library/postgres:17-alpine
