@@ -7,8 +7,8 @@
 # one: `bun scripts/geyser.ts bump` (the latest) or `bun scripts/geyser.ts bump <build>`, which
 # rewrites the three lines below; `bun scripts/geyser.ts check` says whether the hash is the build's.
 ARG GEYSER_VERSION=2.12.1
-ARG GEYSER_BUILD=1279
-ARG GEYSER_SHA256=15205b459883a9046160e479b705f4f6bc4deeeff6f2ae97da1897e90be3a25b
+ARG GEYSER_BUILD=1284
+ARG GEYSER_SHA256=4cfa8be3eb08d0e5c1991c93e5a950dcb8c90a369709ec77e3289104bf4ff25b
 
 FROM ghcr.io/itzg/mc-router:1.49.0@sha256:76697861c41e7d64880accf0d25e953a3c2d871e6f5f0922d7c830ffcb2b75ab AS router
 

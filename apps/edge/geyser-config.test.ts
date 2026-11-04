@@ -20,8 +20,9 @@ test('Geyser routes by the name the player typed, signs players in, and reads wh
   expect(config).toContain('  forward-hostname: true')
   expect(config).toContain('  auth-type: floodgate')
   expect(config).toContain('    validate-bedrock-login: true')
-  expect(config).toContain('    use-haproxy-protocol: true')
-  expect(config.match(/use-haproxy-protocol: true/g)).toHaveLength(2)
+  // On the Java side the header is a switch; on the Bedrock side, listing the relay turns it on.
+  expect(config).toContain('  java:\n    use-haproxy-protocol: true')
+  expect(config.match(/use-haproxy-protocol/g)).toHaveLength(1)
   expect(config).toContain('    mtu: 1300')
   expect(config).toContain('    broadcast-port: 19132')
 })
@@ -42,5 +43,6 @@ test('Bedrock 26.60 and later join over NetherNet, at the public address given, 
   // Only the relay may say whose a RakNet datagram is; only Fly's proxy whose a signaling request is.
   expect(config).toContain('    haproxy-protocol-whitelisted-ips:\n    - 127.0.0.1')
   expect(config).toContain('    signaling-trusted-proxies:\n    - "172.16.0.0/12"')
-  expect(config).toContain('config-version: 11')
+  expect(config).toContain('    prefer-signaling-proxy-address: true')
+  expect(config).toContain('config-version: 12')
 })
