@@ -13,10 +13,8 @@ import { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import { z } from 'zod'
 import { ArtifactForbidden, type ArtifactService } from '../../app/artifacts/service.ts'
+import { tuning } from '../../app/tuning.ts'
 import type { VitalsService } from '../../app/vitals/service.ts'
-
-/** Thirty samples, each a few hundred bytes, with room to spare. */
-const MOST_BYTES = 32 * 1024
 
 export function createVitalsApp(deps: {
   artifacts: ArtifactService
@@ -25,7 +23,9 @@ export function createVitalsApp(deps: {
   const app = new Hono()
   app.post(
     '/runtime/v1/servers/:serverId/vitals',
-    bodyLimit({ maxSize: MOST_BYTES, onError: (c) => c.body(null, 413) }),
+    // As much as one request may carry: the deployment's own limit, read as each comes.
+    (c, next) =>
+      bodyLimit({ maxSize: tuning().abuse.vitalsReportBytes, onError: (d) => d.body(null, 413) })(c, next),
     async (c) => {
       const serverId = c.req.param('serverId') ?? ''
       if (!z.uuid().safeParse(serverId).success) return c.body(null, 404)

@@ -197,6 +197,8 @@ const AbuseLimits = z
       knownAddressDays: Count.default(DEFAULT_ABUSE_LIMITS.knownAddressDays),
       joinReportsPerSecond: Count.default(DEFAULT_ABUSE_LIMITS.joinReportsPerSecond),
       joinReportBytes: Count.default(DEFAULT_ABUSE_LIMITS.joinReportBytes),
+      vitalsReportsPerMinute: Count.default(DEFAULT_ABUSE_LIMITS.vitalsReportsPerMinute),
+      vitalsReportBytes: Count.default(DEFAULT_ABUSE_LIMITS.vitalsReportBytes),
       worldUploadsPerDay: Count.default(DEFAULT_ABUSE_LIMITS.worldUploadsPerDay),
       refreshesPerMinute: Count.default(DEFAULT_ABUSE_LIMITS.refreshesPerMinute),
       publicReadsPerMinute: z

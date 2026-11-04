@@ -75,6 +75,13 @@ export interface AbuseLimits {
   joinReportsPerSecond: number
   joinReportBytes: number
   /**
+   * What one Paper server's reporter may post of how it ticks (`interfaces/runtime/vitals.ts`):
+   * requests a minute (one a minute, and retries), and bytes a request. Past them its posts are
+   * refused, and its reporter drops them.
+   */
+  vitalsReportsPerMinute: number
+  vitalsReportBytes: number
+  /**
    * Worlds one account may bring in a day before there is a server for them
    * (`app/backups/new-world-imports.ts`): each is up to 4 GB, and read on a worker.
    */
@@ -145,6 +152,8 @@ export const DEFAULT_ABUSE_LIMITS: AbuseLimits = {
   inviteJoinsPerHour: 10,
   joinReportsPerSecond: 10,
   joinReportBytes: 65_536,
+  vitalsReportsPerMinute: 6,
+  vitalsReportBytes: 32_768,
   worldUploadsPerDay: 10,
   refreshesPerMinute: 10,
   publicReadsPerMinute: { page: 120, status: 240, invite: 60, invites: 1200 },

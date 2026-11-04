@@ -23,11 +23,10 @@ import { type Db, schema } from '@blockly/db'
 import { and, asc, eq, gte, lt, type SQL, sql } from 'drizzle-orm'
 import { serverTicked } from '../platform/telemetry.ts'
 import type { Limits } from '../ports/limits.ts'
+import { tuning } from '../tuning.ts'
 
 /** Days a sample is kept. */
 export const VITALS_KEPT_DAYS = 7
-/** Requests a minute one server may post: one a minute, and retries. */
-const REPORTS_PER_MINUTE = 6
 /** How far from now a sample may say it was taken: a queue that waited, or a clock off a little. */
 const OLDEST_MS = HOUR_MS
 const NEWEST_MS = 5 * MINUTE_MS
@@ -71,10 +70,13 @@ export class VitalsService {
     this.#limits = deps.limits
   }
 
-  /** Whether `serverId` may post another report this minute, counting it when it may. */
+  /**
+   * Whether `serverId` may post another report this minute, counting it when it may: as often as
+   * the deployment's ABUSE_LIMITS allow (`vitalsReportsPerMinute`).
+   */
   mayReport(serverId: string, now = new Date()): Promise<boolean> {
     const minute = Math.floor(now.getTime() / MINUTE_MS)
-    return this.#limits.allow(`vitals:${serverId}:${minute}`, REPORTS_PER_MINUTE)
+    return this.#limits.allow(`vitals:${serverId}:${minute}`, tuning().abuse.vitalsReportsPerMinute)
   }
 
   /** Keeps a server's samples, once each; how many were new. */

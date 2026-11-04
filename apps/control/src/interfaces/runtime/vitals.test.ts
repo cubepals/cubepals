@@ -9,6 +9,7 @@
 import { beforeEach, describe, expect, test } from 'bun:test'
 import type { ServerVitals } from '@blockly/contracts/server-vitals'
 import { ArtifactForbidden, type ArtifactService } from '../../app/artifacts/service.ts'
+import { installTuning, tuning } from '../../app/tuning.ts'
 import { createVitalsApp } from './vitals.ts'
 
 const SERVER = '3b1f5c2a-7d4e-4f6a-9b8c-1d2e3f4a5b6c'
@@ -76,8 +77,16 @@ describe('a server’s ticks, as its reporter posts them', () => {
     expect(kept).toEqual([])
   })
 
-  test('refuse more than a request may carry', async () => {
-    const big = { events: [SAMPLE], padding: 'x'.repeat(64 * 1024) }
-    expect((await post(big)).status).toBe(413)
+  test('refuse more than a request may carry, as the deployment’s ABUSE_LIMITS say', async () => {
+    const deployed = tuning()
+    const padded = (n: number) => ({ events: [SAMPLE], padding: 'x'.repeat(n) })
+    expect((await post(padded(deployed.abuse.vitalsReportBytes))).status).toBe(413)
+    installTuning({ ...deployed, abuse: { ...deployed.abuse, vitalsReportBytes: 1_000 } })
+    try {
+      expect((await post(padded(2_000))).status).toBe(413)
+      expect((await post({ events: [SAMPLE] })).status).toBe(204)
+    } finally {
+      installTuning(deployed)
+    }
   })
 })

@@ -12,6 +12,7 @@ import { DAY_MS, MINUTE_MS } from '@blockly/contracts/durations'
 import { LAGGING_TPS, type ServerVitals } from '@blockly/contracts/server-vitals'
 import { MemoryLimits } from '../../infra/limits/memory-limits.ts'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
+import { installTuning, tuning } from '../tuning.ts'
 import { VITALS_KEPT_DAYS, VitalsService } from './service.ts'
 
 const now = new Date('2026-11-04T12:00:00.000Z')
@@ -108,8 +109,20 @@ describe.skipIf(!hasDatabase)('how servers tick', () => {
 
   test('a server may post a few times a minute, and no more', async () => {
     const at = new Date('2026-11-04T13:00:30.000Z')
-    const answers = await Promise.all(Array.from({ length: 8 }, () => vitals.mayReport(smooth, at)))
-    expect(answers.filter(Boolean)).toHaveLength(6)
+    const allowed = tuning().abuse.vitalsReportsPerMinute
+    const answers = await Promise.all(Array.from({ length: allowed + 2 }, () => vitals.mayReport(smooth, at)))
+    expect(answers.filter(Boolean)).toHaveLength(allowed)
     expect(await vitals.mayReport(smooth, new Date(at.getTime() + MINUTE_MS))).toBe(true)
+  })
+
+  test('how often is the deployment’s own, from ABUSE_LIMITS', async () => {
+    const deployed = tuning()
+    installTuning({ ...deployed, abuse: { ...deployed.abuse, vitalsReportsPerMinute: 1 } })
+    try {
+      const at = new Date('2026-11-04T14:00:30.000Z')
+      expect([await vitals.mayReport(smooth, at), await vitals.mayReport(smooth, at)]).toEqual([true, false])
+    } finally {
+      installTuning(deployed)
+    }
   })
 })
