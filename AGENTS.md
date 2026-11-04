@@ -92,6 +92,7 @@ A value that belongs to another system is taken from that system, never typed ou
 
 An agent a maintainer runs takes its work end to end, on the maintainer's access. It doesn't hand back a step it can take.
 
+- **Codex reviews its pull requests, once a commit.** Codex's summary comment on the pull request says which commit it is reviewing or reviewed. After a push, the agent waits a minute; if that comment doesn't show the new head running or done, it comments `@codex review`, and never asks again for a commit Codex already has. It answers Codex like a person: each finding (Codex's line comments, P0 and P1) is fixed, or answered on its thread with why not, before it merges, and a fixed finding's thread is resolved, since Codex counts an open thread as an open finding. Codex is done when its summary comment says so: 👍 with no findings, or findings the agent dealt with and the fix reviewed. The second eye takes Codex's answer as its verdict and runs Claude only when Codex didn't answer for the commit, so the two never review the same commit both.
 - **It merges its own pull request** once CI's `check` and the Second eye gate pass, and, for the website's runtime, once the staging preview serves its pages. It squash-merges with the expected head. An open pull request is unfinished work: it merges, or it closes with the reason and what replaces it.
 - **It fixes main.** A red run on `main`, a nightly or a scheduled run is its to fix when it finds one, in a pull request of its own.
 - **It deploys production** after its change merges and a nightly has passed with it ([Production](#production)).
@@ -110,6 +111,17 @@ What keeps an agent with that access from making work for the maintainer:
 - **Fix forward, small.** A bug in merged work gets its own pull request, with a test that fails without the fix.
 - **Only what is true.** A pull request or commit says what changed and how it was checked. It never claims an approval, review or authorization nobody gave, and never says a check passed that didn't run.
 - **Stuck is a report, not a loop.** After three tries at the same failure, stop pushing: write down what fails, what was tried and what it looks like, and ask.
+
+## Code Review Rules
+
+What a reviewer of a pull request here reports, Codex's GitHub review included, and what the second eye's Claude checks too (`.github/second-eye.md`). Only what was checked against the code and is wrong:
+
+- **Bugs:** wrong behaviour, broken edge cases, races, errors swallowed.
+- **Security:** access checks, secrets, injection, untrusted input.
+- **Data or money:** data lost or corrupted, migrations, billing, hours.
+- **This guide's rules:** the core rule, the name rules, the structure rules, and business internals put anywhere public.
+
+Never praise, a summary of the diff, style, or anything CI already reports.
 
 ## CI
 

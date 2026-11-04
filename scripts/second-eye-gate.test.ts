@@ -199,18 +199,15 @@ describe('second-eye.yml', () => {
     expect(workflow.match(/secrets\.CLAUDE_CODE_OAUTH_TOKEN/g)).toHaveLength(1)
     expect(job('sensitive')).not.toContain('CLAUDE_CODE_OAUTH_TOKEN')
     expect(job('gate')).not.toContain('CLAUDE_CODE_OAUTH_TOKEN')
-    // Codex's key reaches only its own step; the job's environment learns only whether it is set.
-    const review = job('review')
-    expect(workflow.match(/secrets\.OPENAI_API_KEY/g)).toHaveLength(2)
-    expect(review).toMatch(/openai-api-key: \$\{\{ secrets\.OPENAI_API_KEY \}\}\n/)
-    expect(review).toMatch(/CODEX_SET_UP: \$\{\{ secrets\.OPENAI_API_KEY != '' \}\}\n/)
+    // Codex runs on its own plan, outside this workflow: no OpenAI key reaches it.
+    expect(workflow).not.toContain('OPENAI_API_KEY')
   })
 
-  test('Codex reviews first, read-only, and Claude only when Codex gave no review', () => {
+  test("Codex's own review is waited for first, and Claude reviews only when there is none", () => {
     const review = job('review')
-    expect(review.indexOf('id: codex')).toBeLessThan(review.indexOf('id: claude'))
-    expect(review).toContain("permission-profile: ':read-only'")
-    expect(review).not.toContain('safety-strategy:')
+    expect(review.indexOf('id: answer')).toBeLessThan(review.indexOf('id: claude'))
+    expect(review).toContain('run: bun scripts/second-eye-codex.ts')
+    expect(review).toContain('CODEX_WAIT_MINUTES:')
     for (const id of ['claude', 'result'])
       expect(review).toContain(
         `id: ${id}\n        if: steps.newer.outputs.superseded != 'true' && steps.answer.outputs.review == ''`,

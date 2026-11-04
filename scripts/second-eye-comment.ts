@@ -25,8 +25,8 @@
  *   DECIDE=1 bun scripts/second-eye-comment.ts
  *
  * It reads REVIEW (the reviewer's answer), REVIEWED (the commit and its counts, as the review job
- * read them), PREVIOUS (the earlier review's findings, when there was one), REVIEWER, MODEL, EFFORT,
- * FALLBACK, REPO, PULL and GH_TOKEN from the environment the workflow gives
+ * read them), PREVIOUS (the earlier review's findings, when there was one), REVIEWER, MODEL, SOURCE
+ * (Codex's own review), FALLBACK, REPO, PULL and GH_TOKEN from the environment the workflow gives
  * it, and what the reviewer looks at from .github/second-eye.md. With NOTICE it writes only the
  * line at the top and needs no review. With DECIDE it touches nothing: it writes to GITHUB_OUTPUT
  * whether this run reviews and what it says first (EVENT, ACTION, DRAFT and FORCE say what started
@@ -76,8 +76,8 @@ export interface Previous {
 /** Who wrote the review: Codex first, or Claude in its place. */
 export type Reviewer = 'codex' | 'claude'
 
-/** Why Claude reviewed in Codex's place: Codex isn't set up (off), or gave no review (failed). */
-export type Fallback = 'off' | 'failed'
+/** Why Claude reviewed in Codex's place: Codex didn't review the commit in time. */
+export type Fallback = 'silent'
 
 /** What the comment says about the run, beside the reviewer's answer. */
 export interface Run {
@@ -90,8 +90,8 @@ export interface Run {
   deletions: number
   reviewer: Reviewer
   model: string
-  /** The reasoning effort the reviewer ran at, when the workflow sets one. */
-  effort?: string
+  /** Codex's own review on GitHub, which this comment sums up. */
+  source?: string
   /** Set when Claude reviewed in Codex's place. */
   fallback?: Fallback
   runUrl: string
@@ -140,10 +140,7 @@ const BADGE = { merge: '✅', 'fix first': '⚠️' } as const
 /** How the comment names each reviewer. */
 const NAME: Record<Reviewer, string> = { codex: 'Codex', claude: 'Claude' }
 /** What the Reviewer row says when Claude stood in for Codex. */
-const STOOD_IN: Record<Fallback, string> = {
-  off: "in place of Codex, which isn't set up",
-  failed: 'in place of Codex, which gave no review',
-}
+const STOOD_IN: Record<Fallback, string> = { silent: "in place of Codex, which didn't review this commit" }
 
 /** The reviewer's text on one line, with no code spans to break out of and nobody mentioned. */
 const plain = (text: unknown): string =>
@@ -177,12 +174,14 @@ function where(run: Run, finding: Finding): string {
 
 const count = (n: number, one: string, many: string): string => `${n} ${n === 1 ? one : many}`
 
-/** Who reviewed, with which model and effort, and whether in Codex's place. */
+/** Who reviewed: Codex with a link to its own review, or Claude's model and whether in Codex's place. */
 function reviewedBy(run: Run): string {
+  if (run.reviewer === 'codex')
+    return /^https:\/\/github\.com\/\S+$/.test(run.source ?? '')
+      ? `Codex · [its review on this pull request](${run.source})`
+      : 'Codex'
   const model = run.model ? `\`${plain(run.model)}\`` : 'unknown model'
-  const effort = run.effort ? `, ${plain(run.effort)} effort` : ''
-  const stoodIn = run.reviewer === 'claude' && run.fallback ? ` · ${STOOD_IN[run.fallback]}` : ''
-  return `${NAME[run.reviewer]} · ${model}${effort}${stoodIn}`
+  return `Claude · ${model}${run.fallback ? ` · ${STOOD_IN[run.fallback]}` : ''}`
 }
 
 /** The findings written, most severe first, and the verdict they leave. */
@@ -284,7 +283,7 @@ export function secondEyeComment(review: Review, run: Run): string {
     : ['| Where | Problem |', '| --- | --- |']
   const why = findings.map(
     (finding, i) =>
-      `${i + 1}. ${where(run, finding)}${finding.why ? ` ${cell(finding.why)}` : ''} **Fix:** ${cell(finding.fix)}`,
+      `${i + 1}. ${where(run, finding)}${finding.why ? ` ${cell(finding.why)}` : ''}${finding.fix ? ` **Fix:** ${cell(finding.fix)}` : ''}`,
   )
   // Too long for a comment: first the folded reasons go, then each problem is cut short.
   const reasons = (stage: 0 | 1 | 2): string[] => {
@@ -450,6 +449,7 @@ async function markStale(repo: string, pull: string, notice: Notice): Promise<vo
 async function writeReview(repo: string, pull: string): Promise<void> {
   const review = JSON.parse(need('REVIEW')) as Review
   const earlier = process.env.PREVIOUS ? (JSON.parse(process.env.PREVIOUS) as Previous) : undefined
+  const codex = process.env.REVIEWER === 'codex'
   const reviewed = JSON.parse(need('REVIEWED')) as {
     sha: string
     files: number
@@ -464,13 +464,14 @@ async function writeReview(repo: string, pull: string): Promise<void> {
     additions: Number(reviewed.additions) || 0,
     deletions: Number(reviewed.deletions) || 0,
     // A run from before Codex reviewed first names no reviewer: Claude wrote it.
-    reviewer: process.env.REVIEWER === 'codex' ? 'codex' : 'claude',
+    reviewer: codex ? 'codex' : 'claude',
     model: process.env.MODEL ?? '',
-    effort: process.env.EFFORT || undefined,
-    fallback: (['off', 'failed'] as const).find((reason) => reason === process.env.FALLBACK),
+    source: process.env.SOURCE || undefined,
+    fallback: process.env.FALLBACK === 'silent' ? 'silent' : undefined,
     runUrl: `${process.env.GITHUB_SERVER_URL ?? 'https://github.com'}/${repo}/actions/runs/${need('GITHUB_RUN_ID')}`,
     areas: lookedAt(readFileSync(new URL('../.github/second-eye.md', import.meta.url), 'utf8')),
-    previous: earlier,
+    // Codex's review stands on its own: it doesn't settle the findings of the review before it.
+    previous: codex ? undefined : earlier,
   }
   // A push the workflow didn't review again (a draft's, or anyone else's) moved the head on.
   const now = await pullNow(repo, pull)
