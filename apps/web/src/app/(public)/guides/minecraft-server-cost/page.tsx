@@ -101,8 +101,8 @@ export default async function Guide() {
         <Shot
           src={`${PICTURES}/play-this-month.png`}
           width={588}
-          height={536}
-          alt="The Play this month card on the Account page of a paid plan: the hours left this month as a bar, then Extra play you allow, set to None, which says what an hour past the plan costs and that Cubepals stops your servers at the number you set, then Kick players who stand still, after 15 minutes."
+          height={432}
+          alt="The Play this month card on the Account page of a paid plan: the hours left this month as a bar, then Extra play you allow, set to None, which says what an hour past the plan costs and that Cubepals stops your servers at the number you set."
           caption="Extra play is off until you set a limit."
         />
       </Part>

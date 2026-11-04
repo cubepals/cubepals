@@ -15,7 +15,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { type ReactNode, Suspense, useEffect, useRef, useState } from 'react'
+import { type ReactNode, Suspense, useEffect, useRef } from 'react'
 import { messageOf, useTRPC } from '../../../lib/api'
 import { checkoutHref } from '../../../lib/checkout'
 import { useOutcome } from '../../../lib/outcome'

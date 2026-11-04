@@ -30,7 +30,7 @@ describe.skipIf(!hasDatabase)('server idle-kick choices', () => {
     const runtime = async (id: string) => h.app.specs.desired(h.db, await h.server(id))
     const before = await runtime(first.id)
     const version = (await h.server(first.id)).version
-    await h.app.afkKick.set(owner, first.id, 0)
+    await h.app.servers.afkKick.set(owner, first.id, 0)
     expect((await h.app.queries.get(owner, first.id)).afkKickMinutes).toBe(0)
     expect((await h.app.queries.get(owner, second.id)).afkKickMinutes).toBeNull()
     expect(h.runtime.machine(first.id)?.spec.env.PLAYER_IDLE_TIMEOUT).toBe('15')
@@ -40,19 +40,17 @@ describe.skipIf(!hasDatabase)('server idle-kick choices', () => {
     expect((await runtime(first.id)).driftDigest).toBe(before.driftDigest)
     expect((await runtime(first.id)).digest).not.toBe(before.digest)
     expect((await h.server(first.id)).version).toBe(version + 1)
-    await h.app.afkKick.set(owner, first.id, 0)
+    await h.app.servers.afkKick.set(owner, first.id, 0)
     expect((await h.server(first.id)).version).toBe(version + 1)
     const audit = await h.db
       .select()
       .from(schema.auditLog)
-      .where(
-        and(eq(schema.auditLog.subjectId, first.id), eq(schema.auditLog.action, 'server.afk_kick_set')),
-      )
+      .where(and(eq(schema.auditLog.subjectId, first.id), eq(schema.auditLog.action, 'server.afk_kick_set')))
     expect(audit).toHaveLength(1)
     expect(audit[0]).toMatchObject({ subjectType: 'server', data: { minutes: 0 } })
-    await h.app.afkKick.set(owner, first.id, 45)
+    await h.app.servers.afkKick.set(owner, first.id, 45)
     expect((await runtime(first.id)).spec.env.PLAYER_IDLE_TIMEOUT).toBe('45')
-    await h.app.afkKick.set(owner, first.id, null)
+    await h.app.servers.afkKick.set(owner, first.id, null)
     expect((await h.server(first.id)).afkKickMinutes).toBeNull()
     expect((await runtime(first.id)).spec.env.PLAYER_IDLE_TIMEOUT).toBe('15')
   }, 40_000)
@@ -61,34 +59,40 @@ describe.skipIf(!hasDatabase)('server idle-kick choices', () => {
     const owner = await h.user('Private idle', 'plus')
     const stranger = await h.user('Stranger idle', 'plus')
     const server = await h.create(owner, { name: 'Private idle' })
-    await expect(h.app.afkKick.set(stranger, server.id, 0)).rejects.toMatchObject({ name: 'NotFound' })
+    await expect(h.app.servers.afkKick.set(stranger, server.id, 0)).rejects.toMatchObject({
+      name: 'NotFound',
+    })
     await expect(
-      h.app.afkKick.set({ kind: 'system', reason: 'reconcile' }, server.id, 0),
+      h.app.servers.afkKick.set({ kind: 'system', reason: 'reconcile' }, server.id, 0),
     ).rejects.toMatchObject({ name: 'NotFound' })
     for (const minutes of [-1, 3, 121, 5.5, Number.NaN])
-      await expect(h.app.afkKick.set(owner, server.id, minutes)).rejects.toMatchObject({
+      await expect(h.app.servers.afkKick.set(owner, server.id, minutes)).rejects.toMatchObject({
         code: 'invalid_choice',
       })
     expect((await h.server(server.id)).afkKickMinutes).toBeNull()
     const free = await h.user('Free idle')
     const trial = await h.create(free, { name: 'Free idle' })
-    await expect(h.app.afkKick.set(free, trial.id, 0)).rejects.toMatchObject({ code: 'not_entitled' })
+    await expect(h.app.servers.afkKick.set(free, trial.id, 0)).rejects.toMatchObject({ code: 'not_entitled' })
     expect((await h.server(trial.id)).afkKickMinutes).toBeNull()
   }, 30_000)
 
   test('after a downgrade the owner can reset an earlier choice without choosing a new override', async () => {
     const owner = await h.user('Downgraded idle', 'plus')
     const server = await h.create(owner, { name: 'Downgraded idle' })
-    await h.app.afkKick.set(owner, server.id, 0)
+    await h.app.servers.afkKick.set(owner, server.id, 0)
     await h.db
       .update(schema.accountStanding)
       .set({ plan: 'free' })
       .where(eq(schema.accountStanding.userId, owner.userId))
-    await expect(h.app.afkKick.set(owner, server.id, 30)).rejects.toMatchObject({ code: 'not_entitled' })
+    await expect(h.app.servers.afkKick.set(owner, server.id, 30)).rejects.toMatchObject({
+      code: 'not_entitled',
+    })
     expect((await h.server(server.id)).afkKickMinutes).toBe(0)
-    await h.app.afkKick.set(owner, server.id, null)
+    await h.app.servers.afkKick.set(owner, server.id, null)
     expect((await h.server(server.id)).afkKickMinutes).toBeNull()
-    expect((await h.app.specs.desired(h.db, await h.server(server.id))).spec.env.PLAYER_IDLE_TIMEOUT).toBe('15')
+    expect((await h.app.specs.desired(h.db, await h.server(server.id))).spec.env.PLAYER_IDLE_TIMEOUT).toBe(
+      '15',
+    )
   }, 30_000)
 
   test('a paid subscription allows the choice even when the stored account plan is free', async () => {
@@ -102,7 +106,7 @@ describe.skipIf(!hasDatabase)('server idle-kick choices', () => {
       status: PAYING[0] ?? '',
     })
     const server = await h.create(owner, { name: 'Paid idle' })
-    await h.app.afkKick.set(owner, server.id, 30)
+    await h.app.servers.afkKick.set(owner, server.id, 30)
     expect((await h.server(server.id)).afkKickMinutes).toBe(30)
   }, 30_000)
 

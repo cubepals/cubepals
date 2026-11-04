@@ -70,7 +70,9 @@ function IdleKick({ view, plan }: { view: ServerView; plan: EntitlementsView }) 
                 After {n} minutes
               </option>
             ))}
-            <option value={0} disabled={!plan.mayChooseAfkKick}>Never</option>
+            <option value={0} disabled={!plan.mayChooseAfkKick}>
+              Never
+            </option>
           </select>
         }
       />

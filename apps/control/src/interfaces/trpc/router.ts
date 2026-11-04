@@ -100,7 +100,7 @@ import { authedProcedure, ownerOrAdminProcedure, publicProcedure, router, sessio
 
 const servers = router({
   setAfkKick: authedProcedure.input(SetAfkKickInput).mutation(async ({ ctx, input }) => {
-    await ctx.services.afkKick.set(ctx.actor, input.serverId, input.minutes)
+    await ctx.services.servers.afkKick.set(ctx.actor, input.serverId, input.minutes)
     return ctx.services.queries.get(ctx.actor, input.serverId)
   }),
   list: authedProcedure.query(({ ctx }) => ctx.services.queries.list(ctx.actor)),

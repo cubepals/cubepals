@@ -55,8 +55,7 @@ import type { WorldService } from '../../app/worlds/service.ts'
 
 /** What procedures may call. Each procedure calls exactly one of these methods. */
 export interface Services {
-  servers: MinecraftServerService
-  afkKick: AfkKick
+  servers: MinecraftServerService & { afkKick: AfkKick }
   /** A new address goes through here, so its owner hears when someone else gave it. */
   notices: OwnerNotices
   accounts: AccountService
