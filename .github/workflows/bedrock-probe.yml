@@ -33,82 +33,17 @@ jobs:
         run: |
           sudo tcpdump -i any -nn -U -w probe.pcap "host $EDGE or icmp" > /dev/null 2>&1 &
           sleep 2
-      - name: Probe
-        shell: python3 {0}
+      # The edge's Xbox sign-in check is on: a headless client that reaches Geyser is turned away
+      # with a reason, which shows RakNet connected. One that never connects times out.
+      - name: Join through the forwarder
+        working-directory: tools/bedrock-join
         run: |
-          import json, os, select, socket, struct, time
-          HOST, PORT = os.environ['EDGE'], 19132
-          MAGIC = bytes.fromhex('00ffff00fefefefefdfdfdfd12345678')
-          IP_MTU_DISCOVER, DONT, DO = 10, 0, 2
-          T0 = time.time()
-          def say(**fields):
-              print(json.dumps({'t': round(time.time() - T0, 1), **fields}), flush=True)
-          def ping():
-              return b'\x01' + struct.pack('>q', int(time.time() * 1000)) + MAGIC + os.urandom(8)
-          def ocr1(mtu, pad='zero'):
-              body = b'\x05' + MAGIC + bytes([11])
-              n = mtu - 28 - len(body)
-              return body + (os.urandom(n) if pad == 'random' else b'\x00' * n)
-          def sock(df):
-              s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-              s.setsockopt(socket.IPPROTO_IP, IP_MTU_DISCOVER, DO if df else DONT)
-              s.bind(('0.0.0.0', 0))
-              return s
-          def drain(s, wait):
-              got, end = [], time.time() + wait
-              while (left := end - time.time()) > 0:
-                  if not select.select([s], [], [], left)[0]:
-                      break
-                  data, _ = s.recvfrom(4096)
-                  got.append(hex(data[0]))
-              return got
-          def single(label, payload, df=False, wait=2.0):
-              s = sock(df)
-              s.sendto(payload, (HOST, PORT))
-              say(phase=label, bytes=len(payload), df=df, port=s.getsockname()[1], replies=drain(s, wait))
-              s.close()
-          def raknet_like(label, sizes, pad='zero', df=True):
-              # One socket, open requests half a second apart, as RakNet's client sends them.
-              s = sock(df)
-              sent = []
-              for mtu in sizes:
-                  try:
-                      s.sendto(ocr1(mtu, pad), (HOST, PORT))
-                      sent.append(mtu)
-                  except OSError as e:
-                      sent.append(f'{mtu}:{e.errno}')
-                  time.sleep(0.5)
-              say(phase=label, pad=pad, df=df, port=s.getsockname()[1], sent=sent, replies=drain(s, 1.0))
-              s.close()
-          def canaries(label, seconds, every=5):
-              end = time.time() + seconds
-              while time.time() < end:
-                  single(label + ':canary-1172', ocr1(1200), wait=1.5)
-                  single(label + ':canary-ping', ping(), wait=1.0)
-                  time.sleep(max(0, every - 2.5))
-          RAKNET = [1492] * 4 + [1200] * 4 + [576] * 4
-          while time.time() - T0 < 180:
-              s = sock(False); s.sendto(ping(), (HOST, PORT))
-              if drain(s, 2.0):
-                  break
-              time.sleep(3)
-          say(phase='edge answers')
-          # A: gentle, one open per new socket every 3 s.
-          for _ in range(6):
-              single('A:gentle-1172', ocr1(1200)); time.sleep(1)
-          # B: RakNet's way, without the 1492 opens that never fit Fly's path.
-          raknet_like('B:raknet-no1492', [1200] * 4 + [576] * 4)
-          canaries('after-B', 30)
-          # C: RakNet's way exactly, padded with zeros.
-          raknet_like('C:raknet-zero', RAKNET)
-          canaries('after-C', 60)
-          # D: RakNet's way, padded with random bytes.
-          raknet_like('D:raknet-random', RAKNET, pad='random')
-          canaries('after-D', 60)
-          # E: 1492 opens alone, then canaries.
-          for _ in range(4):
-              single('E:1492-only', ocr1(1492), df=True, wait=0.5)
-          canaries('after-E', 90)
+          for try in 1 2 3; do
+            timeout 120 bun join.ts --address probe.play.staging.cubepals.com --timeout 60 --hold 1 || true
+          done
+      - name: Join with the cap lifted (control)
+        working-directory: tools/bedrock-join
+        run: timeout 120 bun join.ts --address probe.play.staging.cubepals.com --mtu 1500 --timeout 40 --hold 1 || true
       - name: What went over the wire
         if: always()
         run: |
