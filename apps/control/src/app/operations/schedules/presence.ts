@@ -5,27 +5,58 @@
 /**
  * Records who is online on each running server, read from the server's own console, and delivers
  * an access change, or what the owner asked for on a player's page, waiting for someone who has
- * just joined. A console that stops or starts answering again also marks or clears a lost host. Stopping a server nobody is on is `idle.ts`'s;
- * rebuilding one off a lost host is `relocations.ts`'s.
+ * just joined. A console that stops or starts answering again also marks or clears a lost host.
+ * On the same connection it reads how a server ticks (`tick query`) where the reporter plugin
+ * doesn't sample it, which `vitals/console-samples.ts` keeps. Stopping a server nobody is on is
+ * `idle.ts`'s; rebuilding one off a lost host is `relocations.ts`'s.
  */
 import { MINUTE_MS } from '@blockly/contracts/durations'
 import type { Db } from '@blockly/db'
 import type { MinecraftServer } from '../../../domain/server/server.ts'
-import { LIST_UUIDS, parseOnlinePlayers } from '../../../minecraft/console.ts'
+import {
+  LIST_UUIDS,
+  parseOnlinePlayers,
+  parseTickQuery,
+  TICK_QUERY,
+  type TickReading,
+} from '../../../minecraft/console.ts'
 import { PORT_NAMES } from '../../../minecraft/runtime-spec.ts'
 import { readAccess } from '../../access/persistence.ts'
 import { playersSeen } from '../../insight/record.ts'
 import type { PlayerService } from '../../players/service.ts'
 import type { EventBus } from '../../ports/events.ts'
-import type { ServerConsole } from '../../ports/minecraft.ts'
+import type { ConsoleTarget, ServerConsole } from '../../ports/minecraft.ts'
 import type { RuntimeHandle } from '../../ports/runtime.ts'
 import type { Runtimes } from '../../runtimes/router.ts'
 import { HOST_LOST, listByStatus, saveObserved } from '../../servers/persistence.ts'
 import type { RuntimeSpecs } from '../../servers/specs.ts'
 import type { ServerTransitions } from '../../servers/transitions.ts'
 import { type PresentPlayer, recordPlay, replacePresence } from '../../servers/usage.ts'
+import { recordConsoleTick, reportingServers } from '../../vitals/console-samples.ts'
 import { observedJson, recordHostLost } from './observations.ts'
 import { placementsOf } from './placements.ts'
+
+/**
+ * `list uuids`, and `tick query` after it on the same connection when the server's ticks are read
+ * here; null for what didn't answer.
+ */
+async function readConsole(
+  console: ServerConsole,
+  target: ConsoleTarget,
+  ticks: boolean,
+): Promise<{ output: string | null; tick: TickReading | null }> {
+  if (!ticks) return { output: await console.run(target, LIST_UUIDS).catch(() => null), tick: null }
+  const [list, tick] = await console.runAll(target, [LIST_UUIDS, TICK_QUERY]).catch(() => [])
+  return { output: list?.ok ? list.output : null, tick: tick?.ok ? parseTickQuery(tick.output) : null }
+}
+
+/** Keeps a console's tick reading, if it gave one; a failure to keep it is only logged. */
+async function keepTick(db: Db, serverId: string, tick: TickReading | null, players: number): Promise<void> {
+  if (tick === null) return
+  await recordConsoleTick(db, serverId, tick, players).catch((error: unknown) =>
+    console.warn('console ticks', serverId, error instanceof Error ? error.message : error),
+  )
+}
 
 export function readingPresence(deps: {
   db: Db
@@ -56,6 +87,10 @@ export function readingPresence(deps: {
       running.map((s) => s.id),
       runtime.providers,
     )
+    const sampled = await reportingServers(
+      db,
+      running.map((s) => s.id),
+    )
     for (const server of running) {
       const { handle, observed, provider } = placementOf(server.id)
       if (handle === null) continue
@@ -63,7 +98,7 @@ export function readingPresence(deps: {
         endpoint: runtime.endpoint(handle, PORT_NAMES.rcon, 'control'),
         passwords: specs.rconPasswords(server.id),
       }
-      const output = await deps.console.run(target, LIST_UUIDS).catch(() => null)
+      const { output, tick } = await readConsole(deps.console, target, !sampled.has(server.id))
       if (output === null && observed?.detail !== HOST_LOST) {
         // A console that stopped answering may be a lost host, which the provider's list doesn't
         // say: this one machine is asked.
@@ -77,6 +112,7 @@ export function readingPresence(deps: {
       }
       const reading = output === null ? null : parseOnlinePlayers(output)
       if (reading === null) continue
+      await keepTick(db, server.id, tick, reading.online)
       await db.transaction(async (tx) => {
         const now = new Date()
         await replacePresence(tx, server.id, reading.players, now)

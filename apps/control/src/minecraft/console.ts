@@ -61,6 +61,57 @@ export function parseOnlinePlayers(output: string): OnlinePlayers | null {
   return { online: Number(online), max: Number(max), players }
 }
 
+/** How the server is ticking, on Minecraft 1.20.3 and later whatever runs it. */
+export const TICK_QUERY = 'tick query'
+
+/**
+ * `tick query`'s first line, as Minecraft words it (`commands.tick.status.*` in its language
+ * file, which a server's console always speaks): keeping up, behind, or held by an operator.
+ */
+const TICK_STATES: ReadonlyArray<[string, TickReading['state']]> = [
+  ["The game is running, but can't keep up with the target tick rate", 'lagging'],
+  ['The game is running normally', 'running'],
+  ['The game is frozen', 'frozen'],
+  ['The game is sprinting', 'sprinting'],
+]
+const TICK_RATE = /Target tick rate: (\d+(?:\.\d+)?) per second/
+const TICK_MEAN = /Average time per tick: (\d+(?:\.\d+)?)ms/
+const TICK_PERCENTILES = /P50: (\d+(?:\.\d+)?)ms P95: (\d+(?:\.\d+)?)ms P99: (\d+(?:\.\d+)?)ms/
+
+export interface TickReading {
+  state: 'running' | 'lagging' | 'frozen' | 'sprinting'
+  /** The ticks a second the server aims for: 20 unless an operator set `tick rate`. */
+  targetTps: number
+  /** Milliseconds a tick over the last hundred: the average and three percentiles. */
+  msptMean: number
+  msptP50: number
+  msptP95: number
+  msptP99: number
+}
+
+/**
+ * Parses `tick query`, whose lines RCON runs together: "The game is running normallyTarget tick
+ * rate: 20.0 per second.\nAverage time per tick: 0.2ms (Target: 50.0ms)Percentiles: P50: 0.2ms
+ * P95: 0.3ms P99: 1.6ms. Sample: 100". Null for anything else, such as an older server's
+ * "Unknown or incomplete command".
+ */
+export function parseTickQuery(output: string): TickReading | null {
+  const state = TICK_STATES.find(([words]) => output.startsWith(words))?.[1]
+  const rate = TICK_RATE.exec(output)
+  const mean = TICK_MEAN.exec(output)
+  const percentiles = TICK_PERCENTILES.exec(output)
+  if (state === undefined || rate === null || mean === null || percentiles === null) return null
+  const [, p50 = '0', p95 = '0', p99 = '0'] = percentiles
+  return {
+    state,
+    targetTps: Number(rate[1]),
+    msptMean: Number(mean[1]),
+    msptP50: Number(p50),
+    msptP95: Number(p95),
+    msptP99: Number(p99),
+  }
+}
+
 /** Minecraft files use dashed lowercase UUIDs; Mojang's API returns them undashed. */
 export function normalizeUuid(uuid: string): string {
   const hex = uuid.replace(/-/g, '').toLowerCase()

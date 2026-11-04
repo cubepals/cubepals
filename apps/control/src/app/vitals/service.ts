@@ -3,20 +3,23 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * How each Paper server ticks, as its reporter plugin samples it once a minute: kept as it comes
- * (a sample sent twice is kept once, one from long ago or the future not at all), read back for
- * one server with what its samples add up to, and the servers that ticked worst, the most minutes
- * behind first, with whose they are. Samples are kept 7 days (`vitals-sweep`).
+ * How each server ticks, once a minute: the reporter plugin's samples on Paper servers, kept as
+ * they come (a sample sent twice is kept once, one from long ago or the future not at all), beside
+ * the console's readings of every other server (`console-samples.ts`); read back for one server
+ * with what its samples add up to, the servers that ticked worst, the most minutes behind first,
+ * with whose they are, and the platform now. Samples are kept 7 days (`vitals-sweep`).
  *
  * Not for a join's own tick, which its `joins` row keeps (`joins/server-events.ts`).
  */
 import { DAY_MS, HOUR_MS, MINUTE_MS } from '@blockly/contracts/durations'
 import {
   LAGGING_TPS,
+  type PlatformVitalsView,
   type ServerVitals,
   type ServerVitalsView,
   type VitalsListView,
   type VitalsRowView,
+  type VitalsSource,
   type VitalsSummaryView,
 } from '@blockly/contracts/server-vitals'
 import { type Db, schema } from '@blockly/db'
@@ -43,9 +46,10 @@ const SUMMARY = sql`count(*)::int as samples, ${iso(sql`min(v.at)`)} as "firstAt
   percentile_cont(0.95) within group (order by v.mspt_p95)::float8 as "msptP95",
   max(v.mspt_max)::float8 as "msptMax",
   (count(*) filter (where v.tps < ${LAGGING_TPS}))::int as "laggingMinutes",
-  coalesce(max(v.heap_used_mb::float8 / nullif(v.heap_max_mb, 0)), 0)::float8 as "heapShareMax",
+  max(v.heap_used_mb::float8 / nullif(v.heap_max_mb, 0))::float8 as "heapShareMax",
   max(v.gc_ms)::int as "gcMsMax", max(v.players)::int as "playersMax",
-  max(v.chunks)::int as "chunksMax", max(v.entities)::int as "entitiesMax"`
+  max(v.chunks)::int as "chunksMax", max(v.entities)::int as "entitiesMax",
+  array_agg(distinct v.source order by v.source) as sources`
 
 const round = (n: number, places = 2) => Math.round(n * 10 ** places) / 10 ** places
 
@@ -57,9 +61,12 @@ function summaryOf(row: VitalsSummaryView): VitalsSummaryView {
     msptP50: round(row.msptP50),
     msptP95: round(row.msptP95),
     msptMax: round(row.msptMax),
-    heapShareMax: round(row.heapShareMax, 3),
+    heapShareMax: row.heapShareMax === null ? null : round(row.heapShareMax, 3),
   }
 }
+
+/** How recent a server's newest sample must be to count as how it plays now. */
+const NOW_MS = 3 * MINUTE_MS
 
 export class VitalsService {
   readonly #db: Db
@@ -109,8 +116,9 @@ export class VitalsService {
     const { rows: summed } = await this.#db.execute<VitalsSummaryView & Record<string, unknown>>(
       sql`select ${SUMMARY} from server_vitals v where v.server_id = ${serverId} and v.at >= ${since}`,
     )
-    const samples = rows.map(({ id: _id, serverId: _server, at, ...sample }) => ({
+    const samples = rows.map(({ id: _id, serverId: _server, at, source, ...sample }) => ({
       ...sample,
+      source: source as VitalsSource,
       at: at.toISOString(),
     }))
     const summary = summed[0]
@@ -128,8 +136,12 @@ export class VitalsService {
    * The servers that reported since `since`, the most minutes behind first and then the slowest,
    * each with whose it is; only `ownerId`'s where given.
    */
-  async worst(filter: { since: Date; limit?: number; ownerId?: string }): Promise<VitalsListView> {
+  async worst(
+    filter: { since: Date; limit?: number; ownerId?: string },
+    now = new Date(),
+  ): Promise<VitalsListView> {
     const owner = filter.ownerId === undefined ? sql`` : sql`and s.owner_id = ${filter.ownerId}`
+    const platform = await this.#platform(owner, now)
     const { rows } = await this.#db.execute<VitalsRowView & Record<string, unknown>>(
       sql`select v.server_id as "serverId", s.name as "serverName", s.owner_id as "ownerId",
           u.email as "ownerEmail", ${SUMMARY}
@@ -143,8 +155,34 @@ export class VitalsService {
     )
     return {
       since: filter.since.toISOString(),
+      platform,
       servers: rows.map((row) => ({ ...row, ...summaryOf(row) })),
     }
+  }
+
+  /**
+   * The running servers (`owner` narrows them to one account's), how many were sampled in the last
+   * few minutes and from where, and how many were behind in their newest sample.
+   */
+  async #platform(owner: SQL, now: Date): Promise<PlatformVitalsView> {
+    const { rows } = await this.#db.execute<
+      Omit<PlatformVitalsView, 'at' | 'silent'> & Record<string, unknown>
+    >(
+      sql`with running as (
+          select s.id from minecraft_servers s where s.status = 'running' and s.deleted_at is null ${owner}
+        ), newest as (
+          select distinct on (v.server_id) v.server_id, v.source, v.tps from server_vitals v
+          where v.at >= ${new Date(now.getTime() - NOW_MS)} and v.server_id in (select id from running)
+          order by v.server_id, v.at desc
+        )
+        select (select count(*) from running)::int as running, count(*)::int as sampled,
+          (count(*) filter (where source = 'reporter'))::int as "byReporter",
+          (count(*) filter (where source = 'console'))::int as "byConsole",
+          (count(*) filter (where tps < ${LAGGING_TPS}))::int as "laggingNow"
+        from newest`,
+    )
+    const row = rows[0] ?? { running: 0, sampled: 0, byReporter: 0, byConsole: 0, laggingNow: 0 }
+    return { at: now.toISOString(), ...row, silent: Math.max(0, row.running - row.sampled) }
   }
 
   /** `vitals-sweep`: forgets samples past their days. How many it forgot. */

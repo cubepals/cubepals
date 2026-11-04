@@ -115,7 +115,7 @@
  * - `join-report.ts`: a join as an incident report, and the one-line forms of joins and signals.
  * - `diagnostics-report.ts`: an account's trouble as an incident report, what ran slow or failed
  *   one a line and grouped, and the database now.
- * - `vitals-report.ts`: how servers tick, one a line, and one server's minutes.
+ * - `vitals-report.ts`: how servers tick: the platform now, one a line, and one server's minutes.
  */
 import type { HealthOperationView, HealthView, HealthWindow, OperationStepsView } from '@blockly/contracts'
 import type {
@@ -134,7 +134,7 @@ import { ConsoleCommand, namesServer, PLATFORM } from './lib/operator-inputs.ts'
 import { reachProduction } from './lib/production-reach.ts'
 import { databaseReport, diagnosisReport, diagnosticLine, summaryReport } from './ops/diagnostics-report.ts'
 import { joinLine, joinReport, signalLine } from './ops/join-report.ts'
-import { serverVitalsReport, vitalsLine } from './ops/vitals-report.ts'
+import { platformLine, serverVitalsReport, vitalsLine } from './ops/vitals-report.ts'
 
 const [command = 'help', ...rest] = process.argv.slice(2).filter((arg) => arg !== '--production')
 
@@ -583,6 +583,7 @@ switch (command) {
     const list = (await api('GET', `/vitals?${query}`)) as VitalsListView
     if (option('json')) show(list)
     else {
+      say(`now: ${platformLine(list.platform)}`)
       for (const row of list.servers) say(vitalsLine(row))
       say(`${list.servers.length} reported`)
     }

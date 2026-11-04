@@ -3,9 +3,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * How a Paper server ticks, as its reporter plugin samples it once a minute and posts it to
- * `/runtime/v1/servers/<id>/vitals` (`apps/reporter`, `Vitals.java`), and as operators read it
- * under `/ops/v1/vitals` and `/ops/v1/servers/<id>/vitals`.
+ * How a server ticks, once a minute: as the reporter plugin samples it on a Paper server and posts
+ * it to `/runtime/v1/servers/<id>/vitals` (`apps/reporter`, `Vitals.java`), or as the control plane
+ * reads it over any other server's console (`tick query`); and as operators read both under
+ * `/ops/v1/vitals` and `/ops/v1/servers/<id>/vitals`.
  *
  * Not for a join's own tick, which rides its `in_world` event (`join-records.ts`).
  */
@@ -47,6 +48,30 @@ export type VitalsQuery = z.infer<typeof VitalsQuery>
 /** `/ops/v1/servers/<id>/vitals`: one server's samples since a moment, and what they add up to. */
 export const ServerVitalsQuery = z.object({ since: Moment.optional() })
 
+/**
+ * Where a sample came from: the reporter plugin, which sees everything below, or the server's
+ * console, which gives ticks a second, milliseconds a tick (its slowest is the 99th percentile of
+ * the last hundred, which `tick query` gives) and players, and leaves the rest null.
+ */
+export const VITALS_SOURCES = ['reporter', 'console'] as const
+export type VitalsSource = (typeof VITALS_SOURCES)[number]
+
+/** One minute's sample as it is kept: a console's has no chunks, entities, heap or collections. */
+export interface VitalsSampleView {
+  at: string
+  source: VitalsSource
+  tps: number
+  mspt: number
+  msptP95: number
+  msptMax: number
+  players: number
+  chunks: number | null
+  entities: number | null
+  heapUsedMb: number | null
+  heapMaxMb: number | null
+  gcMs: number | null
+}
+
 /** What a server's samples over a while add up to. */
 export interface VitalsSummaryView {
   samples: number
@@ -62,12 +87,17 @@ export interface VitalsSummaryView {
   msptMax: number
   /** Minutes in which the server fell behind: fewer than 18 ticks a second. */
   laggingMinutes: number
-  /** The most of its heap it used, as a share, and the longest garbage collection a minute held. */
-  heapShareMax: number
-  gcMsMax: number
+  /**
+   * The most of its heap it used, as a share, and the longest garbage collection a minute held;
+   * these, chunks and entities are null where only its console was read.
+   */
+  heapShareMax: number | null
+  gcMsMax: number | null
   playersMax: number
-  chunksMax: number
-  entitiesMax: number
+  chunksMax: number | null
+  entitiesMax: number | null
+  /** Where its samples came from. */
+  sources: VitalsSource[]
 }
 
 export interface ServerVitalsView {
@@ -75,10 +105,10 @@ export interface ServerVitalsView {
   serverName: string | null
   since: string
   /** The newest sample, or null with none since. */
-  latest: (ServerVitals & { at: string }) | null
+  latest: VitalsSampleView | null
   summary: VitalsSummaryView | null
   /** Every sample since, oldest first. */
-  samples: ServerVitals[]
+  samples: VitalsSampleView[]
 }
 
 /** A server among those that ticked worst: whose it is and what its samples add up to. */
@@ -89,8 +119,25 @@ export interface VitalsRowView extends VitalsSummaryView {
   ownerEmail: string | null
 }
 
+/**
+ * The whole platform now, naming no one: the servers running, how many were sampled in the last
+ * few minutes and from where, how many of those were behind in their newest sample, and how many
+ * said nothing (a version before `tick query`, or a console that didn't answer).
+ */
+export interface PlatformVitalsView {
+  at: string
+  running: number
+  sampled: number
+  byReporter: number
+  byConsole: number
+  laggingNow: number
+  silent: number
+}
+
 export interface VitalsListView {
   since: string
+  /** The platform now; across every account, or the one named. */
+  platform: PlatformVitalsView
   /** The servers that reported, the most minutes behind first, then the slowest. */
   servers: VitalsRowView[]
 }
