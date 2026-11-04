@@ -39,6 +39,15 @@ export function restartsFor(from: ChangeFacts, to: ChangeFacts): boolean {
   )
 }
 
+/**
+ * Whether a revision's field shows only from the server's next start, whatever its owner chose:
+ * the server list's message (`next_start`). It never waits for players, and dropping what waits
+ * leaves it as it is.
+ */
+export function showsAtNextStart(field: string, gameVersion: string): boolean {
+  return settingTakes(field as keyof ServerSettings, gameVersion) === 'next_start'
+}
+
 /** What a server's last boot applied, whichever provider runs it; null where nothing booted. */
 export async function loadApplied(q: Queryable, serverId: string): Promise<AppliedConfigJson | null> {
   const [runtime] = await q

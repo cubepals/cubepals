@@ -257,7 +257,13 @@ const servers = router({
   }),
   /** A running server's changes that wait for everyone to leave: taken now, or dropped. */
   settleWaiting: authedProcedure.input(SettleWaitingInput).mutation(async ({ ctx, input }) => {
-    await ctx.services.stopCheaters.waiting.settle(ctx.actor, input.serverId, input.settle, input.requestId)
+    await ctx.services.stopCheaters.waiting.settle(
+      ctx.actor,
+      input.serverId,
+      input.settle,
+      input.requestId,
+      input.version,
+    )
     return ctx.services.queries.get(ctx.actor, input.serverId)
   }),
   rollback: authedProcedure.input(RollbackInput).mutation(async ({ ctx, input }) => {

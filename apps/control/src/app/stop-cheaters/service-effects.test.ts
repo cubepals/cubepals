@@ -81,14 +81,15 @@ describe.skipIf(!hasDatabase)('Stop cheaters owner effects', () => {
         const server = await h.server(id)
         const deadline = Date.now() + SECOND_MS
         while (events.length < 3 && Date.now() < deadline) await Bun.sleep(SECOND_MS / 100)
+        // Off leaves Smooth as it is at auto; on and Cubepals' settings each move the server's version.
         expect(events).toEqual(
-          Array(3).fill({
+          [server.version - 2, server.version - 1, server.version].map((version) => ({
             type: 'server_changed',
             serverId: id,
             ownerId: server.ownerId,
             status: server.lifecycle.status,
-            version: server.version,
-          }),
+            version,
+          })),
         )
         expect((await h.operations(id)).length).toBe(beforeOperations)
       } finally {

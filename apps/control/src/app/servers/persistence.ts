@@ -559,8 +559,8 @@ export async function listRevisions(
 }
 
 /**
- * Moves what the server should run: its revision, size or world. What runs moves only when an
- * operation boots it (`saveApplied`).
+ * Moves what the server should run: its revision, size or world; with none, only its version, as
+ * Stop cheaters' switch does. What runs moves only when an operation boots it (`saveApplied`).
  */
 export async function setDesired(
   tx: Tx,

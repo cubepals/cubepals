@@ -5,14 +5,15 @@
 /**
  * An owner's change that waits for everyone to leave a running server: held while someone plays and
  * the owner chose to wait, applied at once otherwise, shown on the server's page, taken now or
- * dropped, and brought by drift once the server is empty.
+ * dropped, and brought by drift once the server is empty; and the server list's message, which
+ * never waits, and stays where what waits is dropped.
  */
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { randomUUID } from 'node:crypto'
 import type { RestartWhen } from '@blockly/contracts'
 import { schema } from '@blockly/db'
 import { eq } from 'drizzle-orm'
-import type { ServerSettings } from '../../domain/revision/revision.ts'
+import { type ServerSettings, welcome } from '../../domain/revision/revision.ts'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
 import type { UserActor } from '../actor.ts'
 import { loadRevision, loadRuntime } from './persistence.ts'
@@ -159,5 +160,40 @@ describe.skipIf(!hasDatabase)('a change that waits for everyone to leave', () =>
     const stranger = await h.user('Stranger', 'free')
     await expect(h.app.stopCheaters.waiting.settle(stranger, id, 'cancel', randomUUID())).rejects.toThrow()
     expect((await h.app.queries.get(owner, id)).waiting).not.toBeNull()
+  }, 60_000)
+})
+
+describe.skipIf(!hasDatabase)('the server list message, which shows from the next start', () => {
+  beforeAll(async () => {
+    h = await startHarness()
+  }, 30_000)
+  afterAll(async () => {
+    await h.close()
+  })
+
+  test('a new name’s server list message never waits, and dropping what waits keeps it', async () => {
+    const { owner, id } = await running('Nettle')
+    await playing(id)
+    await h.app.servers.saveIdentity(owner, id, { name: 'Nettle Hollow' })
+    expect((await settingsOf(id)).motd).toBe(welcome('Nettle Hollow'))
+    // The server list shows it from the next start, whoever is on: nothing waits for it.
+    expect((await h.app.queries.get(owner, id)).waiting).toBeNull()
+    await expect(h.app.stopCheaters.waiting.settle(owner, id, 'cancel', randomUUID())).rejects.toThrow(
+      'Nothing is waiting',
+    )
+
+    const from = (await settingsOf(id)).viewDistance
+    await change(owner, id, { viewDistance: 6 }, 'empty')
+    await h.app.servers.saveIdentity(owner, id, { name: 'Nettle Glen' })
+    expect((await h.app.queries.get(owner, id)).waiting?.changes).toEqual([
+      { field: 'viewDistance', from, to: 6 },
+    ])
+    await h.app.stopCheaters.waiting.settle(owner, id, 'cancel', randomUUID())
+    expect(await settingsOf(id)).toMatchObject({ viewDistance: from, motd: welcome('Nettle Glen') })
+    expect((await h.app.queries.get(owner, id)).waiting).toBeNull()
+    // Still in Cubepals' words, so it follows the next name too.
+    await h.app.servers.saveIdentity(owner, id, { name: 'Nettle Dell' })
+    expect((await settingsOf(id)).motd).toBe(welcome('Nettle Dell'))
+    expect(await applies(id)).toHaveLength(0)
   }, 60_000)
 })

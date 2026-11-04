@@ -229,8 +229,9 @@ export class RuntimeSpecs {
     const labelled = label(withCompressedFiles({ ...built, env }))
     const refused = tooLongForAStart(labelled)
     if (refused !== null) throw new PermanentFailure(refused)
-    // The Via plugins arrive at a start, never through drift: a running server isn't restarted
-    // for Cubepals' compatibility layer, or for a newer pin of it.
+    // The Via plugins arrive at a start, never through this digest: a running server isn't
+    // restarted for Cubepals' compatibility layer, or for a newer pin of it. An owner's change of
+    // which come, left waiting for everyone to leave, drift brings by its revision (`waiting.ts`).
     const driftDigest = specDigest(withoutPlanLimits(label(toRuntimeSpec(input))))
     const compat = projectsOf(placed)
     // What drift leaves for the next start, a machine asleep can leave too: it wakes as it slept.

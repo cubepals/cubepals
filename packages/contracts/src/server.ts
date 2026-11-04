@@ -394,10 +394,15 @@ export const ChangeVersionInput = z.object({
   expected: z.array(z.string().regex(/^[0-9a-f]{128}$/)).max(400),
 })
 export const ResizeInput = z.object({ ...change, partySize: PartySize })
-/** Take a running server's waiting changes now (`now`), or drop them and keep what it runs (`cancel`). */
+/**
+ * Take a running server's waiting changes now (`now`), or drop them and keep what it runs
+ * (`cancel`), with the server's version as the page showed it, as any change carries: a server
+ * changed since, by another change that waits too, refuses it (`changed_meanwhile`).
+ */
 export const SettleWaitingInput = z.object({
   serverId: ServerId,
   requestId: z.uuid(),
+  version: change.version,
   settle: z.enum(['now', 'cancel']),
 })
 export const RollbackInput = z.object({ ...change, revisionId: z.uuid() })

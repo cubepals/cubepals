@@ -37,7 +37,7 @@ import { loadStanding } from '../accounts/persistence.ts'
 import { type Actor, authorize, requestedBy } from '../actor.ts'
 import type { ArtifactService } from '../artifacts/service.ts'
 import { revokedIn } from '../catalog/persistence.ts'
-import { AppError, NotFound } from '../errors.ts'
+import { AppError, NotFound, refuseChangedSince } from '../errors.ts'
 import type { AccessPolicy } from '../policy/access-policy.ts'
 import type { EventBus } from '../ports/events.ts'
 import type { LoaderBuilds } from '../ports/loaders.ts'
@@ -240,8 +240,8 @@ export class RevisionService {
    * Whether the server lets Bedrock players in (`ServerSettings.bedrock`): Floodgate, and the Via
    * plugins its version needs, which Cubepals adds as it starts. Only Paper runs them. They are
    * Cubepals' own, never the owner's plugins, so no plan counts them. The change restarts a running
-   * server only while nobody is on it; with players on, it is saved and the server takes it at its
-   * next start.
+   * server at once only while nobody is on it, unless the owner says so; with players on, it waits
+   * for everyone to leave, and the server restarts with it then.
    *
    * Plain Minecraft lets them in too. On Mojang's own server, letting them in moves it onto Paper in
    * the same change, which a start applies as any change of server type: a snapshot first, and back
@@ -462,11 +462,7 @@ export class RevisionService {
   ): Promise<MinecraftServer> {
     return this.#db.transaction(async (tx) => {
       const server = authorize(actor, await lockServer(tx, serverId))
-      if (options.version !== undefined && options.version !== server.version)
-        throw new AppError(
-          'changed_meanwhile',
-          'This server changed since you looked at it. Look at it again, then try once more.',
-        )
+      refuseChangedSince(options.version, server.version)
       const desired = await loadRevision(tx, server.desiredRevisionId)
       const next = await plan(tx, server, desired)
       if (next === null) return server
