@@ -60,3 +60,11 @@ export class AfkKick {
     })
   }
 }
+
+/** A previous web release may still show the account control: it must never change every server. */
+export function accountAfkKickMoved(): never {
+  throw new AppError(
+    'invalid_choice',
+    'Idle-kick choices now live in each server’s Settings. Reload this page to continue.',
+  )
+}

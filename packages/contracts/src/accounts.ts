@@ -268,6 +268,8 @@ export interface AccountOverviewView {
     giftNext: { planKey: string; months: number; startsAt: string; endsAt: string; continues: boolean } | null
   }
   entitlements: EntitlementsView
+  /** Compatibility for the previous web release; current choices belong to each ServerView. */
+  settings: { afkKickMinutes: number | null }
   usage: {
     servers: number
     running: number

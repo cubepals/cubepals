@@ -137,6 +137,7 @@ const overviewOf = (plan: Pick<AccountOverviewView['plan'], 'billed' | 'year'>):
   standing: { status: 'active', reason: null },
   plan: { key: 'plus', gifted: null, giftNext: null, ...plan },
   entitlements: held,
+  settings: { afkKickMinutes: null },
   usage: {
     servers: 1,
     running: 0,

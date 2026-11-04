@@ -110,6 +110,8 @@ export interface AccountOverview {
   entitlements: Entitlements
   /** The sizes the plan allows, as somebody reads them: "3 GB · up to 5 players". */
   sizeLabels: string[]
+  /** Read-only compatibility for a previous web release. */
+  settings: { afkKickMinutes: number | null }
   usage: {
     servers: number
     running: number
@@ -277,6 +279,7 @@ export class AccountQueries {
       },
       features,
       sizeLabels: entitlements.allowedMemoryTiers.map(sizeAndParty),
+      settings: { afkKickMinutes: standing.afkKickMinutes },
       plans: ['free', ...PAID_PLANS].map((key) => {
         const plan = entitlementsFor(key)
         return { key, entitlements: plan, sizeLabels: plan.allowedMemoryTiers.map(sizeAndParty) }
