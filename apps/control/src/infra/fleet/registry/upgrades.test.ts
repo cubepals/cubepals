@@ -26,7 +26,7 @@ import { createOperatorApi } from '../operator-api.ts'
 import { withUpgrades } from '../operator-upgrades.ts'
 import { drain, heartbeat, isOlder, retryUpgrade, upgradeSummaries } from '../registry.ts'
 import { rows } from '../sql.ts'
-import type { HeartbeatRequest } from '../wire.ts'
+import type { HeartbeatRequest, UpgradeOffer } from '../wire.ts'
 
 const RELEASE = { version: '0.3.0', sha256: 'a'.repeat(64) }
 const FEATURES = ['placement-epochs', 'self-upgrade']
@@ -36,13 +36,18 @@ let ca: FleetCa
 let drop: () => Promise<void>
 const seqs = new Map<string, number>()
 
-/** One beat from `node`, on `version`, and the upgrade its answer offers. */
-async function send(node: EnrolledNode, version: string, over: Partial<HeartbeatRequest> = {}) {
+/** One beat from `node`, on `version`, and the upgrade its answer offers of `release`. */
+async function send(
+  node: EnrolledNode,
+  version: string,
+  over: Partial<HeartbeatRequest> = {},
+  release: UpgradeOffer = RELEASE,
+) {
   const seq = (seqs.get(node.id) ?? 0) + 1
   seqs.set(node.id, seq)
   const answer = await heartbeat(
     db,
-    { ...registryOptions(), release: RELEASE },
+    { ...registryOptions(), release },
     node.id,
     node.sha,
     beat(node, `s-${node.id}`, seq, [], { daemonVersion: version, features: FEATURES, ...over }),
@@ -163,6 +168,23 @@ describe.skipIf(!hasDatabase)('nodes the rollout passes by, and what operators s
       state: 'skipped',
       reason: 'it upgrades by hand: too old to upgrade itself',
     })
+  })
+
+  test('a node that takes only a signed blocklyd is offered the signature, and nothing without one', async () => {
+    const signed = { ...RELEASE, signature: 'b'.repeat(128) }
+    const features = [...FEATURES, 'signed-upgrade']
+    const node = await enrollNode(db, ca, 'signed-a', { region: 'r10' })
+    expect(await send(node, '0.2.0', { features })).toBeUndefined()
+    expect((await upgradeSummaries(db, RELEASE)).find((n) => n.id === node.id)).toMatchObject({
+      state: 'skipped',
+      reason: 'it takes only a signed blocklyd, and this one has no blocklyd.sig beside it',
+    })
+    expect(await send(node, '0.2.0', { features }, signed)).toEqual(signed)
+    // Still offered, signed, while it downloads and restarts.
+    expect(await send(node, '0.2.0', { features }, signed)).toEqual(signed)
+    // A node that doesn't list the feature is offered the release as before, without the field.
+    const before = await enrollNode(db, ca, 'signed-b', { region: 'r11' })
+    expect(await send(before, '0.2.0', {}, signed)).toEqual(RELEASE)
   })
 
   test('a node already on the release, or newer, or a deployment rolling none out, is offered nothing', async () => {

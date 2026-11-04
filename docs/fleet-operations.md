@@ -355,8 +355,10 @@ nodes on an older version: one node per region at a time, regions side by side. 
 when a commit that moves the pin (`bun scripts/blocklyd.ts bump <version>`) is deployed; nodes
 already on it are left as they are. A node offered it:
 
-1. downloads it over its own mutual TLS and keeps it only if its sha256 is the one offered and it
-   runs, saying it is the version offered;
+1. takes the offer only with the release's signature (`blocklyd.sig`, beside the binary in the
+   image) and only of a newer version, if it lists `signed-upgrade`; downloads it over its own
+   mutual TLS and keeps it only if its sha256 is the one offered and it runs, saying it is the
+   version offered;
 2. keeps the binary it ran as `/var/lib/blocklyd/bin/blocklyd.prev`, puts the new one in its place
    (`/usr/local/bin/blocklyd` links to it), and restarts into it. Servers keep running;
 3. is on trial: the new blocklyd must reconcile and have a heartbeat accepted within two minutes.

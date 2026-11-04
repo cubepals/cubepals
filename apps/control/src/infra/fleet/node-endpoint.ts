@@ -26,7 +26,8 @@ import type { EnrollRequest, HeartbeatRequest, RenewRequest, UpgradeOffer } from
  *   verified against the fleet CA, for exactly that node's name, and pinned in the registry.
  * - `GET /fleet/v1/ca.pem`, `…/join.sh`, `…/blocklyd` and `…/blocklyd.sha256`: what a host
  *   fetches to join, before it has anything (join-routes.ts). An enrolled node upgrades from the
- *   same `…/blocklyd` when a heartbeat's answer offers it (registry/upgrades.ts).
+ *   same `…/blocklyd` when a heartbeat's answer offers it (registry/upgrades.ts), or when its
+ *   `blocklyd upgrade` asks for `…/blocklyd.json`.
  */
 
 export interface NodeEndpointOptions {
@@ -73,7 +74,9 @@ export async function startNodeEndpoint(
   options: NodeEndpointOptions,
 ): Promise<{ stop: () => Promise<void>; stats: () => EndpointStats; release: UpgradeOffer | null }> {
   const { db, ca } = options
-  const release = options.upgrades ? await blocklydRelease(options.blocklydBin) : null
+  // `blocklyd upgrade` asks for it whether or not the rollout offers it.
+  const blocklyd = await blocklydRelease(options.blocklydBin)
+  const release = options.upgrades ? blocklyd : null
   const registry = { ...options.registry, release }
   const stats = { heartbeats: 0, refused: 0, maxMs: 0, totalMs: 0 }
   const app = new Hono<Env>()
@@ -100,7 +103,7 @@ export async function startNodeEndpoint(
     }
   }
 
-  app.route('/', joinRoutes({ caPem: ca.pem, blocklydBin: options.blocklydBin }))
+  app.route('/', joinRoutes({ caPem: ca.pem, blocklydBin: options.blocklydBin, release: blocklyd }))
 
   app.post('/fleet/v1/enroll', async (c) =>
     c.json(await enroll(db, ca, registry, await body<EnrollRequest>(c))),

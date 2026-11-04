@@ -47,12 +47,29 @@ export function isOlder(version: string | null | undefined, than: string): boole
 
 /** The feature a node lists when it upgrades itself on an offer; one without is upgraded by hand. */
 const SELF_UPGRADE = 'self-upgrade'
+/**
+ * The feature a node lists when it installs only a blocklyd whose release signed it: an offer to it
+ * carries the release's signature, and without one it isn't made (blocklyd's src/upgrade/trust.rs).
+ */
+const SIGNED_UPGRADE = 'signed-upgrade'
 
-/** Why a node is never offered an upgrade as it is now, if it isn't. */
-function skipped(node: Pick<NodeRow, 'lifecycle' | 'duplicate_seen_at' | 'features'>): string | null {
+/** Why a node is never offered `release` as it is now, if it isn't. */
+function skipped(
+  node: Pick<NodeRow, 'lifecycle' | 'duplicate_seen_at' | 'features'>,
+  release: UpgradeOffer,
+): string | null {
   if (node.duplicate_seen_at !== null) return 'quarantined'
   if (node.lifecycle !== 'active') return node.lifecycle
-  return node.features.includes(SELF_UPGRADE) ? null : 'it upgrades by hand: too old to upgrade itself'
+  if (!node.features.includes(SELF_UPGRADE)) return 'it upgrades by hand: too old to upgrade itself'
+  if (node.features.includes(SIGNED_UPGRADE) && !release.signature)
+    return 'it takes only a signed blocklyd, and this one has no blocklyd.sig beside it'
+  return null
+}
+
+/** `release` as a node that lists `features` is offered it: with the signature only if it reads one. */
+function offering(release: UpgradeOffer, features: readonly string[]): UpgradeOffer {
+  const { signature, ...offer } = release
+  return features.includes(SIGNED_UPGRADE) && signature ? { ...offer, signature } : offer
 }
 
 async function mark(
@@ -112,7 +129,8 @@ async function follow(
     await mark(t, node, 'failed', { version, reason })
     return undefined
   }
-  if (node.lifecycle === 'active' && node.duplicate_seen_at === null) return release
+  if (node.lifecycle === 'active' && node.duplicate_seen_at === null)
+    return offering(release, request.features)
   // Drained, lost or quarantined while offered: the offer is withdrawn and the region moves on.
   await t.execute(sql`UPDATE fleet_nodes SET upgrade_state = NULL, upgrade_at = now() WHERE id = ${node.id}`)
   return undefined
@@ -127,7 +145,7 @@ async function offer(
 ): Promise<UpgradeOffer | undefined> {
   if (!isOlder(request.daemonVersion, release.version)) return undefined
   if (node.upgrade_version === release.version && node.upgrade_state === 'failed') return undefined
-  if (skipped({ ...node, features: request.features }) !== null) return undefined
+  if (skipped({ ...node, features: request.features }, release) !== null) return undefined
   if (!request.runtimeUp || !request.reconciled) return undefined
 
   // One node per region: two beats from one region decide one after the other.
@@ -148,7 +166,7 @@ async function offer(
     node: node.id,
     data: { from: request.daemonVersion, version: release.version },
   })
-  return release
+  return offering(release, request.features)
 }
 
 /** A failed node offered the release again, which resumes its region's rollout. */
@@ -171,7 +189,8 @@ export interface UpgradeView {
   /**
    * `current`: it runs the release or newer (`upgraded` if the rollout got it there). `offered`
    * and `failed`, as above. `waiting`: older, and its turn hasn't come. `skipped`: older, and
-   * not offered while it is draining, lost, quarantined or too old to upgrade itself (`reason`).
+   * not offered while it is draining, lost, quarantined, too old to upgrade itself, or takes only
+   * a signed blocklyd and this one has no signature (`reason`).
    */
   state: 'current' | 'upgraded' | 'offered' | 'failed' | 'waiting' | 'skipped'
   since: string | null
@@ -206,6 +225,6 @@ function placeOf(n: NodeRow, release: UpgradeOffer | null): Pick<UpgradeView, 's
     const late = (n.upgrade_age ?? 0) > UPGRADE_TIMEOUT_SECONDS
     return { state: 'offered', reason: late ? 'past its time: it fails at its next beat' : null }
   }
-  const skip = skipped(n)
+  const skip = skipped(n, release)
   return { state: skip === null ? 'waiting' : 'skipped', reason: skip }
 }

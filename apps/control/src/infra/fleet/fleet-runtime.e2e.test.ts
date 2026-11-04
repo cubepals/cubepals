@@ -4,8 +4,16 @@
 
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { spawnSync } from 'node:child_process'
-import { createHash, randomBytes, randomUUID } from 'node:crypto'
-import { chmodSync, existsSync, mkdirSync, openSync, readFileSync, writeFileSync } from 'node:fs'
+import { createHash, generateKeyPairSync, randomBytes, randomUUID, sign } from 'node:crypto'
+import {
+  chmodSync,
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  writeFileSync,
+} from 'node:fs'
 import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -617,13 +625,14 @@ describe.skipIf(!ready)('FleetRuntime against a real blocklyd', () => {
  * ExecStartPre, and after each stop the unit's ExecStopPost, then a start again. ExecStopPost is
  * told what systemd tells it: SERVICE_RESULT always, EXIT_CODE and EXIT_STATUS only once the main
  * process ran. Its first run reports 0.0.1 (a debug build's BLOCKLYD_TEST_VERSION), so the node is
- * older than the blocklyd it is offered.
+ * older than the blocklyd it is offered. `$2` is the test's release key, which a debug build takes
+ * as BLOCKLYD_TEST_RELEASE_KEY besides the keys compiled into it.
  */
 const SUPERVISOR = [
   'v=0.0.1',
   'while :; do',
   '  if "$0" doctor --preflight --config "$1"; then',
-  '    BLOCKLYD_TEST_VERSION=$v "$0" serve --config "$1" --log-format pretty; s=$?; v=',
+  '    BLOCKLYD_TEST_RELEASE_KEY="$2" BLOCKLYD_TEST_VERSION=$v "$0" serve --config "$1" --log-format pretty; s=$?; v=',
   '    r=success; [ $s = 0 ] || r=exit-code',
   '    SERVICE_RESULT=$r EXIT_CODE=exited EXIT_STATUS=$s "$0.prev" upgrade --exited --config "$1"',
   '  else',
@@ -668,6 +677,23 @@ describe.skipIf(!ready)('blocklyd upgrading itself to the blocklyd the node endp
   const dir = join(tmpdir(), `blockly-${DEPLOYMENT}-upgrade`)
   const config = join(dir, 'blocklyd.toml')
   const bin = join(dir, 'state', 'bin', 'blocklyd')
+  // The endpoint serves a copy, so the release's signature can go beside it.
+  const served = join(dir, 'served', 'blocklyd')
+  const releaseKey = join(dir, 'release-key.pub')
+  const { publicKey, privateKey } = generateKeyPairSync('ed25519')
+  /**
+   * `blocklyd.sig` beside `path`, as blocklyd's release workflow signs a release: its version and
+   * sha256, here with this test's own key, which the node is given.
+   */
+  const signed = (path: string) => {
+    const said = spawnSync(path, ['--version']).stdout.toString().trim().split(' ')[1] ?? ''
+    const sha256 = createHash('sha256').update(readFileSync(path)).digest('hex')
+    writeFileSync(
+      `${path}.sig`,
+      sign(null, Buffer.from(`blocklyd release\n${said}\n${sha256}\n`), privateKey),
+    )
+    return path
+  }
   let version = ''
   let db: Db
   let drop: () => Promise<void>
@@ -688,7 +714,10 @@ describe.skipIf(!ready)('blocklyd upgrading itself to the blocklyd the node endp
         .stdout.toString()
         .trim()
         .split(' ')[1] ?? ''
-    mkdirSync(dir, { recursive: true })
+    mkdirSync(join(dir, 'served'), { recursive: true })
+    copyFileSync(BIN ?? '', served)
+    chmodSync(served, 0o755)
+    writeFileSync(releaseKey, publicKey.export({ type: 'spki', format: 'pem' }))
     const fresh = await freshDatabase()
     ;({ db, drop, url } = fresh)
     const pems = await FleetCa.generate(DEPLOYMENT)
@@ -696,7 +725,7 @@ describe.skipIf(!ready)('blocklyd upgrading itself to the blocklyd the node endp
     writeFileSync(join(dir, 'ca.key'), pems.keyPem, { mode: 0o600 })
     const port = await freePort()
     args = [join(dir, 'ca.pem'), join(dir, 'ca.key'), String(port), DEPLOYMENT]
-    endpoint = await startServingEndpoint(args, url, BIN ?? '')
+    endpoint = await startServingEndpoint(args, url, signed(served))
     const { token } = await createToken(db, { regionKey: 'eu', ttlSeconds: 600, createdBy: 'e2e' })
     writeFileSync(join(dir, 'token'), token)
     const low = 47_500 + (Number.parseInt(DEPLOYMENT.slice(3), 16) % 90) * 20
@@ -711,7 +740,7 @@ describe.skipIf(!ready)('blocklyd upgrading itself to the blocklyd the node endp
     )
     // Installed where join.sh installs it, and run the way the unit runs it.
     asRoot(['install', '-D', '-m', '0755', BIN ?? '', bin])
-    const run = ['sh', '-c', SUPERVISOR, bin, config]
+    const run = ['sh', '-c', SUPERVISOR, bin, config, releaseKey]
     const out = openSync(join(dir, 'blocklyd.log'), 'a')
     supervisor = Bun.spawn(SUDO ? ['sudo', '-n', ...run] : run, { stdout: out, stderr: out })
   }, 60_000)
@@ -744,7 +773,7 @@ describe.skipIf(!ready)('blocklyd upgrading itself to the blocklyd the node endp
     // The endpoint reads its release once, as it starts.
     endpoint?.kill('SIGTERM')
     await endpoint?.exited
-    endpoint = await startServingEndpoint(args, url, broken)
+    endpoint = await startServingEndpoint(args, url, signed(broken))
     const failed = await firstEvent(db, 'node.upgrade_failed')
     expect(failed.data).toMatchObject({ version: '99.0.0' })
     // It fails its ExecStartPre (doctor --preflight), so it never runs.

@@ -14,12 +14,13 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { blocklydRelease, joinRoutes } from './join-routes.ts'
 import { caSha256 } from './join-token.ts'
+import type { UpgradeOffer } from './wire.ts'
 
 describe('the join routes', () => {
   const dir = mkdtempSync(join(tmpdir(), 'blockly-join-'))
   const caPem = '-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----\n'
-  const get = (blocklydBin: string, path: string) =>
-    joinRoutes({ caPem, blocklydBin }).request(`https://endpoint/fleet/v1/${path}`)
+  const get = (blocklydBin: string, path: string, release: UpgradeOffer | null = null) =>
+    joinRoutes({ caPem, blocklydBin, release }).request(`https://endpoint/fleet/v1/${path}`)
 
   test('the CA is served byte for byte, so the token’s hash checks it', async () => {
     const served = await (await get('', 'ca.pem')).text()
@@ -44,8 +45,8 @@ describe('the join routes', () => {
     expect(sum).toBe(`${createHash('sha256').update(binary).digest('hex')}  blocklyd\n`)
   })
 
-  test('without a blocklyd, both answer 404 and say why', async () => {
-    for (const path of ['blocklyd', 'blocklyd.sha256']) {
+  test('without a blocklyd, each answers 404 and says why', async () => {
+    for (const path of ['blocklyd', 'blocklyd.sha256', 'blocklyd.json']) {
       const answer = await get(join(dir, 'missing'), path)
       expect(answer.status).toBe(404)
       expect(await answer.text()).toContain('FLEET_BLOCKLYD_BIN')
@@ -65,5 +66,23 @@ describe('the join routes', () => {
     writeFileSync(broken, '#!/bin/sh\nexit 1\n')
     chmodSync(broken, 0o755)
     expect(await blocklydRelease(broken)).toBeNull()
+  })
+
+  test('the release’s signature beside the binary is passed on, in hex, and nothing else is', async () => {
+    const bin = join(dir, 'signed')
+    writeFileSync(bin, '#!/bin/sh\necho "blocklyd 0.3.0"\n')
+    chmodSync(bin, 0o755)
+    const signature = Buffer.alloc(64, 7)
+    writeFileSync(`${bin}.sig`, signature)
+    const release = await blocklydRelease(bin)
+    expect(release).toEqual({
+      version: '0.3.0',
+      sha256: createHash('sha256').update(readFileSync(bin)).digest('hex'),
+      signature: signature.toString('hex'),
+    })
+    // What `blocklyd upgrade` asks for.
+    expect(await (await get(bin, 'blocklyd.json', release)).json()).toEqual(release)
+    writeFileSync(`${bin}.sig`, 'not a signature')
+    expect(await blocklydRelease(bin)).not.toHaveProperty('signature')
   })
 })
