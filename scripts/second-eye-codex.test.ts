@@ -202,6 +202,7 @@ test('the answer, the silence and a GitHub error are written as the workflow rea
         const path = String(url)
         if (path.includes('/reviews/5/comments')) return Response.json([p1])
         if (path.includes('/reviews/6/comments')) return Response.json([{ ...p1, path: 'b.ts' }])
+        if (path.includes('/reviews/7/comments')) return Response.json([])
         if (path.includes('/reviews?')) return Response.json(reviews)
         if (path.includes('/issues/42/comments?')) return Response.json(comments)
         throw new Error(`Unexpected request: ${path}`)
@@ -240,6 +241,11 @@ test('the answer, the silence and a GitHub error are written as the workflow rea
     // Findings announced, but the line review isn't on the pull request yet.
     reviews = []
     comments = [summary(state({ ...done, has_any_findings: true }))]
+    await writeCodexAnswer(env)
+    expect(readFileSync(output, 'utf8')).toBe('codex=silent\nurl=\nreview=\n')
+    rmSync(output)
+    // Findings announced, but none on a line (a review's body only): no answer, so Claude reviews.
+    reviews = [review(7, CODEX_BOT, SHA)]
     await writeCodexAnswer(env)
     expect(readFileSync(output, 'utf8')).toBe('codex=silent\nurl=\nreview=\n')
     rmSync(output)

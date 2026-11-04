@@ -233,7 +233,11 @@ export async function writeCodexAnswer(
           comments.push(
             ...(await all<GitHubReviewComment>(`repos/${repo}/pulls/${pull}/reviews/${review.id}/comments`)),
           )
-        return { url: reviews.at(-1)?.html_url ?? '', review: codexAnswer(comments) }
+        // Findings Codex didn't put on a line (in a review's body, say) can't be read as findings:
+        // that is no answer, not a clean one, and Claude reviews.
+        const answer = codexAnswer(comments)
+        if (!answer.findings.length) return undefined
+        return { url: reviews.at(-1)?.html_url ?? '', review: answer }
       } catch (error) {
         console.warn(
           `::warning::Looking for Codex's review failed: ${String(error).replace(/[\r\n]+/g, ' ')}`,
