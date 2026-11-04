@@ -4,16 +4,16 @@
 
 /**
  * Codex's own GitHub review as the second eye's answer (second-eye.yml). Codex reviews pull
- * requests on the maintainer's Codex plan, on OpenAI's servers, when one is opened or marked ready
- * and when someone comments "@codex review" (agents do, after each push: AGENTS.md). Its app's
- * account keeps a summary comment whose hidden state says which commit it reviewed and whether it
- * found anything; with findings it also posts a GitHub review of line comments, and without any it
- * reacts 👍 and posts none. This waits for either answer about the commit the second eye is
+ * requests on OpenAI's servers, through its GitHub app, when one is opened or marked ready, on new
+ * commits, and when someone comments "@codex review" (AGENTS.md). Its app's account keeps a summary
+ * comment whose hidden state says which commit it reviewed and whether findings are still open on
+ * the pull request; with new findings it also posts a GitHub review of line comments, and with
+ * none it posts no review. This waits for that answer about the commit the second eye is
  * reviewing, once the summary shows every review of that commit finished (code, and security when
  * it runs), and turns it into the second eye's answer: each line comment a finding (P0 high, P1
- * medium, anything else low), the verdict "fix first" when one is high or medium, and "merge" when
- * Codex finished the commit with no findings. When Codex hasn't answered for the commit by the
- * deadline, this answers nothing, and Claude reviews in its place.
+ * medium, anything else low, each once), the verdict "fix first" when one is high or medium, and
+ * "merge" when Codex finished the commit with nothing left unresolved. When Codex hasn't answered
+ * for the commit by the deadline, this answers nothing, and Claude reviews in its place.
  *
  *   bun scripts/second-eye-codex.ts
  *
@@ -47,10 +47,14 @@ export interface GitHubComment {
   html_url: string
 }
 
-/** One of the reviews Codex's summary comment tracks: its commit, whether it found anything, and whether it is done. */
+/**
+ * One of the reviews Codex's summary comment tracks: its commit, whether it found anything on the
+ * pull request, whether any of that is still unresolved, and whether it is done.
+ */
 interface ReviewState {
   commit_sha: string | null
   has_any_findings: boolean | null
+  has_unresolved_findings?: boolean | null
   status: string | null
 }
 
@@ -107,20 +111,29 @@ export function codexSummaryOf(comments: GitHubComment[]): { url: string; state:
 }
 
 /**
- * What Codex's summary says about `sha`: every review of it finished, with findings or clean, or
- * not finished yet (undefined). Its code review must have finished on `sha` saying whether it found
- * anything, and a security review of `sha`, when one runs, must have finished too; until then line
- * reviews already posted aren't the answer. A finished security review leaves `has_any_findings`
+ * Whether a finished review leaves findings open. `has_any_findings` counts every finding Codex
+ * ever made on the pull request, the fixed and resolved ones too, so what is still unresolved
+ * decides, when Codex says; empty means it doesn't know.
+ */
+const leavesOpen = (review: ReviewState): boolean | null =>
+  review.has_unresolved_findings ?? review.has_any_findings
+
+/**
+ * What Codex's summary says about `sha`: every review of it finished, with findings open or clean,
+ * or not finished yet (undefined). Its code review must have finished on `sha` saying whether
+ * anything is open, and a security review of `sha`, when one runs, must have finished too; until
+ * then line reviews already posted aren't the answer. A finished security review leaves its flags
  * empty when it reports nothing (Codex then reacts 👍), so only `true` counts as its findings.
  */
 export function outcomeFor(state: CodexState, sha: string): 'findings' | 'clean' | undefined {
   const code = state.code_review
-  if (code?.commit_sha !== sha || code.status !== 'completed' || code.has_any_findings == null)
-    return undefined
+  if (code?.commit_sha !== sha || code.status !== 'completed') return undefined
+  const codeOpen = leavesOpen(code)
+  if (codeOpen == null) return undefined
   const security = state.security_review
   const here = security?.commit_sha === sha
   if (here && security.status !== 'completed') return undefined
-  return code.has_any_findings || (here && security.has_any_findings === true) ? 'findings' : 'clean'
+  return codeOpen || (here && leavesOpen(security) === true) ? 'findings' : 'clean'
 }
 
 /**
@@ -184,7 +197,17 @@ export function findingOf(comment: GitHubReviewComment): Finding & { origin: Ori
 
 /** Codex's line comments (its replies aside) as the second eye's answer. */
 export function codexAnswer(comments: GitHubReviewComment[]): Review {
-  const findings = comments.filter((comment) => !comment.in_reply_to_id).map(findingOf)
+  // A commit Codex reviewed twice (a second request) repeats its line comments: each counts once.
+  const seen = new Set<string>()
+  const findings = comments
+    .filter((comment) => !comment.in_reply_to_id)
+    .map(findingOf)
+    .filter((finding) => {
+      const key = `${finding.file}:${finding.line}:${finding.problem}`
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
   return {
     verdict: findings.some((finding) => finding.severity !== 'low') ? 'fix first' : 'merge',
     earlier: [],

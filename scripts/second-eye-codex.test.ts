@@ -61,6 +61,8 @@ const state = (code: object, security: object = { commit_sha: null, has_any_find
     security_review: { has_unresolved_findings: null, ...security },
   })} -->\n\n## Codex Review Summary\n`
 const done = { commit_sha: SHA, has_any_findings: false, status: 'completed' }
+// Codex's state with a finding still unresolved on the pull request.
+const open = { ...done, has_any_findings: true, has_unresolved_findings: true }
 const summary = (body: string, login = CODEX_BOT, type = 'Bot'): GitHubComment => ({
   user: { login, type },
   body,
@@ -98,13 +100,11 @@ test('only every review of this commit finished counts: clean, findings, or not 
     status,
   })
   expect(outcomeFor(read(state(done)), SHA)).toBe('clean')
-  expect(outcomeFor(read(state({ ...done, has_any_findings: true })), SHA)).toBe('findings')
+  expect(outcomeFor(read(state(open)), SHA)).toBe('findings')
   expect(outcomeFor(read(state({ ...done, status: 'running', has_any_findings: null })), SHA)).toBeUndefined()
   expect(outcomeFor(read(state({ ...done, commit_sha: OTHER })), SHA)).toBeUndefined()
   // A code review with findings while the security review of the same commit still runs isn't the answer yet.
-  expect(
-    outcomeFor(read(state({ ...done, has_any_findings: true }, sec('running', null))), SHA),
-  ).toBeUndefined()
+  expect(outcomeFor(read(state(open, sec('running', null))), SHA)).toBeUndefined()
   expect(outcomeFor(read(state(done, sec('running', null))), SHA)).toBeUndefined()
   expect(outcomeFor(read(state(done, sec('completed', true))), SHA)).toBe('findings')
   expect(outcomeFor(read(state(done, sec('completed', false))), SHA)).toBe('clean')
@@ -112,8 +112,18 @@ test('only every review of this commit finished counts: clean, findings, or not 
   expect(outcomeFor(read(state(done, sec('completed', null))), SHA)).toBe('clean')
   // A code review done with its flag empty says nothing (no 👍 came with it): not an answer.
   expect(
-    outcomeFor(read(state({ ...done, has_any_findings: null }, sec('completed', null))), SHA),
+    outcomeFor(
+      read(state({ ...done, has_any_findings: null, has_unresolved_findings: null }, sec('completed', null))),
+      SHA,
+    ),
   ).toBeUndefined()
+  // Findings Codex made before, all fixed and resolved: this commit is clean. (has_any_findings stays true.)
+  expect(
+    outcomeFor(read(state({ ...done, has_any_findings: true, has_unresolved_findings: false })), SHA),
+  ).toBe('clean')
+  // With no unresolved flag at all, whether it found anything decides.
+  expect(outcomeFor({ code_review: { ...done, has_any_findings: true } }, SHA)).toBe('findings')
+  expect(outcomeFor({ code_review: done }, SHA)).toBe('clean')
   // A security review of an older commit doesn't hold this one back.
   expect(outcomeFor(read(state(done, sec('running', null, OTHER))), SHA)).toBe('clean')
   expect(outcomeFor({}, SHA)).toBeUndefined()
@@ -165,6 +175,10 @@ test('the verdict is fix first on a P0 or P1, and replies are not findings', () 
   expect(codexAnswer([])).toEqual({ verdict: 'merge', earlier: [], findings: [] })
   expect(codexAnswer([{ ...p1, body: 'A note' }]).verdict).toBe('merge')
   expect(codexAnswer([p1, { ...p1, in_reply_to_id: 7 }]).findings).toHaveLength(1)
+})
+
+test('a line comment repeated by a second review of the commit counts once', () => {
+  expect(codexAnswer([p1, { ...p1 }, { ...p1, line: 900 }]).findings.map((f) => f.line)).toEqual([858, 900])
 })
 
 test('waiting asks until found, at most every 30 seconds, and gives up at the deadline', async () => {
@@ -238,20 +252,13 @@ test('the answer, the silence and a GitHub error are written as the workflow rea
     rmSync(output)
     // Line reviews already posted while the security review still runs: not the answer yet.
     reviews = [review(5, CODEX_BOT, SHA), review(6, CODEX_BOT, SHA)]
-    comments = [
-      summary(
-        state(
-          { ...done, has_any_findings: true },
-          { commit_sha: SHA, has_any_findings: null, status: 'running' },
-        ),
-      ),
-    ]
+    comments = [summary(state(open, { commit_sha: SHA, has_any_findings: null, status: 'running' }))]
     await writeCodexAnswer(env)
     expect(readFileSync(output, 'utf8')).toBe('codex=silent\nurl=\nreview=\n')
     rmSync(output)
     // Findings announced, but the line review isn't on the pull request yet.
     reviews = []
-    comments = [summary(state({ ...done, has_any_findings: true }))]
+    comments = [summary(state(open))]
     await writeCodexAnswer(env)
     expect(readFileSync(output, 'utf8')).toBe('codex=silent\nurl=\nreview=\n')
     rmSync(output)
