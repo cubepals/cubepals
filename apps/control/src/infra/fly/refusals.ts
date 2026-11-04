@@ -11,6 +11,11 @@
  * their words, are not here.
  */
 
+import type { paths } from './generated/machines.ts'
+
+/** What Fly's spec says exec answers. */
+type ExecResponses = paths['/v1/apps/{app_name}/machines/{machine_id}/exec']['post']['responses']
+
 /**
  * The status Fly's error carries when a host has no room for a machine. Its words say which room
  * ran out: CPUs (iad volume hosts, January to March 2026) or memory.
@@ -81,6 +86,19 @@ const REPLACING = 'machine is replacing'
 export const REPLACING_SAID = `aborted: ${REPLACING}: concurrent update in progress`
 const REPLACING_MATCH = new RegExp(REPLACING, 'i')
 export const saysReplacing = (error: unknown): boolean => REPLACING_MATCH.test(JSON.stringify(error ?? ''))
+
+/**
+ * A command refused because the machine isn't running: stopped (community.fly.io/t/14881), or
+ * restarting while Fly still read it started (/t/27620). Fly doesn't say whether it runs a command
+ * in a machine it reads `starting`, as a resumed one whose game already answers can be
+ * (`resume.ts`). Its spec gives exec one refusal, `EXEC_REFUSED` with its error body; the status
+ * Fly sends with these words is undocumented, so the words alone are matched.
+ */
+const NOT_RUNNING = 'machine not running'
+export const NOT_RUNNING_SAID = `failed_precondition: ${NOT_RUNNING}`
+export const EXEC_REFUSED: Exclude<keyof ExecResponses, 200> = 400
+const NOT_RUNNING_MATCH = new RegExp(NOT_RUNNING, 'i')
+export const saysNotRunning = (error: unknown): boolean => NOT_RUNNING_MATCH.test(JSON.stringify(error ?? ''))
 
 /** A snapshot refused, 412, while one is being written, saying when that one began. */
 const SCHEDULED = 'already scheduled at'

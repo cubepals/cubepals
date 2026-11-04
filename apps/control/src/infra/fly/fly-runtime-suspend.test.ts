@@ -13,7 +13,7 @@ import { HostFull, type ProgressSink, type RuntimeKey, type RuntimeSpec } from '
 import { flyClient } from './client.ts'
 import { FakeFly } from './fake-fly.ts'
 import { FlyRuntime } from './fly-runtime.ts'
-import { NO_MEMORY_SAID } from './refusals.ts'
+import { NO_MEMORY_SAID, NOT_RUNNING_SAID } from './refusals.ts'
 
 const KEY = '6276d3d7-5c80-4bd4-9d00-12818b8a4d38' as RuntimeKey
 const APP = 'bly-test-6276d3d75c804bd49d0012818b8a4d38'
@@ -258,6 +258,32 @@ describe('FlyRuntime with a server asleep: waking it, or stopping it', () => {
     const { runtime, handle, sleep } = await running()
     await sleep()
     expect((await runtime.observe(handle)).state).toBe('stopped')
+  })
+})
+
+// A resume whose game answers first goes on to who can join, read and written by command,
+// while Fly may still read the machine starting (`resume.ts`).
+describe('FlyRuntime running a command in a server it woke', () => {
+  test('a command Fly refuses while the machine still starts runs once Fly says it started', async () => {
+    const { fake, runtime, handle, machine, sleep } = await running()
+    await sleep()
+    fake.startingReads = 3
+    await runtime.start(handle)
+    expect(machine.state).toBe('starting')
+    fake.calls.length = 0
+    const ran = await runtime.exec(handle, ['cat', '/data/whitelist.json'], 20)
+    expect(ran.exitCode).toBe(0)
+    expect(machine.state).toBe('started')
+    expect(fake.count(`POST /v1/apps/${APP}/machines/${machine.id}/exec`)).toBe(2)
+  })
+
+  test('a command in a machine still asleep is refused at once, not waited on', async () => {
+    const { fake, runtime, handle, machine, sleep } = await running()
+    await sleep()
+    fake.calls.length = 0
+    await expect(runtime.exec(handle, ['true'], 20)).rejects.toThrow(NOT_RUNNING_SAID)
+    expect(machine.state).toBe('suspended')
+    expect(fake.count(`POST /v1/apps/${APP}/machines/${machine.id}/exec`)).toBe(1)
   })
 })
 

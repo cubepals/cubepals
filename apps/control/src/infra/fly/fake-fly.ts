@@ -9,14 +9,18 @@
  * prepared them, then stay stopped; a stop, a suspend and a destroy can take a moment to finish, a
  * start resumes a suspended machine and a config update or a stop drops what it kept, an update can
  * take a moment to put in place, refusing another meanwhile, and a volume stays bound to its
- * machine until the machine is gone; a first request can get a 429.
+ * machine until the machine is gone; a start can take a moment, and a command runs only in a
+ * machine started; a first request can get a 429.
  * It holds no tests: FlyRuntime's tests against it live in `fly-runtime*.test.ts`.
  */
 
+import type { FlySchemas } from './client.ts'
 import {
   AT_LIMIT_SAID,
   CURRENTLY_STOPPING_SAID,
+  EXEC_REFUSED,
   NO_MACHINE,
+  NOT_RUNNING_SAID,
   REPLACING_SAID,
   STILL_ACTIVE_SAID,
   snapshotScheduled,
@@ -26,6 +30,8 @@ import {
 } from './refusals.ts'
 
 export type Json = Record<string, unknown>
+/** A command in a machine Fly doesn't count as running, in the error body Fly's spec gives. */
+const NOT_RUNNING_REFUSAL: FlySchemas['ErrorResponse'] = { error: NOT_RUNNING_SAID }
 interface FakeMachine {
   id: string
   name: string
@@ -43,7 +49,8 @@ interface FakeMachine {
   /** Requests while Fly still puts an update in place, and the state it ends in. */
   replacingLeft?: number
   replacedTo?: string
-  /** Reads while it is still stopping, or still suspending, or still being destroyed. */
+  /** Reads while it is still starting, or still stopping, or still suspending, or still being destroyed. */
+  startReadsLeft?: number
   stopReadsLeft?: number
   suspendReadsLeft?: number
   destroyReadsLeft?: number
@@ -74,6 +81,18 @@ function replaced(machine: FakeMachine): FakeMachine {
   delete machine.replaceReadsLeft
   machine.state = 'started'
   machine.events = [{ type: 'start', status: 'started', timestamp: Date.now() }]
+  return machine
+}
+
+/**
+ * Fly finishes a start in the background: each read of it is a moment later. Only a start of the
+ * fake's own finishes, and one a test left starting never does.
+ */
+function started(machine: FakeMachine): FakeMachine {
+  if (machine.state !== 'starting' || machine.startReadsLeft === undefined) return machine
+  if (--machine.startReadsLeft >= 0) return machine
+  machine.state = 'started'
+  delete machine.startReadsLeft
   return machine
 }
 
@@ -108,6 +127,11 @@ export class FakeFly {
    */
   replacing = 0
   replacingGone = false
+  /**
+   * Reads of a machine still starting after a start, as a resumed machine whose game already
+   * answers can be (`resume.ts`); a command in it is refused meanwhile, as in any machine not started.
+   */
+  startingReads = 0
   /** Reads of a machine still stopping after a stop, and the starts it refused meanwhile. */
   stopReads = 0
   /** Starts refused as the machine still active, though it reads stopped: Fly's stop not yet done. */
@@ -363,13 +387,8 @@ export class FakeFly {
           return action === 'stop' ? this.#stop(app, machine, body) : this.#suspend(app, machine)
         case 'wait':
           return this.#longPoll(machine, url.searchParams, request.signal)
-        case 'exec': {
-          // As Fly does: stdin is not passed on, so a script comes as the argument after `sh -c`.
-          const [, , line = '', argument] = body.command as string[]
-          if (line.startsWith('printf') && argument !== undefined) this.jobScripts.push(argument)
-          const stdout = line.includes('cat /tmp/job.result') ? `${this.#jobResult()}\n` : ''
-          return json({ exit_code: 0, stdout, stderr: '' })
-        }
+        case 'exec':
+          return this.#exec(machine, body)
       }
     }
     m = path.match(/^\/v1\/orgs\/([^/]+)\/machines$/)
@@ -514,8 +533,22 @@ export class FakeFly {
     if (refused) return Response.json(refused, { status: 412 })
     this.startedFrom.push(machine.state)
     machine.state = 'started'
+    if (this.startingReads > 0) {
+      machine.state = 'starting'
+      machine.startReadsLeft = this.startingReads
+    }
     machine.updated_at = new Date().toISOString()
     return Response.json({ previous_state: 'stopped' })
+  }
+
+  /** A command, which Fly runs only in a machine it counts as running. */
+  #exec(machine: FakeMachine, body: Json): Response {
+    if (machine.state !== 'started') return Response.json(NOT_RUNNING_REFUSAL, { status: EXEC_REFUSED })
+    // As Fly does: stdin is not passed on, so a script comes as the argument after `sh -c`.
+    const [, , line = '', argument] = body.command as string[]
+    if (line.startsWith('printf') && argument !== undefined) this.jobScripts.push(argument)
+    const stdout = line.includes('cat /tmp/job.result') ? `${this.#jobResult()}\n` : ''
+    return Response.json({ exit_code: 0, stdout, stderr: '' })
   }
 
   /** A stop, finished in the background; a suspended machine's memory goes, and nothing saves. */
@@ -552,7 +585,7 @@ export class FakeFly {
   #read(app: string, machine: FakeMachine): Response {
     if (this.#stillReplacing(machine) && this.replacingGone)
       return Response.json({ error: 'not found' }, { status: 404 })
-    return Response.json(this.#moment(app, prepared(replaced(machine))))
+    return Response.json(this.#moment(app, prepared(replaced(started(machine)))))
   }
 
   /** A long poll, held for its timeout first where `holdWaits` says, unless its state is there. */

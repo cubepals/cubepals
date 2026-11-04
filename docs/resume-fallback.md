@@ -58,7 +58,9 @@ in a moment", and a plain message ends the hold.
    ends that wait immediately and cancels the outstanding observation; a provider status update
    cannot hold an already answering game. The machine has 30 s to reach `started` (nine times the slowest resume measured,
    and still short of a cold boot's answer). Once it runs, it has 10 s to answer a ping. The wait
-   ends at the bound, not when Fly's long poll next returns.
+   ends at the bound, not when Fly's long poll next returns. Who can join is put back next, by
+   commands Fly runs in the machine; one Fly refuses as not running while it still reads the
+   machine `starting` is run again once Fly says `started`, within 30 s.
 2. **Snapshot dropped, so Fly cold boots.** It runs and prints its boot, but doesn't answer yet.
    This start goes on as a boot from its disk, as before.
 3. **Hung resume.** It isn't running by 30 s, or it runs but neither answers nor prints anything

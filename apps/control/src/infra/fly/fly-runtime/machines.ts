@@ -8,11 +8,12 @@
  * those are the verbs in `fly-runtime.ts`. What a machine's state means is `observation.ts`.
  */
 
+import { SECOND_MS } from '@blockly/contracts/durations'
 import { z } from 'zod'
 import type { ExecResult } from '../../../app/ports/runtime.ts'
 import type { FlyClient, FlySchemas } from '../client.ts'
 import { META } from '../machine-config.ts'
-import { saysClaimed, saysNotYet, saysReplacing } from '../refusals.ts'
+import { saysClaimed, saysNotRunning, saysNotYet, saysReplacing } from '../refusals.ts'
 import { lastExit } from './observation.ts'
 import { idOf, launched, must, succeeded } from './responses.ts'
 
@@ -56,6 +57,11 @@ const CLAIM_SECONDS = 180
  * counts as gone.
  */
 const GONE_SECONDS = 30
+/**
+ * How long a command refused while its machine starts waits for Fly to say it started: a resume
+ * runs within a second or so, and 30 s is a resume's whole bound to run (`resume.ts`).
+ */
+const STARTING_SECONDS = 30
 
 // The spec says a flat Lease; flyctl reads { status, data: Lease }. Accept either until a live
 // machine settles it (docs/dependency-audit.md).
@@ -547,6 +553,12 @@ export async function untilStarted(
   throw new Error('The machine did not start in time')
 }
 
+/**
+ * A command run in the machine. A resumed machine's game can answer while Fly still reads it
+ * `starting` (`resume.ts`), and who can join is put back by command straight after: one Fly refuses
+ * as not running then is asked again once Fly says it started, within `STARTING_SECONDS`. One
+ * refused in a machine not on its way up fails at once.
+ */
 export async function exec(
   fly: FlyClient,
   app: string,
@@ -554,13 +566,21 @@ export async function exec(
   command: readonly string[],
   timeoutSeconds: number,
 ): Promise<ExecResult> {
-  const result = must(
-    await fly.POST('/v1/apps/{app_name}/machines/{machine_id}/exec', {
+  const run = () =>
+    fly.POST('/v1/apps/{app_name}/machines/{machine_id}/exec', {
       params: { path: { app_name: app, machine_id: machineId } },
       body: { command: [...command], timeout: timeoutSeconds },
-    }),
-    'running a command',
-  )
+    })
+  let ran = await run()
+  if (!ran.response.ok && saysNotRunning(ran.error)) {
+    // Started since the refusal, or still starting: either way it is on its way up.
+    const state = (await readMachine(fly, app, machineId))?.state
+    if (state === 'starting' || state === 'started') {
+      await untilStarted(fly, app, machineId, AbortSignal.timeout(STARTING_SECONDS * SECOND_MS))
+      ran = await run()
+    }
+  }
+  const result = must(ran, 'running a command')
   return { exitCode: result.exit_code ?? -1, stdout: result.stdout ?? '', stderr: result.stderr ?? '' }
 }
 
