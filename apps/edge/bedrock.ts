@@ -28,7 +28,7 @@ import { MINUTE_MS, SECOND_MS } from '../../packages/contracts/src/durations.ts'
 import { bedrockRelay, type Relay } from './bedrock-relay.ts'
 import { pipe } from './front.ts'
 import { Supervised } from './geyser.ts'
-import { geyserConfig } from './geyser-config.ts'
+import { FLY_UDP_MTU, geyserConfig } from './geyser-config.ts'
 import type { Rate } from './limits.ts'
 import { bedrockOpened } from './metrics.ts'
 import { nethernetIdentity } from './nethernet-identity.ts'
@@ -201,7 +201,7 @@ export function prepareGeyserDir(options: BedrockOptions, place: GeyserPlace): v
       java: { address: '127.0.0.1', port: options.front },
       keyFile: 'key.pem',
       validateLogin: options.validateLogin,
-      mtu: 1300,
+      mtu: FLY_UDP_MTU,
     }),
   )
 }

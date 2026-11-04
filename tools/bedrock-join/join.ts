@@ -13,9 +13,12 @@
  *             ServerAddress, and the edge routes by it.
  * --connect   where the packets go, when that isn't the address: an IPv4 and port. Defaults to
  *             the address.
- * --via6      host:port of an IPv6 UDP relay (a Fly machine's 6PN), reached through a forwarder on
- *             this machine. A Fly machine gets no UDP reply from a Fly app's public IPv4, so a
- *             test client running on Fly joins through the edge's private address instead.
+ * --via6      host:port of an IPv6 UDP relay (a Fly machine's 6PN). A Fly machine gets no UDP reply
+ *             from a Fly app's public IPv4, so a test client running on Fly joins through the edge's
+ *             private address instead.
+ * --mtu       the largest datagram sent, headers included (1300, what Fly's UDP carries). Every
+ *             datagram goes through a forwarder on this machine that drops a larger one
+ *             (`forwarder.ts`): RakNet opens with requests too large for Fly, which lose the socket.
  * --players   how many players join, one every --stagger ms (1500), each with a fake XUID of its
  *             own (--offset moves them): Floodgate makes a player's UUID from the XUID, so
  *             players sharing one would be refused as already logged in.
@@ -36,17 +39,20 @@
  * it can join; run more than one machine for more.
  */
 
-import { createSocket } from 'node:dgram'
+import { lookup } from 'node:dns/promises'
 import { cpSync, existsSync, readdirSync } from 'node:fs'
 import { release } from 'node:os'
 import { dirname, join } from 'node:path'
 import { parseArgs } from 'node:util'
+import { FLY_UDP_MTU } from '../../apps/edge/geyser-config.ts'
+import { forwarder, type Target } from './forwarder.ts'
 
 const { values } = parseArgs({
   options: {
     address: { type: 'string' },
     connect: { type: 'string' },
     via6: { type: 'string' },
+    mtu: { type: 'string', default: String(FLY_UDP_MTU) },
     players: { type: 'string', default: '1' },
     username: { type: 'string' },
     xuid: { type: 'string' },
@@ -89,35 +95,18 @@ const { ClientStatus } = require('bedrock-protocol/src/connection.js') as {
   ClientStatus: { Disconnected: number }
 }
 
-/**
- * A UDP forwarder on this machine's loopback to an IPv6 address: bedrock-protocol's RakNet speaks
- * IPv4, and a Fly machine's private network is IPv6 only. One upstream socket per client port, so
- * the far end sees every client as its own peer.
- */
-async function forwardTo6(target: string): Promise<number> {
-  const colon = target.lastIndexOf(':')
-  const host = target.slice(0, colon)
-  const port = Number(target.slice(colon + 1))
-  const front = createSocket('udp4')
-  const upstreams = new Map<number, ReturnType<typeof createSocket>>()
-  front.on('error', () => undefined)
-  front.on('message', (message, from) => {
-    let up = upstreams.get(from.port)
-    if (up === undefined) {
-      up = createSocket('udp6')
-      up.on('error', () => undefined)
-      up.on('message', (back) => front.send(back, from.port, from.address))
-      upstreams.set(from.port, up)
-    }
-    up.send(message, port, host)
-  })
-  await new Promise<void>((resolve) => front.bind(0, '127.0.0.1', resolve))
-  return front.address().port
+/** Where the client's datagrams go: --via6, --connect, or the typed address, looked up once. */
+async function targetOf(): Promise<Target> {
+  if (values.via6) {
+    const colon = values.via6.lastIndexOf(':')
+    return { host: values.via6.slice(0, colon), port: Number(values.via6.slice(colon + 1)), family: 'udp6' }
+  }
+  const [connectHost, connectPort] = (values.connect ?? '').split(':')
+  const { address } = await lookup(connectHost || typedHost, { family: 4 })
+  return { host: address, port: Number(connectPort ?? typedPort), family: 'udp4' }
 }
 
-const [connectHost, connectPort] = (values.connect ?? '').split(':')
-let to = { host: connectHost || typedHost, port: Number(connectPort ?? typedPort) }
-if (values.via6) to = { host: '127.0.0.1', port: await forwardTo6(values.via6) }
+const to = { host: '127.0.0.1', port: (await forwarder(await targetOf(), Number(values.mtu))).port }
 
 const spawnMs: (number | null)[] = []
 /** How many sockets each player tried: one, unless an attempt never connected. */
@@ -199,8 +188,9 @@ function join1(index: number): Promise<void> {
         end()
       })
       // A path through the network can lose every datagram of one socket while another socket's
-      // get through, so an attempt that never connected is let go and a new socket tries again, as
-      // a player taps Join again. The edge's relay counts each connection it is opened by
+      // get through (as Fly's does after a datagram too large for it, which the forwarder keeps
+      // back), so an attempt that never connected is let go and a new socket tries again, as a
+      // player taps Join again. The edge's relay counts each connection it is opened by
       // (`cubepals_edge_bedrock_opens_total`): an attempt it never counted was lost on the way.
       setTimeout(() => {
         if (ended || client.status !== ClientStatus.Disconnected || Date.now() + ATTEMPT_MS > deadline) return

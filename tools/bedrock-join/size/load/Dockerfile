@@ -8,7 +8,8 @@ ADD https://piston-data.mojang.com/v1/objects/33680f5f2ac32864d6d7cf5e56a705fdb3
 WORKDIR /app/tools/bedrock-join
 COPY tools/bedrock-join/package.json tools/bedrock-join/bun.lock ./
 RUN bun install --frozen-lockfile
-COPY tools/bedrock-join/join.ts ./
+COPY tools/bedrock-join/join.ts tools/bedrock-join/forwarder.ts ./
+COPY apps/edge/geyser-config.ts /app/apps/edge/geyser-config.ts
 COPY tools/bedrock-join/size/load/ ./size/load/
 COPY scripts/lib/minecraft.ts /app/scripts/lib/minecraft.ts
 COPY apps/control/src/minecraft/ports.ts /app/apps/control/src/minecraft/ports.ts

@@ -52,6 +52,7 @@ function stage(dir: string): string {
     'tools/bedrock-join/package.json',
     'tools/bedrock-join/bun.lock',
     'tools/bedrock-join/join.ts',
+    'tools/bedrock-join/forwarder.ts',
     'tools/bedrock-join/size',
     'scripts/lib/minecraft.ts',
   ])
