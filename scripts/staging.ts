@@ -48,6 +48,7 @@ import { createPolar } from '@polar-sh/sdk/2026-10'
 import { GAME_PORT } from '../apps/control/src/minecraft/ports.ts'
 import { pointRecord } from './lib/cloudflare-dns.ts'
 import { afterStop, asleep, awake, type Machine, serve } from './lib/control-wake.ts'
+import { flySync } from './lib/fly-rate-limit.ts'
 import { stagingBilling, stagingProducts } from './lib/polar-products.ts'
 import { DATABASE_APP, databaseKind, ensureDatabase, startDatabase } from './lib/staging-database.ts'
 import { buildWorker, deployWorker } from './lib/web-worker.ts'
@@ -129,15 +130,11 @@ const checkDomain = (state: State) =>
 
 /** Runs flyctl and hands back what it printed; a failure throws its last lines, never its input. */
 function fly(args: string[], options: { input?: string; allowFail?: boolean } = {}): string {
-  const result = Bun.spawnSync(['fly', ...args], {
-    stdin: options.input === undefined ? 'ignore' : Buffer.from(options.input),
-    stdout: 'pipe',
-    stderr: 'pipe',
-  })
-  const out = result.stdout.toString()
+  const result = flySync(args, options.input)
+  const out = result.stdout
   if (result.exitCode === 0) return out
   if (options.allowFail) return ''
-  const said = `${out}\n${result.stderr.toString()}`.trim().split('\n').slice(-4).join(' | ')
+  const said = `${out}\n${result.stderr}`.trim().split('\n').slice(-4).join(' | ')
   throw new Error(`fly ${args.slice(0, 3).join(' ')}: ${said}`)
 }
 

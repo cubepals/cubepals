@@ -20,6 +20,7 @@
  */
 import { spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
+import { flySync } from './fly-rate-limit.ts'
 import { verifiedAgainstSupabase } from './supabase-root.ts'
 
 export const DATABASE_APP = 'bly-staging-db'
@@ -59,14 +60,10 @@ export const privateDatabaseUrl = (state: DatabaseState): string =>
   databaseKind() === 'fly' ? urlOn(`${DATABASE_APP}.flycast`, PORT, state) : (supabaseUrl(state) ?? '')
 
 function fly(args: string[], allowFail = false, input?: string): string {
-  const result = Bun.spawnSync(['fly', ...args], {
-    stdin: input === undefined ? 'ignore' : Buffer.from(input),
-    stdout: 'pipe',
-    stderr: 'pipe',
-  })
-  if (result.exitCode === 0) return result.stdout.toString()
+  const result = flySync(args, input)
+  if (result.exitCode === 0) return result.stdout
   if (allowFail) return ''
-  const said = result.stderr.toString().trim().split('\n').slice(-2).join(' | ')
+  const said = result.stderr.trim().split('\n').slice(-2).join(' | ')
   throw new Error(`fly ${args.slice(0, 3).join(' ')}: ${said}`)
 }
 
