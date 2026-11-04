@@ -78,17 +78,20 @@ export function geyserConfig(s: GeyserSettings): string {
     '  bedrock:',
     `    broadcast-port: ${s.publicPort}`,
     `    mtu: ${s.mtu}`,
-    // The relay says whose each player is (`bedrock-relay.ts`); a datagram that doesn't is ignored.
-    '    use-haproxy-protocol: true',
-    // Only the relay, on this machine, may say so.
+    // The relay says whose each player is (`bedrock-relay.ts`), and only the relay, on this machine,
+    // may: listing it is what turns the header on, and RakNet then takes nothing that doesn't open
+    // with one.
     '    haproxy-protocol-whitelisted-ips:',
     '    - 127.0.0.1',
     // Fly's proxy ends TLS in front of signaling and names the player in X-Forwarded-For.
     '    signaling-trusted-proxies:',
     ...s.nethernet.trustedProxies.map((range) => `    - ${JSON.stringify(range)}`),
+    // A NetherNet player is known by the address signaling's proxy named, as Geyser did before
+    // config version 12 made it a choice.
+    '    prefer-signaling-proxy-address: true',
     `    validate-bedrock-login: ${s.validateLogin}`,
     'enable-metrics: false',
     // The layout above is this version's, so Geyser runs no migration over it.
-    'config-version: 11',
+    'config-version: 12',
   ].join('\n')}\n`
 }
