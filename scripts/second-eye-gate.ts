@@ -82,6 +82,8 @@ export interface Outcome {
   unavailable?: string
   /** True when the pull request is a draft as the event saw it. */
   draft?: boolean
+  /** 'true' when a newer push has its own review, which this run stood down for. */
+  superseded?: string
 }
 
 /** What the status says, or nothing when this run has nothing to add. */
@@ -92,6 +94,8 @@ export function statusFor(
   if (reviewed && outcome.unavailable === 'true')
     return { state: 'success', description: 'Automated review unavailable. Skipped for this commit.' }
   if (reviewed) return { state: 'success', description: 'Reviewed by the second eye.' }
+  // A run that stood down for a newer push's review didn't fail: that review sets the gate.
+  if (outcome.superseded === 'true') return undefined
   // A comment or a run by hand only ever adds a review; it has nothing to take back.
   if (outcome.event === 'issue_comment' || outcome.event === 'workflow_dispatch') return undefined
   if (outcome.sensitive === 'false')
@@ -156,6 +160,7 @@ async function writeStatus(repo: string): Promise<void> {
     comment: process.env.COMMENT ?? '',
     unavailable: process.env.UNAVAILABLE ?? '',
     draft: process.env.DRAFT === 'true',
+    superseded: process.env.SUPERSEDED ?? '',
   })
   const sha = process.env.SHA ?? ''
   if (!state && process.env.DRAFT === 'true')
