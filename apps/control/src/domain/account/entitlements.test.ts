@@ -9,12 +9,16 @@ import {
   diskForWorld,
   entitlementsFor,
   grownDisk,
+  growthLineBytes,
   longestSnapshotNeedDays,
   PAID_PLANS,
+  PLAN_KEYS,
   planGap,
   planOnSale,
   planThatRuns,
   runsOn,
+  SERVER_FILES_BYTES,
+  worldRoomBytes,
 } from './entitlements.ts'
 import { centsFor, isLarge, METER_UNITS, UNIT_CENTS, unitsFor } from './meter.ts'
 
@@ -125,9 +129,9 @@ describe('entitlements', () => {
     const GB = 2 ** 30
     const free = entitlementsFor('free')
     const plus = entitlementsFor('plus')
-    // 60% of the disk: 3 GB of world needs 5 GB, which Plus starts on already.
-    expect(diskForWorld(plus, 5, 3 * GB)).toBeNull()
-    expect(diskForWorld(plus, 5, 3.5 * GB)).toBe(6)
+    // 60% of the disk, and the world with the server's own files below where it grows: 3 GB needs 6.
+    expect(diskForWorld(plus, 5, 3 * GB)).toBe(6)
+    expect(diskForWorld(plus, 5, 3.5 * GB)).toBe(7)
     expect(diskForWorld(plus, 5, 11 * GB)).toBe(19)
     // Past what a plan's disks grow to, nothing is promised.
     expect(diskForWorld(plus, 5, 13 * GB)).toBeNull()
@@ -292,5 +296,57 @@ describe('the disk a new server starts with for a world brought', () => {
     expect(broughtWorldRoomBytes(plus.storage.mostGb) / GB).toBeCloseTo(7.5, 6)
     expect(diskForBroughtWorld(plus, 7.5 * GB, 7.5 * GB)).toBe(20)
     expect(diskForBroughtWorld(plus, 9 * GB, 9 * GB)).toBe(20)
+  })
+})
+
+describe('a world brought back starts below the line its disk grows at', () => {
+  const GB = 2 ** 30
+  /** Every plan whose disks grow, as the plan table has them. */
+  const growing = PLAN_KEYS.map((key) => entitlementsFor(key)).filter(
+    (plan) => plan.storage.mostGb > plan.storage.startGb,
+  )
+  /** World sizes a tenth of a GB apart, up to `most`. */
+  const upTo = (most: number) =>
+    Array.from({ length: Math.floor(most / (GB / 10)) }, (_, tenth) => ((tenth + 1) * GB) / 10)
+
+  test('the line is where a disk grows, and the same for every plan', () => {
+    expect(growing.length).toBeGreaterThan(0)
+    for (const plan of growing)
+      for (let gb = plan.storage.startGb; gb < plan.storage.mostGb; gb++) {
+        expect(grownDisk(plan, gb, growthLineBytes(gb) - 1)).toBeNull()
+        expect(grownDisk(plan, gb, growthLineBytes(gb))).toBeGreaterThan(gb)
+      }
+  })
+
+  test('a new server’s first measure finds room for its world and its own files, played or stopped', () => {
+    // A world that packs small, so its archive needs little room beside it, and comes to most of a
+    // disk once unpacked.
+    const plus = entitlementsFor('plus')
+    const disk = diskForBroughtWorld(plus, 2.8 * GB, 0.3 * GB)
+    expect(grownDisk(plus, disk, 2.8 * GB + SERVER_FILES_BYTES)).toBeNull()
+    // However big the world, and however small its archive, on every plan whose disks grow.
+    const outgrown = growing.flatMap((plan) =>
+      upTo(broughtWorldRoomBytes(plan.storage.mostGb)).flatMap((world) =>
+        [0.1, 0.5, 1]
+          .map((packed) => ({
+            plan: plan.plan,
+            world,
+            disk: diskForBroughtWorld(plan, world, world * packed),
+          }))
+          .filter(({ disk }) => grownDisk(plan, disk, world + SERVER_FILES_BYTES) !== null),
+      ),
+    )
+    expect(outgrown).toEqual([])
+  })
+
+  test('a world download restored onto a server finds room the same way', () => {
+    // On the plan's first disk, which the restore grows where the world needs more.
+    const outgrown = growing.flatMap((plan) => {
+      const first = plan.storage.startGb
+      return upTo(worldRoomBytes(plan.storage.mostGb))
+        .map((world) => ({ plan: plan.plan, world, disk: diskForWorld(plan, first, world) ?? first }))
+        .filter(({ disk, world }) => grownDisk(plan, disk, world + SERVER_FILES_BYTES) !== null)
+    })
+    expect(outgrown).toEqual([])
   })
 })

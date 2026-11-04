@@ -428,6 +428,29 @@ export function addedLabel(gap: 'mods' | 'datapacks', modpack: boolean): string 
  */
 const WORLD_SHARE_OF_DISK = 0.6
 
+const GB = 2 ** 30
+
+/**
+ * What a server keeps in its folder beside its world, which measuring the folder counts with the
+ * world: its jar and libraries, a few hundred MB on plain Minecraft, and a modpack's mods and
+ * libraries, up to about a gigabyte, with its configs and logs.
+ */
+export const SERVER_FILES_BYTES = GB
+
+/**
+ * What a disk of `diskGb` holds before it grows (`grownDisk`): four fifths of it, or all but 1.5 GB,
+ * whichever is less. The disk a world is brought back on is chosen below it (`diskWithRoomFor`), so
+ * the first time it is measured, played or stopped, it has room.
+ */
+export const growthLineBytes = (diskGb: number): number => Math.min(diskGb * 0.8, diskGb - 1.5) * GB
+
+/** The smallest disk, in whole GB, that holds `bytes` below the line it grows at. */
+function diskWithRoomFor(bytes: number): number {
+  let gb = Math.max(1, Math.ceil(bytes / GB))
+  while (bytes >= growthLineBytes(gb)) gb++
+  return gb
+}
+
 /** The largest world, as it lies on disk, a disk of `diskGb` has room for. */
 export const worldRoomBytes = (diskGb: number): number => Math.floor(diskGb * WORLD_SHARE_OF_DISK * 1024 ** 3)
 
@@ -439,31 +462,39 @@ export const broughtWorldRoomBytes = (diskGb: number): number =>
   Math.floor((diskGb * 1024 ** 3) / (1 / WORLD_SHARE_OF_DISK + 1))
 
 /**
- * The disk a new server made from a world its owner brought starts with: room for the world, and
- * for its archive beside it while the first start unpacks it, from the plan's first disk to its most.
+ * The disk a new server made from a world its owner brought starts with, from the plan's first disk
+ * to its most: room for the world, and for its archive beside it while the first start unpacks it.
+ * The first start deletes the archive once the world is in place (`minecraft/starter.ts`); what
+ * stays is the world and the server's own files, which stay under the line the disk grows at.
  */
 export function diskForBroughtWorld(plan: Entitlements, worldBytes: number, archiveBytes: number): number {
-  const needed = Math.ceil((worldBytes / WORLD_SHARE_OF_DISK + archiveBytes) / 2 ** 30)
+  const unpacking = Math.ceil((worldBytes / WORLD_SHARE_OF_DISK + archiveBytes) / GB)
+  const needed = Math.max(unpacking, diskWithRoomFor(worldBytes + SERVER_FILES_BYTES))
   return Math.min(plan.storage.mostGb, Math.max(plan.storage.startGb, needed))
 }
 
 /**
  * The disk a server needs to bring back a world download of `worldBytes`, where the one it has is
  * too small and its plan can grow that far; null when its disk will do, or no disk it may have would.
+ * Too small: the world takes more than its share of it, or with the server's own files beside it
+ * reaches the line the disk grows at.
  */
 export function diskForWorld(plan: Entitlements, currentGb: number, worldBytes: number): number | null {
-  const needed = Math.ceil(worldBytes / 2 ** 30 / WORLD_SHARE_OF_DISK)
-  return needed <= currentGb || needed > plan.storage.mostGb ? null : needed
+  const fits = Math.ceil(worldBytes / GB / WORLD_SHARE_OF_DISK)
+  if (fits > plan.storage.mostGb) return null
+  const needed = Math.min(
+    plan.storage.mostGb,
+    Math.max(fits, diskWithRoomFor(worldBytes + SERVER_FILES_BYTES)),
+  )
+  return needed <= currentGb ? null : needed
 }
 
 /**
- * The disk a server gets at its next start once its world leaves less than a fifth of the one it
- * has free, or 1.5 GB, whichever comes first: one its world fills to about 70%, at least 2 GB more,
- * up to its plan's most. Null while it has room, or when its plan has none to give.
+ * The disk a server gets at its next start once what is on it reaches the line it grows at
+ * (`growthLineBytes`): one its world fills to about 70%, at least 2 GB more, up to its plan's most.
+ * Null while it has room, or when its plan has none to give.
  */
 export function grownDisk(plan: Entitlements, currentGb: number, usedBytes: number): number | null {
-  const GB = 2 ** 30
-  if (usedBytes < Math.min(currentGb * 0.8, currentGb - 1.5) * GB || currentGb >= plan.storage.mostGb)
-    return null
+  if (usedBytes < growthLineBytes(currentGb) || currentGb >= plan.storage.mostGb) return null
   return Math.min(plan.storage.mostGb, Math.max(currentGb + 2, Math.ceil(usedBytes / GB / 0.7)))
 }
