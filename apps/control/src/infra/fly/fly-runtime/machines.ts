@@ -8,6 +8,7 @@
  * those are the verbs in `fly-runtime.ts`. What a machine's state means is `observation.ts`.
  */
 
+import { setTimeout as delay } from 'node:timers/promises'
 import { SECOND_MS } from '@blockly/contracts/durations'
 import { z } from 'zod'
 import type { ExecResult } from '../../../app/ports/runtime.ts'
@@ -158,7 +159,8 @@ async function readUnlessGone(
     // Another server machine in its place: this one is gone, replaced by that one.
     const another = live.some((m) => m.config?.metadata?.[META.role] === 'minecraft')
     if (another || Date.now() > deadline) return null
-    await sleep(1000)
+    // Over when `signal` ends it, which the loop's check then throws.
+    await delay(SECOND_MS, undefined, { signal }).catch(() => undefined)
   }
 }
 
