@@ -37,17 +37,26 @@ export function jarSide(evidence: {
 
 /**
  * Which of a pack's jars are left to players' games, from the catalog's record of every jar it
- * holds (`published`): one only players' games run (`jarSide`), unless a mod of the pack requires
- * its project, whatever the jar says of itself. A server mod that needs a client companion the
- * catalog marks optional on servers (`client_only_server_optional`) is given it.
+ * holds (`published`): one only players' games run (`jarSide`), unless a mod the server keeps
+ * requires its project, or requires one that does, whatever the jar says of itself. A server mod
+ * that needs a client companion the catalog marks optional on servers
+ * (`client_only_server_optional`) is given it; what only a mod left to players requires is left
+ * with it.
  */
 export function playersOnlyIn(
-  published: Iterable<Pick<CatalogVersion, 'dependencies'>>,
+  published: Iterable<Pick<CatalogVersion, 'projectId' | 'environment' | 'dependencies'>>,
 ): (side: ReturnType<typeof jarSide>, version: Pick<CatalogVersion, 'projectId'> | undefined) => boolean {
+  const versions = [...published]
+  const byProject = new Map(versions.map((version) => [version.projectId, version]))
   const needed = new Set<string>()
-  for (const version of published)
-    for (const dependency of version.dependencies)
-      if (dependency.kind === 'required' && dependency.projectId) needed.add(dependency.projectId)
+  const keeping = versions.filter((version) => jarSide({ catalog: version.environment }) !== 'client')
+  for (let next = keeping.pop(); next !== undefined; next = keeping.pop())
+    for (const { kind, projectId } of next.dependencies) {
+      if (kind !== 'required' || !projectId || needed.has(projectId)) continue
+      needed.add(projectId)
+      const required = byProject.get(projectId)
+      if (required !== undefined) keeping.push(required)
+    }
   return (side, version) => side === 'client' && !(version !== undefined && needed.has(version.projectId))
 }
 

@@ -42,15 +42,41 @@ describe('where a pack’s jar runs', () => {
     expect(jarSide({})).toBe('both')
   })
 
-  test('one only players’ games run is left to them, unless another mod of the pack requires it', () => {
+  const requires = (projectId: string, kind: 'required' | 'optional' = 'required') => ({
+    projectId,
+    versionId: null,
+    kind,
+  })
+
+  test('one only players’ games run is left to them, unless a mod the server keeps requires it', () => {
     const playersOnly = playersOnlyIn([
-      { dependencies: [{ projectId: 'companion', versionId: null, kind: 'required' }] },
-      { dependencies: [{ projectId: 'zoom', versionId: null, kind: 'optional' }] },
+      { projectId: 'core', environment: 'client_and_server', dependencies: [requires('companion')] },
+      { projectId: 'tweaks', environment: 'client_and_server', dependencies: [requires('zoom', 'optional')] },
     ])
     expect(playersOnly('client', { projectId: 'companion' })).toBe(false)
     expect(playersOnly('client', { projectId: 'zoom' })).toBe(true)
     expect(playersOnly('client', undefined)).toBe(true)
     expect(playersOnly('both', { projectId: 'zoom' })).toBe(false)
+  })
+
+  test('what only a mod left to players requires is left with it, and a kept chain stays whole', () => {
+    const playersOnly = playersOnlyIn([
+      // A players' mod that needs another players' mod: neither is the server's.
+      { projectId: 'minimap', environment: 'client_only', dependencies: [requires('minimap-lib')] },
+      { projectId: 'minimap-lib', environment: 'client_only', dependencies: [] },
+      // A server mod whose companion needs a library of its own: all of it stays.
+      { projectId: 'core', environment: 'client_and_server', dependencies: [requires('companion')] },
+      {
+        projectId: 'companion',
+        environment: 'client_only_server_optional',
+        dependencies: [requires('companion-lib')],
+      },
+      { projectId: 'companion-lib', environment: 'client_only', dependencies: [] },
+    ])
+    expect(playersOnly('client', { projectId: 'minimap' })).toBe(true)
+    expect(playersOnly('client', { projectId: 'minimap-lib' })).toBe(true)
+    expect(playersOnly('client', { projectId: 'companion' })).toBe(false)
+    expect(playersOnly('client', { projectId: 'companion-lib' })).toBe(false)
   })
 })
 
