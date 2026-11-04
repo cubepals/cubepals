@@ -123,7 +123,8 @@ export const ASKED = 'needs-second-eye'
  */
 export type Notice = 'running' | 'draft' | 'failed' | 'moved' | 'unavailable'
 
-const RANK: Record<Severity, number> = { high: 0, medium: 1, low: 2 }
+/** The severities in order, most severe first. */
+export const RANK: Record<Severity, number> = { high: 0, medium: 1, low: 2 }
 /** A severity's heading over its table. */
 const HEADING: Record<Severity, string> = { high: '🔴 High', medium: '🟠 Medium', low: '🟡 Low' }
 /** What a re-review says of a finding in its row. */

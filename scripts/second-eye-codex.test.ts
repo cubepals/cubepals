@@ -177,8 +177,14 @@ test('the verdict is fix first on a P0 or P1, and replies are not findings', () 
   expect(codexAnswer([p1, { ...p1, in_reply_to_id: 7 }]).findings).toHaveLength(1)
 })
 
-test('a line comment repeated by a second review of the commit counts once', () => {
+test('a line comment repeated by a second review of the commit counts once, at its most severe', () => {
   expect(codexAnswer([p1, { ...p1 }, { ...p1, line: 900 }]).findings.map((f) => f.line)).toEqual([858, 900])
+  // The first review marked it P2; the second raised it to P1: it counts once, as P1.
+  const p2 = { ...p1, body: p1.body.replaceAll('P1', 'P2') }
+  const answer = codexAnswer([p2, p1])
+  expect(answer.findings.map((f) => f.severity)).toEqual(['medium'])
+  expect(answer.verdict).toBe('fix first')
+  expect(codexAnswer([p1, p2]).findings.map((f) => f.severity)).toEqual(['medium'])
 })
 
 test('waiting asks until found, at most every 30 seconds, and gives up at the deadline', async () => {

@@ -25,7 +25,7 @@
 import { appendFileSync, readFileSync } from 'node:fs'
 import { MINUTE_MS, SECOND_MS } from '../packages/contracts/src/durations.ts'
 import { github } from './lib/pull-comment.ts'
-import type { Finding, Origin, Review, Severity } from './second-eye-comment.ts'
+import { type Finding, type Origin, RANK, type Review, type Severity } from './second-eye-comment.ts'
 
 /** The account Codex's GitHub reviews come from, as OpenAI's code review documentation shows it. */
 export const CODEX_BOT = 'chatgpt-codex-connector[bot]'
@@ -197,17 +197,15 @@ export function findingOf(comment: GitHubReviewComment): Finding & { origin: Ori
 
 /** Codex's line comments (its replies aside) as the second eye's answer. */
 export function codexAnswer(comments: GitHubReviewComment[]): Review {
-  // A commit Codex reviewed twice (a second request) repeats its line comments: each counts once.
-  const seen = new Set<string>()
-  const findings = comments
-    .filter((comment) => !comment.in_reply_to_id)
-    .map(findingOf)
-    .filter((finding) => {
-      const key = `${finding.file}:${finding.line}:${finding.problem}`
-      if (seen.has(key)) return false
-      seen.add(key)
-      return true
-    })
+  // A commit Codex reviewed twice (a second request) repeats its line comments: each counts once,
+  // at the most severe priority either review gave it.
+  const once = new Map<string, Finding & { origin: Origin }>()
+  for (const finding of comments.filter((comment) => !comment.in_reply_to_id).map(findingOf)) {
+    const key = `${finding.file}:${finding.line}:${finding.problem}`
+    const kept = once.get(key)
+    if (!kept || RANK[finding.severity] < RANK[kept.severity]) once.set(key, finding)
+  }
+  const findings = [...once.values()]
   return {
     verdict: findings.some((finding) => finding.severity !== 'low') ? 'fix first' : 'merge',
     earlier: [],
