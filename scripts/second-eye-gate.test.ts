@@ -137,6 +137,16 @@ describe('statusFor', () => {
     expect(statusFor({ ...unavailable, review: 'failure', comment: 'success' })?.state).toBe('failure')
   })
 
+  test("a run that stood down for a newer push's review sets nothing", () => {
+    // It read the newer head, saw that head's own run, and wrote no comment.
+    expect(
+      statusFor({ ...none, mark: 'success', review: 'success', comment: 'skipped', superseded: 'true' }),
+    ).toBeUndefined()
+    expect(statusFor({ ...none, mark: 'success', review: 'success', comment: 'skipped' })?.state).toBe(
+      'failure',
+    )
+  })
+
   test('a review that did not finish fails, on a draft too', () => {
     expect(statusFor({ ...none, mark: 'success', review: 'failure' })?.description).toContain("didn't finish")
     expect(statusFor({ ...none, mark: 'success', review: 'cancelled', draft: true })?.state).toBe('failure')

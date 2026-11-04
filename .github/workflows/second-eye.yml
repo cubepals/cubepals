@@ -523,7 +523,7 @@ jobs:
   # The status a ruleset requires. It runs after the others, whatever they did, and says what
   # became of the review: passed at once when no sensitive path changed, failed while a sensitive
   # change waits for v0id-user to request one, passed once the review has finished, and nothing on
-  # a draft that waits.
+  # a draft that waits or from a run that stood down for a newer push's review.
   gate:
     name: Set the second eye gate
     needs: [sensitive, mark, review, comment]
@@ -563,6 +563,7 @@ jobs:
           COMMENT: ${{ needs.comment.result }}
           UNAVAILABLE: ${{ needs.review.outputs.unavailable }}
           DRAFT: ${{ github.event.pull_request.draft }}
+          SUPERSEDED: ${{ needs.review.outputs.superseded }}
           SHA: ${{ fromJSON(needs.review.outputs.reviewed || '{}').sha || github.event.pull_request.head.sha }}
           REPO: ${{ github.repository }}
         run: bun scripts/second-eye-gate.ts

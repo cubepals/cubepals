@@ -62,6 +62,7 @@ beforeEach(() => {
     'MODEL',
     'SOURCE',
     'FALLBACK',
+    'SUPERSEDED',
   ])
     delete process.env[key]
   fetcher = spyOn(globalThis, 'fetch').mockImplementation(
@@ -155,6 +156,15 @@ test('unavailability sets an explicit skipped status, while failed notices canno
   expect(calls.at(-1)?.body).toMatchObject({ state: 'failure' })
   statuses = [{ context: 'Second eye gate', state: 'failure' }]
   calls = []
+  await runSecondEyeGate()
+  expect(calls.at(-1)?.body).toMatchObject({ state: 'failure' })
+})
+
+test('a run that stood down for a newer review writes no status', async () => {
+  Object.assign(process.env, { MARK: 'success', REVIEW: 'success', COMMENT: 'skipped', SUPERSEDED: 'true' })
+  await runSecondEyeGate()
+  expect(calls).toHaveLength(0)
+  process.env.SUPERSEDED = ''
   await runSecondEyeGate()
   expect(calls.at(-1)?.body).toMatchObject({ state: 'failure' })
 })
