@@ -19,7 +19,7 @@ import { describeChanges, type ServerSettings } from '../../domain/revision/revi
 import type { MinecraftServer } from '../../domain/server/server.ts'
 import { type MemoryTier, sizeLabel } from '../../domain/server/size.ts'
 import { type Actor, authorize, requestedBy } from '../actor.ts'
-import { AppError } from '../errors.ts'
+import { AppError, refuseChangedSince } from '../errors.ts'
 import type { EventBus } from '../ports/events.ts'
 import { saveStopCheaters } from '../stop-cheaters/persistence.ts'
 import { ownersStopCheatersWaiting, stopCheatersWaiting } from '../stop-cheaters/waiting.ts'
@@ -134,11 +134,19 @@ export class WaitingChanges {
   /**
    * `now`: the server restarts into what waits, its players warned first. `cancel`: what waits is
    * dropped, and the server keeps what it runs: the configuration and size it booted, and Stop
-   * cheaters as it booted it.
+   * cheaters as it booted it. `version` is the server's as the page showed it: one that changed
+   * since, by a change in another tab that waits too, refuses rather than take or drop it unseen.
    */
-  async settle(actor: Actor, serverId: string, settle: 'now' | 'cancel', requestId: string): Promise<void> {
+  async settle(
+    actor: Actor,
+    serverId: string,
+    settle: 'now' | 'cancel',
+    requestId: string,
+    version?: number,
+  ): Promise<void> {
     await this.#db.transaction(async (tx) => {
       const server = authorize(actor, await lockServer(tx, serverId))
+      refuseChangedSince(version, server.version)
       const applied = await loadApplied(tx, server.id)
       const waiting = await waitingChanges(tx, server, applied)
       if (waiting === null || applied === null) throw new AppError('invalid_choice', NOTHING_WAITS)

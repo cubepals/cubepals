@@ -37,7 +37,7 @@ import { loadStanding } from '../accounts/persistence.ts'
 import { type Actor, authorize, requestedBy } from '../actor.ts'
 import type { ArtifactService } from '../artifacts/service.ts'
 import { revokedIn } from '../catalog/persistence.ts'
-import { AppError, NotFound } from '../errors.ts'
+import { AppError, NotFound, refuseChangedSince } from '../errors.ts'
 import type { AccessPolicy } from '../policy/access-policy.ts'
 import type { EventBus } from '../ports/events.ts'
 import type { LoaderBuilds } from '../ports/loaders.ts'
@@ -462,11 +462,7 @@ export class RevisionService {
   ): Promise<MinecraftServer> {
     return this.#db.transaction(async (tx) => {
       const server = authorize(actor, await lockServer(tx, serverId))
-      if (options.version !== undefined && options.version !== server.version)
-        throw new AppError(
-          'changed_meanwhile',
-          'This server changed since you looked at it. Look at it again, then try once more.',
-        )
+      refuseChangedSince(options.version, server.version)
       const desired = await loadRevision(tx, server.desiredRevisionId)
       const next = await plan(tx, server, desired)
       if (next === null) return server
