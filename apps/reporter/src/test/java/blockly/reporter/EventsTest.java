@@ -55,6 +55,27 @@ class EventsTest {
     }
 
     @Test
+    void vitalsSayHowTheServerTicked() {
+        var vitals = Events.vitals(AT, 19.98765, 12.3456, 30.004, 48.5, 3, 1200, 340, 900, 2048, 15);
+        assertEquals(
+                "{\"at\":\"2026-10-20T10:00:01.234Z\",\"tps\":19.99,\"mspt\":12.35,\"msptP95\":30.0,"
+                        + "\"msptMax\":48.5,\"players\":3,\"chunks\":1200,\"entities\":340,"
+                        + "\"heapUsedMb\":900,\"heapMaxMb\":2048,\"gcMs\":15}",
+                vitals.toString());
+    }
+
+    @Test
+    void aTickPercentileIsInMillisecondsOfTheSlowestShare() {
+        long[] ticks = new long[100];
+        for (int i = 0; i < ticks.length; i++) ticks[i] = (i + 1) * 1_000_000L;
+        assertEquals(95.0, Vitals.percentileMs(ticks, 0.95));
+        assertEquals(100.0, Vitals.percentileMs(ticks, 1));
+        assertEquals(1.0, Vitals.percentileMs(ticks, 0));
+        assertEquals(0.0, Vitals.percentileMs(new long[0], 0.95));
+        assertEquals(0.0, Vitals.percentileMs(null, 0.95));
+    }
+
+    @Test
     void anEmptyBatchIsStillAValidRequest() {
         assertEquals("{\"events\":[]}", Events.batch(List.of()));
     }

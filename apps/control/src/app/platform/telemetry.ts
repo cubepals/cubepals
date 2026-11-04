@@ -64,6 +64,7 @@ export const procedureServed: Telemetry['procedureServed'] = (procedure, status,
   installed?.procedureServed(procedure, status, ms)
   recorder?.served('procedure', procedure, status, ms)
 }
+export const serverTicked: Telemetry['serverTicked'] = (...args) => installed?.serverTicked(...args)
 export const realtimeConnected: Telemetry['realtimeConnected'] = (...args) =>
   installed?.realtimeConnected(...args)
 export const observeRealtime: Telemetry['observeRealtime'] = (...args) => installed?.observeRealtime(...args)

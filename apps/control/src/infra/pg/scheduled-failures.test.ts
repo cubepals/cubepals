@@ -43,6 +43,7 @@ const JOBS: ScheduledJob[] = [
   'known-addresses',
   'joins-sweep',
   'diagnostics-sweep',
+  'vitals-sweep',
   'signals',
   'spend-watchdog',
   'creates-room',

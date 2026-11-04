@@ -17,6 +17,7 @@ import type {
   DiagnosticView,
 } from '@blockly/contracts/diagnostics'
 import { joinLine, signalLine } from './join-report.ts'
+import { vitalsLine } from './vitals-report.ts'
 
 const ms = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1)} s` : `${Math.round(n)} ms`)
 const at = (iso: string) => `${iso.slice(0, 10)} ${iso.slice(11, 19)}`
@@ -119,6 +120,7 @@ export function diagnosisReport(view: AccountDiagnosisView): string[] {
     ...section('Slowest to succeed', view.operations.slowest.map(operationLine), 'None.'),
     ...section('Joins that stopped short', view.joins.map(joinLine), 'None.'),
     ...section('Signals', view.signals.map(signalLine), 'None.'),
+    ...section('How its servers ticked', view.vitals.map(vitalsLine), 'None of its servers reported ticks.'),
     ...section(
       'Slow or failed, by what',
       view.diagnostics.summary.map(groupLine),

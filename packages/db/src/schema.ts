@@ -36,6 +36,7 @@
  * - `edge.ts`: the edges that route players, and how far each one's routes go.
  * - `joins.ts`: every join as one row, the signals raised on them, and each server's last boot report.
  * - `diagnostics.ts`: what ran slow or failed, and whose it was.
+ * - `vitals.ts`: how each Paper server ticked, a minute at a time.
  */
 
 export * from './schema/access.ts'
@@ -61,3 +62,4 @@ export * from './schema/players.ts'
 export * from './schema/realtime.ts'
 export * from './schema/servers.ts'
 export * from './schema/usage.ts'
+export * from './schema/vitals.ts'

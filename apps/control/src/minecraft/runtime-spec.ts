@@ -107,6 +107,12 @@ export const PROXY_ENV = 'USES_PROXY_PROTOCOL'
 export const REPORT_ENV = 'CUBEPALS_REPORT_URL'
 
 /**
+ * Where the same plugin posts how the server ticks, once a minute (`app/vitals/`). Left out of
+ * what drift compares for the same reason.
+ */
+export const VITALS_ENV = 'CUBEPALS_VITALS_URL'
+
+/**
  * Whether a server of `revision` reads a PROXY protocol header before each connection: Paper does,
  * so it sees each player's own address rather than the edge's. Minecraft itself and the mod
  * loaders have no such setting, and a header sent to them breaks the connection.

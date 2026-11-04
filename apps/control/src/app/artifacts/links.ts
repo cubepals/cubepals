@@ -2,6 +2,10 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
+/**
+ * The links game runtimes are given into the control plane, each signed with the server's own
+ * token: its artifacts, its icon, and where its reporter plugin posts joins and ticks.
+ */
 import type { ModArtifact } from '../../domain/mods/artifact.ts'
 import { diskName } from '../../minecraft/jars.ts'
 import { deriveServerSecret, type SecretKeyring } from '../secrets.ts'
@@ -39,8 +43,17 @@ export class ArtifactLinks {
 
   /** Where the server's join reporter posts its players' joins, with its own token as its jars have. */
   joinsReport(serverId: string): string {
+    return this.#reported(serverId, 'joins')
+  }
+
+  /** Where the same reporter posts how the server ticks, once a minute (`interfaces/runtime/vitals.ts`). */
+  vitalsReport(serverId: string): string {
+    return this.#reported(serverId, 'vitals')
+  }
+
+  #reported(serverId: string, what: 'joins' | 'vitals'): string {
     const token = deriveServerSecret(this.#secrets.current.key, serverId, 'artifacts')
-    return `${this.#base}/runtime/v1/servers/${serverId}/joins?t=${token}`
+    return `${this.#base}/runtime/v1/servers/${serverId}/${what}?t=${token}`
   }
 
   /** Links signed with the current key; links from earlier keys still work during a rotation. */

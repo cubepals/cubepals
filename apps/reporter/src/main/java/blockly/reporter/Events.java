@@ -63,6 +63,34 @@ final class Events {
         return tick;
     }
 
+    /** How the server ticked over the last minute, as `Vitals` sampled it (`ServerVitals` in contracts). */
+    static JsonObject vitals(
+            Instant at,
+            double tps,
+            double mspt,
+            double msptP95,
+            double msptMax,
+            int players,
+            int chunks,
+            int entities,
+            long heapUsedMb,
+            long heapMaxMb,
+            long gcMs) {
+        JsonObject vitals = new JsonObject();
+        vitals.addProperty("at", at(at));
+        vitals.addProperty("tps", Math.round(tps * 100) / 100.0);
+        vitals.addProperty("mspt", Math.round(mspt * 100) / 100.0);
+        vitals.addProperty("msptP95", Math.round(msptP95 * 100) / 100.0);
+        vitals.addProperty("msptMax", Math.round(msptMax * 100) / 100.0);
+        vitals.addProperty("players", players);
+        vitals.addProperty("chunks", chunks);
+        vitals.addProperty("entities", entities);
+        vitals.addProperty("heapUsedMb", heapUsedMb);
+        vitals.addProperty("heapMaxMb", heapMaxMb);
+        vitals.addProperty("gcMs", gcMs);
+        return vitals;
+    }
+
     /**
      * The server as it booted: its Paper, and the plugins listening as players log in, which slow
      * every join where they do work there.

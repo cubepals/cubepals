@@ -256,7 +256,7 @@ deployment refuses a value that isn't the shape below. The values themselves are
 | Variable | Local | Staging | Production | Set by | Shape |
 |---|---|---|---|---|---|
 | `FREE_LINK_TUNING` | default | default | secret | secret | `{ "weights": { "mainPlayer", "inbox", "signedUpClose", "network" }, "link", "medium", "high", "signedUpCloseMs", "mainShare", "mainForS", "networkKeptMs" }`: the weights are non-negative; `link`, `medium`, `high` and `mainShare` are in [0, 1], with `link < medium < high`; the rest are positive whole numbers |
-| `ABUSE_LIMITS` | default | default | secret | secret | `{ "chipIn": { "payerDayCents", "serverDayCents" }, "extraCeiling": { "untilRenewed", "renewed" }, "giftsPerDay", "wrongCodesPerHour", "wakesPerHour", "pingWakeHoldHours", "knownAddressDays", "inviteJoinsPerHour", "joinReportsPerSecond", "joinReportBytes", "worldUploadsPerDay", "unconfirmedPlaceHours", "consoleWatchesPerMinute", "consolesPerConnection", "publicReadsPerMinute": { "page", "status", "invite", "invites" }, "refreshesPerMinute" }`: whole numbers, positive but for `untilRenewed`, which is at most `renewed`; `pingWakeHoldHours`, `knownAddressDays`, `inviteJoinsPerHour`, `joinReportsPerSecond`, `joinReportBytes`, `worldUploadsPerDay`, `unconfirmedPlaceHours`, `consoleWatchesPerMinute`, `consolesPerConnection`, `publicReadsPerMinute` and `refreshesPerMinute` may be left out for their defaults |
+| `ABUSE_LIMITS` | default | default | secret | secret | `{ "chipIn": { "payerDayCents", "serverDayCents" }, "extraCeiling": { "untilRenewed", "renewed" }, "giftsPerDay", "wrongCodesPerHour", "wakesPerHour", "pingWakeHoldHours", "knownAddressDays", "inviteJoinsPerHour", "joinReportsPerSecond", "joinReportBytes", "vitalsReportsPerMinute", "vitalsReportBytes", "worldUploadsPerDay", "unconfirmedPlaceHours", "consoleWatchesPerMinute", "consolesPerConnection", "publicReadsPerMinute": { "page", "status", "invite", "invites" }, "refreshesPerMinute" }`: whole numbers, positive but for `untilRenewed`, which is at most `renewed`; `pingWakeHoldHours`, `knownAddressDays`, `inviteJoinsPerHour`, `joinReportsPerSecond`, `joinReportBytes`, `vitalsReportsPerMinute`, `vitalsReportBytes`, `worldUploadsPerDay`, `unconfirmedPlaceHours`, `consoleWatchesPerMinute`, `consolesPerConnection`, `publicReadsPerMinute` and `refreshesPerMinute` may be left out for their defaults |
 | `ECONOMICS_TUNING` | default | default | optional secret | secret | `{ "paymentFee": { "percent", "fixedCents" }, "archiveGbMonthCents" }`: the fee taken from each order, as a percent of its total plus a fixed amount in cents, and what a GB-month of backups costs, in cents. Unset in production, the runtime economics report leaves fees and margin out |
 | `CAPACITY_TUNING` | default | default | secret | secret | `{ "freeShare", "tightShare", "tightIdleMinutes" }`: the share of the room for new servers free plans may fill, the share of running room past which room is tight, and how long a free server nobody is on stays up while it is. The shares are in [0, 1]; the minutes a positive whole number |
 | `SIGNALS` | unset | optional secret | optional secret | secret | `SignalsConfig` in `packages/contracts/src/join-records.ts`: which kinds of join signal run, each by its key, with its limits, and the watched addresses. Optional everywhere: unset, or not that shape, no signal runs and the log says so once |
@@ -312,6 +312,13 @@ modpack, at their next full boot: a running server isn't restarted for it, and a
 still wakes from memory and gets it at the boot after. It posts to `/runtime/v1/servers/<id>/joins`
 with the server's own token, as the server's jar links carry. With `CUBEPALS_REPORT_URL` unset the
 plugin does nothing.
+
+Once a minute it also samples how the server ticks (ticks a second; milliseconds a tick, on
+average, at the 95th percentile and at the slowest; players, loaded chunks and entities; the JVM's
+heap and its garbage collection) and posts it to `/runtime/v1/servers/<id>/vitals`
+(`CUBEPALS_VITALS_URL`, with the same token), from a queue of its own so a join's report never
+waits behind it. Samples are kept 7 days (`server_vitals`); operators read them with
+`ops.ts vitals` ([diagnosis.md](diagnosis.md)).
 
 | Variable | Local | Staging | Production | Set by | Notes |
 |---|---|---|---|---|---|

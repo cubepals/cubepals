@@ -110,6 +110,7 @@ describe('on the public listener', () => {
       artifacts: {} as Parameters<typeof createRuntimeApp>[0]['artifacts'],
       joins: {} as Parameters<typeof createRuntimeApp>[0]['joins'],
       stopCheaters: {} as Parameters<typeof createRuntimeApp>[0]['stopCheaters'],
+      vitals: {} as Parameters<typeof createRuntimeApp>[0]['vitals'],
     }),
   )
   api.route(

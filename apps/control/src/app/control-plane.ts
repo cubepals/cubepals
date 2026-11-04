@@ -76,6 +76,7 @@ import { SetupService } from './setups/service.ts'
 import { SharingQueries } from './sharing/queries.ts'
 import { SharingService } from './sharing/service.ts'
 import { StopCheatersService } from './stop-cheaters/service.ts'
+import { VitalsService } from './vitals/service.ts'
 import { WorldQueries } from './worlds/queries.ts'
 import { WorldService } from './worlds/service.ts'
 
@@ -335,7 +336,7 @@ export function composeControlPlane(ports: ControlPlanePorts, settings: ControlP
   const waiter = new ServerWaiter(db, events)
   const edge = new EdgeService({ ...ports, service: servers, waiter, schedules, links, ...settings })
 
-  return withDiagnostics(db, {
+  return withHealthRecords(ports, {
     policy,
     transitions,
     specs,
@@ -404,9 +405,15 @@ export function composeControlPlane(ports: ControlPlanePorts, settings: ControlP
   })
 }
 
-/** The parts, with what keeps and reads what ran slow or failed and whose it was (`diagnostics/`). */
-function withDiagnostics<Parts extends object>(db: Db, parts: Parts) {
-  return { ...parts, diagnostics: new DiagnosticsService(db) }
+/**
+ * The parts, with what keeps and reads what ran slow or failed and whose it was (`diagnostics/`),
+ * and how each Paper server ticks (`vitals/`).
+ */
+function withHealthRecords<Parts extends object>(
+  ports: Pick<ControlPlanePorts, 'db' | 'limits'>,
+  parts: Parts,
+) {
+  return { ...parts, diagnostics: new DiagnosticsService(ports.db), vitals: new VitalsService(ports) }
 }
 
 export type ControlPlane = ReturnType<typeof composeControlPlane>

@@ -53,6 +53,7 @@ if (!process.env.OPERATOR_API || !process.env.OPERATOR_TOKEN) {
 const INSTRUCTIONS = [
   'For one person: account_diagnose with their email gives their servers, failed and slow operations, joins that stopped short, signals, and what ran slow or failed for them. Then join_get for one join, operation_get for one operation, console_read for a server’s log.',
   'For a group or the whole platform: diagnostics_summary grouped by name (which query or procedure), account (who it touched most), server or origin (what it ran under), then diagnostics_list narrowed to one of them.',
+  'For how a Paper server plays: vitals_list (the servers that ticked worst, with whose they are; one account’s with account) and server_vitals (one server’s minutes). Only servers the reporter plugin runs on report.',
   'For the database itself: database_now (connections, what runs long or waits on a lock, the statements that took the most time, tables read by sequential scans). A slow query’s name (q:…) and statement in diagnostics match the statement database_now lists.',
   'Nothing here changes anything unless its description says it does.',
 ].join('\n')
@@ -636,6 +637,25 @@ tool(
     limit: z.number().int().min(1).max(100).optional(),
   },
   (a) => ['GET', `/database${query(a)}`],
+  read,
+)
+
+tool(
+  'vitals_list',
+  'How Paper servers ticked, the worst first: minutes behind (under 18 ticks a second), ticks a second, milliseconds a tick (p50, p95, slowest), heap, garbage collection, players, chunks and entities, each with whose server it is. Only servers the reporter plugin runs on report, once a minute.',
+  {
+    account: account.optional(),
+    since: moment.optional().describe('An ISO moment; an hour ago unless given'),
+    limit: z.number().int().min(1).max(200).optional(),
+  },
+  (a) => ['GET', `/vitals${query(a)}`],
+  read,
+)
+tool(
+  'server_vitals',
+  'One Paper server’s ticks, minute by minute since a moment, with what they add up to.',
+  { serverId, since: moment.optional().describe('An ISO moment; an hour ago unless given') },
+  (a) => ['GET', `${at(a.serverId, '/vitals')}${query({ since: a.since })}`],
   read,
 )
 

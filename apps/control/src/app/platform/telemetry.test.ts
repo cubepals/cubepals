@@ -24,6 +24,7 @@ const counted: Counted = {
   realtimeConnected: [],
   observeRealtime: [],
   watchQueries: [],
+  serverTicked: [],
 }
 const recorder: Telemetry = {
   operationEnded: (...args) => void counted.operationEnded.push(args),
@@ -36,6 +37,7 @@ const recorder: Telemetry = {
   realtimeConnected: (...args) => void counted.realtimeConnected.push(args),
   observeRealtime: (...args) => void counted.observeRealtime.push(args),
   watchQueries: (...args) => void counted.watchQueries.push(args),
+  serverTicked: (...args) => void counted.serverTicked.push(args),
 }
 
 let h: Harness

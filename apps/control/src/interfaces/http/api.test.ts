@@ -163,6 +163,7 @@ describe('what is counted of a request', () => {
       realtimeConnected: ignored,
       observeRealtime: ignored,
       watchQueries: ignored,
+      serverTicked: ignored,
       requestServed: (...args) => void requests.push(args),
       procedureServed: (...args) => void procedures.push(args),
     } satisfies Telemetry)

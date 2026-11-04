@@ -51,6 +51,9 @@ beforeEach(() => {
     health: {
       ofServers: record('ofServers', { failed: [], slowest: [] }),
     } as unknown as DiagnosticsOptions['health'],
+    vitals: {
+      worst: record('vitals', { since: '', servers: [{ serverId: SERVER, laggingMinutes: 3 }] }),
+    } as unknown as DiagnosticsOptions['vitals'],
     joins: {
       // As the joins list answers when asked only for those that stopped short.
       list: record('joins', [
@@ -116,6 +119,7 @@ describe('the operators’ diagnostics', () => {
       '2026-11-04T11:00:00.000Z',
     ])
     expect(diagnosis.signals.map((s) => s.serverId)).toEqual([SERVER])
+    expect(diagnosis.vitals.map((v) => [v.serverId, v.laggingMinutes])).toEqual([[SERVER, 3]])
     expect(diagnosis.diagnostics.summary.map((g) => g.key)).toEqual(['q:aaaaaaaaaaaa'])
     expect(diagnosis.elsewhere.join(' ')).toContain(OWNER)
     expect(calls.find(([name]) => name === 'summary')?.[1]).toMatchObject({ accountId: OWNER, by: 'name' })

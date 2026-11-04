@@ -10,6 +10,9 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.TreeSet;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import org.bukkit.Bukkit;
 import org.bukkit.event.HandlerList;
 import org.bukkit.event.player.PlayerLoginEvent;
@@ -19,17 +22,21 @@ import org.bukkit.plugin.java.JavaPlugin;
 /**
  * The plugin Cubepals places on Paper servers so each join can be followed from the edge into the
  * world: it reports the server's own steps of each join to the control plane, at
- * `CUBEPALS_REPORT_URL`. It also gives Stop cheaters its console command, `cubepals-remove`
- * (`Removals`), which kicks a player and reports it. With no address it only kicks.
+ * `CUBEPALS_REPORT_URL`, and how the server ticks, once a minute, at `CUBEPALS_VITALS_URL`
+ * (`Vitals`). It also gives Stop cheaters its console command, `cubepals-remove` (`Removals`),
+ * which kicks a player and reports it. With no address it only kicks.
  */
 public final class Reporter extends JavaPlugin {
     private static final String CONFIGURE =
             "io.papermc.paper.event.connection.configuration.AsyncPlayerConnectionConfigureEvent";
 
     private Queue queue;
+    private Queue vitals;
+    private ScheduledExecutorService clock;
 
     @Override
     public void onEnable() {
+        startVitals();
         String url = System.getenv("CUBEPALS_REPORT_URL");
         boolean reports = url != null && !url.isBlank();
         if (reports) queue = new Queue(Queue.http(URI.create(url)), Duration.ofSeconds(1));
@@ -50,6 +57,28 @@ public final class Reporter extends JavaPlugin {
     @Override
     public void onDisable() {
         if (queue != null) queue.stop(Duration.ofSeconds(2));
+        if (clock != null) clock.shutdownNow();
+        if (vitals != null) vitals.stop(Duration.ofSeconds(1));
+    }
+
+    /**
+     * Samples how the server ticks once a minute of the clock (`Vitals`), on the main thread, and
+     * sends it to `CUBEPALS_VITALS_URL` from a queue of its own, so a join's report never waits
+     * behind it. Without the address, nothing.
+     */
+    private void startVitals() {
+        String url = System.getenv("CUBEPALS_VITALS_URL");
+        if (url == null || url.isBlank()) return;
+        vitals = new Queue(Queue.http(URI.create(url)), Duration.ofSeconds(5));
+        vitals.start();
+        clock = Executors.newSingleThreadScheduledExecutor(run -> {
+            Thread thread = new Thread(run, "Cubepals vitals");
+            thread.setDaemon(true);
+            return thread;
+        });
+        long every = Vitals.EVERY.toSeconds();
+        Runnable sample = new Vitals(vitals::offer).onTheMinute(task -> Bukkit.getScheduler().runTask(this, task));
+        clock.scheduleAtFixedRate(sample, every, every, TimeUnit.SECONDS);
     }
 
     /** The plugins, other than this one, with a listener on `handlers`, by name. */

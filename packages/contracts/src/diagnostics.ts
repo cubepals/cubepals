@@ -13,6 +13,7 @@
 import { z } from 'zod'
 import type { HealthOperationView } from './health.ts'
 import type { JoinView, SignalView } from './join-records.ts'
+import type { VitalsRowView } from './server-vitals.ts'
 
 export const DIAGNOSTIC_KINDS = ['query', 'procedure', 'request'] as const
 export type DiagnosticKind = (typeof DIAGNOSTIC_KINDS)[number]
@@ -169,7 +170,8 @@ export type DatabaseQuery = z.infer<typeof DatabaseQuery>
 /**
  * Everything known about why one account is having a bad time, in one answer: who it is, its
  * servers, the operations that failed or were slow, joins that didn't reach the world, open
- * signals, and what ran slow or failed in the control plane for it, grouped and newest.
+ * signals, how its Paper servers ticked, and what ran slow or failed in the control plane for it,
+ * grouped and newest.
  */
 export interface AccountDiagnosisView {
   account: { id: string; email: string; name: string; plan: string; status: string; test: boolean }
@@ -180,6 +182,8 @@ export interface AccountDiagnosisView {
   joins: JoinView[]
   signals: SignalView[]
   diagnostics: { summary: DiagnosticGroupView[]; recent: DiagnosticView[] }
+  /** How its Paper servers ticked, the most minutes behind first: those its reporter runs on. */
+  vitals: VitalsRowView[]
   /** Where else to look, as sentences: what the record can't say. */
   elsewhere: string[]
 }

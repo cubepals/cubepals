@@ -24,6 +24,7 @@ export interface DiagnosticsOptions {
   diagnostics: DiagnosisSources['diagnostics'] & Pick<DiagnosticsService, 'database'>
   health: DiagnosisSources['health']
   joins: DiagnosisSources['joins']
+  vitals: DiagnosisSources['vitals']
 }
 
 /** An account by its id or email, as `ops.ts` finds one. */

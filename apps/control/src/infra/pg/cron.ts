@@ -54,6 +54,8 @@ export const CRON: Record<ScheduledJob | WorkerHeartbeat, string> = {
   signals: '* * * * *',
   // What ran slow or failed, past its 14 days (`app/diagnostics/`): hourly keeps the table short.
   'diagnostics-sweep': '43 * * * *',
+  // How servers ticked, past its 7 days (`app/vitals/`).
+  'vitals-sweep': '19 * * * *',
   // A day's spend against its limit. At the most the platform runs at
   // once, ten minutes between passes is about 35 cents past the limit before it pauses.
   'spend-watchdog': '*/10 * * * *',
