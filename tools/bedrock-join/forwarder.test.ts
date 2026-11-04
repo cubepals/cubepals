@@ -4,7 +4,8 @@
 
 import { afterEach, expect, test } from 'bun:test'
 import { createSocket, type Socket } from 'node:dgram'
-import { FLY_UDP_MTU, type Forwarder, forwarder } from './forwarder.ts'
+import { FLY_UDP_MTU } from '../../apps/edge/geyser-config.ts'
+import { type Forwarder, forwarder } from './forwarder.ts'
 
 const opened: { close: () => void }[] = []
 afterEach(() => {

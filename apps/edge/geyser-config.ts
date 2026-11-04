@@ -9,6 +9,13 @@
  * Geyser (`geyser.ts`) or for deciding where it is reached (`bedrock.ts`).
  */
 
+/**
+ * The largest datagram, its IP and UDP headers included, that Fly's UDP is taken to carry whole:
+ * Fly's documentation on UDP says to assume "something more like 1300 bytes to work with, not
+ * 1500" (docs.fly.io/networking/udp-and-tcp).
+ */
+export const FLY_UDP_MTU = 1300
+
 export interface GeyserSettings {
   /**
    * Where Geyser listens: the machine's UDP address (Fly's `fly-global-services`), which NetherNet

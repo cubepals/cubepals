@@ -18,13 +18,6 @@
 
 import { createSocket, type Socket } from 'node:dgram'
 
-/**
- * The largest datagram, its IP and UDP headers included, that Fly's UDP is taken to carry: Fly's
- * documentation on UDP says to assume "something more like 1300 bytes to work with, not 1500"
- * (docs.fly.io/networking/udp-and-tcp).
- */
-export const FLY_UDP_MTU = 1300
-
 /** The IP and UDP headers a datagram's MTU counts and its payload leaves out. */
 const HEADERS = { udp4: 20 + 8, udp6: 40 + 8 } as const
 

@@ -44,7 +44,8 @@ import { cpSync, existsSync, readdirSync } from 'node:fs'
 import { release } from 'node:os'
 import { dirname, join } from 'node:path'
 import { parseArgs } from 'node:util'
-import { FLY_UDP_MTU, forwarder, type Target } from './forwarder.ts'
+import { FLY_UDP_MTU } from '../../apps/edge/geyser-config.ts'
+import { forwarder, type Target } from './forwarder.ts'
 
 const { values } = parseArgs({
   options: {
