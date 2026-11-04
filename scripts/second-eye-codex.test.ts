@@ -113,10 +113,14 @@ test('only every review of this commit finished counts: clean, findings, or not 
   expect(outcomeFor({}, SHA)).toBeUndefined()
 })
 
-test('P0 is high, P1 medium, anything else low', () => {
+test('P0 is high, P1 medium, anything else low, read from the badge line only', () => {
   expect(severityOf('![P0 Badge](x) Data loss')).toBe('high')
   expect(severityOf(p1.body)).toBe('medium')
-  expect(severityOf('A note with no badge')).toBe('low')
+  expect(severityOf('**<sub>![P2 Badge](x)</sub> Naming**\n\nUnlike the P1 case above, this is minor.')).toBe(
+    'low',
+  )
+  expect(severityOf('\n  P0: data lost on restart')).toBe('high')
+  expect(severityOf('A note with no badge\n\nThe P1 finding covers it.')).toBe('low')
   expect(severityOf('Uses AP1 internally')).toBe('low')
 })
 

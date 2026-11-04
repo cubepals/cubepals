@@ -121,10 +121,15 @@ export function outcomeFor(state: CodexState, sha: string): 'findings' | 'clean'
   return code.has_any_findings || (here && security.has_any_findings) ? 'findings' : 'clean'
 }
 
-/** Codex marks each line comment P0 (breaks something) or P1 (should be fixed). */
+/**
+ * Codex marks each line comment with a badge on its first line: P0 (breaks something), P1 (should
+ * be fixed), P2 and below. Only that line is read, so a P2 whose text mentions a P1 stays low.
+ */
 export function severityOf(body: string): Severity {
-  if (/\bP0\b/.test(body)) return 'high'
-  if (/\bP1\b/.test(body)) return 'medium'
+  const first = body.trimStart().split('\n')[0] ?? ''
+  const priority = /!\[P(\d) Badge\]/.exec(first)?.[1] ?? /\bP(\d)\b/.exec(first)?.[1]
+  if (priority === '0') return 'high'
+  if (priority === '1') return 'medium'
   return 'low'
 }
 
