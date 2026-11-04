@@ -313,6 +313,13 @@ still wakes from memory and gets it at the boot after. It posts to `/runtime/v1/
 with the server's own token, as the server's jar links carry. With `CUBEPALS_REPORT_URL` unset the
 plugin does nothing.
 
+Once a minute it also samples how the server ticks (ticks a second; milliseconds a tick, on
+average, at the 95th percentile and at the slowest; players, loaded chunks and entities; the JVM's
+heap and its garbage collection) and posts it to `/runtime/v1/servers/<id>/vitals`
+(`CUBEPALS_VITALS_URL`, with the same token), from a queue of its own so a join's report never
+waits behind it. Samples are kept 7 days (`server_vitals`); operators read them with
+`ops.ts vitals` ([diagnosis.md](diagnosis.md)).
+
 | Variable | Local | Staging | Production | Set by | Notes |
 |---|---|---|---|---|---|
 | `JOIN_REPORTER` | `off` | optional | optional | op | `off`, `official` (the servers flagged official) or `all`; unset is `off`. Needs an archive store, where the jar is kept |

@@ -152,6 +152,7 @@ test('an account’s trouble reads as an incident report, saying none where ther
     joins: [],
     signals: [],
     diagnostics: { summary: [], recent: [SLOW] },
+    vitals: [],
     elsewhere: ['Look in PostHog.'],
   }
   const report = diagnosisReport(view)
@@ -165,6 +166,7 @@ test('an account’s trouble reads as an incident report, saying none where ther
     '- 2026-11-04 11:00:00 start on Castle: failed at booting, 60 s — The server ran out of memory',
   )
   expect(report).toContain('Nothing ran slow or failed for it.')
+  expect(report).toContain('None of its servers reported ticks.')
   expect(report).toContain(`- ${diagnosticLine(SLOW)}`)
   expect(report.at(-1)).toBe('- Look in PostHog.')
 })

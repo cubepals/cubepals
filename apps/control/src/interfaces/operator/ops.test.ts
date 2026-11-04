@@ -58,10 +58,11 @@ const detail = {
   history: [],
 } as unknown as AccountDetail
 
-/** The operators' token, and diagnostics, whose routes have tests of their own (`diagnostics.test.ts`). */
+/** The operators' token, and diagnostics and ticks, whose routes have tests of their own. */
 const TOKEN_AND_DIAGNOSTICS = {
   token: 'operator-token',
   diagnostics: {} as unknown as OpsApiOptions['diagnostics'],
+  vitals: {} as unknown as OpsApiOptions['vitals'],
 }
 
 /** The API over services that only write down each call they get, in `calls`. */

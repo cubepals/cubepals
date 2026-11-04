@@ -24,6 +24,7 @@ import {
   REPORT_ENV,
   toRuntimeSpec,
   usesProxyProtocol,
+  VITALS_ENV,
   withoutOwnSteps,
 } from '../../minecraft/runtime-spec.ts'
 import { stopCheatersEnv } from '../../minecraft/stop-cheaters.ts'
@@ -88,11 +89,11 @@ export function specDigest(spec: RuntimeSpec): string {
 /**
  * The spec as drift sees it: without what the owner's plan sets, the picture they chose, Paper's
  * reading a PROXY protocol header, which a server running from before it was asked takes at its
- * next start, where its join reporter reports, or Blockly's own steps before the image starts (`withoutOwnSteps`), whose text can
+ * next start, where its join reporter reports joins and ticks, or Blockly's own steps before the image starts (`withoutOwnSteps`), whose text can
  * change without changing what a server runs.
  */
 export function withoutPlanLimits(spec: RuntimeSpec): RuntimeSpec {
-  const ignored = [...PLAN_ENV, ...IDENTITY_ENV, PROXY_ENV, REPORT_ENV]
+  const ignored = [...PLAN_ENV, ...IDENTITY_ENV, PROXY_ENV, REPORT_ENV, VITALS_ENV]
   const { entrypoint: _entrypoint, ...rest } = spec
   const entrypoint = withoutOwnSteps(spec.entrypoint)
   return {
@@ -207,7 +208,12 @@ export class RuntimeSpecs {
     // through it, with where it reports.
     const reporter = await reporterFor(q, revision, official, stop.placed !== null)
     const report: Record<string, string> =
-      reporter.length === 0 ? {} : { [REPORT_ENV]: this.#links.joinsReport(server.id) }
+      reporter.length === 0
+        ? {}
+        : {
+            [REPORT_ENV]: this.#links.joinsReport(server.id),
+            [VITALS_ENV]: this.#links.vitalsReport(server.id),
+          }
     // A start places the files Cubepals owns as they are now (`own-files.ts`); like the Via
     // plugins, they never arrive through drift.
     const starting = withCurrentOwnFiles(revision, stop.officialFiles)

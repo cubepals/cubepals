@@ -96,6 +96,10 @@
  *                      [--since 24h|7d|<ISO>] [--until <ISO>] [--limit n] [--json]
  *                                                   what ran slow or failed, with whose it was, the
  *                                                   newest first; or grouped, the most first
+ *   bun scripts/ops.ts vitals [<server>] [--account <email|id>] [--since 1h|24h|<ISO>] [--limit n]
+ *                     [--json]
+ *                                                   how Paper servers tick: the worst first, one a
+ *                                                   line, or one server's minutes
  *   bun scripts/ops.ts database [--order total|mean|calls|max] [--limit n] [--json]
  *                                                   the database now: connections, what runs long or
  *                                                   waits, the statements that took the most time,
@@ -111,6 +115,7 @@
  * - `join-report.ts`: a join as an incident report, and the one-line forms of joins and signals.
  * - `diagnostics-report.ts`: an account's trouble as an incident report, what ran slow or failed
  *   one a line and grouped, and the database now.
+ * - `vitals-report.ts`: how servers tick, one a line, and one server's minutes.
  */
 import type { HealthOperationView, HealthView, HealthWindow, OperationStepsView } from '@blockly/contracts'
 import type {
@@ -121,6 +126,7 @@ import type {
 } from '@blockly/contracts/diagnostics'
 import { DAY_MS, HOUR_MS, MINUTE_MS } from '@blockly/contracts/durations'
 import type { JoinDetailView, JoinView, SignalView } from '@blockly/contracts/join-records'
+import type { ServerVitalsView, VitalsListView } from '@blockly/contracts/server-vitals'
 import { z } from 'zod'
 import { healthReport, operationLine, stepsReport } from './lib/health-report.ts'
 import { flags, operatorCli, withoutSecrets } from './lib/operator-cli.ts'
@@ -128,6 +134,7 @@ import { ConsoleCommand, namesServer, PLATFORM } from './lib/operator-inputs.ts'
 import { reachProduction } from './lib/production-reach.ts'
 import { databaseReport, diagnosisReport, diagnosticLine, summaryReport } from './ops/diagnostics-report.ts'
 import { joinLine, joinReport, signalLine } from './ops/join-report.ts'
+import { serverVitalsReport, vitalsLine } from './ops/vitals-report.ts'
 
 const [command = 'help', ...rest] = process.argv.slice(2).filter((arg) => arg !== '--production')
 
@@ -555,6 +562,32 @@ switch (command) {
     }
     break
   }
+  case 'vitals': {
+    const from = option('since')
+    if (positional[0] !== undefined) {
+      const query = from === undefined ? '' : `?since=${encoded(since(from))}`
+      const view = (await api(
+        'GET',
+        `/servers/${encoded(uuid('a server id'))}/vitals${query}`,
+      )) as ServerVitalsView
+      if (option('json')) show(view)
+      else for (const line of serverVitalsReport(view)) say(line)
+      break
+    }
+    const query = new URLSearchParams()
+    for (const name of ['account', 'limit']) {
+      const given = option(name)
+      if (given !== undefined) query.set(name, given)
+    }
+    if (from !== undefined) query.set('since', since(from))
+    const list = (await api('GET', `/vitals?${query}`)) as VitalsListView
+    if (option('json')) show(list)
+    else {
+      for (const row of list.servers) say(vitalsLine(row))
+      say(`${list.servers.length} reported`)
+    }
+    break
+  }
   case 'database': {
     const query = new URLSearchParams()
     for (const name of ['order', 'limit']) {
@@ -568,7 +601,7 @@ switch (command) {
   }
   default:
     say(
-      'bun scripts/ops.ts [--production] accounts|account|plan|limits|create|server|start|stop|retry|trash|untrash|rest|purge|console|identity|message|mods|players|whitelist|operator|helper|ban|pardon|moderation|listing|notice|official|allowlist|platform|jars|health|operations|operation|joins|join|signals|diagnose|diagnostics|database',
+      'bun scripts/ops.ts [--production] accounts|account|plan|limits|create|server|start|stop|retry|trash|untrash|rest|purge|console|identity|message|mods|players|whitelist|operator|helper|ban|pardon|moderation|listing|notice|official|allowlist|platform|jars|health|operations|operation|joins|join|signals|diagnose|diagnostics|vitals|database',
     )
     say('See the top of scripts/ops.ts, and docs/production.md.')
     if (command !== 'help') process.exit(1)

@@ -15,7 +15,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DAY_MS } from '@blockly/contracts/durations'
 import { schema } from '@blockly/db'
-import { REPORT_ENV } from '../../minecraft/runtime-spec.ts'
+import { REPORT_ENV, VITALS_ENV } from '../../minecraft/runtime-spec.ts'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
 import { MemoryStore } from '../../testing/memory-store.ts'
 import { deriveServerSecret, singleKey } from '../secrets.ts'
@@ -71,6 +71,7 @@ describe.skipIf(!hasDatabase)('the join reporter', () => {
     const without = await desired(id)
     expect(reporterLine(without.spec.env)).toBeUndefined()
     expect(without.spec.env[REPORT_ENV]).toBeUndefined()
+    expect(without.spec.env[VITALS_ENV]).toBeUndefined()
 
     placing('all')
     const placed = await desired(id)
@@ -81,6 +82,8 @@ describe.skipIf(!hasDatabase)('the join reporter', () => {
       'artifacts',
     )
     expect(placed.spec.env[REPORT_ENV]).toBe(`${h.artifactsUrl}/runtime/v1/servers/${id}/joins?t=${token}`)
+    // How it ticks goes beside them, with the same token.
+    expect(placed.spec.env[VITALS_ENV]).toBe(`${h.artifactsUrl}/runtime/v1/servers/${id}/vitals?t=${token}`)
     // Never a reason to restart a running server, or to boot a sleeping one rather than wake it.
     expect(placed.driftDigest).toBe(without.driftDigest)
     expect(placed.spec.resumesOn).toBe(without.spec.resumesOn)

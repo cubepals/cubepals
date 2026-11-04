@@ -77,6 +77,7 @@ function schedules(
       run: () => app.diagnostics.sweep(),
       says: (n) => `forgot ${n} slow or failed records`,
     },
+    { job: 'vitals-sweep', run: () => app.vitals.sweep(), says: (n) => `forgot ${n} minutes of ticks` },
     { job: 'listing-eligibility-sweep', run: () => app.listings.sweep() },
     {
       job: 'standing-sweep',

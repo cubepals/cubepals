@@ -26,6 +26,8 @@ export interface Telemetry {
   procedureServed(procedure: string, status: number, ms: number): void
   /** A browser asked the realtime role to connect: `outcome` is `accepted`, or why it was refused. */
   realtimeConnected(transport: 'webtransport' | 'websocket', outcome: string, ms: number): void
+  /** A Paper server reported a minute of ticks: their average length, in milliseconds. */
+  serverTicked(msptMs: number): void
   /** The realtime role's open connections, read as the monitor scrapes. */
   observeRealtime(read: () => { browsers: number; tails: number }): void
   /**

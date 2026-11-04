@@ -14,6 +14,8 @@ import type { Telemetry } from '../../app/ports/telemetry.ts'
 
 /** Seconds, for waits a player sits through: a join, a wake. */
 const WAIT_BUCKETS = [0.5, 1, 2, 3, 5, 8, 12, 20, 30, 45, 60, 90, 120, 180]
+/** Seconds, for a tick: twenty a second is 50 ms each, and a server is behind past it. */
+const TICK_BUCKETS = [0.005, 0.01, 0.02, 0.03, 0.04, 0.05, 0.075, 0.1, 0.2, 0.5, 1]
 /** Seconds, for operations, which take from moments to the half hour. */
 const OPERATION_BUCKETS = [1, 5, 10, 20, 30, 60, 90, 120, 180, 300, 600, 1200, 1800]
 
@@ -80,7 +82,13 @@ export function openTelemetry(): Omit<Telemetry, 'watchQueries'> {
     unit: 's',
     advice: { explicitBucketBoundaries: REQUEST_BUCKETS },
   })
+  const tickDuration = meter.createHistogram('cubepals_server_tick_duration_seconds', {
+    description: 'How long Paper servers took a tick, on average over each minute they reported',
+    unit: 's',
+    advice: { explicitBucketBoundaries: TICK_BUCKETS },
+  })
   return {
+    serverTicked: (msptMs) => tickDuration.record(seconds(msptMs)),
     requestServed: (listener, route, method, status, ms) => {
       const labels = {
         listener,

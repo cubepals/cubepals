@@ -20,6 +20,8 @@ them up. Each command below has a tool of the same purpose, named after it.
 | Is the database itself struggling? | `ops.ts database [--order total\|mean\|calls\|max]` | `database_now` |
 | Why did this join fail or take so long? | `ops.ts join <player or join id> --markdown` | `join_get` |
 | Why did this start or wake fail or take so long? | `ops.ts operations --server <id> --status failed`, then `ops.ts operation <id>` | `operations_list`, `operation_get` |
+| Which servers lag, and whose are they? | `ops.ts vitals [--account <email>] [--since 24h]` | `vitals_list` |
+| How did this one server tick? | `ops.ts vitals <server> [--since 24h]` | `server_vitals` |
 | What does the server's own log say? | `ops.ts console <server> --lines 200` | `console_read` |
 | Is the platform as a whole up and fast? | `ops.ts health`, and the metrics ([metrics.md](metrics.md)) | `health` |
 
@@ -30,6 +32,7 @@ since the moment given (a day ago by default):
 - the operations on its servers that failed, and the slowest that succeeded;
 - joins that stopped before the world or were turned away, newest first;
 - the signals raised on its servers ([production.md](production.md#from-the-command-line), `signals`);
+- how its Paper servers ticked, the most minutes behind first;
 - what ran slow or failed in the control plane for it, grouped by what it was, and the newest;
 - where else to look, by name: its errors in PostHog, a server's log, one join's story.
 
@@ -109,6 +112,27 @@ that happened to give back the connection (`infra/metrics/pools.ts`).
 Every query's text passes through the same shaping as the records, so no value anyone typed reaches
 an answer.
 
+## How servers tick
+
+Paper servers the reporter plugin runs on ([configuration.md](configuration.md), Join reporter)
+sample how they tick once a minute and post it to the control plane, which keeps it 7 days
+(`server_vitals`, `app/vitals/`):
+
+| Figure | What it says |
+|---|---|
+| `tps` | Ticks a second over the last minute. 20 is keeping up; under 18 the server is behind, and the minute counts in `laggingMinutes`. |
+| `mspt`, `msptP95`, `msptMax` | Milliseconds a tick: the average, the 95th percentile and the slowest of the last hundred. Past 50 ms on average, a server can't keep up. |
+| `players`, `chunks`, `entities` | What it was carrying: players online, chunks loaded and entities in its worlds. |
+| `heapUsedMb`, `heapMaxMb` | The JVM's heap in use and its most. A share near 1 with long garbage collection is a server short of memory. |
+| `gcMs` | Milliseconds garbage collection paused the game in that minute. |
+
+`ops.ts vitals` lists the servers that ticked worst since a moment (an hour ago by default), with
+whose they are: for one account with `--account`, for the platform without. `ops.ts vitals
+<server>` gives one server's minutes. Lag that comes with many entities or chunks is the world's;
+lag that comes with a full heap and long collections is memory; lag with neither, on a server few
+play on, is more likely the machine (its CPU in Fly's metrics, [metrics.md](metrics.md)). Across
+the platform, without naming anyone: `cubepals_server_tick_duration_seconds`.
+
 ## Errors in PostHog
 
 Production sends the API's errors to PostHog's EU project as `$exception` events
@@ -124,5 +148,6 @@ record here with an `error` of 5xx and a `request_id` is the same failure as the
   ([metrics.md](metrics.md), Jobs).
 - The website's own rendering runs on Cloudflare, not on the control plane: only its calls to
   `/api` are seen, where they arrive.
-- A server's tick rate, memory and crashes are the game's, not the control plane's: a join's tick
-  is in its record (`join_get`), and the server's log is `console_read`.
+- Servers without the reporter plugin (vanilla, mod loaders, modpacks, and Paper where
+  `JOIN_REPORTER` leaves it off) report no ticks; their log is `console_read`.
+- A crash is the server's latest state (`server_get`), not a history.

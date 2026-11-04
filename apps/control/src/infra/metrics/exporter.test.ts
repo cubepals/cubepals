@@ -85,6 +85,7 @@ async function drive(telemetry: Telemetry, boss: PgBoss) {
   telemetry.procedureServed('servers.list', 200, 30)
   telemetry.procedureServed('servers.list', 404, 5)
   telemetry.realtimeConnected('websocket', 'ticket', 2)
+  telemetry.serverTicked(42)
   await pool.query(`select 1 from minecraft_servers where id = '${SERVER_ID}'`)
   await pool.query('select 1 / 0').catch(() => {})
   await boss.createQueue('ok')
@@ -182,6 +183,10 @@ describe.skipIf(!hasDatabase)('the metrics endpoint, of requests, the database a
     expect(scrape).toContain(
       'rpc_server_call_duration_count{rpc_system="trpc",rpc_method="servers.list",status_class="4xx"} 1',
     )
+    // A minute of a server's ticks, by how long they took and nothing else. Other files' servers
+    // may tick on the same telemetry, so the count is at least this one's.
+    expect(scrape).toMatch(/\ncubepals_server_tick_duration_seconds_bucket\{le="0\.05"\} [1-9]\d*\n/)
+    expect(scrape).toMatch(/\ncubepals_server_tick_duration_seconds_count [1-9]\d*\n/)
     expect(scrape).toContain(
       'cubepals_realtime_connect_duration_seconds_count{transport="websocket",outcome="ticket"} 1',
     )

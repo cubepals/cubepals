@@ -17,7 +17,9 @@ import {
 } from '../../app/artifacts/service.ts'
 import type { JoinService } from '../../app/joins/service.ts'
 import type { StopCheatersService } from '../../app/stop-cheaters/service.ts'
+import type { VitalsService } from '../../app/vitals/service.ts'
 import { createJoinsApp } from './joins.ts'
+import { createVitalsApp } from './vitals.ts'
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 const SHA512 = /^[0-9a-f]{128}$/
@@ -33,11 +35,12 @@ const SHA256 = /^[0-9a-f]{64}$/
 const ICONS = fileURLToPath(new URL('../../../assets/server-icons/', import.meta.url))
 const ICON_KEY = /^[a-z]{3,16}$/
 
-/** What the runtime-facing routes reach: the jar links, the joins, and Stop cheaters' removals. */
+/** What the runtime-facing routes reach: the jar links, the joins, Stop cheaters' removals and ticks. */
 type RuntimeDeps = {
   artifacts: ArtifactService
   joins: JoinService
   stopCheaters: Pick<StopCheatersService, 'recordRemovals'>
+  vitals: Pick<VitalsService, 'mayReport' | 'record'>
 }
 
 export function createRuntimeApp(deps: RuntimeDeps): Hono {
@@ -110,8 +113,9 @@ export function createRuntimeApp(deps: RuntimeDeps): Hono {
     }
   })
 
-  // A Paper server's reporter plugin posts its players' joins here (`joins.ts`).
+  // A Paper server's reporter plugin posts its players' joins here (`joins.ts`), and how it ticks (`vitals.ts`).
   app.route('/', createJoinsApp(deps))
+  app.route('/', createVitalsApp(deps))
 
   return app
 }

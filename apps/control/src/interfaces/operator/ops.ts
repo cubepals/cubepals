@@ -9,7 +9,7 @@
  * (as its owner's Try again does), sent to the trash and taken back out, rested in the archive
  * store now, or purged now. What an owner does on a server's own pages is
  * `server-pages.ts`'s; Browse and its allowlist are `listings.ts`'s; the admins' platform switches
- * are `platform.ts`'s; uploaded jars' malware checks are `jar-checks.ts`'s; joins and their signals are `joins.ts`'s; what ran slow or failed, and the database now, are `diagnostics.ts`'s. All of it is under `/ops/v1`. `scripts/ops.ts` is its command line, and `scripts/production-check.ts`
+ * are `platform.ts`'s; uploaded jars' malware checks are `jar-checks.ts`'s; joins and their signals are `joins.ts`'s; what ran slow or failed, and the database now, are `diagnostics.ts`'s; how servers tick is `vitals.ts`'s. All of it is under `/ops/v1`. `scripts/ops.ts` is its command line, and `scripts/production-check.ts`
  * runs a server's whole life through it. Production's health reads as the admin Health page
  * reads it (`app/platform/health.ts`): `/health`, `/operations` and one operation's steps. Every
  * route goes through the services the web app's own routes use, as the operator the `x-operator`
@@ -40,12 +40,14 @@ import { type JoinOptions, joinRoutes } from './joins.ts'
 import { type ListingsOptions, listingRoutes } from './listings.ts'
 import { type PlatformOptions, platformRoutes } from './platform.ts'
 import { type ServerPagesOptions, serverPageRoutes } from './server-pages.ts'
+import { type VitalsOptions, vitalsRoutes } from './vitals.ts'
 
 export type OpsApiOptions = ServerPagesOptions &
   ListingsOptions &
   JarCheckOptions &
   JoinOptions &
   DiagnosticsOptions &
+  VitalsOptions &
   PlatformOptions & {
     accounts: Pick<AccountService, 'setPlan' | 'setLimits' | 'createAccount'>
     accountQueries: Pick<AccountQueries, 'list' | 'get'>
@@ -113,7 +115,10 @@ export function createOpsApi(options: OpsApiOptions): Hono {
   platformRoutes(app, options)
   jarCheckRoutes(app, options)
   joinRoutes(app, options)
-  diagnosticsRoutes(app, options, (operator, ref) => accountOf(options.accountQueries, operator, ref))
+  const findAccount = (operator: OperatorActor, ref: string) =>
+    accountOf(options.accountQueries, operator, ref)
+  diagnosticsRoutes(app, options, findAccount)
+  vitalsRoutes(app, options, findAccount)
   healthRoutes(app, options)
   return app
 }
