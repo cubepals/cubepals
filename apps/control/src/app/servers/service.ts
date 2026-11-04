@@ -2,12 +2,10 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import { DESCRIPTION_MAX_LENGTH, NAME_MAX_LENGTH, SERVER_ICONS, SERVER_TAGS } from '@blockly/contracts'
 import { DAY_MS, HOUR_MS } from '@blockly/contracts/durations'
 import { type Db, schema, type Tx } from '@blockly/db'
 import { and, eq, sql } from 'drizzle-orm'
 import { entitlementsOf } from '../../domain/account/entitlements.ts'
-import { type RevisionDraft, welcome } from '../../domain/revision/revision.ts'
 import { type Command, decide, type OperationKind, type StopReason } from '../../domain/server/lifecycle.ts'
 import type { MinecraftServer } from '../../domain/server/server.ts'
 import { memoryMb } from '../../domain/server/size.ts'
@@ -17,28 +15,24 @@ import { loadStanding, lockOwnerCapacity } from '../accounts/persistence.ts'
 import { type Actor, authorize, type OperatorActor, requestedBy, type UserActor } from '../actor.ts'
 import { AppError, NotFound } from '../errors.ts'
 import { FUNNEL, noteOnce } from '../insight/record.ts'
-import { loadListing } from '../listings/persistence.ts'
 import { loadOperation } from '../operations/persistence.ts'
 import type { AccessPolicy } from '../policy/access-policy.ts'
 import type { EventBus } from '../ports/events.ts'
 import type { JobQueue } from '../ports/jobs.ts'
 import type { LoaderBuilds } from '../ports/loaders.ts'
 import type { PlayAddressing, RegionCatalog } from '../ports/platform.ts'
-import { draftOf } from '../revisions/service.ts'
 import { loadRules } from '../runtimes/persistence.ts'
 import type { RuntimePlacement } from '../runtimes/service.ts'
-import { keepSentIcon, type OwnIcon } from '../server-icons/persistence.ts'
 import type { SetupService } from '../setups/service.ts'
+import { changeIdentity, type IdentityChange } from './identity.ts'
 import { newInviteCode } from './invites.ts'
 import { keptUp } from './kept-up.ts'
-import { checkNewServer, mayGive, redescribed, refuseAddress, renamed } from './names.ts'
+import { checkNewServer, mayGive, refuseAddress } from './names.ts'
 import { bindNewRuntime, type CreateServerRequest, draftNewServer } from './new-server.ts'
 import {
   findByCreateKey,
   findServer,
-  insertRevision,
   insertServer,
-  loadRevision,
   lockServer,
   markActive,
   markDeleted,
@@ -47,7 +41,6 @@ import {
   retireSlug,
   saveDeletionWarned,
   saveIdentity,
-  setDesired,
   slugAvailable,
   slugClaimable,
 } from './persistence.ts'
@@ -420,66 +413,9 @@ export class MinecraftServerService {
    * A server list message still in Blockly's words quotes the old name, so it follows the new one,
    * as a revision of its own that also arrives at the next start; one the owner wrote stays.
    */
-  async saveIdentity(
-    actor: Actor,
-    serverId: string,
-    identity: {
-      name?: string
-      description?: string
-      icon?: string | null
-      picture?: OwnIcon | null
-      tags?: readonly string[]
-    },
-  ): Promise<MinecraftServer> {
-    const name = identity.name?.trim()
-    if (name !== undefined && (name.length === 0 || name.length > NAME_MAX_LENGTH))
-      throw new AppError('invalid_name', `A name is 1 to ${NAME_MAX_LENGTH} characters.`)
-    const description = identity.description?.trim()
-    if (description !== undefined && description.length > DESCRIPTION_MAX_LENGTH)
-      throw new AppError('invalid_choice', `A description is up to ${DESCRIPTION_MAX_LENGTH} characters.`)
-    const icons: readonly string[] = SERVER_ICONS
-    if (identity.icon !== undefined && identity.icon !== null && !icons.includes(identity.icon))
-      throw new AppError('invalid_choice', 'Pick one of Cubepals’ icons.')
-    const tags = identity.tags === undefined ? undefined : [...new Set(identity.tags)]
-    const known: readonly string[] = SERVER_TAGS
-    if (tags !== undefined && (tags.length > 5 || tags.some((tag) => !known.includes(tag))))
-      throw new AppError('invalid_choice', `Pick up to 5 tags from: ${SERVER_TAGS.join(', ')}.`)
-
-    const saved = await this.#db.transaction(async (tx) => {
-      const server = authorize(actor, await lockServer(tx, serverId))
-      const official = (await loadListing(tx, server.id))?.official === true
-      const change = {
-        ...renamed(server.name, name, official),
-        ...redescribed(server.description, description, official),
-        ...(identity.icon === undefined || identity.icon === server.icon ? {} : { icon: identity.icon }),
-        ...(await keepSentIcon(tx, server, identity.picture)),
-        ...(tags === undefined || tags.join() === server.tags.join() ? {} : { tags }),
-      }
-      if (Object.keys(change).length === 0) return server
-      let next = await saveIdentity(tx, server, change)
-      const desired = await loadRevision(tx, server.desiredRevisionId)
-      const motd = welcome(next.name)
-      const redraft = desired.settings.motd === welcome(server.name) && desired.settings.motd !== motd
-      if (redraft) {
-        const draft: RevisionDraft = {
-          ...draftOf(desired),
-          settings: { ...desired.settings, motd },
-          reason: 'settings_changed',
-          basedOnRevisionId: desired.id,
-        }
-        const revision = await insertRevision(tx, server.id, draft, requestedBy(actor))
-        next = await setDesired(tx, next, { revisionId: revision.id })
-      }
-      await this.#changed(tx, next)
-      await this.#audit(tx, actor, 'server.identity_changed', serverId, {
-        ...change,
-        ...(redraft ? { motd } : {}),
-      })
-      return next
-    })
-    // What a server is called and says is what the directory shows, so its listing follows it.
-    if (saved.version !== undefined) await this.#jobs.enqueueEligibility([serverId])
-    return saved
+  saveIdentity(actor: Actor, serverId: string, identity: IdentityChange): Promise<MinecraftServer> {
+    const [changed, audit] = [this.#changed.bind(this), this.#audit.bind(this)]
+    return changeIdentity({ db: this.#db, jobs: this.#jobs, changed, audit }, actor, serverId, identity)
   }
 
   /**
