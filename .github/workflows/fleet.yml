@@ -148,8 +148,20 @@ jobs:
           blocklyd_container=$(docker create "$BLOCKLYD_IMAGE")
           trap 'docker rm -f "$blocklyd_container" >/dev/null' EXIT
           docker cp "$blocklyd_container:/blocklyd" .blocklyd/static/blocklyd
+          docker cp "$blocklyd_container:/blocklyd.sig" .blocklyd/static/blocklyd.sig
           chmod +x .blocklyd/static/blocklyd
           test -x .blocklyd/static/blocklyd
+      # What a node checks before it takes this blocklyd as an upgrade (blocklyd's
+      # src/upgrade/trust.rs): the image's signature of the version and the binary's sha256, by the
+      # release key the release itself compiles in.
+      - name: The pinned blocklyd is signed by its release key
+        env:
+          VERSION: ${{ steps.pin.outputs.version }}
+        run: |
+          sha=$(sha256sum .blocklyd/static/blocklyd | cut -d' ' -f1)
+          printf 'blocklyd release\n%s\n%s\n' "$VERSION" "$sha" > "$RUNNER_TEMP/statement"
+          openssl pkeyutl -verify -pubin -inkey .blocklyd/deploy/release-keys.pem -rawin \
+            -in "$RUNNER_TEMP/statement" -sigfile .blocklyd/static/blocklyd.sig
       - name: Start an S3 store
         run: >-
           docker run -d --name s3 -p 9000:9000 -e RUSTFS_ACCESS_KEY=blockly-test
