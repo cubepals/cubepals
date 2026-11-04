@@ -66,7 +66,6 @@ import {
   SaveIdentityInput,
   SearchModpacksInput,
   ServerRef,
-  SetAfkKickInput,
   SetCopyableInput,
   SetLadderInput,
   SetModerationInput,
@@ -89,6 +88,7 @@ import {
 import type { RealtimeConnectInfo } from '@blockly/contracts/realtime'
 import { z } from 'zod'
 import { admin } from './admin.ts'
+import { accountIdleKick, serverIdleKick } from './afk-kick.ts'
 import { billing } from './billing.ts'
 import { chipIns } from './chip-ins.ts'
 import { gifts } from './gifts.ts'
@@ -99,6 +99,7 @@ import { authedProcedure, ownerOrAdminProcedure, publicProcedure, router, sessio
 /** Each procedure: parse, get the actor, call one service method, return. Nothing else. */
 
 const servers = router({
+  ...serverIdleKick,
   list: authedProcedure.query(({ ctx }) => ctx.services.queries.list(ctx.actor)),
   get: authedProcedure
     .input(ServerRef)
@@ -626,6 +627,7 @@ const realtime = router({
 })
 
 const account = router({
+  ...accountIdleKick,
   me: authedProcedure.query(({ ctx }) => ctx.services.accountQueries.me(ctx.actor)),
   /** An admin using a test account (`admin.useAs`), back to their own session. */
   switchBack: authedProcedure.mutation(({ ctx }) =>
@@ -693,10 +695,6 @@ const account = router({
   setTimeZone: authedProcedure
     .input(SetTimeZoneInput)
     .mutation(({ ctx, input }) => ctx.services.accounts.setTimeZone(ctx.actor, input.timeZone)),
-  setAfkKick: authedProcedure.input(SetAfkKickInput).mutation(async ({ ctx, input }) => {
-    await ctx.services.accounts.setAfkKick(ctx.actor, input.minutes)
-    return ctx.services.accountQueries.overview(ctx.actor)
-  }),
   /** The owner's own spending cap: what Blockly may charge past the included block. */
   allowExtraPlay: authedProcedure.input(AllowExtraPlayInput).mutation(async ({ ctx, input }) => {
     await ctx.services.accounts.allowExtraPlay(ctx.actor, input.units)

@@ -27,6 +27,7 @@ import { BedrockSetting } from './bedrock'
 import { GameSettings } from './game'
 import { History } from './history'
 import { Identity } from './identity'
+import { IdlePlayers } from './idle-players'
 import { Location } from './location'
 import { OtherVersionsSetting } from './other-versions'
 import { ChangeState } from './shared'
@@ -70,6 +71,7 @@ export default function SettingsPage() {
 
       {options.data && <Location view={view} options={options.data} />}
 
+      <IdlePlayers key={view.id} view={view} />
       <History view={view} />
       <Advanced view={view} options={options.data} />
       <DeleteServer serverId={view.id} name={view.name} />

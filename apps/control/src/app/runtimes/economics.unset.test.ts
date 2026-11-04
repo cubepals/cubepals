@@ -8,7 +8,7 @@
  */
 import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test'
 import { randomUUID } from 'node:crypto'
-import { DAY_MS } from '@blockly/contracts/durations'
+import { DAY_MS, HOUR_MS } from '@blockly/contracts/durations'
 import { schema } from '@blockly/db'
 import { DEFAULT_ECONOMICS_TUNING } from '../../domain/account/tuning.ts'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
@@ -45,14 +45,16 @@ describe.skipIf(!hasDatabase)('the economics report without figures for fees', (
       orderedAt: now,
     })
     const window = { from: new Date(now.getTime() - DAY_MS), to: new Date(now.getTime() + DAY_MS) }
+    // Both reads see an hour of running time, independent of how fast the worker finishes.
+    const asOf = new Date(now.getTime() + HOUR_MS)
 
     withEconomics(DEFAULT_ECONOMICS_TUNING)
-    const priced = await h.app.economics.report(window)
+    const priced = await h.app.economics.report(window, undefined, asOf)
     expect(priced.runtimes.every((row) => row.feeCents !== null && row.marginCents !== null)).toBe(true)
     expect(priced.servers[0]?.feeCents).toBeGreaterThan(0)
 
     withEconomics(null)
-    const bare = await h.app.economics.report(window)
+    const bare = await h.app.economics.report(window, undefined, asOf)
     expect(bare.runtimes.length).toBeGreaterThan(0)
     for (const row of bare.runtimes)
       expect([row.feeCents, row.marginCents, row.marginPercent]).toEqual([null, null, null])

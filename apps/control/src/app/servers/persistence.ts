@@ -38,6 +38,7 @@ function toServer(row: ServerRow): MinecraftServer {
     inviteCode: row.inviteCode,
     regionKey: row.regionKey,
     memoryTier: row.memoryTier,
+    afkKickMinutes: row.afkKickMinutes,
     lifecycle: {
       status: row.status,
       stopReason: row.stopReason,

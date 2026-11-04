@@ -764,6 +764,13 @@
       "when": 1793622592564,
       "tag": "0108_world_import_progress",
       "breakpoints": true
+    },
+    {
+      "idx": 109,
+      "version": "7",
+      "when": 1793753563804,
+      "tag": "0109_server_afk_kick",
+      "breakpoints": true
     }
   ]
 }

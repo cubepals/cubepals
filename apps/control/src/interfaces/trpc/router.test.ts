@@ -13,6 +13,7 @@ describe('the API router', () => {
     const procedures = Object.keys(appRouter._def.procedures)
     for (const path of [
       'servers.get',
+      'servers.setAfkKick',
       'servers.planVersion',
       'servers.relocate',
       'mods.plan',
@@ -54,7 +55,20 @@ describe('the API router', () => {
       'sharing.inviteOpened',
     ])
       expect(procedures).toContain(path)
+    expect(procedures).toContain('account.setAfkKick')
   })
+})
+
+test('the previous account control asks for a reload instead of changing all servers', async () => {
+  const caller = appRouter.createCaller({
+    actor: { kind: 'user', userId: 'old-page' },
+    services: {} as Services,
+  })
+  await expect(caller.account.setAfkKick({ minutes: 0 })).rejects.toThrow(
+    'Idle-kick choices now live in each server’s Settings. Reload this page to continue.',
+  )
+  const anonymous = appRouter.createCaller({ actor: null, services: {} as Services })
+  await expect(anonymous.account.setAfkKick({ minutes: 0 })).rejects.toMatchObject({ code: 'UNAUTHORIZED' })
 })
 
 describe('admin procedures', () => {

@@ -229,6 +229,9 @@ console.
 
 **MinecraftServer** (aggregate root). Fields:
 - `ownerId`, `name`, `slug`, `regionKey`, `memoryTier`
+- `afkKickMinutes`: this server's idle kick, null for the plan default and zero for never. `AfkKick`
+  saves an owner's choice for this server alone; it takes effect at the next start without a restart.
+  The migration copies the former account choice onto existing servers; new servers use their plan.
 - `description`, `icon`, `tags`, `inviteCode` and `expiresAt` (§15.6); `lastActiveAt` and
   `storedAt` (§15.5 stored worlds)
 - `status`, `stopReason` (`user | idle | policy | entitlement | crash | maintenance | session_cap | hours | unpaid | daily`), `failure`
@@ -633,7 +636,8 @@ tRPC procedure (parse input, get actor, call ONE method, return)
 | `CatalogSync` | `refresh()` (bulk state poll → transitions → eligibility re-evaluation), `recordObserved(states)` (write-through from resolution) |
 | `PackCuration` | `queueDue`, `ingest` (fetch, verify, judge licences, keep a copy where allowed), `publish` / `withdraw` / `retry` (admins), `offered`, `releaseFor`, `newerFor`, `compatibility` (admins: versions Cubepals tested, templates that lag) |
 | `EdgeService` | `routes`, `wake`, `idleHint`, `recordSession` (the edge protocol's application side) |
-| `AccountService` | `suspend`, `reinstate`, `terminate`, `setRestrictions`, `setPlan`, `setLimits`, `grantAdmin`, `revokeAdmin` (admin actors only; each audited); the owner's own `allowExtraPlay`, `setAfkKick`, `recordSource`; `enforce` (`standing-sweep`) |
+| `AfkKick` | The owner's `set` for one server; plan-gated, audited and applied at its next start |
+| `AccountService` | `suspend`, `reinstate`, `terminate`, `setRestrictions`, `setPlan`, `setLimits`, `grantAdmin`, `revokeAdmin` (admin actors only; each audited); the owner's own `allowExtraPlay`, `recordSource`; `enforce` (`standing-sweep`) |
 | `BillingService` | `startCheckout`, `customerPortal`, `refresh`, `receiveWebhook` → `syncSubscription` |
 | `PlatformControlsService` | `view`, `set` (kill switches and caps), `refreshCatalog` (admin) |
 | `RuntimePlacement` | which runtime a new server goes to, and the rules and moves operators steer it by (docs/runtimes.md) |
@@ -753,7 +757,7 @@ infra/fly | infra/docker | infra/boat | infra/fleet | infra/fake   ← provider-
     - A server that plays a modpack lists none: the image installs the pack itself
       (`TYPE=MODRINTH`, `MODRINTH_MODPACK`; docs/modpack-system.md).
     - `MODRINTH_DOWNLOAD_DEPENDENCIES` stays unset.
-  - Plan limits: `PLAYER_IDLE_TIMEOUT` (the owner's `playerIdleKickMinutes`, 0 for none) and
+  - Plan limits: `PLAYER_IDLE_TIMEOUT` (the server's `afkKickMinutes`, or the plan's `playerIdleKickMinutes`, 0 for none) and
     `MAX_WORLD_SIZE` (`worldRadius`, omitted for none). These come from the plan, not the revision,
     so they are left out of the digest drift compares: a plan change never restarts a server.
   - Memory: `MEMORY=<heap>` (`heapMb`): 75% of the size for a vanilla server and 65% for one

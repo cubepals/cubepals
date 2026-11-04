@@ -167,13 +167,13 @@ describe.skipIf(!hasDatabase)('plan limits on configurations', () => {
     await h.settled(id)
     expect(h.runtime.machine(id)?.spec.env.PLAYER_IDLE_TIMEOUT).toBe('15')
     // Never is the costliest choice, made by the owner; the server takes it at its next start.
-    await h.app.accounts.setAfkKick(owner, 0)
+    await h.app.servers.afkKick.set(owner, id, 0)
     await h.app.servers.restart(owner, id, randomUUID())
     await h.until(id, (s) => s.lifecycle.status === 'running')
     await h.settled(id)
     expect(h.runtime.machine(id)?.spec.env.PLAYER_IDLE_TIMEOUT).toBe('0')
     // Anything else is a real kick.
-    const refused = await h.app.accounts.setAfkKick(owner, 3).then(
+    const refused = await h.app.servers.afkKick.set(owner, id, 3).then(
       () => null,
       (error: { code?: string }) => error.code,
     )

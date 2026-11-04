@@ -30,6 +30,8 @@ export interface MinecraftServer {
   regionKey: string
   /** Desired size. */
   memoryTier: MemoryTier
+  /** Idle kick for this server: null uses the plan default, zero never kicks. */
+  afkKickMinutes: number | null
   lifecycle: Lifecycle
   desiredRevisionId: string
   activeWorldId: string

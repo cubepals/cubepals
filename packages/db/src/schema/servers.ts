@@ -107,6 +107,8 @@ export const minecraftServers = pgTable(
     inviteCode: text('invite_code').notNull(),
     regionKey: text('region_key').notNull(),
     memoryTier: text('memory_tier').notNull(),
+    /** This server's idle kick: null uses the plan default; zero never kicks. */
+    afkKickMinutes: integer('afk_kick_minutes'),
     status: serverStatus('status').notNull(),
     stopReason: stopReason('stop_reason'),
     failure: jsonb('failure').$type<FailureJson>(),

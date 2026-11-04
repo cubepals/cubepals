@@ -15,7 +15,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { type ReactNode, Suspense, useEffect, useRef, useState } from 'react'
+import { type ReactNode, Suspense, useEffect, useRef } from 'react'
 import { messageOf, useTRPC } from '../../../lib/api'
 import { checkoutHref } from '../../../lib/checkout'
 import { useOutcome } from '../../../lib/outcome'
@@ -29,7 +29,6 @@ import {
   FormRow,
   FormSection,
   LoadFailed,
-  Modal,
   Note,
   PageSkeleton,
   PlanCard,
@@ -134,24 +133,7 @@ const money = (cents: number) => `$${(cents / 100).toFixed(2)}`
  * the plan's and what was left of last month's, up to the plan's carry, which are spent first.
  */
 function Play({ overview }: { overview: AccountOverviewView }) {
-  const trpc = useTRPC()
-  const queries = useQueryClient()
   const { usage: u, entitlements: e } = overview
-  const again = () => void queries.invalidateQueries({ queryKey: trpc.account.overview.queryKey() })
-  // Each choice saves as it is made, and its line says so for a moment.
-  const kicked = useOutcome(undefined)
-  const afk = useMutation(
-    trpc.account.setAfkKick.mutationOptions({
-      onSuccess: () => {
-        again()
-        kicked.settled()
-        setNeverAsked(false)
-      },
-    }),
-  )
-  // Never kicking is the costliest choice, so it is asked about, never a default.
-  const [neverAsked, setNeverAsked] = useState(false)
-  const kicksAfter = overview.settings.afkKickMinutes ?? e.playerIdleKickMinutes
   if (e.includedUnits === null) return null
   const included = e.includedUnits + u.carriedUnits
   const share = Math.round(Math.min(1, u.unitsThisMonth / included) * 100)
@@ -181,57 +163,6 @@ function Play({ overview }: { overview: AccountOverviewView }) {
         </p>
       )}
       {e.mayBuyMore && <ExtraPlay overview={overview} />}
-      {e.mayChooseAfkKick && (
-        <FormRow
-          label="Kick players who stand still"
-          description={`${kicked.said === 'done' ? 'Saved. ' : ''}${
-            kicksAfter === 0
-              ? 'Off: somebody idle keeps your server awake and spends your play time until they leave.'
-              : 'Somebody idle in a loaded world still spends your play time. Cubepals kicks them; they can join again straight away.'
-          }`}
-          control={
-            <select
-              className="bk-selectctl bk-num"
-              style={{ inlineSize: 'auto' }}
-              value={kicksAfter}
-              disabled={afk.isPending}
-              onChange={(event) => {
-                const minutes = Number(event.target.value)
-                if (minutes === 0) setNeverAsked(true)
-                else afk.mutate({ minutes })
-              }}
-            >
-              {[10, 15, 30, 60].map((minutes) => (
-                <option key={minutes} value={minutes}>
-                  After {minutes} minutes
-                </option>
-              ))}
-              <option value={0}>Never</option>
-            </select>
-          }
-        />
-      )}
-      <Modal
-        open={neverAsked}
-        onClose={() => setNeverAsked(false)}
-        title="Never kick players who stand still?"
-        actions={
-          <>
-            <Button variant="ghost" onClick={() => setNeverAsked(false)}>
-              Keep kicking them
-            </Button>
-            <Button variant="primary" disabled={afk.isPending} onClick={() => afk.mutate({ minutes: 0 })}>
-              {afk.isPending ? 'Saving…' : 'Never kick'}
-            </Button>
-          </>
-        }
-      >
-        <p>
-          Somebody idle keeps your server awake, so it keeps using your play time for as long as they stay,
-          even when nobody is playing. It is the most expensive way to run a server.
-        </p>
-      </Modal>
-      {afk.isError && <Note tone="danger">{messageOf(afk.error)}</Note>}
     </FormSection>
   )
 }
@@ -646,8 +577,8 @@ function Includes({ overview }: { overview: AccountOverviewView }) {
           {row('Server types', e.allowedLoaders.map(loaderLabel).join(', '))}
           {row('Sleeps when nobody plays', minutes(e.idleShutdownAfterMinutes))}
           {row(
-            'Kicks players who go idle',
-            afkKick(overview.settings.afkKickMinutes ?? e.playerIdleKickMinutes),
+            'Default idle kick',
+            afkKick(e.playerIdleKickMinutes),
             <Tip tip="Servers wake up on their own when someone joins, so a sleeping one is nothing to worry about. Sleeping while nobody plays is what keeps your hours for playing.">
               So a server nobody is playing on can sleep.
             </Tip>,

@@ -83,6 +83,7 @@ import {
 import { partySizesFor, planFit, usableFirst } from './plan-fit.ts'
 import { loadChangeFacts, loadRevisionCard, loadRevisionFields, revisionHistory } from './revision-reads.ts'
 import type { MinecraftServerService } from './service.ts'
+import { serverSettingsView } from './settings-view.ts'
 import { lastsOnceRestored } from './temporary.ts'
 import { knownPlayers, lastActivity, openIntervalStart, openRun, presenceFor } from './usage.ts'
 import { waitingChanges } from './waiting.ts'
@@ -661,7 +662,7 @@ export class ServerQueries {
         : null,
       createdAt: server.createdAt.toISOString(),
       version: server.version,
-      settings: revision.settings,
+      ...serverSettingsView(server, revision),
       partySize: partySizeOf(server.memoryTier),
       sessionEndsAt:
         sessionStart === null || plan.maxSessionMinutes === null

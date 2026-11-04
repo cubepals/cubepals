@@ -111,10 +111,6 @@ export const LimitsInput = z.object({
  */
 export const AllowExtraPlayInput = z.object({ units: z.number().int().min(0).max(10_000) })
 
-/**
- * The AFK kick the owner sets, in minutes; null goes back to the plan's own. 0 is never: the most
- * expensive choice, which only the owner makes.
- */
 /** A campaign tag past the source (`utm_medium`, `utm_campaign`…), as a short plain word. */
 const CampaignTag = z
   .string()
@@ -163,10 +159,6 @@ export const JoinWaitlistInput = z.object({
     .regex(/^[a-z0-9][a-z0-9_.-]{0,39}$/)
     .nullable()
     .default(null),
-})
-
-export const SetAfkKickInput = z.object({
-  minutes: z.union([z.literal(0), z.number().int().min(5).max(120)]).nullable(),
 })
 
 // ─── The signed-in person's plan ────────────────────────────────────────────────────────────
@@ -276,7 +268,7 @@ export interface AccountOverviewView {
     giftNext: { planKey: string; months: number; startsAt: string; endsAt: string; continues: boolean } | null
   }
   entitlements: EntitlementsView
-  /** What the owner has set for themselves, where their plan lets them. */
+  /** Compatibility for the previous web release; current choices belong to each ServerView. */
   settings: { afkKickMinutes: number | null }
   usage: {
     servers: number

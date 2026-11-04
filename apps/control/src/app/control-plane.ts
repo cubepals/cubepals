@@ -62,6 +62,7 @@ import { RuntimeEconomics } from './runtimes/economics.ts'
 import type { Runtimes } from './runtimes/router.ts'
 import { RuntimePlacement } from './runtimes/service.ts'
 import type { SecretKeyring } from './secrets.ts'
+import { AfkKick } from './servers/afk-kick.ts'
 import { officialFilesOf } from './servers/own-files.ts'
 import { OwnerNotices } from './servers/owner-notices.ts'
 import { markNotLoaded } from './servers/persistence.ts'
@@ -337,7 +338,7 @@ export function composeControlPlane(ports: ControlPlanePorts, settings: ControlP
     policy,
     transitions,
     specs,
-    servers,
+    servers: Object.assign(servers, { afkKick: new AfkKick(db, events) }),
     notices,
     accounts,
     accountQueries: new AccountQueries({ db, policy }),

@@ -74,7 +74,7 @@ export interface Entitlements {
   /**
    * Minutes a player may be idle in game before Minecraft kicks them. Every plan kicks: an idle
    * player keeps a server awake and spends play time, so never kicking is the most expensive way
-   * to run one, and only its owner can choose it (`AccountStanding.afkKickMinutes`).
+   * to run one, and only its owner can choose it (`MinecraftServer.afkKickMinutes`).
    */
   playerIdleKickMinutes: number
   /** Minutes a server may run in one go before it is stopped, after two warnings; null: no cap. */

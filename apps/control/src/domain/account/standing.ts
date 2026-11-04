@@ -50,10 +50,8 @@ export interface AccountStanding {
    */
   extraUnitsAllowed: number
   /**
-   * The AFK kick the owner set, in minutes; null leaves the plan's own, and 0 is never. On a plan
-   * where play is metered, someone standing still in a loaded chunk spends the owner's money, so
-   * it is theirs to set rather than Blockly's to decide — and never kicking, the costliest, is
-   * only ever their choice, never a default.
+   * Legacy account choice, retained for releases serving during an upgrade. The server migration
+   * copies it to existing servers; current code uses MinecraftServer.afkKickMinutes instead.
    */
   afkKickMinutes: number | null
   /** The last play warning sent, as `YYYY-MM:percent`; null before any. */
