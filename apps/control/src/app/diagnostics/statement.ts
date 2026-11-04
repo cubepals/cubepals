@@ -22,17 +22,28 @@ export interface Shape {
   text: string
 }
 
+/** Where a literal was, until every literal is out: a character no statement holds. */
+const LITERAL = '\u0000'
+
+/**
+ * A query's literals taken out, whatever their quoting: dollar quotes (`$$…$$`, `$tag$…$tag$`;
+ * a parameter like `$1` is none, as a tag can't start with a digit), escape strings (`E'…'`, where
+ * a backslash escapes a quote) and plain strings (`'…'`, where `''` does). A quote left after them
+ * is one this couldn't match: the text is cut there, so what follows it is never kept.
+ */
+function withoutLiterals(statement: string): string {
+  const out = statement
+    .replace(/\$([A-Za-z_][A-Za-z0-9_]*)?\$[\s\S]*?\$\1\$/g, LITERAL)
+    .replace(/\b[Ee]'(?:[^'\\]|\\[\s\S]|'')*'/g, LITERAL)
+    .replace(/'(?:[^']|'')*'/g, LITERAL)
+  const stray = out.indexOf("'")
+  return (stray === -1 ? out : `${out.slice(0, stray)}${LITERAL}`).replaceAll(LITERAL, "'?'")
+}
+
 /** Literals and lists of parameters, as what varies between runs of one query. */
 function normalized(statement: string): string {
   return (
-    statement
-      .replace(/\s+/g, ' ')
-      .trim()
-      // A quoted literal, which a query built by hand may carry, dollar-quoted ones included
-      // (`$$…$$`, `$tag$…$tag$`): never kept. A parameter (`$1`) is no dollar quote: its tag
-      // can't start with a digit.
-      .replace(/\$([A-Za-z_][A-Za-z0-9_]*)?\$[\s\S]*?\$\1\$/g, "'?'")
-      .replace(/'(?:[^']|'')*'/g, "'?'")
+    withoutLiterals(statement.replace(/\s+/g, ' ').trim())
       // `in ($1, $2, $3)` and `values ($1, $2), ($3, $4)` are one query whatever their length.
       .replace(/\(\s*\$\d+(?:\s*,\s*\$\d+)*\s*\)(?:\s*,\s*\(\s*\$\d+(?:\s*,\s*\$\d+)*\s*\))*/g, '($n)')
       .replace(/\$\d+/g, '$n')

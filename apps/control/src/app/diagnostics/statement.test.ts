@@ -36,6 +36,17 @@ describe('a query’s shape', () => {
     )
   })
 
+  test('keeps nothing of an escape string, however its quotes are escaped', () => {
+    expect(shapeOf("select E'prefix\\'private-value', $1")?.text).toBe("select '?', $n")
+    expect(shapeOf("select e'a\\\\' || 'b'")?.text).toBe("select '?' || '?'")
+  })
+
+  test('cuts the text at a quote it couldn’t match, so nothing after it is kept', () => {
+    const cut = shapeOf("select 'never closed private-value from users")
+    expect(cut?.text).toBe("select '?'")
+    expect(cut?.text).not.toContain('private')
+  })
+
   test('is the same however the statement is spaced, and keeps numbers inside names', () => {
     const spaced = shapeOf('SELECT  "t1"."col_2"\n  FROM   "t1"')
     expect(spaced?.text).toBe('SELECT "t1"."col_2" FROM "t1"')
