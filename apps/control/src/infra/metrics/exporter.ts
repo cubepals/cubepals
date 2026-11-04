@@ -21,15 +21,16 @@ import type { PgBoss } from 'pg-boss'
 import type { Telemetry } from '../../app/ports/telemetry.ts'
 import { observeDatabase } from './gauges.ts'
 import { openTelemetry } from './opentelemetry.ts'
-import { measurePools } from './pools.ts'
+import { hearQueries, measurePools } from './pools.ts'
 import { readPostgres } from './postgres.ts'
 import { measureProcess } from './process.ts'
 
 /**
  * Starts serving `/metrics` on `listen` (a `host:port`; nothing where it is unset), and returns the
  * telemetry that feeds it and how to stop what reads Postgres. Call it before `database.pool` opens
- * a connection, so every query is timed. The worker role alone reports the figures the database
- * holds, through the pool, and reads Postgres's statistics at `database.url`.
+ * a connection, so every query is timed and heard. The worker role alone reports the figures the
+ * database holds, through the pool, and reads Postgres's statistics at `database.url`. Queries are
+ * told to whoever the telemetry's `watchQueries` adds, whether or not metrics are served.
  */
 export function serveMetrics(
   listen: string | undefined,
@@ -37,6 +38,7 @@ export function serveMetrics(
   database: { pool: Pool; boss: PgBoss; url: string },
 ): { telemetry: Telemetry; stop: () => Promise<void> } {
   let stop = async () => {}
+  const listeners = hearQueries(database.pool)
   if (listen !== undefined) {
     const at = listen.lastIndexOf(':')
     const exporter = new PrometheusExporter({
@@ -48,11 +50,15 @@ export function serveMetrics(
     metrics.setGlobalMeterProvider(new MeterProvider({ readers: [exporter] }))
     const role = roles.join('+')
     measureProcess(role)
-    measurePools(role, database.pool, database.boss)
+    measurePools(role, database.pool, database.boss, listeners)
     if (roles.includes('worker')) {
       observeDatabase(createDb(database.pool))
       stop = readPostgres(database.url)
     }
   }
-  return { telemetry: openTelemetry(), stop }
+  const telemetry: Telemetry = {
+    ...openTelemetry(),
+    watchQueries: (listener) => void listeners.push(listener),
+  }
+  return { telemetry, stop }
 }

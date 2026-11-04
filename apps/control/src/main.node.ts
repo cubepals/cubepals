@@ -488,7 +488,7 @@ async function startWorker(
     )
   await takeBack()
   setTimeout(() => void takeBack(), (OPERATION_HEARTBEAT_SECONDS + 1) * 1000).unref()
-  await workServerOperations(boss, (attempt) => app.runner.run(attempt), config.operations)
+  await workServerOperations(boss, (attempt) => app.runner.work(attempt), config.operations)
   await workArtifactMirror(boss, (artifact) => app.artifacts.mirror(artifact))
   await workJarChecks(boss, (sha512) => app.jarChecks.run(sha512))
   await workPackImports(boss, app.packs)
@@ -637,7 +637,7 @@ function billingRoutes(billing: BillingService, provider: BillingProvider | null
  */
 async function connect(config: DeploymentConfig) {
   const { url, directUrl, poolMax } = config.database
-  const pool = createPool(url, poolMax)
+  const pool = createPool(url, poolMax, `blockly-${config.roles.join('+')}`)
   const boss = await startBoss(url, { maintains: config.roles.includes('worker'), poolMax })
   const { telemetry } = serveMetrics(config.metrics.listen, config.roles, { pool, boss, url })
   return {
@@ -650,7 +650,7 @@ async function connect(config: DeploymentConfig) {
       locks: new PgAdvisoryLocks(pool),
       // Heard only where the edges ask for routes (`app/edge/service.ts`).
       routeChanges: new PgChangeSignal(directUrl, ROUTES_CHANNEL),
-      telemetry: installTelemetry(telemetry),
+      telemetry: installTelemetry(telemetry, { db: createDb(pool), roles: config.roles }),
     },
   }
 }

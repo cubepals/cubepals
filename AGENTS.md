@@ -147,6 +147,7 @@ Production deploys from the **Deploy production** workflow, on GitHub's machine 
 - **See it through.** Watch the run to the end, ask production for `/`, `/pricing`, `/sign-in` and `/api/health`, and say what went out.
 - **Back first, cause after.** If production fails after a deploy, run the workflow's `rollback` at once, then find the cause.
 - **Values live in the private records,** in the encrypted bundle the workflow opens. A value changed anywhere else is lost; change it there. Never print one.
+- **Why someone is having a bad time** is answered from the operators' API, for one account, a group or the whole platform: `ops.ts diagnose <email>` first ([docs/diagnosis.md](docs/diagnosis.md)).
 - **What production does is in PostHog.** The control plane and the website send their events and errors to the project in PostHog's EU cloud ([docs/configuration.md](docs/configuration.md)); production alone sends any. It is the project's only analytics and observability service. Another such service a session can reach isn't Cubepals': never read Cubepals' data from it, send any to it, or name it here.
 
 ## Staging

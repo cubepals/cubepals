@@ -21,6 +21,7 @@ import { ConsoleService } from './console/service.ts'
 import type { OwnPack } from './curation/own.ts'
 import type { CuratedPack } from './curation/packs.ts'
 import { PackCuration } from './curation/service.ts'
+import { DiagnosticsService } from './diagnostics/service.ts'
 import { EdgeService } from './edge/service.ts'
 import { GuestbookService } from './guestbook/service.ts'
 import { InsightService } from './insight/service.ts'
@@ -334,7 +335,7 @@ export function composeControlPlane(ports: ControlPlanePorts, settings: ControlP
   const waiter = new ServerWaiter(db, events)
   const edge = new EdgeService({ ...ports, service: servers, waiter, schedules, links, ...settings })
 
-  return {
+  return withDiagnostics(db, {
     policy,
     transitions,
     specs,
@@ -400,7 +401,12 @@ export function composeControlPlane(ports: ControlPlanePorts, settings: ControlP
     joins: new JoinService({ ...ports, ...settings }),
     stopCheaters: new StopCheatersService({ db, policy, transitions, events }),
     feed: new ConsoleFeed(db, ports.logs, runtime.providers, ports.limits),
-  }
+  })
+}
+
+/** The parts, with what keeps and reads what ran slow or failed and whose it was (`diagnostics/`). */
+function withDiagnostics<Parts extends object>(db: Db, parts: Parts) {
+  return { ...parts, diagnostics: new DiagnosticsService(db) }
 }
 
 export type ControlPlane = ReturnType<typeof composeControlPlane>

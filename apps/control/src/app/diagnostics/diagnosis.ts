@@ -1,0 +1,76 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
+/**
+ * Everything the control plane knows about why one account is having a bad time, put together
+ * in one answer for an operator or an agent: who it is, its servers, the operations on them that
+ * failed or ran slowest, joins that never reached the world, the signals raised on its servers,
+ * and what ran slow or failed for it, grouped and newest. It reads; it changes nothing.
+ *
+ * Not for the account's standing, plan or limits in full, which `GET /ops/v1/accounts/<account>`
+ * gives, or for one join's story (`join_get`).
+ */
+import type { AccountDiagnosisView } from '@blockly/contracts/diagnostics'
+import type { JoinView, SignalView } from '@blockly/contracts/join-records'
+import type { AccountDetail } from '../accounts/queries.ts'
+import type { Actor } from '../actor.ts'
+import type { JoinService } from '../joins/service.ts'
+import type { PlatformHealth } from '../platform/health.ts'
+import type { DiagnosticsService } from './service.ts'
+
+export interface DiagnosisSources {
+  health: Pick<PlatformHealth, 'ofServers'>
+  joins: Pick<JoinService, 'list' | 'signals'>
+  diagnostics: Pick<DiagnosticsService, 'summary' | 'list'>
+}
+
+/** Joins kept for each server: the latest that stopped short. */
+const JOINS_PER_SERVER = 20
+
+/** A join that ended before the world, or was turned away. */
+const stoppedShort = (join: JoinView) =>
+  join.kind === 'join' && (join.inWorldAt === null || (join.leftReason?.startsWith('refused:') ?? false))
+
+export async function diagnoseAccount(
+  sources: DiagnosisSources,
+  actor: Actor,
+  account: Pick<AccountDetail, 'userId' | 'email' | 'name' | 'standing' | 'serverList'>,
+  since: Date,
+  now = new Date(),
+): Promise<AccountDiagnosisView> {
+  const servers = account.serverList
+  const ids = servers.map((server) => server.id)
+  const filter = { accountId: account.userId, since: since.toISOString() }
+  const [operations, joins, signals, summary, recent] = await Promise.all([
+    sources.health.ofServers(actor, ids, since, now),
+    Promise.all(ids.map((server) => sources.joins.list({ server, since, limit: JOINS_PER_SERVER * 5 }))),
+    sources.joins.signals(since),
+    sources.diagnostics.summary({ ...filter, by: 'name', limit: 15 }, now),
+    sources.diagnostics.list({ ...filter, limit: 20 }, now),
+  ])
+  const ours = (signal: SignalView) => signal.serverId !== null && ids.includes(signal.serverId)
+  return {
+    account: {
+      id: account.userId,
+      email: account.email,
+      name: account.name,
+      plan: account.standing.plan,
+      status: account.standing.status,
+      test: account.standing.testAccount,
+    },
+    since: since.toISOString(),
+    servers,
+    operations,
+    joins: joins
+      .flatMap((list) => list.filter(stoppedShort).slice(0, JOINS_PER_SERVER))
+      .sort((a, b) => b.connectedAt.localeCompare(a.connectedAt)),
+    signals: signals.filter(ours),
+    diagnostics: { summary: summary.groups, recent },
+    elsewhere: [
+      `Errors the API answered this account with a 5xx are PostHog's $exception events with distinct_id ${account.userId} (production only).`,
+      'A server’s own log: console_read with its id; one join’s whole story: join_get.',
+      'Platform-wide speed and errors, naming no one: the metrics in docs/metrics.md.',
+    ],
+  }
+}

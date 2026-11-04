@@ -10,6 +10,7 @@
     "./edge-poll": "./src/edge-poll.ts",
     "./example-address": "./src/example-address.ts",
     "./join-records": "./src/join-records.ts",
+    "./diagnostics": "./src/diagnostics.ts",
     "./durations": "./src/durations.ts",
     "./release-order": "./src/release-order.ts",
     "./limits": "./src/limits.ts",

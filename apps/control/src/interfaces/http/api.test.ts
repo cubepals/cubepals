@@ -7,6 +7,7 @@
  * reaches PostHog when a request fails, and what is counted of each request.
  */
 import { describe, expect, test } from 'bun:test'
+import { currentWork } from '../../app/diagnostics/context.ts'
 import { installTelemetry } from '../../app/platform/telemetry.ts'
 import type { Telemetry } from '../../app/ports/telemetry.ts'
 import { RecordedInsight } from '../../testing/insight.ts'
@@ -161,6 +162,7 @@ describe('what is counted of a request', () => {
       wakeAnswered: ignored,
       realtimeConnected: ignored,
       observeRealtime: ignored,
+      watchQueries: ignored,
       requestServed: (...args) => void requests.push(args),
       procedureServed: (...args) => void procedures.push(args),
     } satisfies Telemetry)
@@ -175,5 +177,38 @@ describe('what is counted of a request', () => {
       ['api', '/api/trpc/*', 'POST'],
     ])
     expect(procedures.map(([procedure, status]) => [procedure, status])).toEqual([['billing.portal', 401]])
+  })
+})
+
+// Whose a request's work is (`app/diagnostics/context.ts`): what each procedure does runs for the
+// account signed in and the server its input names, under its request's id.
+describe('the work a request does', () => {
+  const seen: Array<ReturnType<typeof currentWork>> = []
+  const app = createApiApp({
+    auth: signedInAs(() => 'u-7'),
+    methods: { google: false, github: false, turnstileSiteKey: null },
+    addresses: { proxySecret: null, hostHeader: null },
+    origins: ['https://blockly.test'],
+    services: {
+      insight: { report: () => {} },
+      guestbook: {
+        notes: async () => {
+          seen.push(currentWork())
+          return []
+        },
+      },
+    } as unknown as Services,
+  })
+
+  test('is its caller’s, for the server its input names, under the request’s id', async () => {
+    const server = '3b1f5c2a-7d4e-4f6a-9b8c-1d2e3f4a5b6c'
+    const input = encodeURIComponent(JSON.stringify({ 0: { serverId: server } }))
+    const response = await app.request(`/api/trpc/listings.notes?batch=1&input=${input}`, {
+      headers: { origin: 'https://blockly.test', 'x-request-id': 'req-1' },
+    })
+    expect(response.status).toBe(200)
+    expect(seen).toEqual([
+      { origin: 'trpc:listings.notes', requestId: 'req-1', accountId: 'u-7', serverId: server },
+    ])
   })
 })

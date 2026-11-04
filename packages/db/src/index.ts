@@ -35,9 +35,15 @@ export const POOL_IDLE_MS = 70 * SECOND_MS
 /**
  * `max` is how many connections the pool may hold at once. Behind a session-mode pooler each one
  * holds a server connection for as long as it is open, so a deployment sizes it (DATABASE_POOL_MAX).
+ * `application` is the name Postgres shows its connections by (`pg_stat_activity`), where given.
  */
-export function createPool(connectionString: string, max = 10): pg.Pool {
-  const pool = new pg.Pool({ connectionString, max, idleTimeoutMillis: POOL_IDLE_MS })
+export function createPool(connectionString: string, max = 10, application?: string): pg.Pool {
+  const pool = new pg.Pool({
+    connectionString,
+    max,
+    idleTimeoutMillis: POOL_IDLE_MS,
+    ...(application === undefined ? {} : { application_name: application }),
+  })
   // A connection resting in the pool can be cut (a restart, a failover, a pooler going down), and
   // node-postgres reports it as the pool's `error`, which Node turns into the end of the process
   // when nobody listens. The pool has already let that client go; the next query opens another.

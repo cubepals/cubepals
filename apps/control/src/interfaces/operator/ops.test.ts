@@ -58,6 +58,12 @@ const detail = {
   history: [],
 } as unknown as AccountDetail
 
+/** The operators' token, and diagnostics, whose routes have tests of their own (`diagnostics.test.ts`). */
+const TOKEN_AND_DIAGNOSTICS = {
+  token: 'operator-token',
+  diagnostics: {} as unknown as OpsApiOptions['diagnostics'],
+}
+
 /** The API over services that only write down each call they get, in `calls`. */
 function recordingApi(calls: Array<[string, ...unknown[]]>) {
   const record =
@@ -67,7 +73,7 @@ function recordingApi(calls: Array<[string, ...unknown[]]>) {
       return answer
     }
   return createOpsApi({
-    token: 'operator-token',
+    ...TOKEN_AND_DIAGNOSTICS,
     joins: {
       list: record('joins.list', []),
       detail: record('joins.detail', {}),

@@ -11,7 +11,7 @@ What Cubepals counts and times, served in Prometheus's format so Fly's managed P
 - pg-boss reports its own jobs on the same provider (`messaging_*`, below): nothing in Blockly counts them.
 - The web app runs as a Cloudflare Worker, not on Fly's machines, so nothing here measures it; its `/api` calls are counted where they arrive, at the api.
 
-Labels never name a server, player or address. Fly sets `app`, `region`, `host` and `instance` itself and overwrites a custom label of those names, so a server's region is `server_region` and the region a player's edge is in is `edge_region`.
+Labels never name a server, player or address. Fly sets `app`, `region`, `host` and `instance` itself and overwrites a custom label of those names, so a server's region is `server_region` and the region a player's edge is in is `edge_region`. Whose a slow query, procedure or request was is kept apart, in Postgres, for an operator to ask: [diagnosis.md](diagnosis.md).
 
 Counters get Prometheus's `_total` suffix; histograms are `_bucket`, `_sum` and `_count`. For p95 of joins: `histogram_quantile(0.95, sum by (le) (rate(cubepals_join_duration_seconds_bucket[15m])))`.
 
@@ -46,7 +46,7 @@ Every listener the control plane runs: `api` (the public API: tRPC and plain rou
 | Name | Type | Labels | Meaning |
 |---|---|---|---|
 | `cubepals_http_requests_total` | counter | `listener`, `http_route`, `http_request_method`, `status_class` (`2xx`, `3xx`, `4xx`, `5xx`) | Requests answered, health checks included. Errors are its `4xx` and `5xx`. A handler that throws past every other counts as `5xx`. |
-| `http_server_request_duration` | histogram | the same | Seconds from a request arriving to its answer, health checks (`/api/health`, `/api/health/live`, `/health`) left out. Buckets: OpenTelemetry's advice, 5 ms to 10 s. |
+| `http_server_request_duration` | histogram | the same | Seconds from a request arriving to its answer, liveness checks (`/api/health`, `/api/health/live`, `/health`) left out; the operators' `/ops/v1/health` reads the platform and is timed. Buckets: OpenTelemetry's advice, 5 ms to 10 s. |
 | `rpc_server_call_duration` | histogram | `rpc_system` (`trpc`), `rpc_method`, `status_class` | Seconds each tRPC procedure took, by its path as the router defines it (`servers.list`). The web app batches calls, so one request to `/api/trpc/*` can hold several; each is timed here on its own. A path the router doesn't define never runs, and is never a label. |
 
 ## Realtime connections
@@ -64,7 +64,7 @@ Per process, in every role. `db_client_connection_pool_name` is `queries` (the c
 | `db_client_connection_count` | gauge | `db_client_connection_pool_name`, `role`, `db_client_connection_state` (`used`, `idle`) | Connections the pool holds. |
 | `db_client_connection_max` | gauge | `db_client_connection_pool_name`, `role` | The most the pool may hold (`DATABASE_POOL_MAX`). |
 | `db_client_connection_pending_requests` | gauge | `db_client_connection_pool_name`, `role` | Queries waiting for the pool to give them a connection. Above zero for long means the pool is too small or the database too slow. |
-| `db_client_operation_duration` | histogram | `db_system_name` (`postgresql`), `db_client_connection_pool_name` (`queries`), `role`, `db_operation_name`, `error_type` | Seconds each query on the `queries` pool took. `db_operation_name` is the statement it opens with (`SELECT`, `INSERT`, `UPDATE`, `DELETE`, `WITH`, `BEGIN`, `COMMIT`, …; `_OTHER` for the rest), never its text. A failed query has `error_type`: its SQLSTATE class (`23` integrity, `40` rollback, `57` operator intervention, …), or `_OTHER` with none, as when a connection drops. Buckets: OpenTelemetry's advice, 1 ms to 10 s. |
+| `db_client_operation_duration` | histogram | `db_system_name` (`postgresql`), `db_client_connection_pool_name` (`queries`), `role`, `db_operation_name`, `error_type` | Seconds each query on the `queries` pool took. `db_operation_name` is the statement it opens with (`SELECT`, `INSERT`, `UPDATE`, `DELETE`, `WITH`, `BEGIN`, `COMMIT`, …; `_OTHER` for the rest), never its text. A failed query has `error_type`: its SQLSTATE class (`23` integrity, `40` rollback, `57` operator intervention, …), or `_OTHER` with none, as when a connection drops. Buckets: OpenTelemetry's advice, 1 ms to 10 s. Which query it was, and whose, is in [diagnosis.md](diagnosis.md) for those that were slow or failed. |
 
 ## Database, from Postgres
 

@@ -8,6 +8,7 @@ import { fetchRequestHandler } from '@trpc/server/adapters/fetch'
 import { getHTTPStatusCodeFromError } from '@trpc/server/http'
 import { Hono } from 'hono'
 import { shownOffersOf } from '../../app/billing/shown-offers.ts'
+import { currentWork, note } from '../../app/diagnostics/context.ts'
 import type { Authenticator } from '../../app/ports/auth.ts'
 import { appRouter } from '../trpc/router.ts'
 import type { Services } from '../trpc/trpc.ts'
@@ -37,13 +38,16 @@ export function createApiApp(deps: {
   app.use('*', async (c, next) => {
     const id = c.req.header('x-request-id')?.slice(0, 64) || randomUUID()
     c.set('requestId', id)
+    note({ requestId: id })
     await next()
     c.header('x-request-id', id)
   })
   // What nothing else caught: logged, reported, and a plain 500.
   app.onError((error, c) => {
     console.error('api', error)
+    const accountId = currentWork()?.accountId
     deps.services.insight.report(error, {
+      ...(accountId === undefined ? {} : { distinctId: accountId }),
       properties: { route: c.req.path, method: c.req.method, request_id: c.get('requestId') },
     })
     return c.json({ error: 'Something went wrong on our side. Try again in a moment.' }, 500)
@@ -109,6 +113,7 @@ export function createApiApp(deps: {
       router: appRouter,
       createContext: async ({ req, resHeaders }) => {
         const session = await deps.auth.sessionOf(req.headers)
+        if (session !== null) note({ accountId: session.userId })
         return {
           actor: session === null ? null : { kind: 'user' as const, userId: session.userId },
           impersonatedBy: session?.impersonatedBy ?? null,

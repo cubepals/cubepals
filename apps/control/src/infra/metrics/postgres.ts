@@ -48,7 +48,7 @@ interface Stats {
 
 /** Starts reading `url`'s statistics and registers the gauges that report them. Returns how to stop. */
 export function readPostgres(url: string): () => Promise<void> {
-  const pool = createPool(url, 1)
+  const pool = createPool(url, 1, 'blockly-metrics')
   let last: Stats | null = null
   let failing = false
   const read = async () => {

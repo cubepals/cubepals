@@ -5,6 +5,7 @@
 import type { Db } from '@blockly/db'
 import type { OperationKind, Phase, ServerStatus } from '../../domain/server/lifecycle.ts'
 import type { MinecraftServer } from '../../domain/server/server.ts'
+import { note, within } from '../diagnostics/context.ts'
 import { DiagnosedFailure, inFull, inPlainWords, PermanentFailure } from '../errors.ts'
 import { operationEnded, operationFailed } from '../platform/telemetry.ts'
 import type { EventBus } from '../ports/events.ts'
@@ -151,6 +152,16 @@ export class OperationRunner {
     this.#handlers = new Map(handlers.map((h) => [h.kind, h]))
   }
 
+  /**
+   * One attempt at an operation, as work of its own for its server and its owner, so what it does
+   * slowly is known by them (`diagnostics/`). What the worker calls.
+   */
+  work(attempt: JobAttempt): Promise<void> {
+    return within({ origin: 'operation', detail: { operation: attempt.operationId } }, () =>
+      this.run(attempt),
+    )
+  }
+
   async run(attempt: JobAttempt): Promise<void> {
     const op = await loadOperation(this.#db, attempt.operationId)
     if (op === null || isFinished(op.status)) return
@@ -158,6 +169,7 @@ export class OperationRunner {
     if (!handler) throw new PermanentFailure(`No handler for ${op.kind}`)
 
     const server = await findServer(this.#db, op.serverId)
+    noteOperation(op, server)
     if (server === null) {
       await finishOperation(this.#db, op.id, 'failed', 'The server no longer exists')
       await handler.abandon?.(op, 'The server no longer exists', 'failed')
@@ -347,4 +359,13 @@ function progressEvent(
     step,
     status,
   }
+}
+
+/** The work in hand is this operation, on its server, for the server's owner. */
+function noteOperation(op: OperationRecord, server: MinecraftServer | null): void {
+  note({
+    origin: `operation:${op.kind}`,
+    serverId: op.serverId,
+    ...(server ? { accountId: server.ownerId } : {}),
+  })
 }

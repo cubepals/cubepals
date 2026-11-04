@@ -771,6 +771,13 @@
       "when": 1793753563804,
       "tag": "0109_server_afk_kick",
       "breakpoints": true
+    },
+    {
+      "idx": 110,
+      "version": "7",
+      "when": 1793797102959,
+      "tag": "0110_diagnostics",
+      "breakpoints": true
     }
   ]
 }

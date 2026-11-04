@@ -298,6 +298,22 @@ it crossed. The limits come from `SIGNALS` ([configuration](configuration.md)); 
 signal is raised, and the log says so once. A signal left open a day closes as expired; one dealt
 with sooner is closed with `signals close`. The MCP server's `joins_list`, `join_get` and `signals_list` answer the same.
 
+Why one person is having a bad time reads the same way, with whose each slow or failed thing was
+([diagnosis.md](diagnosis.md)): `diagnose` puts an account's servers, failed and slow operations,
+joins that stopped short, signals, and what ran slow or failed for it into one report;
+`diagnostics` lists or groups what ran slow or failed (by query, account, server or what it ran
+under); `database` reads Postgres now.
+
+```sh
+bun scripts/ops.ts --production diagnose you@example.com --since 7d    # one account's trouble
+bun scripts/ops.ts --production diagnostics summary --by account --since 24h
+bun scripts/ops.ts --production diagnostics --name q:0a1b2c3d4e5f --limit 20
+bun scripts/ops.ts --production database --order mean                # what runs, waits, took the most time
+```
+
+The MCP server's `account_diagnose`, `diagnostics_list`, `diagnostics_summary` and `database_now`
+answer the same, and its instructions tell an agent which to start with.
+
 The top of `scripts/ops.ts` lists every command. `--production` opens `fly proxy` to
 `bly-prod-control`'s internal listener with production's own `FLY_API_TOKEN` and `OPERATOR_TOKEN`,
 read from `local/production/production.env`; neither is printed, and a shell's own Fly token never

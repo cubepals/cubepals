@@ -24,14 +24,21 @@ const OPERATION_BUCKETS = [1, 5, 10, 20, 30, 60, 90, 120, 180, 300, 600, 1200, 1
 const REQUEST_BUCKETS = [0.005, 0.01, 0.025, 0.05, 0.075, 0.1, 0.25, 0.5, 0.75, 1, 2.5, 5, 7.5, 10]
 /** HTTP's own methods. Any other is `_OTHER`, as the conventions say, so no client can add a label. */
 const METHODS = new Set(['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS', 'CONNECT', 'TRACE'])
-/** Routes that only say a process is up: counted, and kept out of the durations, which they'd flatter. */
-const HEALTH = /\/_?health(\/live)?$/
+/**
+ * Routes that only say a process is up (`/api/health`, `/api/health/live`, a worker's `/health`):
+ * counted, and kept out of the durations, which they'd flatter. The operators' `/ops/v1/health`
+ * reads the whole platform, and is timed like any other.
+ */
+const HEALTH = /^(\/api)?\/health(\/live)?$/
 
 const seconds = (ms: number) => Math.max(0, ms) / SECOND_MS
 const statusClass = (status: number) => `${Math.trunc(status / 100)}xx`
 
-/** Instruments on the provider registered now: register it first, or they do nothing. */
-export function openTelemetry(): Telemetry {
+/**
+ * Instruments on the provider registered now: register it first, or they do nothing. Queries are
+ * heard where the pool is (`exporter.ts`), so `watchQueries` is the exporter's to add.
+ */
+export function openTelemetry(): Omit<Telemetry, 'watchQueries'> {
   const meter = metrics.getMeter('cubepals')
   const operationDuration = meter.createHistogram('cubepals_operation_duration_seconds', {
     description: 'How long a server operation took from queued to ended',

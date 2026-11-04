@@ -18,6 +18,7 @@ import type { BackupService } from '../../app/backups/service.ts'
 import type { BillingService } from '../../app/billing/service.ts'
 import type { ConsoleService } from '../../app/console/service.ts'
 import type { PackCuration } from '../../app/curation/service.ts'
+import { within } from '../../app/diagnostics/context.ts'
 import { AppError, inPlainWords, NotFound } from '../../app/errors.ts'
 import type { GuestbookService } from '../../app/guestbook/service.ts'
 import type { InsightService } from '../../app/insight/service.ts'
@@ -208,15 +209,33 @@ const translateErrors = t.middleware(async ({ next }) => {
   return result
 })
 
+/** The server a procedure's input names, where it names one as `serverId`. */
+const serverOf = (input: unknown): { serverId?: string } => {
+  const id = (input as { serverId?: unknown } | null)?.serverId
+  return z.uuid().safeParse(id).success ? { serverId: id as string } : {}
+}
+
 /**
  * Times each procedure by its path, which the router defines, so no caller adds a label. A batch
- * is one HTTP request (`http/measured.ts`) but each procedure in it is timed here on its own.
+ * is one HTTP request (`http/measured.ts`) but each procedure in it is timed here on its own, as
+ * work of its own: named by its path, for its caller's account and the server its input names.
  */
-const timed = t.middleware(async ({ path, next }) => {
-  const began = performance.now()
-  const result = await next()
-  procedureServed(path, result.ok ? 200 : getHTTPStatusCodeFromError(result.error), performance.now() - began)
-  return result
+const timed = t.middleware(async ({ path, ctx, getRawInput, next }) => {
+  const input = await getRawInput().catch(() => undefined)
+  const accountId = ctx.actor?.userId
+  return within(
+    { origin: `trpc:${path}`, ...(accountId ? { accountId } : {}), ...serverOf(input) },
+    async () => {
+      const began = performance.now()
+      const result = await next()
+      procedureServed(
+        path,
+        result.ok ? 200 : getHTTPStatusCodeFromError(result.error),
+        performance.now() - began,
+      )
+      return result
+    },
+  )
 })
 
 /** The request's session, which only HTTP requests carry. */
