@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import type { ModEnvironment } from '../domain/mods/catalog.ts'
+import type { CatalogVersion, ModEnvironment } from '../domain/mods/catalog.ts'
 import type { MemoryTier } from '../domain/server/size.ts'
 import { serverEnvironment } from './mods.ts'
 import type { PackLoader } from './mrpack.ts'
@@ -33,6 +33,39 @@ export function jarSide(evidence: {
   if (evidence.metadata?.environment === 'client') return 'client'
   if (evidence.metadata?.environment === 'server') return 'server'
   return 'both'
+}
+
+type PublishedVersion = Pick<CatalogVersion, 'projectId' | 'environment' | 'dependencies'>
+
+/**
+ * Which of a pack's jars are left to players' games, from every jar it holds with what it says of
+ * itself (`jars`) and the catalog's record of those it publishes, by sha512 (`published`): one only
+ * players' games run (`jarSide`), unless a mod the server keeps requires its project, or requires
+ * one that does, whatever the jar says of itself. A jar's side here is the one its pack decides
+ * by, so a mod left to players never keeps another. A server mod that needs a client companion the
+ * catalog marks optional on servers (`client_only_server_optional`) is given it; what only a mod
+ * left to players requires is left with it.
+ */
+export function playersOnlyIn(
+  jars: Iterable<{ sha512: string; metadata?: Pick<ModMetadata, 'environment'> | null }>,
+  published: ReadonlyMap<string, { version: PublishedVersion }>,
+): (side: ReturnType<typeof jarSide>, version: Pick<CatalogVersion, 'projectId'> | undefined) => boolean {
+  const byProject = new Map([...published.values()].map(({ version }) => [version.projectId, version]))
+  const needed = new Set<string>()
+  const keeping: PublishedVersion[] = []
+  for (const jar of jars) {
+    const version = published.get(jar.sha512)?.version
+    if (version && jarSide({ catalog: version.environment, metadata: jar.metadata }) !== 'client')
+      keeping.push(version)
+  }
+  for (let next = keeping.pop(); next !== undefined; next = keeping.pop())
+    for (const { kind, projectId } of next.dependencies) {
+      if (kind !== 'required' || !projectId || needed.has(projectId)) continue
+      needed.add(projectId)
+      const required = byProject.get(projectId)
+      if (required !== undefined) keeping.push(required)
+    }
+  return (side, version) => side === 'client' && !(version !== undefined && needed.has(version.projectId))
 }
 
 /**

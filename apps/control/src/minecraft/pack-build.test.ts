@@ -13,6 +13,7 @@ import {
   packNameOf,
   packNotes,
   packTierFor,
+  playersOnlyIn,
   runsOn,
   someNames,
 } from './pack-build.ts'
@@ -39,6 +40,73 @@ describe('where a pack’s jar runs', () => {
     expect(jarSide({ catalog: 'unknown', metadata: { environment: 'client' } })).toBe('client')
     expect(jarSide({ metadata: { environment: 'server' } })).toBe('server')
     expect(jarSide({})).toBe('both')
+  })
+
+  const requires = (projectId: string, kind: 'required' | 'optional' = 'required') => ({
+    projectId,
+    versionId: null,
+    kind,
+  })
+  type Environment = Parameters<typeof jarSide>[0]['catalog'] & string
+  /** A pack's jars, each published as its own project, as `playersOnlyIn` is given them. */
+  const pack = (
+    jars: Array<{
+      id: string
+      environment: Environment
+      requires?: ReturnType<typeof requires>[]
+      metadata?: { environment: 'client' | 'server' | 'both' }
+    }>,
+  ) =>
+    playersOnlyIn(
+      jars.map((jar) => ({ sha512: jar.id, metadata: jar.metadata ?? null })),
+      new Map(
+        jars.map((jar) => [
+          jar.id,
+          { version: { projectId: jar.id, environment: jar.environment, dependencies: jar.requires ?? [] } },
+        ]),
+      ),
+    )
+
+  test('one only players’ games run is left to them, unless a mod the server keeps requires it', () => {
+    const playersOnly = pack([
+      { id: 'core', environment: 'client_and_server', requires: [requires('companion')] },
+      { id: 'tweaks', environment: 'client_and_server', requires: [requires('zoom', 'optional')] },
+    ])
+    expect(playersOnly('client', { projectId: 'companion' })).toBe(false)
+    expect(playersOnly('client', { projectId: 'zoom' })).toBe(true)
+    expect(playersOnly('client', undefined)).toBe(true)
+    expect(playersOnly('both', { projectId: 'zoom' })).toBe(false)
+  })
+
+  test('what only a mod left to players requires is left with it, and a kept chain stays whole', () => {
+    const playersOnly = pack([
+      // A players' mod that needs another players' mod: neither is the server's.
+      { id: 'minimap', environment: 'client_only', requires: [requires('minimap-lib')] },
+      { id: 'minimap-lib', environment: 'client_only' },
+      // A server mod whose companion needs a library of its own: all of it stays.
+      { id: 'core', environment: 'client_and_server', requires: [requires('companion')] },
+      { id: 'companion', environment: 'client_only_server_optional', requires: [requires('companion-lib')] },
+      { id: 'companion-lib', environment: 'client_only' },
+    ])
+    expect(playersOnly('client', { projectId: 'minimap' })).toBe(true)
+    expect(playersOnly('client', { projectId: 'minimap-lib' })).toBe(true)
+    expect(playersOnly('client', { projectId: 'companion' })).toBe(false)
+    expect(playersOnly('client', { projectId: 'companion-lib' })).toBe(false)
+  })
+
+  test('a jar the catalog has no side for is judged by what it says of itself, as its pack is', () => {
+    // The catalog doesn't know where the zoom mod runs; the jar says players' games. Its library
+    // is no reason to keep anything on the server.
+    const playersOnly = pack([
+      {
+        id: 'zoom',
+        environment: 'unknown',
+        metadata: { environment: 'client' },
+        requires: [requires('zoom-lib')],
+      },
+      { id: 'zoom-lib', environment: 'client_only' },
+    ])
+    expect(playersOnly('client', { projectId: 'zoom-lib' })).toBe(true)
   })
 })
 

@@ -28,6 +28,7 @@ import {
   packNameOf,
   packNotes,
   packTierFor,
+  playersOnlyIn,
   runsOn,
   someNames,
 } from '../../minecraft/pack-build.ts'
@@ -487,10 +488,7 @@ export class PackBuilder {
         metadata: jarMetadata(this.#formats, bytes),
       })
     }
-    const published = await this.#catalog.filesByHash([
-      ...[...read.values()].map((jar) => jar.sha512),
-      ...plan.listed.map((file) => file.sha512),
-    ])
+    const { published, playersOnly } = await this.#published([...read.values()], plan.listed)
 
     const leftOut = [...plan.leftOut]
     const leftForPlayers: string[] = []
@@ -503,7 +501,7 @@ export class PackBuilder {
     for (const file of plan.listed) {
       const match = published.get(file.sha512)
       const side = jarSide({ catalog: match?.version.environment ?? null })
-      if (isJar(file.path) && side === 'client') {
+      if (isJar(file.path) && playersOnly(side, match?.version)) {
         leftOut.push({ path: file.path, why: 'players', sha512: file.sha512 })
         leftForPlayers.push(file.path)
         continue
@@ -526,7 +524,7 @@ export class PackBuilder {
       if (facts === undefined) continue
       const match: CatalogFileMatch | undefined = published.get(facts.sha512)
       const side = jarSide({ catalog: match?.version.environment ?? null, metadata: facts.metadata })
-      if (side === 'client') {
+      if (playersOnly(side, match?.version)) {
         leftOut.push({ path: jar.to, why: 'players', sha512: facts.sha512 })
         leftForPlayers.push(jar.to)
         continue
@@ -610,6 +608,17 @@ export class PackBuilder {
         memoryMb: identity.memoryMb,
       },
     }
+  }
+
+  /**
+   * The catalog's record of each of the pack's files it publishes, by sha512, and which of the
+   * pack's jars only players' games run (`playersOnlyIn`), from the jars it carries, read for what
+   * they say of themselves, and the jars it lists.
+   */
+  async #published(carried: readonly JarFacts[], listed: ReadonlyArray<{ path: string; sha512: string }>) {
+    const published = await this.#catalog.filesByHash([...carried, ...listed].map((file) => file.sha512))
+    const jars = [...carried, ...listed.filter((file) => isJar(file.path))]
+    return { published, playersOnly: playersOnlyIn(jars, published) }
   }
 
   /**

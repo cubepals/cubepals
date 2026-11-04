@@ -5,7 +5,7 @@
 import { createHash } from 'node:crypto'
 import type { Db, PackJarJson, PackLeftOutJson } from '@blockly/db'
 import { INDEX_FILE, isJar, playersNeedIt, readIndex, serverFiles } from '../../minecraft/mrpack.ts'
-import { jarNamed, jarSide } from '../../minecraft/pack-build.ts'
+import { jarNamed, jarSide, playersOnlyIn } from '../../minecraft/pack-build.ts'
 import { HAND_DOWNLOADS, handDownloads } from '../../minecraft/packs.ts'
 import type { JarChecks } from '../mods/jar-checks.ts'
 import type { ModCatalog } from '../ports/catalog.ts'
@@ -193,25 +193,18 @@ export class PackContents {
     ])
     const leftOut: PackLeftOutJson[] = []
     const jars: PackJarJson[] = []
-    // A mod another kept mod needs stays, whatever it says about itself.
-    const needed = new Set(
-      [...published.values()].flatMap((m) =>
-        m.version.dependencies
-          .filter((d) => d.kind === 'required' && d.projectId)
-          .map((d) => d.projectId as string),
-      ),
-    )
+    const playersOnly = playersOnlyIn([...listed, ...carriedJars], published)
     for (const file of listed) {
       const match = published.get(file.sha512)
       const side = jarSide({ catalog: match?.version.environment ?? null })
-      if (side === 'client' && !needed.has(match?.version.projectId ?? ''))
+      if (playersOnly(side, match?.version))
         leftOut.push({ path: file.path, why: 'players', sha512: file.sha512 })
       else jars.push({ path: file.path, sha512: file.sha512, sizeBytes: file.sizeBytes })
     }
     for (const jar of carriedJars) {
       const match = published.get(jar.sha512)
       const side = jarSide({ catalog: match?.version.environment ?? null, metadata: jar.metadata })
-      if (side === 'client' && !needed.has(match?.version.projectId ?? ''))
+      if (playersOnly(side, match?.version))
         leftOut.push({ path: jar.name, why: 'players', sha512: jar.sha512 })
       else jars.push({ path: jar.path, sha512: jar.sha512, sizeBytes: jar.size })
     }
