@@ -29,6 +29,13 @@ describe('a query’s shape', () => {
     expect(shapeOf('select 1 from users')?.name).not.toBe(shapeOf('select 1 from joins')?.name as string)
   })
 
+  test('keeps no dollar-quoted literal, tagged or not, and leaves parameters as they are', () => {
+    expect(shapeOf('select $$private value$$, $1')?.text).toBe("select '?', $n")
+    expect(shapeOf("select $q$it's $$ here$q$ from users where id = $2")?.text).toBe(
+      "select '?' from users where id = $n",
+    )
+  })
+
   test('is the same however the statement is spaced, and keeps numbers inside names', () => {
     const spaced = shapeOf('SELECT  "t1"."col_2"\n  FROM   "t1"')
     expect(spaced?.text).toBe('SELECT "t1"."col_2" FROM "t1"')

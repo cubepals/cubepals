@@ -28,7 +28,10 @@ function normalized(statement: string): string {
     statement
       .replace(/\s+/g, ' ')
       .trim()
-      // A quoted literal, which a query built by hand may carry: never kept.
+      // A quoted literal, which a query built by hand may carry, dollar-quoted ones included
+      // (`$$…$$`, `$tag$…$tag$`): never kept. A parameter (`$1`) is no dollar quote: its tag
+      // can't start with a digit.
+      .replace(/\$([A-Za-z_][A-Za-z0-9_]*)?\$[\s\S]*?\$\1\$/g, "'?'")
       .replace(/'(?:[^']|'')*'/g, "'?'")
       // `in ($1, $2, $3)` and `values ($1, $2), ($3, $4)` are one query whatever their length.
       .replace(/\(\s*\$\d+(?:\s*,\s*\$\d+)*\s*\)(?:\s*,\s*\(\s*\$\d+(?:\s*,\s*\$\d+)*\s*\))*/g, '($n)')

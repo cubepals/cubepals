@@ -4,8 +4,8 @@
 
 /**
  * One account's trouble through the operators' API, on the whole control plane and a real
- * database: its server's operations, a join that never reached the world, and a slow query it ran,
- * found by its email; and the platform's records grouped by whom they touched.
+ * database: its server's operations, a join that never reached the world behind many that did, and
+ * a slow query it ran, found by its email; and the platform's records grouped by whom they touched.
  */
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { randomUUID } from 'node:crypto'
@@ -47,6 +47,18 @@ describe.skipIf(!hasDatabase)('an account’s trouble, asked of the operators’
       leftReason: 'gave_up_waiting',
       playerName: 'Steve',
     })
+    // A busy server: more joins that reached the world since than a diagnosis lists.
+    await h.db.insert(schema.joins).values(
+      Array.from({ length: 120 }, (_, i) => ({
+        id: randomUUID(),
+        kind: 'join' as const,
+        serverId,
+        address: 'troubled.play.test',
+        connectedAt: new Date(now - 3 * MINUTE_MS + i * 1000),
+        inWorldAt: new Date(now - 3 * MINUTE_MS + i * 1000 + 500),
+        playerName: `Friend${i}`,
+      })),
+    )
     await h.app.diagnostics.write([
       {
         at: new Date(now - MINUTE_MS),

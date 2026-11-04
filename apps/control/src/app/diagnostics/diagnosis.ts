@@ -12,7 +12,7 @@
  * gives, or for one join's story (`join_get`).
  */
 import type { AccountDiagnosisView } from '@blockly/contracts/diagnostics'
-import type { JoinView, SignalView } from '@blockly/contracts/join-records'
+import type { SignalView } from '@blockly/contracts/join-records'
 import type { AccountDetail } from '../accounts/queries.ts'
 import type { Actor } from '../actor.ts'
 import type { JoinService } from '../joins/service.ts'
@@ -28,10 +28,6 @@ export interface DiagnosisSources {
 /** Joins kept for each server: the latest that stopped short. */
 const JOINS_PER_SERVER = 20
 
-/** A join that ended before the world, or was turned away. */
-const stoppedShort = (join: JoinView) =>
-  join.kind === 'join' && (join.inWorldAt === null || (join.leftReason?.startsWith('refused:') ?? false))
-
 export async function diagnoseAccount(
   sources: DiagnosisSources,
   actor: Actor,
@@ -44,7 +40,10 @@ export async function diagnoseAccount(
   const filter = { accountId: account.userId, since: since.toISOString() }
   const [operations, joins, signals, summary, recent] = await Promise.all([
     sources.health.ofServers(actor, ids, since, now),
-    Promise.all(ids.map((server) => sources.joins.list({ server, since, limit: JOINS_PER_SERVER * 5 }))),
+    // Narrowed before the limit, so a busy server's good joins never push its failed ones out.
+    Promise.all(
+      ids.map((server) => sources.joins.list({ server, since, stoppedShort: true, limit: JOINS_PER_SERVER })),
+    ),
     sources.joins.signals(since),
     sources.diagnostics.summary({ ...filter, by: 'name', limit: 15 }, now),
     sources.diagnostics.list({ ...filter, limit: 20 }, now),
@@ -62,9 +61,7 @@ export async function diagnoseAccount(
     since: since.toISOString(),
     servers,
     operations,
-    joins: joins
-      .flatMap((list) => list.filter(stoppedShort).slice(0, JOINS_PER_SERVER))
-      .sort((a, b) => b.connectedAt.localeCompare(a.connectedAt)),
+    joins: joins.flat().sort((a, b) => b.connectedAt.localeCompare(a.connectedAt)),
     signals: signals.filter(ours),
     diagnostics: { summary: summary.groups, recent },
     elsewhere: [

@@ -52,15 +52,14 @@ beforeEach(() => {
       ofServers: record('ofServers', { failed: [], slowest: [] }),
     } as unknown as DiagnosticsOptions['health'],
     joins: {
+      // As the joins list answers when asked only for those that stopped short.
       list: record('joins', [
-        join({ connectedAt: '2026-11-04T10:00:00.000Z', inWorldAt: '2026-11-04T10:00:05.000Z' }),
         join({ connectedAt: '2026-11-04T11:00:00.000Z', leftReason: 'gave_up_waiting' }),
         join({
           connectedAt: '2026-11-04T12:00:00.000Z',
           inWorldAt: '2026-11-04T12:00:05.000Z',
           leftReason: 'refused:whitelist',
         }),
-        join({ connectedAt: '2026-11-04T09:00:00.000Z', kind: 'look' }),
       ]),
       signals: record('signals', [signal(SERVER), signal(OTHER)]),
     } as unknown as DiagnosticsOptions['joins'],
@@ -120,6 +119,11 @@ describe('the operators’ diagnostics', () => {
     expect(diagnosis.diagnostics.summary.map((g) => g.key)).toEqual(['q:aaaaaaaaaaaa'])
     expect(diagnosis.elsewhere.join(' ')).toContain(OWNER)
     expect(calls.find(([name]) => name === 'summary')?.[1]).toMatchObject({ accountId: OWNER, by: 'name' })
+    // Only joins that stopped short are asked for, so a busy server's good joins never crowd them out.
+    expect(calls.find(([name]) => name === 'joins')?.[1]).toMatchObject({
+      server: SERVER,
+      stoppedShort: true,
+    })
     expect(calls.find(([name]) => name === 'ofServers')?.[1]).toMatchObject({ kind: 'operator', name: 'ada' })
   })
 

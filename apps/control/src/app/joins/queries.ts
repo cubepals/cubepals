@@ -29,6 +29,8 @@ export interface JoinFilter {
   /** A whole address, or its first label. */
   address?: string
   since?: Date
+  /** Only joins that never reached the world, or were turned away. */
+  stoppedShort?: boolean
   limit?: number
 }
 
@@ -81,6 +83,10 @@ export async function listJoins(q: Queryable, filter: JoinFilter): Promise<JoinV
     )
   }
   if (filter.since !== undefined) where.push(gte(joins.connectedAt, filter.since))
+  if (filter.stoppedShort)
+    where.push(
+      sql`${joins.kind} = 'join' and (${joins.inWorldAt} is null or ${joins.leftReason} like 'refused:%')`,
+    )
   const rows = await q
     .select({ join: joins, serverName: servers.name })
     .from(joins)
