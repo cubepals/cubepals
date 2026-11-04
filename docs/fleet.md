@@ -534,6 +534,16 @@ network with inter-container traffic off, and ports published only on the addres
 names. A spec can ask for none of this to be relaxed: policy is the host's (`[workloads]`), not
 the request's.
 
+Inter-container traffic off stops a server reaching another by its own address, not by its
+published port: Docker's proxy hands on a connection to the host's address, and another node's
+port is reached the way the edge reaches it. So before every start, blocklyd's unit runs
+`blocklyd isolate` as root, which puts one nftables table in place: a new connection from the
+servers' bridge to the host itself, to blocklyd's port range or API port on a private address, or
+to the link-local metadata address is dropped. Replies, and what the edge and the control plane
+dial, pass. The unit doesn't start without the rules, and `join.sh` installs nftables. That is
+what keeps the edge the only way in, and with it the only place that takes out a forwarded
+identity, a Floodgate one included, or a PROXY header that didn't come from it.
+
 Containers share the host's kernel. Servers run arbitrary plugins and mods, so a kernel escape is
 the residual risk. The path to stronger isolation, without changing the protocol (it never names
 Docker):
