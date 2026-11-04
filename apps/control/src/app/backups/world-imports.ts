@@ -36,7 +36,7 @@ import { placeOnServer, playerFilePath, withPlayersRenamed } from '../../minecra
 import { loadStanding } from '../accounts/persistence.ts'
 import { type Actor, authorize, requestedBy } from '../actor.ts'
 import { type DeploymentCapabilities, requireCapability } from '../capabilities.ts'
-import { AppError, NotFound } from '../errors.ts'
+import { AppError, inFull, NotFound } from '../errors.ts'
 import type { AccessPolicy } from '../policy/access-policy.ts'
 import type { EventBus } from '../ports/events.ts'
 import type {
@@ -170,9 +170,16 @@ export class WorldImports {
         ? await loadBackup(this.#db, record.backupId)
         : null
     const facts = backup?.worldFacts ?? null
-    const playedWith = playedWithOf(
-      facts?.mods === undefined ? facts : { ...facts, mods: await this.#mods.current(facts.mods) },
-    )
+    const brought = facts?.mods
+    // Each mod's side as the catalog says now; while it can't say, as it was when the world came.
+    const mods =
+      brought === undefined
+        ? undefined
+        : await this.#mods.current(brought).catch((error: unknown) => {
+            console.warn(`world-import ${record.id}: mods shown as brought: ${inFull(error)}`)
+            return brought
+          })
+    const playedWith = playedWithOf(facts === null || mods === undefined ? facts : { ...facts, mods })
     return viewOf(record, (ready) => ({
       backupId: ready.backupId as string,
       people: ready.people,
@@ -421,10 +428,7 @@ export class WorldImports {
           target,
           mostOf(read.archive),
         )
-    await input.progress.step('saving').catch(async (error: unknown) => {
-      await store.delete(key).catch(() => undefined)
-      throw error
-    })
+    await input.progress.step('saving')
     // Written after the world itself, which a failure among them takes with it.
     const others = await this.#keptOthers(
       server,

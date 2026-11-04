@@ -10,7 +10,7 @@
  * jars are test jars, published on the stand-in catalog by their bytes where the test says. Restored
  * with its mods, the server moves to Fabric with them and what they depend on, in the one restore.
  */
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
+import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test'
 import { execFile } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
@@ -226,6 +226,27 @@ describe.skipIf(!hasDatabase)('a world brought with its mods', () => {
   )
 
   test('keeps the world and explains which dependency is missing', explainMissingServerDependency, 120_000)
+
+  test('its view, while the catalog is down, shows its mods as they came', async () => {
+    const { owner, id } = await server('Outage')
+    const read = await brought(
+      owner,
+      id,
+      await instance({ 'treeharvester.jar': TREE_HARVESTER, 'sodium.jar': SODIUM }),
+    )
+    if (read.status !== 'ready') throw new Error('World not ready')
+    const warned = spyOn(console, 'warn').mockImplementation(() => undefined)
+    h.catalog.outage(true)
+    try {
+      expect(await h.app.backups.imports.view(owner, id, read.importId)).toEqual(read)
+      expect(warned).toHaveBeenCalledWith(
+        expect.stringContaining(`world-import ${read.importId}: mods shown as brought`),
+      )
+    } finally {
+      h.catalog.outage(false)
+      warned.mockRestore()
+    }
+  }, 120_000)
 })
 
 describe.skipIf(!hasDatabase)('a world brought from an instance on a plan without mods', () => {

@@ -28,6 +28,8 @@ import {
   bringWorld,
   broughtBackup,
   PLAYER,
+  PROGRESS_REFUSED,
+  progressRefused,
   save,
   serverFolder,
   untilRead,
@@ -35,7 +37,6 @@ import {
 import { offlineUuid } from '../access/identity.ts'
 import type { UserActor } from '../actor.ts'
 import { listWorlds } from '../worlds/persistence.ts'
-import { ImportProgress } from './import-progress.ts'
 import { WorldReading } from './world-reading.ts'
 
 const run = promisify(execFile)
@@ -373,8 +374,12 @@ describe.skipIf(!hasDatabase)('a world larger than the server holds', () => {
   }, 120_000)
 })
 
+describe.skipIf(!hasDatabase)('a world whose progress Postgres refuses to record', () => {
+  test('is kept all the same, on its first run, with nothing undone', progressRefusedThroughout, 120_000)
+})
+
 describe.skipIf(!hasDatabase)('a world kept when recording it fails', () => {
-  test('failed progress and partial companion copies clean up before retrying', importWriteFailures, 120_000)
+  test('partial companion copies clean up before retrying', companionCopyFails, 120_000)
   test('leaves no copy behind, and the retry keeps one', async () => {
     const { owner, id } = await server('Sage')
     const target = store.archiveTarget.bind(store)
@@ -521,75 +526,87 @@ describe.skipIf(!hasDatabase)('an upload that says it is a Cubepals download', (
   }, 120_000)
 })
 
-async function importWriteFailures() {
-  for (const fault of ['saving', 'companion']) {
-    const { owner, id } = await server(`Writer ${fault}`)
-    const files = withSecondWorld(await serverFolder('paper-1.21.11'))
-    for (const [path, bytes] of Object.entries({ ...files }))
-      if (path.startsWith('creative/')) files[path.replace('creative/', 'adventure/')] = bytes
-    const step = ImportProgress.prototype.step
-    const pack = LibraryUploadArchives.prototype.tarball
-    const remove = store.delete.bind(store)
-    const target = store.archiveTarget.bind(store)
-    const written: string[] = []
-    let refused = false
-    let packed = 0
-    const progress = spyOn(ImportProgress.prototype, 'step').mockImplementation(async function (
-      this: ImportProgress,
-      next,
-      total,
-    ) {
-      if (fault === 'saving' && next === 'saving' && !refused) {
-        refused = true
-        throw new Error('The progress write disconnected')
-      }
-      return step.call(this, next, total)
-    })
-    const writer = spyOn(LibraryUploadArchives.prototype, 'tarball').mockImplementation(function (
-      this: LibraryUploadArchives,
-      entries,
-    ) {
-      packed++
-      if (fault === 'companion' && packed === 3 && !refused) {
-        refused = true
-        throw new Error('The companion copy disconnected')
-      }
-      return pack.call(this, entries)
-    })
-    const destinations = spyOn(store, 'archiveTarget').mockImplementation(async (key) => {
-      written.push(key)
-      return target(key)
-    })
-    const cleanup = spyOn(store, 'delete').mockImplementation(async (key) => {
-      await remove(key)
-      throw new Error('The store lost the acknowledgement after deleting the file')
-    })
-    const queued = spyOn(h.jobs, 'enqueueWorldImport').mockResolvedValue(undefined)
-    try {
-      const bytes = zipBytes(files)
-      const start = await h.app.backups.beginWorldUpload(owner, id, {
-        fileName: 'server.zip',
-        sizeBytes: bytes.length,
-      })
-      await fetch(start.url, { method: 'PUT', body: bytes, headers: start.headers })
-      const { importId } = await h.app.backups.finishWorldUpload(owner, id, start.ticket)
-      await expect(h.app.backups.imports.runImport(importId)).rejects.toThrow(
-        fault === 'saving' ? 'progress write' : 'companion copy',
-      )
-      expect(written.every((key) => !store.objects.has(key))).toBe(true)
-      await h.app.backups.imports.runImport(importId)
-      const read = await h.app.backups.imports.view(owner, id, importId)
-      expect(read.status).toBe('ready')
-      expect(refused).toBe(true)
-      expect(store.objects.has((await broughtBackup(h, read)).archiveKey ?? '')).toBe(true)
-    } finally {
-      queued.mockRestore()
-      progress.mockRestore()
-      writer.mockRestore()
-      destinations.mockRestore()
-      cleanup.mockRestore()
-      await h.app.servers.stop(owner, id, randomUUID())
-      await h.settled(id)
+/** A server's folder sent as a world, its job left for the test to run. */
+async function uploaded(owner: UserActor, id: string, files: Record<string, Uint8Array>): Promise<string> {
+  const bytes = zipBytes(files)
+  const start = await h.app.backups.beginWorldUpload(owner, id, {
+    fileName: 'server.zip',
+    sizeBytes: bytes.length,
+  })
+  await fetch(start.url, { method: 'PUT', body: bytes, headers: start.headers })
+  return (await h.app.backups.finishWorldUpload(owner, id, start.ticket)).importId
+}
+
+async function companionCopyFails() {
+  const { owner, id } = await server('Writer companion')
+  const files = withSecondWorld(await serverFolder('paper-1.21.11'))
+  for (const [path, bytes] of Object.entries({ ...files }))
+    if (path.startsWith('creative/')) files[path.replace('creative/', 'adventure/')] = bytes
+  const pack = LibraryUploadArchives.prototype.tarball
+  const remove = store.delete.bind(store)
+  const target = store.archiveTarget.bind(store)
+  const written: string[] = []
+  let refused = false
+  let packed = 0
+  const writer = spyOn(LibraryUploadArchives.prototype, 'tarball').mockImplementation(function (
+    this: LibraryUploadArchives,
+    entries,
+  ) {
+    packed++
+    if (packed === 3 && !refused) {
+      refused = true
+      throw new Error('The companion copy disconnected')
     }
+    return pack.call(this, entries)
+  })
+  const destinations = spyOn(store, 'archiveTarget').mockImplementation(async (key) => {
+    written.push(key)
+    return target(key)
+  })
+  const cleanup = spyOn(store, 'delete').mockImplementation(async (key) => {
+    await remove(key)
+    throw new Error('The store lost the acknowledgement after deleting the file')
+  })
+  const queued = spyOn(h.jobs, 'enqueueWorldImport').mockResolvedValue(undefined)
+  try {
+    const importId = await uploaded(owner, id, files)
+    await expect(h.app.backups.imports.runImport(importId)).rejects.toThrow('companion copy')
+    expect(written.every((key) => !store.objects.has(key))).toBe(true)
+    await h.app.backups.imports.runImport(importId)
+    const read = await h.app.backups.imports.view(owner, id, importId)
+    expect(read.status).toBe('ready')
+    expect(refused).toBe(true)
+    expect(store.objects.has((await broughtBackup(h, read)).archiveKey ?? '')).toBe(true)
+  } finally {
+    queued.mockRestore()
+    writer.mockRestore()
+    destinations.mockRestore()
+    cleanup.mockRestore()
+    await h.app.servers.stop(owner, id, randomUUID())
+    await h.settled(id)
+  }
+}
+
+async function progressRefusedThroughout() {
+  const { owner, id } = await server('Writer progress')
+  const allow = await progressRefused(h)
+  const warned = spyOn(console, 'warn').mockImplementation(() => undefined)
+  const queued = spyOn(h.jobs, 'enqueueWorldImport').mockResolvedValue(undefined)
+  try {
+    const importId = await uploaded(owner, id, withSecondWorld(await serverFolder('paper-1.21.11')))
+    // Every stage's report is refused, from fetching to saving, and the first run keeps the world.
+    await h.app.backups.imports.runImport(importId)
+    const read = await h.app.backups.imports.view(owner, id, importId)
+    expect(read.status).toBe('ready')
+    expect(store.objects.has((await broughtBackup(h, read)).archiveKey ?? '')).toBe(true)
+    const kept = await h.db.query.worldImports.findFirst({ where: (t, { eq: is }) => is(t.id, importId) })
+    expect(kept?.progress).toBeNull()
+    expect(warned).toHaveBeenCalledWith(expect.stringContaining(PROGRESS_REFUSED))
+  } finally {
+    queued.mockRestore()
+    warned.mockRestore()
+    await allow()
+    await h.app.servers.stop(owner, id, randomUUID())
+    await h.settled(id)
   }
 }
