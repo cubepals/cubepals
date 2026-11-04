@@ -9,7 +9,8 @@ The repository is public, and so are its commits, pull requests and issues. Busi
 - costs, margins, and what a plan earns;
 - competitors;
 - pricing history, and why a price is what it is;
-- strategy and vendor trials.
+- strategy and vendor trials;
+- anything about a maintainer personally: their other work, their accounts, and the tools and connectors a session happens to have.
 
 They live in the private records repository or in private configuration. Code keeps the mechanism and reads such numbers from private configuration, an env var or a Fly secret (`FREE_LINK_TUNING`, `ABUSE_LIMITS`), with a harmless default for development and tests. Public prices are what the pricing page shows.
 
