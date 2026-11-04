@@ -31,7 +31,7 @@ import { GRIM_FIELDS, type GrimFacts, grimFor } from '../compat/service.ts'
 import { AppError } from '../errors.ts'
 import type { AccessPolicy } from '../policy/access-policy.ts'
 import type { EventBus } from '../ports/events.ts'
-import { findServer, lockServer } from '../servers/persistence.ts'
+import { findServer, lockServer, setDesired } from '../servers/persistence.ts'
 import { loadApplied, waitsForPlayers } from '../servers/restart-wait.ts'
 import { loadRevisionFields } from '../servers/revision-reads.ts'
 import type { ServerTransitions } from '../servers/transitions.ts'
@@ -233,6 +233,8 @@ export class StopCheatersService {
   /**
    * A change of the owner's: their policy, audited, and a running server restarted to take it where
    * it runs otherwise (`stopCheatersWaiting`), unless players are on and the owner chose to wait.
+   * Either way what the server should run moved, and its version with it: drift looks at it again,
+   * to bring it once everyone has left.
    */
   async #change(
     actor: Actor,
@@ -243,9 +245,10 @@ export class StopCheatersService {
     apply: (tx: Tx, desired: GrimFacts) => Promise<boolean>,
   ): Promise<void> {
     await this.#db.transaction(async (tx) => {
-      const server = authorize(actor, await lockServer(tx, serverId))
-      if (actor.kind === 'user') await this.#policy.require(tx, server.ownerId, { kind: 'manage_access' })
-      const changed = await apply(tx, await loadRevisionFields(tx, server.desiredRevisionId, GRIM_FIELDS))
+      const locked = authorize(actor, await lockServer(tx, serverId))
+      if (actor.kind === 'user') await this.#policy.require(tx, locked.ownerId, { kind: 'manage_access' })
+      const changed = await apply(tx, await loadRevisionFields(tx, locked.desiredRevisionId, GRIM_FIELDS))
+      const server = changed ? await setDesired(tx, locked, {}) : locked
       await tx.insert(schema.auditLog).values({
         actor: requestedBy(actor),
         action,

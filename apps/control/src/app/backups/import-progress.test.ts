@@ -3,12 +3,13 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /** The pollable worker record preserves stage time, throttles bytes and counts consumed source bytes. */
-import { afterAll, afterEach, beforeAll, describe, expect, setSystemTime, test } from 'bun:test'
+import { afterAll, afterEach, beforeAll, describe, expect, setSystemTime, spyOn, test } from 'bun:test'
 import { randomUUID } from 'node:crypto'
 import { SECOND_MS } from '@blockly/contracts/durations'
 import { schema } from '@blockly/db'
 import { eq } from 'drizzle-orm'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
+import { PROGRESS_REFUSED, progressRefused } from '../../testing/world-imports.ts'
 import { ImportProgress } from './import-progress.ts'
 
 let h: Harness
@@ -120,5 +121,32 @@ describe.skipIf(!hasDatabase)('world import measurements', () => {
       { name: 'region/r.0.0.mca', sizeBytes: 6, bytes: [3, 4, 5, 6, 7, 8] },
     ])
     expect(await read(id)).toMatchObject({ step: 'packing', bytes: 8, totalBytes: 8 })
+  })
+
+  test('a write Postgres refuses is logged and skipped, never thrown, and the next one is written', async () => {
+    const { id, progress } = await reading()
+    const allow = await progressRefused(h)
+    const warned = spyOn(console, 'warn').mockImplementation(() => undefined)
+    try {
+      at(0)
+      await progress.step('fetching', 4)
+      await progress.bytes(4)
+      const source = async function* () {
+        yield { name: 'level.dat', sizeBytes: 4, data: new Uint8Array([1, 2, 3, 4]) }
+      }
+      for await (const entry of progress.entries(source())) expect(entry.name).toBe('level.dat')
+      expect(await read(id)).toBeNull()
+      expect(warned).toHaveBeenCalledTimes(3)
+      expect(warned).toHaveBeenCalledWith(expect.stringContaining(`world-import ${id}: progress not written`))
+      expect(warned).toHaveBeenCalledWith(expect.stringContaining(PROGRESS_REFUSED))
+    } finally {
+      warned.mockRestore()
+      await allow()
+    }
+    await progress.step('checking')
+    expect(await read(id)).toMatchObject({
+      step: 'checking',
+      steps: [{ step: 'fetching' }, { step: 'checking' }],
+    })
   })
 })

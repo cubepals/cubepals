@@ -68,7 +68,9 @@ export function WaitingChanges({ view, changed }: { view: ServerView; changed: (
       waiting={view.waiting}
       busy={settle.isPending}
       error={settle.isError ? messageOf(settle.error) : null}
-      onSettle={(how) => settle.mutate({ serverId: view.id, requestId: requestId(), settle: how })}
+      onSettle={(how) =>
+        settle.mutate({ serverId: view.id, version: view.version, requestId: requestId(), settle: how })
+      }
     />
   )
 }

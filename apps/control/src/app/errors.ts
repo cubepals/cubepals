@@ -23,6 +23,19 @@ export class AppError extends Error {
   }
 }
 
+/**
+ * A change sent from a page that showed the server at another version than it has (§4: optimistic
+ * concurrency) is refused rather than let it undo what the person hasn't seen. One sent with no
+ * version, as Cubepals' own are, goes ahead.
+ */
+export function refuseChangedSince(seen: number | undefined, version: number): void {
+  if (seen !== undefined && seen !== version)
+    throw new AppError(
+      'changed_meanwhile',
+      'This server changed since you looked at it. Look at it again, then try once more.',
+    )
+}
+
 /** The thing does not exist, or the actor may not know that it does. */
 export class NotFound extends Error {
   constructor(what: string) {

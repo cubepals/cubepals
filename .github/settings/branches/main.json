@@ -1,0 +1,35 @@
+{
+  "allow_deletions": false,
+  "allow_force_pushes": false,
+  "allow_fork_syncing": false,
+  "block_creations": false,
+  "enforce_admins": false,
+  "lock_branch": false,
+  "required_conversation_resolution": false,
+  "required_linear_history": true,
+  "required_pull_request_reviews": {
+    "dismiss_stale_reviews": false,
+    "require_code_owner_reviews": false,
+    "require_last_push_approval": false,
+    "required_approving_review_count": 0
+  },
+  "required_signatures": true,
+  "required_status_checks": {
+    "checks": [
+      {
+        "app_id": 15368,
+        "context": "Has a kind, an area and a size"
+      },
+      {
+        "app_id": 15368,
+        "context": "Title fits in 50 characters"
+      },
+      {
+        "app_id": 15368,
+        "context": "check"
+      }
+    ],
+    "strict": false
+  },
+  "restrictions": null
+}

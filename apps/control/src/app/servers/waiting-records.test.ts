@@ -13,6 +13,8 @@ import type { RestartWhen } from '@blockly/contracts'
 import { schema } from '@blockly/db'
 import { eq } from 'drizzle-orm'
 import type { ServerSettings } from '../../domain/revision/revision.ts'
+import { appRouter } from '../../interfaces/trpc/router.ts'
+import type { Services } from '../../interfaces/trpc/trpc.ts'
 import { GRIM } from '../../minecraft/stop-cheaters.ts'
 import { offeredVersions } from '../../minecraft/versions.ts'
 import { Cdn } from '../../testing/cdn.ts'
@@ -97,6 +99,67 @@ test.skipIf(!hasDatabase)(
   recordedAnticheat,
   30_000,
 )
+test.skipIf(!hasDatabase)(
+  'a settle from a page that showed the server before another change is refused, as any change is',
+  staleSettle,
+  30_000,
+)
+
+/** The API as the owner's pages call it, over the real services. */
+const apiFor = (owner: UserActor) =>
+  appRouter.createCaller({
+    actor: owner,
+    services: {
+      queries: h.app.queries,
+      revisions: h.app.revisions,
+      stopCheaters: h.app.stopCheaters,
+    } as unknown as Services,
+  })
+
+/** What a call is refused with, as a page reads it; null where it isn't refused. */
+const refusal = (call: Promise<unknown>) =>
+  call.then(
+    () => null,
+    (error: { code?: unknown; message?: unknown }) => ({ code: error.code, message: error.message }),
+  )
+
+/** Cancel on a page loaded before another tab's change, which would drop it unseen. */
+async function staleSettle() {
+  const { owner, id } = await occupied('Stale settle')
+  const api = apiFor(owner)
+  await change(owner, id, { maxPlayers: 4 }, 'empty')
+  const seen = (await h.app.queries.get(owner, id)).version
+  // Another tab turns Stop cheaters on after the page loaded, and it waits too.
+  await h.app.stopCheaters.set(owner, id, true, randomUUID(), 'empty')
+  const refused = await refusal(
+    api.servers.settleWaiting({ serverId: id, requestId: randomUUID(), settle: 'cancel', version: seen }),
+  )
+  expect(refused).not.toBeNull()
+  expect(refused).toEqual(
+    await refusal(
+      api.servers.changeAuthentication({
+        serverId: id,
+        requestId: randomUUID(),
+        version: seen,
+        onlineMode: false,
+      }),
+    ),
+  )
+  expect((await h.app.queries.get(owner, id)).waiting).toEqual({
+    changes: [{ field: 'maxPlayers', from: 5, to: 4 }],
+    size: null,
+    stopCheaters: 'on',
+  })
+  // The page as the server is now drops both.
+  const shown = (await h.app.queries.get(owner, id)).version
+  const settled = await api.servers.settleWaiting({
+    serverId: id,
+    requestId: randomUUID(),
+    settle: 'cancel',
+    version: shown,
+  })
+  expect(settled.waiting).toBeNull()
+}
 
 /** Inspect persisted intent with the queue port held; the existing boot cases execute it. */
 async function recordedWaiting() {

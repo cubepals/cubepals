@@ -9,6 +9,7 @@
  * then waits for, and what a start does once it is up, are `boot.ts`'s.
  */
 
+import { setTimeout as delay } from 'node:timers/promises'
 import { inFull, PlainFailure } from '../errors.ts'
 import type { GameEndpoint, ReadinessProbe } from '../ports/minecraft.ts'
 import type { LogSource } from '../ports/platform.ts'
@@ -139,7 +140,8 @@ export class Resume {
       } catch {
         signal.throwIfAborted()
       }
-      await new Promise((resolve) => setTimeout(resolve, RESUME_PAUSE_MS))
+      // Over when `signal` ends it, which the loop's check then throws.
+      await delay(RESUME_PAUSE_MS, undefined, { signal }).catch(() => undefined)
     }
   }
 

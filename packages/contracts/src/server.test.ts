@@ -374,15 +374,24 @@ test('public operation choices remain compatible with stored progress and revisi
   }
 })
 
-test('settling waiting changes requires a deliberate request and an explicit action', () => {
+test('settling waiting changes requires a deliberate request, the version seen and an explicit action', () => {
   for (const settle of ['now', 'cancel'] as const)
-    expect(server.SettleWaitingInput.parse({ serverId, requestId, settle })).toEqual({
+    expect(server.SettleWaitingInput.parse({ serverId, requestId, version: 3, settle })).toEqual({
       serverId,
       requestId,
+      version: 3,
       settle,
     })
-  for (const patch of [{ serverId: 'bad' }, { requestId: 'bad' }, { settle: 'later' }])
+  for (const patch of [
+    { serverId: 'bad' },
+    { requestId: 'bad' },
+    { settle: 'later' },
+    { version: -1 },
+    { version: 1.5 },
+    { version: undefined },
+  ])
     expect(
-      server.SettleWaitingInput.safeParse({ serverId, requestId, settle: 'now', ...patch }).success,
+      server.SettleWaitingInput.safeParse({ serverId, requestId, version: 3, settle: 'now', ...patch })
+        .success,
     ).toBe(false)
 })

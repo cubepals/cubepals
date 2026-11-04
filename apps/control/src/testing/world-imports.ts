@@ -5,11 +5,13 @@
 /**
  * A world upload taken to where it ends, as a test waits on one: begun, sent to the store,
  * finished, and waited on while a worker reads it (`app/backups/world-imports.ts`), to a server or
- * for a server being made (`new-world-imports.ts`); and the worlds real servers saved, as files to
- * upload (`minecraft/world-fixtures/`).
+ * for a server being made (`new-world-imports.ts`); the worlds real servers saved, as files to
+ * upload (`minecraft/world-fixtures/`); and Postgres refusing an import's progress
+ * (`progressRefused`).
  */
 import { readFile } from 'node:fs/promises'
 import type { NewWorldImportView, WorldImportView } from '@blockly/contracts'
+import { sql } from 'drizzle-orm'
 import type { UserActor } from '../app/actor.ts'
 import { type BackupRecord, loadBackup } from '../app/backups/persistence.ts'
 import type { Harness } from './harness.ts'
@@ -116,4 +118,26 @@ export async function bringNewWorld(
   if (!put.ok) throw new Error(`The store answered ${put.status} to the upload`)
   const { importId } = await h.app.backups.newWorlds.finish(owner, start.ticket)
   return untilNewRead(h, owner, importId)
+}
+
+/** What Postgres says to each write of an import's progress while `progressRefused` holds. */
+export const PROGRESS_REFUSED = 'the progress write was refused'
+
+/**
+ * Postgres refusing every write of an import's progress, by a trigger in the harness's own
+ * database, until the function it returns drops it: each write meets Postgres' own error.
+ */
+export async function progressRefused(h: Pick<Harness, 'db'>): Promise<() => Promise<void>> {
+  await h.db.execute(
+    sql.raw(`CREATE FUNCTION refuse_progress() RETURNS trigger LANGUAGE plpgsql
+      AS $$ BEGIN RAISE EXCEPTION '${PROGRESS_REFUSED}'; END $$`),
+  )
+  await h.db.execute(
+    sql.raw(`CREATE TRIGGER refuse_progress BEFORE UPDATE OF progress ON world_imports
+      FOR EACH ROW EXECUTE FUNCTION refuse_progress()`),
+  )
+  return async () => {
+    await h.db.execute(sql.raw('DROP TRIGGER refuse_progress ON world_imports'))
+    await h.db.execute(sql.raw('DROP FUNCTION refuse_progress()'))
+  }
 }
