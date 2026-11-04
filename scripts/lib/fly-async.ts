@@ -8,14 +8,11 @@
  * synchronously and has its own.
  */
 
+import { flyAsync } from './fly-rate-limit.ts'
+
 /** Runs `fly` with these arguments and answers its output; a failure throws what flyctl said. */
 export async function fly(args: string[]): Promise<string> {
-  const child = Bun.spawn(['fly', ...args], { stdout: 'pipe', stderr: 'pipe' })
-  const [out, err, code] = await Promise.all([
-    new Response(child.stdout).text(),
-    new Response(child.stderr).text(),
-    child.exited,
-  ])
-  if (code !== 0) throw new Error(`fly ${args.slice(0, 3).join(' ')}: ${err.trim()}`)
-  return out
+  const { stdout, stderr, exitCode } = await flyAsync(args)
+  if (exitCode !== 0) throw new Error(`fly ${args.slice(0, 3).join(' ')}: ${stderr.trim()}`)
+  return stdout
 }

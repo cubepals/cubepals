@@ -17,6 +17,7 @@
  */
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { flySync } from './fly-rate-limit.ts'
 
 /** A machine service's settings for Fly's proxy, as the Machines API names them. */
 export interface Service {
@@ -92,12 +93,10 @@ export function afterStop(
 }
 
 function fly(args: string[]): string {
-  const result = Bun.spawnSync(['fly', ...args], { stdin: 'ignore', stdout: 'pipe', stderr: 'pipe' })
+  const result = flySync(args)
   if (result.exitCode !== 0)
-    throw new Error(
-      `fly ${args.slice(0, 3).join(' ')}: ${result.stderr.toString().trim().split('\n').at(-1)}`,
-    )
-  return result.stdout.toString()
+    throw new Error(`fly ${args.slice(0, 3).join(' ')}: ${result.stderr.trim().split('\n').at(-1)}`)
+  return result.stdout
 }
 
 /**
