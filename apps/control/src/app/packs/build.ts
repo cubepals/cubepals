@@ -488,7 +488,7 @@ export class PackBuilder {
         metadata: jarMetadata(this.#formats, bytes),
       })
     }
-    const { published, playersOnly } = await this.#published([...read.values(), ...plan.listed])
+    const { published, playersOnly } = await this.#published([...read.values()], plan.listed)
 
     const leftOut = [...plan.leftOut]
     const leftForPlayers: string[] = []
@@ -612,11 +612,13 @@ export class PackBuilder {
 
   /**
    * The catalog's record of each of the pack's files it publishes, by sha512, and which of the
-   * pack's jars only players' games run (`playersOnlyIn`).
+   * pack's jars only players' games run (`playersOnlyIn`), from the jars it carries, read for what
+   * they say of themselves, and the jars it lists.
    */
-  async #published(files: ReadonlyArray<{ sha512: string }>) {
-    const published = await this.#catalog.filesByHash(files.map((file) => file.sha512))
-    return { published, playersOnly: playersOnlyIn([...published.values()].map((match) => match.version)) }
+  async #published(carried: readonly JarFacts[], listed: ReadonlyArray<{ path: string; sha512: string }>) {
+    const published = await this.#catalog.filesByHash([...carried, ...listed].map((file) => file.sha512))
+    const jars = [...carried, ...listed.filter((file) => isJar(file.path))]
+    return { published, playersOnly: playersOnlyIn(jars, published) }
   }
 
   /**

@@ -193,7 +193,7 @@ export class PackContents {
     ])
     const leftOut: PackLeftOutJson[] = []
     const jars: PackJarJson[] = []
-    const playersOnly = playersOnlyIn([...published.values()].map((match) => match.version))
+    const playersOnly = playersOnlyIn([...listed, ...carriedJars], published)
     for (const file of listed) {
       const match = published.get(file.sha512)
       const side = jarSide({ catalog: match?.version.environment ?? null })

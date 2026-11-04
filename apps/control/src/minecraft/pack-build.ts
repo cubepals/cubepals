@@ -35,21 +35,29 @@ export function jarSide(evidence: {
   return 'both'
 }
 
+type PublishedVersion = Pick<CatalogVersion, 'projectId' | 'environment' | 'dependencies'>
+
 /**
- * Which of a pack's jars are left to players' games, from the catalog's record of every jar it
- * holds (`published`): one only players' games run (`jarSide`), unless a mod the server keeps
- * requires its project, or requires one that does, whatever the jar says of itself. A server mod
- * that needs a client companion the catalog marks optional on servers
- * (`client_only_server_optional`) is given it; what only a mod left to players requires is left
- * with it.
+ * Which of a pack's jars are left to players' games, from every jar it holds with what it says of
+ * itself (`jars`) and the catalog's record of those it publishes, by sha512 (`published`): one only
+ * players' games run (`jarSide`), unless a mod the server keeps requires its project, or requires
+ * one that does, whatever the jar says of itself. A jar's side here is the one its pack decides
+ * by, so a mod left to players never keeps another. A server mod that needs a client companion the
+ * catalog marks optional on servers (`client_only_server_optional`) is given it; what only a mod
+ * left to players requires is left with it.
  */
 export function playersOnlyIn(
-  published: Iterable<Pick<CatalogVersion, 'projectId' | 'environment' | 'dependencies'>>,
+  jars: Iterable<{ sha512: string; metadata?: Pick<ModMetadata, 'environment'> | null }>,
+  published: ReadonlyMap<string, { version: PublishedVersion }>,
 ): (side: ReturnType<typeof jarSide>, version: Pick<CatalogVersion, 'projectId'> | undefined) => boolean {
-  const versions = [...published]
-  const byProject = new Map(versions.map((version) => [version.projectId, version]))
+  const byProject = new Map([...published.values()].map(({ version }) => [version.projectId, version]))
   const needed = new Set<string>()
-  const keeping = versions.filter((version) => jarSide({ catalog: version.environment }) !== 'client')
+  const keeping: PublishedVersion[] = []
+  for (const jar of jars) {
+    const version = published.get(jar.sha512)?.version
+    if (version && jarSide({ catalog: version.environment, metadata: jar.metadata }) !== 'client')
+      keeping.push(version)
+  }
   for (let next = keeping.pop(); next !== undefined; next = keeping.pop())
     for (const { kind, projectId } of next.dependencies) {
       if (kind !== 'required' || !projectId || needed.has(projectId)) continue
