@@ -45,20 +45,29 @@ describe.skipIf(!hasDatabase)('what ran slow or failed, as a process keeps it', 
       await db.execute(sql`select 1 / 0`).catch((error: Error & { cause?: typeof refused }) => {
         refused = error.cause ?? error
       })
+      // A value Postgres quotes back in what it refused with.
+      await db.execute(sql`select ${'private-not-a-uuid'}::uuid`).catch(() => undefined)
       requestServed('api', '/api/trpc/*', 'POST', 503, 12)
     })
     let rows: Array<typeof schema.diagnostics.$inferSelect> = []
-    for (let waited = 0; rows.length < 3 && waited < 10 * SECOND_MS; waited += 250) {
+    for (let waited = 0; rows.length < 4 && waited < 10 * SECOND_MS; waited += 250) {
       await new Promise((resolve) => setTimeout(resolve, 250))
       rows = await db.select().from(schema.diagnostics)
     }
     expect(rows.map((row) => [row.kind, row.accountId, row.requestId, row.origin, row.role]).sort()).toEqual([
       ['query', 'acct-1', 'req-1', 'trpc:servers.get', 'api'],
       ['query', 'acct-1', 'req-1', 'trpc:servers.get', 'api'],
+      ['query', 'acct-1', 'req-1', 'trpc:servers.get', 'api'],
       ['request', 'acct-1', 'req-1', 'trpc:servers.get', 'api'],
     ])
+    // What Postgres said of the value, without the value.
+    const typed = rows.find((row) => JSON.stringify(row.detail).includes('uuid'))
+    expect(JSON.stringify(typed?.detail)).not.toContain('private-not-a-uuid')
+    expect(typed?.detail).toMatchObject({ message: 'invalid input syntax for type uuid: "?"' })
     // What Postgres refused with, as it said it.
-    const failed = rows.find((row) => row.kind === 'query' && row.error !== null)
+    const failed = rows.find(
+      (row) => row.kind === 'query' && row.error !== null && row.detail.statement === 'select ? / ?',
+    )
     expect(failed?.error).toBe(refused.code as string)
     expect(failed?.detail).toMatchObject({ statement: 'select ? / ?', message: refused.message })
     const query = rows.find((row) => row.kind === 'query' && row.error === null)

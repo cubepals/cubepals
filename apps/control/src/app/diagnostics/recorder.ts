@@ -66,8 +66,14 @@ const sqlstateOf = (error: unknown): string => {
   return typeof code === 'string' && /^[0-9A-Z]{5}$/.test(code) ? code : '_OTHER'
 }
 
+/**
+ * An error's first line, without the value Postgres quotes after a colon where a value was wrong
+ * (`invalid input syntax for type uuid: "…"`); a constraint's or a column's name stays.
+ */
 const messageOf = (error: unknown): string =>
-  (error instanceof Error ? error.message : String(error)).split('\n')[0]?.slice(0, MESSAGE_CHARS) ?? ''
+  ((error instanceof Error ? error.message : String(error)).split('\n')[0] ?? '')
+    .replace(/: "(?:[^"\\]|\\.)*"/g, ': "?"')
+    .slice(0, MESSAGE_CHARS)
 
 export class DiagnosticsRecorder {
   readonly #role: string
