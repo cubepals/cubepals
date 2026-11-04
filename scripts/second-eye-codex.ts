@@ -92,7 +92,9 @@ export const codexReviewsOf = (reviews: GitHubReview[], sha: string): GitHubRevi
 /** Codex's summary comment and the state it keeps, when its own account wrote one. */
 export function codexSummaryOf(comments: GitHubComment[]): { url: string; state: CodexState } | undefined {
   for (const comment of comments.filter(byCodex).reverse()) {
-    const match = /<!-- codex-review-state:v1 (\{.*?\}) -->/s.exec(comment.body ?? '')
+    // GitHub stores the braces as written; an HTML-escaped copy (&#123; &#125;) reads the same.
+    const body = (comment.body ?? '').replaceAll('&#123;', '{').replaceAll('&#125;', '}')
+    const match = /<!-- codex-review-state:v1 (\{.*?\}) -->/s.exec(body)
     if (!match) continue
     try {
       return { url: comment.html_url, state: JSON.parse(match[1] as string) as CodexState }
@@ -120,19 +122,25 @@ export function severityOf(body: string): Severity {
   return 'low'
 }
 
+/** `text` with every HTML tag gone, stripped until none is left, and no stray angle bracket. */
+function withoutTags(text: string): string {
+  let before: string
+  let after = text
+  // One pass leaves a tag split around another (<scr<b>ipt>), so it repeats until nothing changes.
+  do {
+    before = after
+    after = before.replace(/<[^<>]*>/g, '')
+  } while (after !== before)
+  return after.replace(/[<>]/g, '')
+}
+
 /** Codex's Markdown as plain lines: no images or badges, tags, emphasis or feedback prompt. */
 function plainLines(body: string): string[] {
-  return (
-    body
-      .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
-      .replace(/<[^>]*>/g, '')
-      // A tag split around another (<scr<b>ipt>) survives one pass: no angle bracket is kept at all.
-      .replace(/[<>]/g, '')
-      .replace(/\*\*|__/g, '')
-      .split('\n')
-      .map((line) => line.trim())
-      .filter((line) => line && !/^Useful\? React with/i.test(line))
-  )
+  return withoutTags(body.replace(/!\[[^\]]*\]\([^)]*\)/g, ''))
+    .replace(/\*\*|__/g, '')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line && !/^Useful\? React with/i.test(line))
 }
 
 /** One of Codex's line comments as a finding: its first line the problem, the rest the why. */
