@@ -24,7 +24,7 @@ import { PlatformHealth } from './app/platform/health.ts'
 import { JobRecord } from './app/platform/job-record.ts'
 import { ServerRepairs } from './app/platform/repairs.ts'
 import { SuspendSwitch } from './app/platform/suspend-switch.ts'
-import { installTelemetry } from './app/platform/telemetry.ts'
+import { installTelemetry, stopTelemetry } from './app/platform/telemetry.ts'
 import { CLIENT_ADDRESS_HEADER } from './app/ports/auth.ts'
 import type { EventBus } from './app/ports/events.ts'
 import type { PlayerProfiles, ReadinessProbe, ServerConsole } from './app/ports/minecraft.ts'
@@ -775,7 +775,7 @@ async function main(): Promise<void> {
     for (const stop of stops.reverse()) await stop()
     provider.fleet?.stop()
     await boss.stop({ graceful: true, timeout: DRAIN_MS })
-    await capabilities.insight?.shutdown()
+    await Promise.all([capabilities.insight?.shutdown(), stopTelemetry()])
     await events.close()
     await pool.end()
     process.exit(0)

@@ -10,11 +10,11 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { SECOND_MS } from '@blockly/contracts/durations'
 import { createDb, createPool, schema } from '@blockly/db'
-import { sql } from 'drizzle-orm'
+import { eq, sql } from 'drizzle-orm'
 import type { Pool } from 'pg'
 import type { PgBoss } from 'pg-boss'
 import { within } from '../../app/diagnostics/context.ts'
-import { installTelemetry, requestServed } from '../../app/platform/telemetry.ts'
+import { installTelemetry, requestServed, stopTelemetry } from '../../app/platform/telemetry.ts'
 import { freshDatabase, hasDatabase } from '../../testing/fleet.ts'
 import { serveMetrics } from './exporter.ts'
 
@@ -78,4 +78,16 @@ describe.skipIf(!hasDatabase)('what ran slow or failed, as a process keeps it', 
       error: '503',
     })
   }, 20_000)
+
+  test('is all written when the process stops, before its two seconds are up', async () => {
+    const { telemetry } = serveMetrics(undefined, ['worker'], { pool, boss: {} as PgBoss, url: database.url })
+    const db = createDb(pool)
+    installTelemetry(telemetry, { db, roles: ['worker'] })
+    await within({ origin: 'schedule:reconcile' }, async () =>
+      requestServed('worker', '/health', 'GET', 503, 3),
+    )
+    await stopTelemetry()
+    const kept = await db.select().from(schema.diagnostics).where(eq(schema.diagnostics.role, 'worker'))
+    expect(kept.map((row) => [row.name, row.origin])).toEqual([['GET /health', 'schedule:reconcile']])
+  })
 })

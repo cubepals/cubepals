@@ -43,6 +43,14 @@ export function installTelemetry(
   return telemetry
 }
 
+/** Writes what the recorder holds, and stops it: as the process stops, before its pool closes. */
+export async function stopTelemetry(): Promise<void> {
+  const stopping = stopRecording
+  recorder = null
+  stopRecording = null
+  await stopping?.()
+}
+
 export const operationEnded: Telemetry['operationEnded'] = (...args) => installed?.operationEnded(...args)
 export const operationFailed: Telemetry['operationFailed'] = (...args) => installed?.operationFailed(...args)
 export const joinCompleted: Telemetry['joinCompleted'] = (...args) => installed?.joinCompleted(...args)

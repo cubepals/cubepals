@@ -51,6 +51,18 @@ describe('a query’s shape', () => {
     expect(cut?.text).not.toContain('private')
   })
 
+  test('reads past comments, whatever quotes they hold, and keeps none of them', () => {
+    expect(shapeOf("select /* user's query */ 'private-value'")?.text).toBe("select '?'")
+    expect(shapeOf("select 1 -- it's mine\n, 'private-value'")?.text).toBe("select ? , '?'")
+    expect(shapeOf("select /* a /* nested */ it's */ 'private-value'")?.text).toBe("select '?'")
+  })
+
+  test('keeps a quoted name, quotes and all, and takes out the literal after it', () => {
+    expect(shapeOf(`select "it's" from "t""x" where a = 'private-value'`)?.text).toBe(
+      `select "it's" from "t""x" where a = '?'`,
+    )
+  })
+
   test('is the same however the statement is spaced, and keeps numbers inside names', () => {
     const spaced = shapeOf('SELECT  "t1"."col_2"\n  FROM   "t1"')
     expect(spaced?.text).toBe('SELECT "t1"."col_2" FROM "t1"')
