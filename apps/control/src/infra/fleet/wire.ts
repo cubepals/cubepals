@@ -61,7 +61,13 @@ export type WorkloadReport = Writes['WorkloadReport']
 export type EnrollRequest = Writes['EnrollRequest']
 export type EnrollResponse = Reads['EnrollResponse']
 export type HeartbeatRequest = Writes['HeartbeatRequest']
-export type UpgradeOffer = Reads['UpgradeOffer']
+/**
+ * `signature` is the release's `blocklyd.sig` in hex, without which a node that lists
+ * `signed-upgrade` installs nothing (blocklyd's src/upgrade/trust.rs). blocklyd's OpenAPI has it
+ * from the release that brings that feature; until this repository pins that release, it is added
+ * here.
+ */
+export type UpgradeOffer = Reads['UpgradeOffer'] & { signature?: string | null }
 export type Fence = Reads['Fence']
 /**
  * The node takes `lifecycle` as any string, so a newer control plane can't break its heartbeats;

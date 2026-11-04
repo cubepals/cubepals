@@ -13,9 +13,13 @@
  * - `GET /fleet/v1/blocklyd` and `…/blocklyd.sha256`: the static blocklyd this control plane's
  *   image carries, and its hash in `sha256sum -c` form. A process without it starts as usual
  *   and answers 404, saying so.
+ * - `GET /fleet/v1/blocklyd.json`: that blocklyd as an upgrade offer, version, sha256 and release
+ *   signature, which an enrolled node's `blocklyd upgrade` asks for.
  *
- * `blocklydRelease` says which version that blocklyd is, for the upgrade rollout
- * (registry/upgrades.ts). Enrollment and what follows it are node-endpoint.ts.
+ * `blocklydRelease` says which version that blocklyd is, and its release's signature, for the
+ * upgrade rollout (registry/upgrades.ts). The signature is the release's `blocklyd.sig`, which the
+ * image carries beside the binary; the control plane can't make one, and only passes it on.
+ * Enrollment and what follows it are node-endpoint.ts.
  */
 import { execFile } from 'node:child_process'
 import { createHash } from 'node:crypto'
@@ -25,9 +29,24 @@ import { promisify } from 'node:util'
 import { Hono } from 'hono'
 import type { UpgradeOffer } from './wire.ts'
 
+/** An Ed25519 signature's length: `blocklyd.sig` is one, raw, as `openssl pkeyutl -sign` writes it. */
+const SIGNATURE_BYTES = 64
+
 /**
- * The version (from its `--version`) and sha256 of the blocklyd at `bin`, read once as the process
- * starts; null, saying why, when there is none or it doesn't run here.
+ * The release's signature beside `bin` (`<bin>.sig`), in hex; null when there is none, saying so
+ * when there is a file that isn't one.
+ */
+async function signatureOf(bin: string): Promise<string | null> {
+  const signature = await readFile(`${bin}.sig`).catch(() => null)
+  if (signature === null) return null
+  if (signature.length === SIGNATURE_BYTES) return signature.toString('hex')
+  console.error(`fleet: ${bin}.sig is ${signature.length} bytes, not a signature, so it isn't passed on`)
+  return null
+}
+
+/**
+ * The version (from its `--version`), sha256 and release signature of the blocklyd at `bin`, read
+ * once as the process starts; null, saying why, when there is none or it doesn't run here.
  */
 export async function blocklydRelease(bin: string): Promise<UpgradeOffer | null> {
   const binary = await readFile(bin).catch(() => null)
@@ -40,10 +59,20 @@ export async function blocklydRelease(bin: string): Promise<UpgradeOffer | null>
   if (printed !== null && version === undefined)
     console.error(`fleet: ${bin} --version printed no version, so no node is offered it`)
   if (version === undefined) return null
-  return { version, sha256: createHash('sha256').update(binary).digest('hex') }
+  const signature = await signatureOf(bin)
+  return {
+    version,
+    sha256: createHash('sha256').update(binary).digest('hex'),
+    ...(signature === null ? {} : { signature }),
+  }
 }
 
-export function joinRoutes(options: { caPem: string; blocklydBin: string }): Hono {
+export function joinRoutes(options: {
+  caPem: string
+  blocklydBin: string
+  /** `blocklydRelease(blocklydBin)`, read as the process started. */
+  release: UpgradeOffer | null
+}): Hono {
   const app = new Hono()
   // Read once, from beside this file: join.sh is the control plane's, and daemon.json is the pinned
   // blocklyd release's (scripts/blocklyd.ts).
@@ -71,5 +100,6 @@ export function joinRoutes(options: { caPem: string; blocklydBin: string }): Hon
     if (binary === null) return missing(c)
     return c.text(`${createHash('sha256').update(binary).digest('hex')}  blocklyd\n`)
   })
+  app.get('/fleet/v1/blocklyd.json', (c) => (options.release === null ? missing(c) : c.json(options.release)))
   return app
 }

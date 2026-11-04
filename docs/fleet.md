@@ -153,6 +153,7 @@ TLS 1.3 only, both ways, with no 0-RTT.
 | A token leaks | One enrollment, then nothing; an hour by default. Presented again it answers only the node it enrolled, for that node's own key. The node it made is visible and can be retired. |
 | A node's certificate leaks | Useless once renewed (pinning); retire for immediate effect. |
 | The CA key leaks | Every identity can be forged. Replacing the CA re-enrolls every node under its own id, which cuts nodes off until each has ([fleet-operations.md §8](fleet-operations.md#8-certificates)); nodes refuse a renewal under another CA. Keep it in the deployment's secret store only. |
+| The control plane, or its CA key, is taken | It can do what the API lets it within each host's workload policy. It can't have a node run a blocklyd of its own: a node that lists `signed-upgrade` takes an upgrade only with its release's signature, by a key only blocklyd's release workflow holds, and never to an older version (§13). |
 | The operator token leaks | Operator actions, including declaring a node lost. It never reaches nodes; rotate it like any secret. |
 | Presigned archive URLs leak | One object, for 30 minutes. They are never logged by blocklyd (only scheme, host and path). |
 
@@ -560,9 +561,12 @@ Docker):
 - **blocklyd** is one static binary, released from its own repository, and the control plane's
   image carries the release it pins (`bun scripts/blocklyd.ts`). Deploying a control plane that
   pins a newer one rolls it out: a heartbeat's answer offers it
-  (`upgrade: {version, sha256}`) to a node on an older version, which downloads it from the node
-  endpoint over its mutual TLS, checks it, keeps the binary it ran as `blocklyd.prev`, and
-  restarts into it. Servers keep running and no drain is needed: they are Docker's, not
+  (`upgrade: {version, sha256, signature}`) to a node on an older version, which downloads it from
+  the node endpoint over its mutual TLS, checks it, keeps the binary it ran as `blocklyd.prev`, and
+  restarts into it. `signature` is the release's `blocklyd.sig`, which the image carries beside
+  the binary: release.yml's signature of the version and sha256, which the control plane only
+  passes on. A node that lists `signed-upgrade` downloads nothing without one, and never goes back
+  to an older version. Servers keep running and no drain is needed: they are Docker's, not
   blocklyd's. The new binary is on trial until it reconciles and a heartbeat is accepted; one that
   doesn't within two minutes, or can't start, is swapped back for the one before, which reports
   the failure in its heartbeats (`upgradeFailed`). [fleet-operations.md
@@ -571,7 +575,8 @@ Docker):
   the previous one beats healthy on it. A failure (one the node reports, or a node not healthy on
   the release 15 minutes after the offer) stops that region's rollout until an operator retries
   the node; other regions go on. Draining, lost and quarantined nodes aren't offered it, and nor are nodes
-  without the `self-upgrade` feature, which would ignore the offer. Each node's place in it is
+  without the `self-upgrade` feature, which would ignore the offer, or nodes that list
+  `signed-upgrade` while the binary has no `blocklyd.sig` beside it. Each node's place in it is
   four columns on its `fleet_nodes` row, written only in its own heartbeat's transaction; the
   release isn't stored, since it is whatever binary the serving process carries, so a new image is
   a new rollout. `FLEET_UPGRADES=off` turns it off.
