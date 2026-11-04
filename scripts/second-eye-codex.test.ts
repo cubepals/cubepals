@@ -108,6 +108,12 @@ test('only every review of this commit finished counts: clean, findings, or not 
   expect(outcomeFor(read(state(done, sec('running', null))), SHA)).toBeUndefined()
   expect(outcomeFor(read(state(done, sec('completed', true))), SHA)).toBe('findings')
   expect(outcomeFor(read(state(done, sec('completed', false))), SHA)).toBe('clean')
+  // As Codex left it on this pull request when it reacted 👍: the security review done, its flag empty.
+  expect(outcomeFor(read(state(done, sec('completed', null))), SHA)).toBe('clean')
+  // A code review done with its flag empty says nothing (no 👍 came with it): not an answer.
+  expect(
+    outcomeFor(read(state({ ...done, has_any_findings: null }, sec('completed', null))), SHA),
+  ).toBeUndefined()
   // A security review of an older commit doesn't hold this one back.
   expect(outcomeFor(read(state(done, sec('running', null, OTHER))), SHA)).toBe('clean')
   expect(outcomeFor({}, SHA)).toBeUndefined()

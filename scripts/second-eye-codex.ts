@@ -108,8 +108,10 @@ export function codexSummaryOf(comments: GitHubComment[]): { url: string; state:
 
 /**
  * What Codex's summary says about `sha`: every review of it finished, with findings or clean, or
- * not finished yet (undefined). Its code review must have finished on `sha`, and so must a
- * security review of `sha` when one runs; until then line reviews already posted aren't the answer.
+ * not finished yet (undefined). Its code review must have finished on `sha` saying whether it found
+ * anything, and a security review of `sha`, when one runs, must have finished too; until then line
+ * reviews already posted aren't the answer. A finished security review leaves `has_any_findings`
+ * empty when it reports nothing (Codex then reacts 👍), so only `true` counts as its findings.
  */
 export function outcomeFor(state: CodexState, sha: string): 'findings' | 'clean' | undefined {
   const code = state.code_review
@@ -117,8 +119,8 @@ export function outcomeFor(state: CodexState, sha: string): 'findings' | 'clean'
     return undefined
   const security = state.security_review
   const here = security?.commit_sha === sha
-  if (here && (security.status !== 'completed' || security.has_any_findings == null)) return undefined
-  return code.has_any_findings || (here && security.has_any_findings) ? 'findings' : 'clean'
+  if (here && security.status !== 'completed') return undefined
+  return code.has_any_findings || (here && security.has_any_findings === true) ? 'findings' : 'clean'
 }
 
 /**
