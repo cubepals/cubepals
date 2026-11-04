@@ -10,8 +10,11 @@ import { join } from 'node:path'
 import {
   CODEX_BOT,
   codexAnswer,
-  codexReviewOf,
+  codexReviewsOf,
+  codexSummaryOf,
   findingOf,
+  finishedClean,
+  type GitHubComment,
   type GitHubReview,
   type GitHubReviewComment,
   severityOf,
@@ -39,7 +42,7 @@ const p1: GitHubReviewComment = {
   body: '**<sub><sub>![P1 Badge](https://img.shields.io/badge/P1-orange?style=flat)</sub></sub>  Approving MCP tools never notifies the server**\n\nThe approve method only handles function tools.\n\nA branch like reject is needed.\n\nUseful? React with 👍 / 👎.',
 }
 
-test("only Codex's own account counts, on the commit under review, latest first", () => {
+test("only Codex's own account counts, on the commit under review", () => {
   const reviews = [
     review(1, CODEX_BOT, SHA),
     review(2, 'someone', SHA),
@@ -47,8 +50,57 @@ test("only Codex's own account counts, on the commit under review, latest first"
     review(4, CODEX_BOT, SHA, 'User'),
     review(5, CODEX_BOT, SHA),
   ]
-  expect(codexReviewOf(reviews, SHA)?.id).toBe(5)
-  expect(codexReviewOf(reviews.slice(1, 4), SHA)).toBeUndefined()
+  expect(codexReviewsOf(reviews, SHA).map((r) => r.id)).toEqual([1, 5])
+  expect(codexReviewsOf(reviews.slice(1, 4), SHA)).toEqual([])
+})
+
+// Codex's summary comment as it wrote it on a pull request here, once the review was done.
+const state = (code: object, security: object = { commit_sha: null, has_any_findings: null, status: null }) =>
+  `<!-- codex-pull-request-review-summary -->\n<!-- codex-review-state:v1 ${JSON.stringify({
+    code_review: { has_unresolved_findings: false, ...code },
+    security_review: { has_unresolved_findings: null, ...security },
+  })} -->\n\n## Codex Review Summary\n`
+const done = { commit_sha: SHA, has_any_findings: false, status: 'completed' }
+const summary = (body: string, login = CODEX_BOT, type = 'Bot'): GitHubComment => ({
+  user: { login, type },
+  body,
+  html_url: 'https://github.com/cubepals/cubepals/pull/42#issuecomment-7',
+})
+
+test("Codex's summary state is read only from its own account's comment", () => {
+  expect(codexSummaryOf([summary(state(done))])).toEqual({
+    url: 'https://github.com/cubepals/cubepals/pull/42#issuecomment-7',
+    state: {
+      code_review: { has_unresolved_findings: false, ...done },
+      security_review: {
+        has_unresolved_findings: null,
+        commit_sha: null,
+        has_any_findings: null,
+        status: null,
+      },
+    },
+  })
+  expect(codexSummaryOf([summary(state(done), 'someone', 'User')])).toBeUndefined()
+  expect(codexSummaryOf([summary('<!-- codex-review-state:v1 {nope} -->')])).toBeUndefined()
+  expect(codexSummaryOf([summary('Thanks!')])).toBeUndefined()
+})
+
+test('a finished review with no findings of this commit is clean, and nothing else is', () => {
+  const read = (body: string) => codexSummaryOf([summary(body)])?.state ?? {}
+  expect(finishedClean(read(state(done)), SHA)).toBe(true)
+  expect(finishedClean(read(state({ ...done, status: 'running', has_any_findings: null })), SHA)).toBe(false)
+  expect(finishedClean(read(state({ ...done, has_any_findings: true })), SHA)).toBe(false)
+  expect(finishedClean(read(state({ ...done, commit_sha: OTHER })), SHA)).toBe(false)
+  expect(
+    finishedClean(read(state(done, { commit_sha: SHA, has_any_findings: null, status: 'running' })), SHA),
+  ).toBe(false)
+  expect(
+    finishedClean(read(state(done, { commit_sha: SHA, has_any_findings: true, status: 'completed' })), SHA),
+  ).toBe(false)
+  expect(
+    finishedClean(read(state(done, { commit_sha: SHA, has_any_findings: false, status: 'completed' })), SHA),
+  ).toBe(true)
+  expect(finishedClean({}, SHA)).toBe(false)
 })
 
 test('P0 is high, P1 medium, anything else low', () => {
@@ -127,6 +179,7 @@ test('the answer, the silence and a GitHub error are written as the workflow rea
     WAIT_MINUTES: '0',
   }
   let reviews: GitHubReview[] = []
+  let comments: GitHubComment[] = []
   let failing = false
   spyOn(globalThis, 'fetch').mockImplementation(
     Object.assign(
@@ -134,7 +187,9 @@ test('the answer, the silence and a GitHub error are written as the workflow rea
         if (failing) return new Response(null, { status: 502 })
         const path = String(url)
         if (path.includes('/reviews/5/comments')) return Response.json([p1])
+        if (path.includes('/reviews/6/comments')) return Response.json([{ ...p1, path: 'b.ts' }])
         if (path.includes('/reviews?')) return Response.json(reviews)
+        if (path.includes('/issues/42/comments?')) return Response.json(comments)
         throw new Error(`Unexpected request: ${path}`)
       },
       { preconnect: originalFetch.preconnect },
@@ -144,6 +199,21 @@ test('the answer, the silence and a GitHub error are written as the workflow rea
   try {
     await writeCodexAnswer(env)
     expect(readFileSync(output, 'utf8')).toBe('codex=silent\nurl=\nreview=\n')
+    rmSync(output)
+    comments = [summary(state({ ...done, status: 'running', has_any_findings: null }))]
+    await writeCodexAnswer(env)
+    expect(readFileSync(output, 'utf8')).toBe('codex=silent\nurl=\nreview=\n')
+    rmSync(output)
+    comments = [summary(state(done))]
+    await writeCodexAnswer(env)
+    expect(readFileSync(output, 'utf8')).toBe(
+      `codex=answered\nurl=https://github.com/cubepals/cubepals/pull/42#issuecomment-7\nreview=${JSON.stringify(codexAnswer([]))}\n`,
+    )
+    rmSync(output)
+    reviews = [review(5, CODEX_BOT, SHA), review(6, CODEX_BOT, SHA)]
+    await writeCodexAnswer(env)
+    expect(readFileSync(output, 'utf8')).toContain(`url=${reviews[1]?.html_url}`)
+    expect(readFileSync(output, 'utf8')).toContain('"file":"b.ts"')
     rmSync(output)
     reviews = [review(5, CODEX_BOT, SHA)]
     await writeCodexAnswer(env)

@@ -4,17 +4,20 @@
 
 /**
  * Codex's own GitHub review as the second eye's answer (second-eye.yml). Codex reviews pull
- * requests on the maintainer's Codex plan, on OpenAI's servers, when code review is on for this
- * repository in Codex's settings, and posts a GitHub review from its app's account. This waits for
- * that review of the commit the second eye is reviewing and turns it into the second eye's answer:
- * each line comment a finding (P0 high, P1 medium, anything else low), and the verdict "fix first"
- * when one is high or medium. When Codex hasn't reviewed the commit by the deadline, it answers
- * nothing, and Claude reviews in its place.
+ * requests on the maintainer's Codex plan, on OpenAI's servers, when one is opened or marked ready
+ * and when someone comments "@codex review" (agents do, after each push: AGENTS.md). Its app's
+ * account keeps a summary comment whose hidden state says which commit it reviewed and whether it
+ * found anything; with findings it also posts a GitHub review of line comments, and without any it
+ * reacts 👍 and posts none. This waits for either answer about the commit the second eye is
+ * reviewing and turns it into the second eye's answer: each line comment a finding (P0 high, P1
+ * medium, anything else low), the verdict "fix first" when one is high or medium, and "merge" when
+ * Codex finished the commit with no findings. When Codex hasn't answered for the commit by the
+ * deadline, this answers nothing, and Claude reviews in its place.
  *
  *   bun scripts/second-eye-codex.ts
  *
  * It reads REPO, PULL, SHA (the commit under review), WAIT_MINUTES and GH_TOKEN, and writes
- * `codex` (answered or silent), `url` (Codex's review) and `review` (the answer on one line, or
+ * `codex` (answered or silent), `url` (Codex's review or summary) and `review` (the answer on one line, or
  * empty) to GITHUB_OUTPUT. A GitHub error while waiting counts as no review yet. It imports nothing
  * installed. Not for Claude's review, which the workflow runs with .github/second-eye.md.
  */
@@ -34,6 +37,26 @@ export interface GitHubReview {
   user: { login: string; type: string } | null
   commit_id: string
   html_url: string
+}
+
+/** A pull request's conversation comment, as GitHub's REST API gives it. */
+export interface GitHubComment {
+  user: { login: string; type: string } | null
+  body?: string
+  html_url: string
+}
+
+/** One of the reviews Codex's summary comment tracks: its commit, whether it found anything, and whether it is done. */
+interface ReviewState {
+  commit_sha: string | null
+  has_any_findings: boolean | null
+  status: string | null
+}
+
+/** The hidden state in Codex's summary comment (`<!-- codex-review-state:v1 {…} -->`), as Codex writes it. */
+export interface CodexState {
+  code_review?: ReviewState
+  security_review?: ReviewState
 }
 
 /** A line comment of a review, as GitHub's REST API gives it. */
@@ -58,9 +81,37 @@ const MOST = (() => {
   }
 })()
 
-/** Codex's latest review of `sha`, when its own account posted one. */
-export const codexReviewOf = (reviews: GitHubReview[], sha: string): GitHubReview | undefined =>
-  reviews.filter((r) => r.user?.login === CODEX_BOT && r.user.type === 'Bot' && r.commit_id === sha).at(-1)
+/** True for something Codex's own app account wrote, not a person or bot using its name. */
+const byCodex = (item: { user: { login: string; type: string } | null }): boolean =>
+  item.user?.login === CODEX_BOT && item.user.type === 'Bot'
+
+/** Codex's reviews of `sha` (its code review and security review are separate), oldest first. */
+export const codexReviewsOf = (reviews: GitHubReview[], sha: string): GitHubReview[] =>
+  reviews.filter((review) => byCodex(review) && review.commit_id === sha)
+
+/** Codex's summary comment and the state it keeps, when its own account wrote one. */
+export function codexSummaryOf(comments: GitHubComment[]): { url: string; state: CodexState } | undefined {
+  for (const comment of comments.filter(byCodex).reverse()) {
+    const match = /<!-- codex-review-state:v1 (\{.*?\}) -->/s.exec(comment.body ?? '')
+    if (!match) continue
+    try {
+      return { url: comment.html_url, state: JSON.parse(match[1] as string) as CodexState }
+    } catch {
+      return undefined
+    }
+  }
+  return undefined
+}
+
+/** True when Codex finished reviewing `sha` and found nothing, nor did a security review of it. */
+export function finishedClean(state: CodexState, sha: string): boolean {
+  const code = state.code_review
+  if (code?.commit_sha !== sha || code.status !== 'completed' || code.has_any_findings !== false) return false
+  const security = state.security_review
+  return (
+    security?.commit_sha !== sha || (security.status === 'completed' && security.has_any_findings === false)
+  )
+}
 
 /** Codex marks each line comment P0 (breaks something) or P1 (should be fixed). */
 export function severityOf(body: string): Severity {
@@ -151,12 +202,20 @@ export async function writeCodexAnswer(
   const found = await wait(
     async () => {
       try {
-        const review = codexReviewOf(await all<GitHubReview>(`repos/${repo}/pulls/${pull}/reviews`), sha)
-        if (!review) return undefined
-        const comments = await all<GitHubReviewComment>(
-          `repos/${repo}/pulls/${pull}/reviews/${review.id}/comments`,
-        )
-        return { url: review.html_url, review: codexAnswer(comments) }
+        const reviews = codexReviewsOf(await all<GitHubReview>(`repos/${repo}/pulls/${pull}/reviews`), sha)
+        if (reviews.length) {
+          const comments: GitHubReviewComment[] = []
+          for (const review of reviews)
+            comments.push(
+              ...(await all<GitHubReviewComment>(
+                `repos/${repo}/pulls/${pull}/reviews/${review.id}/comments`,
+              )),
+            )
+          return { url: reviews.at(-1)?.html_url ?? '', review: codexAnswer(comments) }
+        }
+        const summary = codexSummaryOf(await all<GitHubComment>(`repos/${repo}/issues/${pull}/comments`))
+        if (summary && finishedClean(summary.state, sha)) return { url: summary.url, review: codexAnswer([]) }
+        return undefined
       } catch (error) {
         console.warn(
           `::warning::Looking for Codex's review failed: ${String(error).replace(/[\r\n]+/g, ' ')}`,
