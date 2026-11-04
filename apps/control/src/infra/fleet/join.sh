@@ -11,7 +11,9 @@
 #
 #   sh join.sh <bk1. token> <the fleet CA it checked> [blocklyd join's options, such as --address <ip>]
 #
-# It installs Docker from Docker's own apt repository if it is missing, gives Docker blocklyd's
+# It installs Docker from Docker's own apt repository if it is missing, and nftables, which
+# blocklyd's unit needs before every start to keep servers off the host and off each other's ports
+# (`blocklyd isolate`), gives Docker blocklyd's
 # daemon.json if it has none, installs the blocklyd the control plane serves once its sha256
 # matches (at /var/lib/blocklyd/bin/blocklyd, linked from /usr/local/bin), and runs `blocklyd join`,
 # which writes the configuration and starts the service. On a host that is already the node a
@@ -53,6 +55,13 @@ if ! command -v docker >/dev/null 2>&1; then
     >/etc/apt/sources.list.d/docker.list
   apt-get update -q
   apt-get install -yq docker-ce docker-ce-cli containerd.io
+fi
+
+if ! command -v nft >/dev/null 2>&1; then
+  command -v apt-get >/dev/null 2>&1 || fail "nft is missing, and only Debian and Ubuntu are set up here: install nftables, then paste the line again"
+  say "installing nftables"
+  apt-get update -q
+  apt-get install -yq nftables
 fi
 
 if [ ! -e /etc/docker/daemon.json ]; then

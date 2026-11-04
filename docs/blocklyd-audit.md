@@ -121,7 +121,6 @@ server down.
 
 - **The address is re-inferred at every start.** A host that later gains a second private address (Tailscale, a VPN) can no longer start blocklyd, including after a self-upgrade. The fix needs a design call and new on-disk state: remember the address served on, or have join persist it. It is the most important open item.
 - **The unit drifts.** The unit on hosts is written once by join and never follows upgrades. Do this with the first release that changes the unit: a doctor check plus `doctor --fix`, the way daemon.json is handled.
-- **Heartbeat fences run inline.** A long graceful stop delays heartbeats. The safe version needs care around the fencing invariant, and the re-applied fence above covers the dangerous case.
 - **Rare races** (low impact, owned code for each):
   - a reconcile pass dropping an in-flight port allocation;
   - concurrent starts passing memory admission together;
