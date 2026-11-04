@@ -7,15 +7,17 @@ package blockly.reporter;
 import com.google.gson.JsonObject;
 import java.lang.management.GarbageCollectorMXBean;
 import java.lang.management.ManagementFactory;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Arrays;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 import org.bukkit.Bukkit;
 import org.bukkit.World;
 
 /**
- * How the server is ticking, sampled once a minute on its main thread and queued for the control
- * plane at `CUBEPALS_VITALS_URL`: ticks a second, milliseconds a tick (the average, the 95th
+ * How the server is ticking, sampled once a minute of the clock on its main thread and queued for
+ * the control plane at `CUBEPALS_VITALS_URL`: ticks a second, milliseconds a tick (the average, the 95th
  * percentile and the slowest of the last hundred), players, loaded chunks and entities, the JVM's
  * heap, and how long garbage collection paused it since the last sample. Reading them is a few
  * counters Paper already keeps; nothing here walks the world.
@@ -23,14 +25,40 @@ import org.bukkit.World;
  * Not for a join's own tick, which rides its `in_world` event (`Listeners`).
  */
 final class Vitals implements Runnable {
-    /** Ticks between samples: a minute at twenty a second. */
-    static final long EVERY_TICKS = 20L * 60;
+    /**
+     * Between samples, by the clock: a server that lags runs its ticks slower, so a count of ticks
+     * would sample it less often the worse it plays.
+     */
+    static final Duration EVERY = Duration.ofMinutes(1);
 
     private final Consumer<JsonObject> queue;
+    private final AtomicBoolean waiting = new AtomicBoolean(false);
     private long gcMsBefore = gcMs();
 
     Vitals(Consumer<JsonObject> queue) {
         this.queue = queue;
+    }
+
+    /**
+     * What the clock runs each minute: hands a sample to the main thread through `dispatch`, unless
+     * the last one handed over hasn't run yet, as on a server stalled for that long.
+     */
+    Runnable onTheMinute(Consumer<Runnable> dispatch) {
+        return () -> {
+            if (!waiting.compareAndSet(false, true)) return;
+            try {
+                dispatch.accept(() -> {
+                    try {
+                        run();
+                    } finally {
+                        waiting.set(false);
+                    }
+                });
+            } catch (RuntimeException e) {
+                // The plugin is being disabled: nothing more to sample.
+                waiting.set(false);
+            }
+        };
     }
 
     @Override

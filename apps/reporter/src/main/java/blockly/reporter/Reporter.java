@@ -10,6 +10,9 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.TreeSet;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import org.bukkit.Bukkit;
 import org.bukkit.event.HandlerList;
 import org.bukkit.event.player.PlayerLoginEvent;
@@ -29,6 +32,7 @@ public final class Reporter extends JavaPlugin {
 
     private Queue queue;
     private Queue vitals;
+    private ScheduledExecutorService clock;
 
     @Override
     public void onEnable() {
@@ -53,19 +57,28 @@ public final class Reporter extends JavaPlugin {
     @Override
     public void onDisable() {
         if (queue != null) queue.stop(Duration.ofSeconds(2));
+        if (clock != null) clock.shutdownNow();
         if (vitals != null) vitals.stop(Duration.ofSeconds(1));
     }
 
     /**
-     * Samples how the server ticks once a minute (`Vitals`) and sends it to `CUBEPALS_VITALS_URL`
-     * from a queue of its own, so a join's report never waits behind it. Without the address, nothing.
+     * Samples how the server ticks once a minute of the clock (`Vitals`), on the main thread, and
+     * sends it to `CUBEPALS_VITALS_URL` from a queue of its own, so a join's report never waits
+     * behind it. Without the address, nothing.
      */
     private void startVitals() {
         String url = System.getenv("CUBEPALS_VITALS_URL");
         if (url == null || url.isBlank()) return;
         vitals = new Queue(Queue.http(URI.create(url)), Duration.ofSeconds(5));
         vitals.start();
-        Bukkit.getScheduler().runTaskTimer(this, new Vitals(vitals::offer), Vitals.EVERY_TICKS, Vitals.EVERY_TICKS);
+        clock = Executors.newSingleThreadScheduledExecutor(run -> {
+            Thread thread = new Thread(run, "Cubepals vitals");
+            thread.setDaemon(true);
+            return thread;
+        });
+        long every = Vitals.EVERY.toSeconds();
+        Runnable sample = new Vitals(vitals::offer).onTheMinute(task -> Bukkit.getScheduler().runTask(this, task));
+        clock.scheduleAtFixedRate(sample, every, every, TimeUnit.SECONDS);
     }
 
     /** The plugins, other than this one, with a listener on `handlers`, by name. */
