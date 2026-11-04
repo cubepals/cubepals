@@ -110,7 +110,6 @@ export interface AccountOverview {
   entitlements: Entitlements
   /** The sizes the plan allows, as somebody reads them: "3 GB · up to 5 players". */
   sizeLabels: string[]
-  settings: { afkKickMinutes: number | null }
   usage: {
     servers: number
     running: number
@@ -249,7 +248,6 @@ export class AccountQueries {
         giftNext: await giftNext(this.#db, userId, now),
       },
       entitlements: monthsBlock(entitlements, month),
-      settings: { afkKickMinutes: standing.afkKickMinutes },
       usage: {
         servers: owned.servers,
         running: owned.running,

@@ -291,6 +291,7 @@ function runningView(
     players: { online: 0, people: [] },
     createdAt: server.createdAt.toISOString(),
     version: current.version,
+    afkKickMinutes: null,
     settings: {
       pvp: true,
       motd: '"Birch Meadow", a server created by Cubepals',

@@ -300,33 +300,6 @@ export class AccountService {
   }
 
   /**
-   * The AFK kick, where the plan lets its owner choose one. Null goes back to the plan's own, and
-   * 0 is never. A plan whose play is metered is one where an idle player costs money, which is
-   * why the choice exists at all; a plan with a fixed allowance keeps Blockly's number.
-   */
-  async setAfkKick(actor: Actor, minutes: number | null): Promise<number | null> {
-    if (actor.kind !== 'user') throw new NotFound('Account')
-    if (minutes !== null && minutes !== 0 && (!Number.isInteger(minutes) || minutes < 5 || minutes > 120))
-      throw new AppError('invalid_choice', 'An AFK kick is between 5 and 120 minutes, or never.')
-    const standing = await loadStanding(this.#db, actor.userId)
-    if (!entitlementsOf(standing).mayChooseAfkKick)
-      throw new AppError('not_entitled', 'Your plan keeps Cubepals’ own AFK kick. Plus lets you set it.')
-    await this.#db.transaction(async (tx) => {
-      const locked = await lockStanding(tx, actor.userId)
-      if (locked === null) throw new NotFound('Account')
-      await saveStanding(tx, actor.userId, { afkKickMinutes: minutes })
-      await tx.insert(schema.auditLog).values({
-        actor: requestedBy(actor),
-        action: 'account.afk_kick_set',
-        subjectType: 'account',
-        subjectId: actor.userId,
-        data: { minutes },
-      })
-    })
-    return minutes
-  }
-
-  /**
    * Where the account came from, as the link that brought it said: kept once, in the
    * week after sign-up, and never overwritten. Saying it again does nothing.
    */

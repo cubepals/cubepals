@@ -662,6 +662,7 @@ export class ServerQueries {
       createdAt: server.createdAt.toISOString(),
       version: server.version,
       settings: revision.settings,
+      afkKickMinutes: server.afkKickMinutes,
       partySize: partySizeOf(server.memoryTier),
       sessionEndsAt:
         sessionStart === null || plan.maxSessionMinutes === null

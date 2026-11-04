@@ -13,6 +13,7 @@ describe('the API router', () => {
     const procedures = Object.keys(appRouter._def.procedures)
     for (const path of [
       'servers.get',
+      'servers.setAfkKick',
       'servers.planVersion',
       'servers.relocate',
       'mods.plan',
@@ -54,6 +55,7 @@ describe('the API router', () => {
       'sharing.inviteOpened',
     ])
       expect(procedures).toContain(path)
+    expect(procedures).not.toContain('account.setAfkKick')
   })
 })
 

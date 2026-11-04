@@ -181,8 +181,8 @@ export class RuntimeSpecs {
       rconPassword: deriveServerSecret(current.key, server.id, 'rcon'),
       artifactUrl: this.#links.forServer(server.id),
       limits: {
-        // The owner's own AFK kick where they set one, the plan's otherwise.
-        playerIdleKickMinutes: standing.afkKickMinutes ?? plan.playerIdleKickMinutes,
+        // This server's own AFK kick where set, the plan's otherwise.
+        playerIdleKickMinutes: server.afkKickMinutes ?? plan.playerIdleKickMinutes,
         worldRadius: plan.worldRadius,
         storageGb: Math.max(plan.storage.startGb, await grownStorage(q, server.id)),
       },

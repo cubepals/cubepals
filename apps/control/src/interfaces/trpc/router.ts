@@ -99,6 +99,10 @@ import { authedProcedure, ownerOrAdminProcedure, publicProcedure, router, sessio
 /** Each procedure: parse, get the actor, call one service method, return. Nothing else. */
 
 const servers = router({
+  setAfkKick: authedProcedure.input(SetAfkKickInput).mutation(async ({ ctx, input }) => {
+    await ctx.services.afkKick.set(ctx.actor, input.serverId, input.minutes)
+    return ctx.services.queries.get(ctx.actor, input.serverId)
+  }),
   list: authedProcedure.query(({ ctx }) => ctx.services.queries.list(ctx.actor)),
   get: authedProcedure
     .input(ServerRef)
@@ -693,10 +697,6 @@ const account = router({
   setTimeZone: authedProcedure
     .input(SetTimeZoneInput)
     .mutation(({ ctx, input }) => ctx.services.accounts.setTimeZone(ctx.actor, input.timeZone)),
-  setAfkKick: authedProcedure.input(SetAfkKickInput).mutation(async ({ ctx, input }) => {
-    await ctx.services.accounts.setAfkKick(ctx.actor, input.minutes)
-    return ctx.services.accountQueries.overview(ctx.actor)
-  }),
   /** The owner's own spending cap: what Blockly may charge past the included block. */
   allowExtraPlay: authedProcedure.input(AllowExtraPlayInput).mutation(async ({ ctx, input }) => {
     await ctx.services.accounts.allowExtraPlay(ctx.actor, input.units)

@@ -349,6 +349,12 @@ const change = {
   when: RestartWhen.optional(),
 }
 
+/** One server's idle kick: null resets to the plan default; zero never kicks. */
+export const SetAfkKickInput = z.object({
+  serverId: ServerId,
+  minutes: z.union([z.literal(0), z.number().int().min(5).max(120)]).nullable(),
+})
+
 export const ChangeSettingsInput = z.object({ ...change, settings: ServerSettingsInput })
 export const ChangeAuthenticationInput = z.object({ ...change, onlineMode: z.boolean() })
 
@@ -561,6 +567,8 @@ export interface ServerView {
   players: { online: number; people: { name: string; uuid: string }[] } | null
   createdAt: string
   version: number
+  /** Idle kick for this server: null uses the plan default, zero never kicks. */
+  afkKickMinutes: number | null
   settings: ServerSettingsView
   /** Bedrock players: on or off on Paper or plain Minecraft, no pack; null on others; false if none. */
   bedrock: BedrockView | null | false

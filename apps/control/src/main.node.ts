@@ -411,6 +411,7 @@ function apiServices(
     servers: app.servers,
     notices: app.notices,
     accounts: app.accounts,
+    afkKick: app.afkKick,
     accountQueries: app.accountQueries,
     impersonation: new Impersonation({ db }),
     billing: app.billing,
