@@ -32,7 +32,7 @@ since the moment given (a day ago by default):
 - the operations on its servers that failed, and the slowest that succeeded;
 - joins that stopped before the world or were turned away, newest first;
 - the signals raised on its servers ([production.md](production.md#from-the-command-line), `signals`);
-- how its Paper servers ticked, the most minutes behind first;
+- how its servers ticked, the most minutes behind first;
 - what ran slow or failed in the control plane for it, grouped by what it was, and the newest;
 - where else to look, by name: its errors in PostHog, a server's log, one join's story.
 
@@ -114,24 +114,35 @@ an answer.
 
 ## How servers tick
 
-Paper servers the reporter plugin runs on ([configuration.md](configuration.md), Join reporter)
-sample how they tick once a minute and post it to the control plane, which keeps it 7 days
-(`server_vitals`, `app/vitals/`):
+Every running server is sampled once a minute, and the samples are kept 7 days (`server_vitals`,
+`app/vitals/`). Each says where it came from (`source`):
+
+- **`reporter`**: Paper servers the reporter plugin runs on ([configuration.md](configuration.md),
+  Join reporter) sample themselves and post it to the control plane. Everything below is known.
+- **`console`**: every other server (vanilla, Fabric, Forge, NeoForge, modpacks, and Paper where
+  `JOIN_REPORTER` leaves the plugin off) is asked `tick query` over its own console, in the same
+  pass that reads who is on (`presence-sync`). Minecraft 1.20.3 and later answer it, whatever runs
+  them. Ticks a second, milliseconds a tick and players are known; chunks, entities, heap and
+  collections are null. A server the plugin sampled in the last three minutes isn't asked too, and
+  a frozen or sprinting game (`tick freeze`, `tick sprint`) isn't kept.
 
 | Figure | What it says |
 |---|---|
-| `tps` | Ticks a second over the last minute. 20 is keeping up; under 18 the server is behind, and the minute counts in `laggingMinutes`. |
-| `mspt`, `msptP95`, `msptMax` | Milliseconds a tick: the average, the 95th percentile and the slowest of the last hundred. Past 50 ms on average, a server can't keep up. |
+| `tps` | Ticks a second over the last minute. 20 is keeping up; under 18 the server is behind, and the minute counts in `laggingMinutes`. From a console: the server's target while its average tick fits in it, `1000 / mspt` when it doesn't. |
+| `mspt`, `msptP95`, `msptMax` | Milliseconds a tick: the average, the 95th percentile and the slowest of the last hundred (from a console, the 99th percentile, which `tick query` gives). Past 50 ms on average, a server can't keep up. |
 | `players`, `chunks`, `entities` | What it was carrying: players online, chunks loaded and entities in its worlds. |
 | `heapUsedMb`, `heapMaxMb` | The JVM's heap in use and its most. A share near 1 with long garbage collection is a server short of memory. |
 | `gcMs` | Milliseconds garbage collection paused the game in that minute. |
 
-`ops.ts vitals` lists the servers that ticked worst since a moment (an hour ago by default), with
-whose they are: for one account with `--account`, for the platform without. `ops.ts vitals
-<server>` gives one server's minutes. Lag that comes with many entities or chunks is the world's;
-lag that comes with a full heap and long collections is memory; lag with neither, on a server few
-play on, is more likely the machine (its CPU in Fly's metrics, [metrics.md](metrics.md)). Across
-the platform, without naming anyone: `cubepals_server_tick_duration_seconds`.
+`ops.ts vitals` starts with the platform now: how many servers are running, how many were sampled
+in the last three minutes and from where, how many were behind in their newest sample, and how
+many said nothing (`silent`: a version before `tick query`, or a console that didn't answer). Then
+it lists the servers that ticked worst since a moment (an hour ago by default), with whose they
+are: for one account with `--account`, for the platform without. `ops.ts vitals <server>` gives one
+server's minutes. Lag that comes with many entities or chunks is the world's; lag that comes with a
+full heap and long collections is memory; lag with neither, on a server few play on, is more likely
+the machine (its CPU in Fly's metrics, [metrics.md](metrics.md)). Across the platform, without
+naming anyone: `cubepals_server_tick_duration_seconds`.
 
 ## Errors in PostHog
 
@@ -148,6 +159,6 @@ record here with an `error` of 5xx and a `request_id` is the same failure as the
   ([metrics.md](metrics.md), Jobs).
 - The website's own rendering runs on Cloudflare, not on the control plane: only its calls to
   `/api` are seen, where they arrive.
-- Servers without the reporter plugin (vanilla, mod loaders, modpacks, and Paper where
-  `JOIN_REPORTER` leaves it off) report no ticks; their log is `console_read`.
+- A server before Minecraft 1.20.3 without the reporter plugin has no `tick query`: it counts as
+  `silent`, and its log is `console_read`. A console reading has no heap, chunks or entities.
 - A crash is the server's latest state (`server_get`), not a history.

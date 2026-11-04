@@ -531,6 +531,8 @@ export class FakeMinecraft implements FakeWorkload, ServerConsole, ReadinessProb
         return this.#data(server, args)
       case 'execute':
         return args[0] === 'as' ? this.#testFooting(server, args) : this.#executeIn(server, args)
+      case 'tick':
+        return tick(args)
       case 'save-all':
         return 'Saving the game (this may take a moment!)Saved the game'
       case 'save-off':
@@ -743,3 +745,9 @@ function pvpIsGameRule(env: Readonly<Record<string, string>>): boolean {
   return major > 1 || minor > 21 || (minor === 21 && patch >= 9)
 }
 const capitalized = (word: string) => word.charAt(0).toUpperCase() + word.slice(1)
+
+/** `tick query` as a vanilla 1.21.11 server answers it over RCON, keeping up; nothing else of `tick` is played. */
+function tick(args: string[]): string {
+  if (args[0] !== 'query') return 'Unknown or incomplete command. See below for error'
+  return 'The game is running normallyTarget tick rate: 20.0 per second.\nAverage time per tick: 0.2ms (Target: 50.0ms)Percentiles: P50: 0.2ms P95: 0.3ms P99: 1.6ms. Sample: 100'
+}
