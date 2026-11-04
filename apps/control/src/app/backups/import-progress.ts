@@ -2,11 +2,16 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-/** Measured world-import stages and byte counts, persisted at a bounded rate for polling and diagnosis. */
+/**
+ * Measured world-import stages and byte counts, persisted at a bounded rate for polling and
+ * diagnosis. A display aid only: a write the database refuses is logged and skipped, so it never
+ * fails or undoes the import it measures.
+ */
 import type { WorldImportProgress } from '@blockly/contracts'
 import { SECOND_MS } from '@blockly/contracts/durations'
 import { type Db, schema } from '@blockly/db'
 import { and, eq } from 'drizzle-orm'
+import { inFull } from '../errors.ts'
 import type { TarballEntry } from '../ports/formats.ts'
 
 const REPORT_EVERY_MS = 2 * SECOND_MS
@@ -76,5 +81,8 @@ export class ImportProgress {
       .update(schema.worldImports)
       .set({ progress: { ...this.#state } })
       .where(and(eq(schema.worldImports.id, this.#importId), eq(schema.worldImports.status, 'reading')))
+      .catch((error: unknown) =>
+        console.warn(`world-import ${this.#importId}: progress not written: ${inFull(error)}`),
+      )
   }
 }

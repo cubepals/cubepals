@@ -405,6 +405,8 @@ attempt; answering a question starts another. The page polls these records and s
 Fetching has the upload's exact size. Packing counts uncompressed source bytes consumed, including
 the generated settings, rather than guessing the compressed size. A remaining-time estimate
 belongs only to a measured stage with fresh progress; unknown work stays indeterminate.
+Progress is a display aid: a report the database refuses is logged and skipped, and never fails
+or undoes the import it measures.
 
 Production evidence collected on 2026-11-02:
 
@@ -432,5 +434,6 @@ A `client_only_server_optional` catalog version stays in players' games when a w
 brought in. A server companion is optional. This avoids resolving the union of unrelated loader
 dependencies for a client mod: Zoomify's universal 2.17.0 release lists KotlinLangForge as required,
 although that dependency has no Fabric version. Earlier world imports are reclassified from their
-exact catalog versions when displayed and played, so they do not need another upload. A real
+exact catalog versions when displayed and played, so they do not need another upload. While the
+catalog can't answer, the import is displayed with its mods as they were sorted when it came. A real
 server dependency that cannot resolve still blocks Play, with the dependency named in the refusal.
