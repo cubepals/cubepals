@@ -394,6 +394,20 @@ cp blocklyd.service /etc/systemd/system/blocklyd.service   # the release's, for 
 systemctl daemon-reload && systemctl restart blocklyd
 ```
 
+**A node that joined before blocklyd 0.3.5** keeps a unit without `blocklyd isolate`, the rules
+that keep its servers off the host and off each other's ports ([fleet.md
+§12](fleet.md#12-isolation)): `join` writes the unit once, and neither an upgrade nor joining
+again (§8) rewrites it. Once the node runs 0.3.5, on its host, as root, with the release's
+`blocklyd.service` (a file of [its release](https://github.com/cubepals/blocklyd/releases/tag/v0.3.5)):
+
+```sh
+apt-get install -y nftables
+cp blocklyd.service /etc/systemd/system/blocklyd.service
+systemctl daemon-reload && systemctl restart blocklyd
+```
+
+The unit then puts the rules in place before every start, and doesn't start without them.
+
 From then on it upgrades itself. If the control plane's new version needs a feature (see
 `features` in [protocol.md](https://github.com/cubepals/blocklyd/blob/main/docs/protocol.md)), it places only on nodes that have
 it, and older nodes keep their servers until they upgrade.
