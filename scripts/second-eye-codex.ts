@@ -153,13 +153,19 @@ function withoutCodexTags(text: string): string {
   return after
 }
 
+/**
+ * True for one of the hidden marker lines Codex ends a comment with (`<!-- codex-…:v1 -->`). Text,
+ * not markup: whatever else is left is escaped when the comment writes it.
+ */
+const isMarker = (line: string): boolean => line.startsWith('<!-- codex-') && line.endsWith('-->')
+
 /** Codex's Markdown as plain lines: no images or badges, its tags and hidden markers, emphasis or feedback prompt. */
 function plainLines(body: string): string[] {
   return withoutCodexTags(body.replace(/!\[[^\]]*\]\([^)]*\)/g, ''))
     .replace(/\*\*|__/g, '')
     .split('\n')
     .map((line) => line.trim())
-    .filter((line) => line && !/^Useful\? React with/i.test(line) && !/^<!--.*-->$/.test(line))
+    .filter((line) => line && !/^Useful\? React with/i.test(line) && !isMarker(line))
 }
 
 /** One of Codex's line comments as a finding: its first line the problem, the rest the why. */
