@@ -2,6 +2,10 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
+/**
+ * A query's shape (`statement.ts`): one name for every run of a query, and none of the values it
+ * carried, however they were quoted.
+ */
 import { describe, expect, test } from 'bun:test'
 import { STATEMENT_CHARS, shapeOf } from './statement.ts'
 
