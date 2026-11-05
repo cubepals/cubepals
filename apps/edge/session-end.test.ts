@@ -178,6 +178,37 @@ describe('how a session’s stretches are counted, on a clock of its own', () =>
     })
   })
 
+  test('once reading resumes, the silence after is the player’s again', async () => {
+    let now = 0
+    const clock = { now: () => now, wall: () => 1_700_000_000_000 + now }
+    const { EventEmitter } = await import('node:events')
+    const player = Object.assign(new EventEmitter(), {
+      writableLength: 0,
+      isPaused: () => false,
+    }) as unknown as Socket
+    const server = Object.assign(new EventEmitter(), {
+      writableLength: 64 * 1024,
+      destroyed: false,
+    }) as unknown as Socket
+    const watch = watchSession(player, server, clock)
+    now = 1_000
+    player.emit('data', Buffer.from('x'))
+    now = 2_000
+    player.emit('pause')
+    now = 3_000
+    player.emit('resume')
+    now = 40_000
+    server.emit('end')
+    expect(watch.end()).toMatchObject({
+      longestHeldMs: 2_000,
+      heldStalls: 0,
+      heldAtEnd: false,
+      stalls: 1,
+      quietAtEndMs: 37_000,
+      longestQuietMs: 37_000,
+    })
+  })
+
   test('a pause with nothing waiting to go on, as a connection comes down, holds nothing', async () => {
     const { player, game, ends, front } = await relayed()
     player.write('hello')

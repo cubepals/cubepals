@@ -81,6 +81,8 @@ export function watchSession(
     quiet.held()
     mostQueuedUp = Math.max(mostQueuedUp, server.writableLength)
   })
+  // Reading again: what follows, until the player's next bytes, is their own silence.
+  player.on('resume', () => quiet.resumed(clock.now()))
   server.on('data', () => {
     down = clock.now()
     mostQueued = Math.max(mostQueued, player.writableLength)
@@ -136,6 +138,14 @@ class Stretches {
   /** The front door stopped reading the player: the stretch under way isn't theirs. */
   held(): void {
     this.#held = true
+  }
+
+  /** The front door reads the player again at `at`: a held stretch ends there, and their own begins. */
+  resumed(at: number): void {
+    if (!this.#held) return
+    this.#close(at)
+    this.#from = at
+    this.#held = false
   }
 
   /** Bytes from the player at `at`: the stretch before them ends, and one begins. */
