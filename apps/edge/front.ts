@@ -38,6 +38,7 @@ import { turnAway } from './hold.ts'
 import type { Gate } from './limits.ts'
 import { connectionClosed, connectionEnded, type Edition, firstByteAfter } from './metrics.ts'
 import { hostnameOf, readVarInt } from './notice.ts'
+import { watchSession } from './session-end.ts'
 import { sourceKey, type Visits } from './visits.ts'
 
 export interface FrontOptions {
@@ -409,9 +410,12 @@ class Arrival {
         toRouter.once('connect', () =>
           visits.alias(sourceKey(toRouter.localAddress ?? '', toRouter.localPort ?? 0), source),
         )
-        // `bytesRead` came from the player, `bytesWritten` went back to them.
+        // `bytesRead` came from the player, `bytesWritten` went back to them; and how it went.
         const client = this.#client
-        client.once('close', () => visits.closed(source, { up: client.bytesRead, down: client.bytesWritten }))
+        const session = watchSession(client, toRouter)
+        client.once('close', () =>
+          visits.closed(source, { up: client.bytesRead, down: client.bytesWritten }, session.end()),
+        )
       },
     }
   }

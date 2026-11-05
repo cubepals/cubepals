@@ -225,6 +225,13 @@ describe.skipIf(ROUTER_BIN === '')('the agent’s visits', () => {
     expect(ordered(close?.connectedAt, close?.handedAt, close?.leftAt)).toBe(true)
     expect(close?.bytesUp).toBeGreaterThan(0)
     expect(close?.bytesDown).toBeGreaterThan(0)
+    // How the session went rides on the close, for telling a drop's side (`session-end.ts`).
+    expect(close?.detail?.session).toMatchObject({
+      closedFirst: expect.stringMatching(/^(player|server)$/),
+      how: expect.stringMatching(/^(reset|timeout|closed)$/),
+      quietAtEndMs: expect.any(Number),
+      mostQueuedDown: expect.any(Number),
+    })
   }, 20_000)
 
   test('a join held in the waiting room: woken, then handed over', async () => {

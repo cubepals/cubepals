@@ -50,6 +50,26 @@ The same records answer all three; only the filter changes.
   p95, max and how many failed, the most frequent first. The metrics answer the same without
   naming anyone ([metrics.md](metrics.md)), and are where a trend over weeks is.
 
+## How a session ended
+
+When a player's connection through the edge closes, its join keeps how the session went, as
+`detail.session` (`apps/edge/session-end.ts`; `ops.ts join <id>`, `join_get`):
+
+- `longestQuietMs` and `longestQuietFrom`: the longest the player's side sent nothing, and when it
+  began. A client in the game sends something every fraction of a second, so seconds of silence
+  are a stall on the player's way to the edge (their machine, their network, or the path to Fly).
+- `stalls`: how many times the player was quiet for 5 s or more, so a session that survived its
+  stalls still shows them.
+- `quietAtEndMs`: how long the player had been quiet when it ended. A drop the server timed out
+  (`lost connection: Timed out` in its log) reads 15 to 30 s here, with `closedFirst: "server"`.
+- `downQuietAtEndMs` and `mostQueuedDown`: how long since anything went toward the player, and the
+  most that waited at the edge to go to them. A large backlog is a path toward the player that
+  couldn't keep up.
+- `closedFirst` (`player` or `server`) and `how` (`reset` with its `error`, `timeout`, `closed`).
+
+A drop with the player quiet for seconds while the edge still had data to send them, and the
+server closing first, happened between the player and the edge, not in Cubepals' servers.
+
 ## What ran slow or failed
 
 The control plane keeps one row in `diagnostics` (`packages/db/src/schema/diagnostics.ts`) for each
