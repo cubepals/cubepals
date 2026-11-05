@@ -143,7 +143,9 @@ describe('how a session’s stretches are counted, on a clock of its own', () =>
       heldAtEnd: false,
     })
   })
+})
 
+describe('stretches the front door held back, its way to the server full', () => {
   test('a stretch the front door held back, its way to the server full, is not the player’s', async () => {
     let now = 0
     const clock = { now: () => now, wall: () => 1_700_000_000_000 + now }
@@ -168,7 +170,7 @@ describe('how a session’s stretches are counted, on a clock of its own', () =>
     now = 40_000
     server.emit('end')
     expect(watch.end()).toMatchObject({
-      longestHeldMs: 21_000,
+      longestHeldMs: 20_000,
       heldStalls: 1,
       heldAtEnd: false,
       mostQueuedUp: 64 * 1024,
@@ -200,13 +202,36 @@ describe('how a session’s stretches are counted, on a clock of its own', () =>
     now = 40_000
     server.emit('end')
     expect(watch.end()).toMatchObject({
-      longestHeldMs: 2_000,
+      longestHeldMs: 1_000,
       heldStalls: 0,
       heldAtEnd: false,
       stalls: 1,
       quietAtEndMs: 37_000,
       longestQuietMs: 37_000,
     })
+  })
+
+  test('the player’s silence before the packet that fills the way to the server stays theirs', async () => {
+    let now = 0
+    const clock = { now: () => now, wall: () => 1_700_000_000_000 + now }
+    const { EventEmitter } = await import('node:events')
+    const player = Object.assign(new EventEmitter(), {
+      writableLength: 0,
+      isPaused: () => true,
+    }) as unknown as Socket
+    const server = Object.assign(new EventEmitter(), {
+      writableLength: 64 * 1024,
+      destroyed: false,
+    }) as unknown as Socket
+    const watch = watchSession(player, server, clock)
+    // Nine seconds of nothing, then a packet whose writing on fills the way: `pipe` pauses first.
+    now = 9_000
+    player.emit('pause')
+    player.emit('data', Buffer.from('x'))
+    now = 9_001
+    player.emit('resume')
+    server.emit('end')
+    expect(watch.end()).toMatchObject({ stalls: 1, longestQuietMs: 9_000, heldStalls: 0, longestHeldMs: 1 })
   })
 
   test('a pause with nothing waiting to go on, as a connection comes down, holds nothing', async () => {

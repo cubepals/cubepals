@@ -78,7 +78,7 @@ export function watchSession(
   // waiting to go on is a connection being taken down, which says nothing about either side.
   player.on('pause', () => {
     if (server.destroyed || server.writableLength === 0) return
-    quiet.held()
+    quiet.held(clock.now())
     mostQueuedUp = Math.max(mostQueuedUp, server.writableLength)
   })
   // Reading again: what follows, until the player's next bytes, is their own silence.
@@ -135,8 +135,15 @@ class Stretches {
     this.#longest = { ms: 0, from: began }
   }
 
-  /** The front door stopped reading the player: the stretch under way isn't theirs. */
-  held(): void {
+  /**
+   * The front door stopped reading the player at `at`. `pipe` pauses as it writes their bytes on,
+   * before those bytes reach the watch, so the silence up to here is theirs: it ends here, and the
+   * held stretch begins.
+   */
+  held(at: number): void {
+    if (this.#held) return
+    this.#close(at)
+    this.#from = at
     this.#held = true
   }
 
