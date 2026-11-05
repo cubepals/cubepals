@@ -14,6 +14,7 @@
 import { HOUR_MS, MINUTE_MS } from '../../packages/contracts/src/durations.ts'
 import type { VisitReport } from '../../packages/contracts/src/join-records.ts'
 import { unmapped } from '../../packages/contracts/src/proxy-header.ts'
+import type { SessionEnd } from './session-end.ts'
 
 /** A connection's `ip:port`, as visits are found by: an IPv6 address in brackets. */
 export function sourceKey(address: string, port: number): string {
@@ -153,14 +154,18 @@ export class Visits {
     this.#send(report({ ...visit, path: 'refused', leftAt: at, leftReason: `refused:${why}` }, 'close'))
   }
 
-  /** The connection from `source` closed: its visit waits a moment for a ping, then is sent. */
-  closed(source: string, bytes: { up: number; down: number }): void {
+  /**
+   * The connection from `source` closed: its visit waits a moment for a ping, then is sent, with
+   * how the session went (`session-end.ts`) where it was watched.
+   */
+  closed(source: string, bytes: { up: number; down: number }, session?: SessionEnd): void {
     const visit = this.#visits.get(source)
     for (const [local, aliased] of this.#aliases) if (aliased === source) this.#aliases.delete(local)
     if (visit === undefined) return
     visit.leftAt ??= this.#now().toISOString()
     visit.bytesUp = bytes.up
     visit.bytesDown = bytes.down
+    if (session !== undefined) visit.detail = { ...visit.detail, session }
     setTimeout(() => {
       if (this.#visits.get(source) === visit) this.#visits.delete(source)
       this.#send(report(visit, 'close'))
