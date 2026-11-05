@@ -201,7 +201,7 @@ export function composeControlPlane(ports: ControlPlanePorts, settings: ControlP
     jobs: ports.jobs,
     locks: ports.locks,
   })
-  const revisions = revisionService(ports, { policy, transitions, artifacts })
+  const revisions = revisionService(ports, { policy, transitions, artifacts, servers })
   const catalog = new CatalogSync({ db, catalog: ports.catalog })
   const listings = new ListingService({
     ...ports,
@@ -400,10 +400,15 @@ export function composeControlPlane(ports: ControlPlanePorts, settings: ControlP
 /** Boot configuration changes, on the ports' database and runtimes (`revisions/service.ts`). */
 function revisionService(
   ports: ControlPlanePorts,
-  parts: { policy: AccessPolicy; transitions: ServerTransitions; artifacts: ArtifactService },
+  parts: {
+    policy: AccessPolicy
+    transitions: ServerTransitions
+    artifacts: ArtifactService
+    servers: Pick<MinecraftServerService, 'refreshAsleep'>
+  },
 ) {
   const { db, events, runtime } = ports
-  const { policy, transitions, artifacts } = parts
+  const { policy, transitions, artifacts, servers } = parts
   return new RevisionService({
     db,
     policy,
@@ -412,6 +417,7 @@ function revisionService(
     artifacts,
     providers: runtime.providers,
     loaderBuilds: ports.loaderBuilds,
+    refresh: (serverId) => servers.refreshAsleep(serverId),
   })
 }
 

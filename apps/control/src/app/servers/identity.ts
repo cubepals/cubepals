@@ -22,7 +22,12 @@ export interface IdentityDeps {
   jobs: Pick<JobQueue, 'enqueueEligibility'>
   changed: (tx: Tx, server: MinecraftServer) => Promise<void>
   audit: (tx: Tx, actor: Actor, action: string, id: string, data: Record<string, unknown>) => Promise<void>
+  /** Starts a server asleep to show what players see of it, where that is worth it (`refresh.ts`). */
+  refresh: (serverId: string) => Promise<unknown>
 }
+
+/** What a save changes that the server list shows: its icon, Blockly's or the owner's own. */
+const SHOWN = ['icon', 'ownIcon']
 
 /** What a save may change; whatever it leaves out stays as it is. */
 export interface IdentityChange {
@@ -53,6 +58,7 @@ export async function changeIdentity(
   if (tags !== undefined && (tags.length > 5 || tags.some((tag) => !known.includes(tag))))
     throw new AppError('invalid_choice', `Pick up to 5 tags from: ${SERVER_TAGS.join(', ')}.`)
 
+  let shown = false
   const saved = await deps.db.transaction(async (tx) => {
     const server = authorize(actor, await lockServer(tx, serverId))
     const official = (await loadListing(tx, server.id))?.official === true
@@ -78,6 +84,7 @@ export async function changeIdentity(
       const revision = await insertRevision(tx, server.id, draft, requestedBy(actor))
       next = await setDesired(tx, next, { revisionId: revision.id })
     }
+    shown = redraft || SHOWN.some((key) => key in change)
     await deps.changed(tx, next)
     await deps.audit(tx, actor, 'server.identity_changed', serverId, {
       ...change,
@@ -87,5 +94,6 @@ export async function changeIdentity(
   })
   // What a server is called and says is what the directory shows, so its listing follows it.
   if (saved.version !== undefined) await deps.jobs.enqueueEligibility([serverId])
+  if (shown) await deps.refresh(serverId)
   return saved
 }

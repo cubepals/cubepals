@@ -304,6 +304,11 @@ export interface OperationView {
    * the page speaks of that world rather than of a backup; null for any other.
    */
   broughtWorld: string | null
+  /**
+   * Present on a `start` Cubepals made with nobody waiting, to show the icon or server list message
+   * its owner changed while it slept; it goes back to sleep after, if nobody joins.
+   */
+  refresh?: true
   status: 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled'
   step: OperationStep | null
   error: string | null

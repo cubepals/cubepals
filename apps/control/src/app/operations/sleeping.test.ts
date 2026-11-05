@@ -22,6 +22,7 @@ import { loadRevision } from '../servers/persistence.ts'
 import { serverBinding } from './handlers/binding.ts'
 import { lastWakeSeconds } from './persistence.ts'
 import type { OperationContext } from './runner.ts'
+import { IDLE_GRACE_MS, WAKE_PROBATION_MS } from './schedules.ts'
 import { medianOf, type WakeWay, wakeTimesOf } from './wake-times.ts'
 
 const operations = schema.serverOperations
@@ -89,6 +90,24 @@ const start = async (owner: UserActor, id: string) => {
 }
 const settingsOf = async (id: string) =>
   (await loadRevision(h.db, (await h.server(id)).desiredRevisionId)).settings
+/** Whether the server's newest run was woken, and counts toward no hours until a join. */
+const lastRun = async (id: string) =>
+  (
+    await h.db
+      .select({ woken: schema.powerIntervals.woken, pinged: schema.powerIntervals.pinged })
+      .from(schema.powerIntervals)
+      .where(eq(schema.powerIntervals.serverId, id))
+      .orderBy(desc(schema.powerIntervals.startedAt))
+      .limit(1)
+  )[0]
+/** The idle check past a woken run's probation, nobody on: it goes back to sleep. */
+const sleepsUnjoined = async (id: string) => {
+  const late = new Date(Date.now() + IDLE_GRACE_MS + WAKE_PROBATION_MS + 1_000)
+  expect(await h.app.schedules.evaluateIdle(await h.server(id), late)).toBe('nobody_joined')
+  await h.until(id, 'stopped')
+  await h.settled(id)
+  expect(h.runtime.machine(id)?.state).toBe('suspended')
+}
 
 describe.skipIf(!hasDatabase)('which stops put a server to sleep', () => {
   test('an idle stop and its owner’s stop put it to sleep, and a start wakes it as it was', async () => {
@@ -269,6 +288,58 @@ describe.skipIf(!hasDatabase)('what changed while a server slept', () => {
     await h.settled(id)
     expect(await start(owner, id)).toContain('booting')
     expect(h.runtime.machine(id)?.spec.env.TYPE).toBe('FABRIC')
+  }, 60_000)
+
+  test('its icon or message, changed while it slept, shows at once: it boots in the background, then sleeps', async () => {
+    const { owner, id } = await running()
+    await stop(owner, id)
+    // Nobody starts it: the save does, with nobody waiting, on the new icon.
+    await h.app.servers.saveIdentity(owner, id, { icon: 'diamond' })
+    await h.until(id, 'running')
+    await h.settled(id)
+    const steps = await stepsOfLast(h, id)
+    expect(steps).toContain('booting')
+    expect(steps).not.toContain('resuming')
+    expect(h.runtime.machine(id)?.spec.env.ICON).toEndWith('/runtime/v1/icons/diamond.png')
+    // A woken run, which counts toward no hours until someone joins it, and says what it is for.
+    expect(await lastRun(id)).toEqual({ woken: true, pinged: true })
+    expect((await h.operations(id)).find((op) => op.kind === 'start')?.idempotencyKey).toStartWith(
+      'start:refresh:',
+    )
+
+    // Nobody joins: asleep again after the probation, on the new icon, so a player's wake resumes.
+    await sleepsUnjoined(id)
+    expect(resumed(await start(owner, id))).toBe(true)
+    expect(h.runtime.machine(id)?.spec.env.ICON).toEndWith('/runtime/v1/icons/diamond.png')
+
+    // Its message the same way.
+    await stop(owner, id)
+    await h.app.revisions.changeSettings(
+      owner,
+      id,
+      { ...(await settingsOf(id)), motd: '&6Sunset &lValley' },
+      randomUUID(),
+    )
+    await h.until(id, 'running')
+    await h.settled(id)
+    expect(await stepsOfLast(h, id)).not.toContain('resuming')
+    expect(await h.minecraft.file(id, 'server.properties')).toContain('motd=§6Sunset §lValley')
+  }, 90_000)
+
+  test('a change players don’t see in the list, or a server stopped without its memory, starts nothing', async () => {
+    const { owner, id } = await running()
+    await stop(owner, id)
+    await h.app.servers.saveIdentity(owner, id, { description: 'A quiet island', tags: ['survival'] })
+    await h.settled(id)
+    expect((await h.server(id)).lifecycle.status).toBe('stopped')
+    expect(resumed(await start(owner, id))).toBe(true)
+
+    h.runtime.sleeps.on = false
+    await stop(owner, id)
+    await h.app.servers.saveIdentity(owner, id, { icon: 'chest' })
+    await h.settled(id)
+    // Its next start boots anyway, and shows it then.
+    expect((await h.server(id)).lifecycle.status).toBe('stopped')
   }, 60_000)
 
   test('a size change while it slept boots on the new size', async () => {

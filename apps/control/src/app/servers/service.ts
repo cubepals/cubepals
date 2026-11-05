@@ -44,6 +44,7 @@ import {
   slugAvailable,
   slugClaimable,
 } from './persistence.ts'
+import { refreshAsleep } from './refresh.ts'
 import { desiredRuns } from './revision-reads.ts'
 import { TEMPORARY_HOURS } from './temporary.ts'
 import type { ServerTransitions } from './transitions.ts'
@@ -411,11 +412,19 @@ export class MinecraftServerService {
    * What the owner calls their world, says about it, and picks or gives for its picture. None of it
    * restarts anything: the name is Blockly's, and the icon reaches the game at its next start.
    * A server list message still in Blockly's words quotes the old name, so it follows the new one,
-   * as a revision of its own that also arrives at the next start; one the owner wrote stays.
+   * as a revision of its own that also arrives at the next start; one the owner wrote stays. A
+   * server asleep with its memory starts in the background to show a new icon or message.
    */
   saveIdentity(actor: Actor, serverId: string, identity: IdentityChange): Promise<MinecraftServer> {
     const [changed, audit] = [this.#changed.bind(this), this.#audit.bind(this)]
-    return changeIdentity({ db: this.#db, jobs: this.#jobs, changed, audit }, actor, serverId, identity)
+    const refresh = (id: string) => this.refreshAsleep(id)
+    const deps = { db: this.#db, jobs: this.#jobs, changed, audit, refresh }
+    return changeIdentity(deps, actor, serverId, identity)
+  }
+
+  /** A server asleep, started in the background to show a new icon or message (`refresh.ts`). */
+  refreshAsleep(serverId: string): Promise<boolean> {
+    return refreshAsleep({ db: this.#db, start: (...args) => this.start(...args) }, serverId)
   }
 
   /**

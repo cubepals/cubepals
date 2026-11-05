@@ -215,7 +215,7 @@ describe.skipIf(!hasDatabase)('a Duels server asleep', () => {
   })
 
   // Production, 2026-10-14: Duels, put to sleep, was booted again at its wake rather than resumed.
-  test('asleep with nothing changed, it wakes as it slept, and a new message waits for its next boot', async () => {
+  test('asleep with nothing changed, it wakes as it slept, and a new message boots in the background', async () => {
     const owner = await h.user('Ola', 'plus')
     const server = await h.create(owner, { from: { kind: 'template', key: 'duels' } })
     await h.until(server.id, 'running')
@@ -239,23 +239,20 @@ describe.skipIf(!hasDatabase)('a Duels server asleep', () => {
         .limit(1)
       return (start?.steps ?? []).map((entry) => entry.step)
     }
-    const booted = h.runtime.machine(server.id)?.spec.env.MOTD
     expect(await sleepAndWake()).toContain('resuming')
     expect(await sleepAndWake()).not.toContain('booting')
 
-    // Its message, changed while it slept: the server list shows it from the next boot, and the
-    // wake doesn't wait for one.
+    // Its message, changed while it slept: Cubepals starts it at once on the new one, nobody
+    // waiting (`servers/refresh.ts`), so the server list shows it, and the wake after resumes.
     const steps = await sleepAndWake(async () => {
       const settings = (await loadRevision(h.db, (await h.server(server.id)).desiredRevisionId)).settings
       await h.app.revisions.changeSettings(owner, server.id, { ...settings, motd: 'Back soon' }, randomUUID())
       await h.settled(server.id)
+      expect((await h.server(server.id)).lifecycle.status).toBe('running')
     })
-    expect(steps).toContain('resuming')
-    expect(steps).not.toContain('booting')
-    expect(h.runtime.machine(server.id)?.spec.env.MOTD).toBe(booted)
-    await h.app.servers.restart(owner, server.id, randomUUID())
-    await h.until(server.id, 'running')
-    await h.settled(server.id)
+    expect(steps).toContain('booting')
+    expect(steps).not.toContain('resuming')
     expect(h.runtime.machine(server.id)?.spec.env.MOTD).toBe('Back soon')
+    expect(await sleepAndWake()).not.toContain('booting')
   }, 60_000)
 })

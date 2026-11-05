@@ -87,7 +87,9 @@ export const PLAN_ENV: readonly string[] = ['PLAYER_IDLE_TIMEOUT', 'MAX_WORLD_SI
 /**
  * What the server list shows of a server: the icon the owner picked and its message. Like the
  * plan's limits they are left out of what drift compares, so changing either never restarts a
- * world someone is playing; they arrive at the next start.
+ * world someone is playing; they arrive at the next start. A server asleep on others boots for
+ * them rather than waking as it slept (`resumesOn`), which a change does at once in the background
+ * (`app/servers/refresh.ts`).
  */
 export const IDENTITY_ENV: readonly string[] = ['ICON', 'OVERRIDE_ICON', 'MOTD']
 

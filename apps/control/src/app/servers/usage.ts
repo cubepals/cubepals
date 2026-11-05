@@ -26,8 +26,8 @@ export async function openInterval(
   at: Date,
   /**
    * The operation that started it, where its start asked: a connection woke it when one asked
-   * rather than a person in the app, and a server-list ping's run counts toward no plan's hours
-   * until someone joins it.
+   * rather than a person in the app, and the run of a start nobody waits for (`pingWoken`) counts
+   * toward no plan's hours until someone joins it.
    */
   by?: { requestedBy: string; idempotencyKey: string },
 ): Promise<void> {
@@ -346,9 +346,19 @@ export async function playedHere(q: Queryable, serverId: string, name: string): 
  */
 export const PING_WAKE_KEY = 'ping-wake:'
 
-/** Whether an operation is a start a server-list ping asked for, by its key. */
+/** The same for the starts that show what its owner changed while a server slept (`refresh.ts`). */
+export const REFRESH_KEY = 'refresh:'
+
+/** Whether an operation is a start that shows what its owner changed while the server slept, by its key. */
+export const refreshes = (op: { idempotencyKey: string }): boolean =>
+  op.idempotencyKey.startsWith(`start:${REFRESH_KEY}`)
+
+/**
+ * Whether an operation is a start nobody waits for, by its key: a server-list ping's, or a
+ * refresh's. Its run counts toward no hours until someone joins it.
+ */
 const pingWoken = (op: { idempotencyKey: string }): boolean =>
-  op.idempotencyKey.startsWith(`start:${PING_WAKE_KEY}`)
+  op.idempotencyKey.startsWith(`start:${PING_WAKE_KEY}`) || refreshes(op)
 
 /** When a server-list ping last asked for a start of this server that was taken; null if none ever was. */
 export async function lastPingWake(q: Queryable, serverId: string): Promise<Date | null> {
