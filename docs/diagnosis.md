@@ -65,6 +65,9 @@ When a player's connection through the edge closes, its join keeps how the sessi
 - `downQuietAtEndMs` and `mostQueuedDown`: how long since anything went toward the player, and the
   most that waited at the edge to go to them. A large backlog is a path toward the player that
   couldn't keep up.
+- `longestHeldMs`, `heldStalls`, `heldAtEnd` and `mostQueuedUp`: stretches in which the edge had
+  stopped reading the player because the way on to the server was full. They are the server
+  side's, not the player's, and aren't in the figures above.
 - `closedFirst` (`player` or `server`) and `how` (`reset` with its `error`, `timeout`, `closed`).
 
 A drop with the player quiet for seconds while the edge still had data to send them, and the

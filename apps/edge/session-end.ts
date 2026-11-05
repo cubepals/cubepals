@@ -8,8 +8,9 @@
  * longest the player sent nothing and when that began (a client in the game sends something every
  * fraction of a second, and the server gives up on one quiet for 15 to 30 s), how long the player
  * had been quiet when it ended, the most that waited here to go out to the player (a path toward
- * them that can't keep up), and which side closed first and how. A join keeps it as
- * `detail.session` (`visits.ts`).
+ * them that can't keep up), and which side closed first and how. A stretch in which the front door
+ * stopped reading from the player because the way on to the server was full is the server side's,
+ * not the player's, and is counted apart. A join keeps it as `detail.session` (`visits.ts`).
  *
  * Not for deciding anything about a connection: `pipe` in `front.ts` relays it, and closes it.
  */
@@ -27,6 +28,15 @@ export interface SessionEnd {
   stalls: number
   /** How long the player's side had sent nothing when the connection closed. */
   quietAtEndMs: number
+  /**
+   * Stretches with nothing from the player in which the front door had stopped reading them,
+   * because the way on to the server was full: the longest, how many were 5 s or more, whether the
+   * session ended in one, and the most that waited here to go on to the server. Not the player's.
+   */
+  longestHeldMs: number
+  heldStalls: number
+  heldAtEnd: boolean
+  mostQueuedUp: number
   /** How long since anything was passed on toward the player when it closed. */
   downQuietAtEndMs: number
   /** The most bytes waiting here, at once, to be written to the player. */
@@ -54,21 +64,22 @@ export function watchSession(
 ): SessionWatch {
   const began = clock.now()
   const wallAt = (at: number) => new Date(clock.wall() - (clock.now() - at)).toISOString()
-  let up = began
+  const quiet = new Stretches(began)
   let down = began
-  let longest = { ms: 0, from: began }
-  let stalls = 0
   let mostQueued = 0
+  let mostQueuedUp = 0
   let first: Pick<SessionEnd, 'closedFirst' | 'how' | 'error'> | null = null
   const ended = (closedFirst: SessionEnd['closedFirst'], how: SessionEnd['how'], error?: string) => {
     first ??= error === undefined ? { closedFirst, how } : { closedFirst, how, error }
   }
 
-  player.on('data', () => {
-    const at = clock.now()
-    if (at - up >= STALL_MS) stalls++
-    if (at - up > longest.ms) longest = { ms: at - up, from: up }
-    up = at
+  player.on('data', () => quiet.heard(clock.now(), player.isPaused()))
+  // `pipe` pauses the player's side while the way on to the server is full; a pause with nothing
+  // waiting to go on is a connection being taken down, which says nothing about either side.
+  player.on('pause', () => {
+    if (server.destroyed || server.writableLength === 0) return
+    quiet.held()
+    mostQueuedUp = Math.max(mostQueuedUp, server.writableLength)
   })
   server.on('data', () => {
     down = clock.now()
@@ -87,17 +98,76 @@ export function watchSession(
   return {
     end() {
       const at = clock.now()
-      const quiet = at - up
-      const still = quiet > longest.ms ? { ms: quiet, from: up } : longest
+      const sum = quiet.at(at)
       return {
-        longestQuietMs: Math.round(still.ms),
-        longestQuietFrom: wallAt(still.from),
-        stalls: stalls + (quiet >= STALL_MS ? 1 : 0),
-        quietAtEndMs: Math.round(quiet),
+        longestQuietMs: Math.round(sum.longest.ms),
+        longestQuietFrom: wallAt(sum.longest.from),
+        stalls: sum.stalls,
+        quietAtEndMs: Math.round(sum.quietMs),
+        longestHeldMs: Math.round(sum.longestHeldMs),
+        heldStalls: sum.heldStalls,
+        heldAtEnd: sum.heldAtEnd,
+        mostQueuedUp,
         downQuietAtEndMs: Math.round(at - down),
         mostQueuedDown: mostQueued,
         ...(first ?? { closedFirst: 'player', how: 'closed' }),
       }
     },
+  }
+}
+
+/**
+ * The stretches between bytes from the player: each is the player's own silence, or, where the
+ * front door paused reading them in it, held by the way on to the server.
+ */
+class Stretches {
+  #from: number
+  #held = false
+  #longest: { ms: number; from: number }
+  #stalls = 0
+  #longestHeld = 0
+  #heldStalls = 0
+
+  constructor(began: number) {
+    this.#from = began
+    this.#longest = { ms: 0, from: began }
+  }
+
+  /** The front door stopped reading the player: the stretch under way isn't theirs. */
+  held(): void {
+    this.#held = true
+  }
+
+  /** Bytes from the player at `at`: the stretch before them ends, and one begins. */
+  heard(at: number, stillPaused: boolean): void {
+    this.#close(at)
+    this.#from = at
+    this.#held = stillPaused
+  }
+
+  /** What the stretches add up to at `at`, the one under way counted as if it ended then. */
+  at(at: number) {
+    const ms = at - this.#from
+    const held = this.#held
+    const stall = ms >= STALL_MS ? 1 : 0
+    return {
+      longest: !held && ms > this.#longest.ms ? { ms, from: this.#from } : this.#longest,
+      stalls: this.#stalls + (held ? 0 : stall),
+      quietMs: ms,
+      longestHeldMs: held ? Math.max(this.#longestHeld, ms) : this.#longestHeld,
+      heldStalls: this.#heldStalls + (held ? stall : 0),
+      heldAtEnd: held,
+    }
+  }
+
+  #close(at: number): void {
+    const ms = at - this.#from
+    if (this.#held) {
+      if (ms >= STALL_MS) this.#heldStalls++
+      this.#longestHeld = Math.max(this.#longestHeld, ms)
+      return
+    }
+    if (ms >= STALL_MS) this.#stalls++
+    if (ms > this.#longest.ms) this.#longest = { ms, from: this.#from }
   }
 }

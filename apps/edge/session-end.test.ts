@@ -110,13 +110,21 @@ describe('how a session through the front door ended', () => {
     expect(end?.longestQuietMs).toBeLessThan(200)
     expect(end?.stalls).toBe(0)
   })
+})
 
+describe('how a session’s stretches are counted, on a clock of its own', () => {
   test('each silence of 5 s or more counts as a stall, the one a session ends in too', async () => {
     let now = 0
     const clock = { now: () => now, wall: () => 1_700_000_000_000 + now }
     const { EventEmitter } = await import('node:events')
-    const player = Object.assign(new EventEmitter(), { writableLength: 0 }) as unknown as Socket
-    const server = new EventEmitter() as unknown as Socket
+    const player = Object.assign(new EventEmitter(), {
+      writableLength: 0,
+      isPaused: () => false,
+    }) as unknown as Socket
+    const server = Object.assign(new EventEmitter(), {
+      writableLength: 0,
+      destroyed: false,
+    }) as unknown as Socket
     const watch = watchSession(player, server, clock)
     for (const at of [1_000, 7_000, 8_000, 14_500]) {
       now = at
@@ -131,6 +139,54 @@ describe('how a session through the front door ended', () => {
       quietAtEndMs: 25_500,
       closedFirst: 'server',
       how: 'closed',
+      heldStalls: 0,
+      heldAtEnd: false,
     })
+  })
+
+  test('a stretch the front door held back, its way to the server full, is not the player’s', async () => {
+    let now = 0
+    const clock = { now: () => now, wall: () => 1_700_000_000_000 + now }
+    const { EventEmitter } = await import('node:events')
+    const player = Object.assign(new EventEmitter(), {
+      writableLength: 0,
+      isPaused: () => false,
+    }) as unknown as Socket
+    const server = Object.assign(new EventEmitter(), {
+      writableLength: 64 * 1024,
+      destroyed: false,
+    }) as unknown as Socket
+    const watch = watchSession(player, server, clock)
+    now = 1_000
+    player.emit('data', Buffer.from('x'))
+    // The way on to the server fills: the relay stops reading the player for 20 s.
+    now = 2_000
+    player.emit('pause')
+    now = 22_000
+    player.emit('data', Buffer.from('x'))
+    // Then the player really goes quiet, and the server closes.
+    now = 40_000
+    server.emit('end')
+    expect(watch.end()).toMatchObject({
+      longestHeldMs: 21_000,
+      heldStalls: 1,
+      heldAtEnd: false,
+      mostQueuedUp: 64 * 1024,
+      longestQuietMs: 18_000,
+      stalls: 1,
+      quietAtEndMs: 18_000,
+    })
+  })
+
+  test('a pause with nothing waiting to go on, as a connection comes down, holds nothing', async () => {
+    const { player, game, ends, front } = await relayed()
+    player.write('hello')
+    await wait(30)
+    await wait(250)
+    front().pause()
+    game().end()
+    while (ends.length === 0) await wait(5)
+    expect(ends[0]).toMatchObject({ heldAtEnd: false, heldStalls: 0, closedFirst: 'server' })
+    expect(ends[0]?.quietAtEndMs).toBeGreaterThanOrEqual(250)
   })
 })
