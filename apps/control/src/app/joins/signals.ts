@@ -15,9 +15,9 @@
 import { DAY_MS, HOUR_MS, MINUTE_MS } from '@blockly/contracts/durations'
 import { SignalsConfig } from '@blockly/contracts/join-records'
 import { type Db, type Queryable, schema } from '@blockly/db'
-import { and, count, eq, gt, inArray, isNotNull, isNull, lt, sql } from 'drizzle-orm'
+import { and, count, eq, gt, inArray, isNotNull, isNull, lt, lte, sql } from 'drizzle-orm'
 import { tuning } from '../tuning.ts'
-import { fromJoins, type JoinRow, type Raised, watched } from './signal-kinds.ts'
+import { dropped, fromJoins, type JoinRow, type Raised, watched } from './signal-kinds.ts'
 
 const {
   joins,
@@ -55,8 +55,11 @@ export async function raiseSignals(db: Db, now: Date): Promise<number> {
   const config = signalsConfig()
   if (config === null) return 0
   const rows = await joinRows(db, config, now)
+  // A session longer than the window ends inside it: how it ended is only known once it has.
+  const ended = config.dropped === undefined ? [] : await joinRows(db, config, now, 'ended')
   const raised = [
     ...fromJoins(config, rows, now),
+    ...dropped(config, ended, now),
     ...(await wakesNobodyJoined(db, config, now)),
     ...(await repeatedWakes(db, config, now)),
     ...(await platformCrowd(db, config, now)),
@@ -71,8 +74,17 @@ export async function raiseSignals(db: Db, now: Date): Promise<number> {
   return written.length
 }
 
-/** Joins of the last hours, with their server's name, whether it is ours, and how their wake went. */
-async function joinRows(q: Queryable, config: SignalsConfig, now: Date): Promise<JoinRow[]> {
+/**
+ * Joins of the last hours, with their server's name, whether it is ours, and how their wake went;
+ * or, `ended`, the joins that came before them and ended within them.
+ */
+async function joinRows(
+  q: Queryable,
+  config: SignalsConfig,
+  now: Date,
+  which: 'connected' | 'ended' = 'connected',
+): Promise<JoinRow[]> {
+  const since = new Date(now.getTime() - READ_MS)
   const rows = await q
     .select({
       join: joins,
@@ -85,7 +97,11 @@ async function joinRows(q: Queryable, config: SignalsConfig, now: Date): Promise
     .leftJoin(servers, eq(servers.id, joins.serverId))
     .leftJoin(listings, eq(listings.serverId, joins.serverId))
     .leftJoin(operations, eq(operations.id, joins.wakeOperationId))
-    .where(gt(joins.connectedAt, new Date(now.getTime() - READ_MS)))
+    .where(
+      which === 'connected'
+        ? gt(joins.connectedAt, since)
+        : and(lte(joins.connectedAt, since), gt(joins.leftAt, since)),
+    )
   return rows.map(({ join, serverName, official, wakeKind, resumed }) => ({
     ...join,
     serverName,

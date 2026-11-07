@@ -253,7 +253,7 @@ const msOf = (value: unknown): number | null =>
  * while the edge still sent to them, or the player's connection was reset. Neither the server nor
  * the edge ended it; the way to the player did.
  */
-function dropped(config: SignalsConfig, rows: readonly JoinRow[], now: Date): Raised[] {
+export function dropped(config: SignalsConfig, rows: readonly JoinRow[], now: Date): Raised[] {
   const limit = config.dropped?.quietS
   if (limit === undefined) return []
   return rows.flatMap((row) => {

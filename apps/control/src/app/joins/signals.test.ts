@@ -16,6 +16,29 @@ import { eq } from 'drizzle-orm'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
 import { installTuning, tuning } from '../tuning.ts'
 
+/** A nine-hour session that ended a minute before `now` with its player cut off, as the edge tells of one. */
+async function longSession(h: Harness, serverId: string, now: Date): Promise<string> {
+  const id = randomUUID()
+  const session = {
+    closedFirst: 'server',
+    how: 'closed',
+    quietAtEndMs: 24_000,
+    downQuietAtEndMs: 1,
+    stalls: 2,
+  }
+  await h.db.insert(schema.joins).values({
+    id,
+    kind: 'join',
+    serverId,
+    address: 'signalled.play.test',
+    playerName: 'Alex',
+    connectedAt: new Date(now.getTime() - 9 * HOUR_MS),
+    leftAt: new Date(now.getTime() - MINUTE_MS),
+    detail: { session },
+  })
+  return id
+}
+
 describe.skipIf(!hasDatabase)('the signals job', () => {
   let h: Harness
   let serverId: string
@@ -115,6 +138,16 @@ describe.skipIf(!hasDatabase)('the signals job', () => {
     const kinds = (await h.db.select().from(schema.signals)).map((s) => s.kind).sort()
     expect(kinds).toEqual(['crowd', 'legacy_login_listener', 'repeated_wakes', 'wake_no_join'])
   })
+
+  test('a session longer than the hours read is judged once it ends', async () => {
+    setting({ dropped: { quietS: 5 } })
+    const id = await longSession(h, serverId, now)
+    expect(await h.app.joins.raiseSignals(now)).toBe(1)
+    expect(await keys()).toEqual([`dropped:${id}`])
+    // Said once: the next pass raises nothing new.
+    expect(await h.app.joins.raiseSignals(now)).toBe(0)
+    await h.db.delete(schema.joins).where(eq(schema.joins.id, id))
+  }, 30_000)
 
   test('closes a signal open a day as expired, whatever the setting', async () => {
     setting(undefined)
