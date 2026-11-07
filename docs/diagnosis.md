@@ -14,16 +14,21 @@ them up. Each command below has a tool of the same purpose, named after it.
 
 | The question | Ask | Tool |
 |---|---|---|
+| What happened on this server? | `ops.ts timeline <server> [--since 24h\|7d\|<ISO>]`: its operations and why each went as it did, its joins and how each session ended, its signals, in time order | |
 | Why is this one person having a bad time? | `ops.ts diagnose <email or id> [--since 24h\|7d\|<ISO>]` | `account_diagnose` |
 | Which queries, procedures or requests are slow or failing, and for whom? | `ops.ts diagnostics summary [--by name\|account\|server\|origin\|kind]` | `diagnostics_summary` |
 | What exactly happened to that one? | `ops.ts diagnostics --name <q:…> \| --account <email> \| --server <id>` | `diagnostics_list` |
 | Is the database itself struggling? | `ops.ts database [--order total\|mean\|calls\|max]` | `database_now` |
 | Why did this join fail or take so long? | `ops.ts join <player or join id> --markdown` | `join_get` |
-| Why did this start or wake fail or take so long? | `ops.ts operations --server <id> --status failed`, then `ops.ts operation <id>` | `operations_list`, `operation_get` |
+| Why did this start or wake fail or take so long? | `ops.ts operations --server <server> --status failed`, then `ops.ts operation <id>` | `operations_list`, `operation_get` |
 | Which servers lag, and whose are they? | `ops.ts vitals [--account <email>] [--since 24h]` | `vitals_list` |
 | How did this one server tick? | `ops.ts vitals <server> [--since 24h]` | `server_vitals` |
 | What does the server's own log say? | `ops.ts console <server> --lines 200` | `console_read` |
 | Is the platform as a whole up and fast? | `ops.ts health`, and the metrics ([metrics.md](metrics.md)) | `health` |
+
+Every command that takes a `<server>`, and every `--server`, takes what a player calls it: its slug,
+the address they join (`v0idworld.play.cubepals.com`), its name, or its id
+(`/ops/v1/servers/find`). One that names several servers says each and stops.
 
 `diagnose` is the one to run first for a person. It puts together, for the account and its servers
 since the moment given (a day ago by default):

@@ -58,11 +58,23 @@ const detail = {
   history: [],
 } as unknown as AccountDetail
 
-/** The operators' token, and diagnostics and ticks, whose routes have tests of their own. */
+/** What the server finder answers: the one server it was asked for. */
+const FOUND = [{ id: SERVER, slug: 'v0idworld', name: 'Void', status: 'stopped', owner: OWNER }]
+
+/** The server finder, answering FOUND and writing the call down in `calls`. */
+const finder = {
+  find: async (ref: string) => {
+    calls.push(['serverFinder.find', ref])
+    return FOUND
+  },
+} as unknown as OpsApiOptions['serverFinder']
+
+/** The operators' token, diagnostics and ticks, whose routes have tests of their own, and the finder. */
 const TOKEN_AND_DIAGNOSTICS = {
   token: 'operator-token',
   diagnostics: {} as unknown as OpsApiOptions['diagnostics'],
   vitals: {} as unknown as OpsApiOptions['vitals'],
+  serverFinder: finder,
 }
 
 /** The API over services that only write down each call they get, in `calls`. */
@@ -305,6 +317,16 @@ describe('the operators’ API: servers and health', () => {
     expect(named('queries.get').every(([, actor]) => JSON.stringify(actor) === JSON.stringify(ADA))).toBe(
       true,
     )
+  })
+
+  test('finds a server by what a player calls it, never taking `find` for an id', async () => {
+    const response = await call('GET', '/servers/find?ref=v0idworld.play.cubepals.com')
+    expect(response.status).toBe(200)
+    expect(((await response.json()) as { servers: { slug: string }[] }).servers.map((s) => s.slug)).toEqual([
+      'v0idworld',
+    ])
+    expect(calls).toEqual([['serverFinder.find', 'v0idworld.play.cubepals.com']])
+    expect((await call('GET', '/servers/find')).status).toBe(400)
   })
 
   test('a purge or a trash without the server’s name is refused', async () => {
