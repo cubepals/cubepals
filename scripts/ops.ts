@@ -269,16 +269,24 @@ switch (command) {
     const id = await serverId()
     const from = since(option('since') ?? '24h')
     const server = (await api('GET', `/servers/${id}`)) as { id: string; name: string; slug: string }
-    const { operations } = (await api('GET', `/operations?server=${id}&since=${from}&limit=200`)) as {
+    const { operations } = (await api(
+      'GET',
+      `/operations?server=${id}&since=${encodeURIComponent(from)}&limit=200`,
+    )) as {
       operations: HealthOperationView[]
     }
     const detailed = await Promise.all(
       operations.map(async (op) => (await api('GET', `/operations/${op.id}`)) as OperationStepsView),
     )
-    const { joins } = (await api('GET', `/joins?server=${id}&since=${from}&limit=500`)) as {
+    const { joins } = (await api(
+      'GET',
+      `/joins?server=${id}&since=${encodeURIComponent(from)}&limit=500`,
+    )) as {
       joins: JoinView[]
     }
-    const { signals } = (await api('GET', `/signals?since=${from}`)) as { signals: SignalView[] }
+    const { signals } = (await api('GET', `/signals?since=${encodeURIComponent(from)}`)) as {
+      signals: SignalView[]
+    }
     // The API's `since` keeps every open signal, however old: only those raised in the window.
     const raised = signals.filter((s) => s.serverId === id && Date.parse(s.at) >= Date.parse(from))
     say(
