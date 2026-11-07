@@ -39,6 +39,7 @@ const operation = async (o: {
   took: number
   running?: boolean
   error?: string
+  key?: string
 }) => {
   const id = randomUUID()
   const startedAt = ago(o.took + MINUTE_MS)
@@ -48,7 +49,7 @@ const operation = async (o: {
     kind: o.kind,
     status: o.running ? 'running' : 'succeeded',
     requestedBy: 'system:wake',
-    idempotencyKey: `${o.kind}:${id}`,
+    idempotencyKey: o.key ?? `${o.kind}:${id}`,
     steps: o.steps.map((step) => ({ step, at: startedAt.toISOString() })),
     error: o.error ?? null,
     createdAt: startedAt,
@@ -80,6 +81,13 @@ describe.skipIf(!hasDatabase)('signals from operations', () => {
       kind: 'start',
       steps: ['attempt', 'allocating', 'other_spec', 'changed:drift:image', 'booting', 'let_in'],
       took: 50 * SECOND_MS,
+    })
+    // A refresh that booted, as stale-sleep asks for one: nobody waited on it, so it raises nothing.
+    await operation({
+      kind: 'start',
+      steps: ['attempt', 'allocating', 'other_spec', 'changed:drift:image', 'booting', 'let_in'],
+      took: 50 * SECOND_MS,
+      key: `start:refresh:${randomUUID()}`,
     })
     const slowResume = await operation({
       kind: 'start',

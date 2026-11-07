@@ -12,6 +12,7 @@ import { DAY_MS, HOUR_MS } from '@blockly/contracts/durations'
 import type { SignalsConfig } from '@blockly/contracts/join-records'
 import { type Queryable, schema } from '@blockly/db'
 import { and, eq, gt, inArray, isNull, or } from 'drizzle-orm'
+import { refreshes } from '../servers/usage.ts'
 import type { Raised } from './signal-kinds.ts'
 
 const { serverOperations: operations, minecraftServers: servers } = schema
@@ -27,6 +28,7 @@ interface OperationRow {
   serverId: string
   server: string | null
   kind: string
+  idempotencyKey: string
   status: string
   steps: readonly { step: string; at: string; after?: string }[] | null
   error: string | null
@@ -43,6 +45,7 @@ async function recentOperations(q: Queryable, now: Date): Promise<OperationRow[]
       serverId: operations.serverId,
       server: servers.name,
       kind: operations.kind,
+      idempotencyKey: operations.idempotencyKey,
       status: operations.status,
       steps: operations.steps,
       error: operations.error,
@@ -67,13 +70,16 @@ async function recentOperations(q: Queryable, now: Date): Promise<OperationRow[]
 const stepsOf = (op: OperationRow) => (op.steps ?? []).map((entry) => entry.step)
 const resumed = (steps: readonly string[]) => steps.includes('resuming') && !steps.includes('booting')
 
-/** A start that booted although its server slept with its memory, with the runtime's reasons and what changed. */
+/**
+ * A start that booted although its server slept with its memory, with the runtime's reasons and what
+ * changed. A refresh (`stale-sleep`) is left out: it boots so that a player's wake doesn't, and nobody waits on it.
+ */
 function wakeBooted(config: SignalsConfig, ops: readonly OperationRow[], now: Date): Raised[] {
   if (config.wakeBooted === undefined) return []
   return ops.flatMap((op) => {
     const steps = stepsOf(op)
     const reasons = steps.filter((step) => BOOTED_ASLEEP.has(step))
-    if (op.kind !== 'start' || op.finishedAt === null || reasons.length === 0) return []
+    if (op.kind !== 'start' || op.finishedAt === null || reasons.length === 0 || refreshes(op)) return []
     return [
       {
         kind: 'wake_booted' as const,
