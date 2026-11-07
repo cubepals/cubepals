@@ -246,7 +246,13 @@ function sideOf(s: Session): string | null {
 }
 
 /** What the edge measured of the session, a line each; a figure it didn't keep is left out. */
-function sessionLines(s: Session): string[] {
+/**
+ * The edge watches a session from the front door, so a join held in the waiting room counts its
+ * wait too: the waiting room speaks to the client every 10 s, and each gap is a 5 s silence.
+ */
+const WAITED = ', the waiting room included'
+
+function sessionLines(s: Session, held: boolean): string[] {
   const from = s.longestQuietFrom === null ? '' : `, from ${time(s.longestQuietFrom)} UTC`
   const heldEnd = s.heldAtEnd ? ', and at the end' : ''
   const lines: [boolean, string][] = [
@@ -258,7 +264,7 @@ function sessionLines(s: Session): string[] {
       s.longestQuietMs !== null,
       `- Longest the player sent nothing: ${secondsOf(s.longestQuietMs ?? 0)} s${from}`,
     ],
-    [s.stalls !== null, `- Times the player went quiet for 5 s or more: ${s.stalls}`],
+    [s.stalls !== null, `- Times the player went quiet for 5 s or more: ${s.stalls}${held ? WAITED : ''}`],
     [
       s.downQuietAtEndMs !== null,
       `- Toward the player: last sent ${secondsOf(s.downQuietAtEndMs ?? 0)} s before the end, at most ${s.mostQueuedDown ?? 0} bytes waiting at the edge`,
@@ -283,7 +289,7 @@ function sessionEnd(view: JoinDetailView): string[] {
     '## How the session ended',
     '',
     `- Closed first by the ${s.closedFirst ?? 'unknown side'}${how}${error}`,
-    ...sessionLines(s),
+    ...sessionLines(s, view.join.path === 'held'),
     ...(side === null ? [] : ['', side]),
   ]
 }
@@ -297,7 +303,8 @@ function lookedWrong(view: JoinDetailView): string[] {
   const s = sessionOf(view)
   const side = s === null ? null : sideOf(s)
   if (side !== null) lines.push(`- Dropped. ${side}`)
-  if (s !== null && (s.stalls ?? 0) > 1)
+  // Not for a join held in the waiting room: its count holds the wait's own silences.
+  if (s !== null && view.join.path !== 'held' && (s.stalls ?? 0) > 1)
     lines.push(`- The player went quiet for 5 s or more ${s.stalls} times: a connection that kept stalling.`)
   return ['', '## What looked wrong', '', ...(lines.length === 0 ? ['Nothing crossed a limit.'] : lines)]
 }

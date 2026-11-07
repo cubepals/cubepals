@@ -175,6 +175,7 @@ test('a session the server timed out while the player was quiet reads as a drop 
     signals: [],
     join: {
       ...JOIN,
+      path: 'direct',
       serverSide: 'not_reported',
       detail: {
         session: {
@@ -239,4 +240,21 @@ test('a server-side reset while the player was quiet isn’t put on the player�
   const report = joinReport({ ...VIEW, signals: [], join: { ...JOIN, detail: { session } } }).join('\n')
   expect(report).toContain('- Closed first by the server, reset (ECONNRESET)')
   expect(report).not.toContain('Between the player and the edge')
+})
+
+test('a join held in the waiting room isn’t called stalling for the wait’s own silences', () => {
+  const session = { closedFirst: 'player', how: 'closed', quietAtEndMs: 10, stalls: 4 }
+  const report = joinReport({
+    ...VIEW,
+    signals: [],
+    join: { ...JOIN, path: 'held', detail: { session } },
+  }).join('\n')
+  expect(report).toContain('- Times the player went quiet for 5 s or more: 4, the waiting room included')
+  expect(report).not.toContain('a connection that kept stalling')
+  const direct = joinReport({
+    ...VIEW,
+    signals: [],
+    join: { ...JOIN, path: 'direct', detail: { session } },
+  }).join('\n')
+  expect(direct).toContain('a connection that kept stalling')
 })
