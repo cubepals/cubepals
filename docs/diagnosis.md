@@ -76,6 +76,21 @@ server closing first, happened between the player and the edge, not in Cubepals'
 it points to. The edge sends a join's end two minutes after the player leaves, so a join read
 sooner shows no leaving yet.
 
+## How wakes and operations went
+
+The `signals` job also reads operations, for the kinds `SIGNALS` turns on
+(`app/joins/operation-signals.ts`), each raised once per operation:
+
+- `wake_booted`: a start that booted although its server slept with its memory, with the runtime's
+  `reasons` (`other_spec`, `memory_lost`, `resume_booted`, `resume_hung`) and what `changed` since
+  it went to sleep (the wake's `changed:*` marks, [waking.md](waking.md)).
+- `slow_operation`: an operation past its kind's figure in seconds (`byKindS`), finished or
+  still `running`, with the step it is on; a start that resumed is held to `resumeS`.
+- `retried_operation`: an operation that took more than one attempt, with its last error.
+
+The kinds `notify` lists are emailed to the admin inbox as one digest a pass, each signal once
+(`app/joins/signal-mail.ts`). `ops.ts signals` lists the open ones.
+
 ## What ran slow or failed
 
 The control plane keeps one row in `diagnostics` (`packages/db/src/schema/diagnostics.ts`) for each
