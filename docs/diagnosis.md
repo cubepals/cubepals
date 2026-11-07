@@ -72,6 +72,9 @@ When a player's connection through the edge closes, its join keeps how the sessi
 
 A drop with the player quiet for seconds while the edge still had data to send them, and the
 server closing first, happened between the player and the edge, not in Cubepals' servers.
+`ops.ts join <id> --markdown` prints all of this under "How the session ended", and says which side
+it points to. The edge sends a join's end two minutes after the player leaves, so a join read
+sooner shows no leaving yet.
 
 ## What ran slow or failed
 

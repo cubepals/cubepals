@@ -33,6 +33,7 @@ const row = (id: string, fields: Partial<JoinRow> = {}): JoinRow => ({
   pingedAfterAt: null,
   tick: null,
   serverSide: 'not_reported',
+  detail: {},
   wake: null,
   ...fields,
 })
@@ -153,6 +154,74 @@ describe('signals judged from joins', () => {
       `crowd:server-1:${Date.parse('2026-10-20T12:00:00Z')}`,
       `crowd:ours:${Date.parse('2026-10-20T12:00:00Z')}`,
       'slow_tick:ticking',
+    ])
+  })
+})
+
+describe('a player cut off between them and the edge', () => {
+  test('dropped: silent while the edge still sent, or reset; not a quit, nor a full way to the server', () => {
+    const config: SignalsConfig = { dropped: { quietS: 5 } }
+    const session = (fields: Record<string, unknown>) => ({
+      session: { stalls: 0, heldAtEnd: false, ...fields },
+    })
+    const joins = [
+      // The server timed out a player gone quiet for 24 s, the edge sending to them until the end.
+      row('silent', {
+        leftAt: at(60),
+        detail: session({
+          closedFirst: 'server',
+          how: 'closed',
+          quietAtEndMs: 23_967,
+          downQuietAtEndMs: 1,
+          stalls: 6,
+        }),
+      }),
+      row('reset', {
+        leftAt: at(60),
+        detail: session({ closedFirst: 'player', how: 'reset', quietAtEndMs: 10 }),
+      }),
+      // Quit of their own accord: the player closed it, cleanly.
+      row('quit', {
+        leftAt: at(60),
+        detail: session({ closedFirst: 'player', how: 'closed', quietAtEndMs: 10 }),
+      }),
+      // Quiet because the way on to the server was full: the server's side.
+      row('held', {
+        leftAt: at(60),
+        detail: session({
+          closedFirst: 'server',
+          how: 'closed',
+          quietAtEndMs: 9_000,
+          downQuietAtEndMs: 1,
+          heldAtEnd: true,
+        }),
+      }),
+      // Reset from the server's side while the player was quiet: the server's.
+      row('server-reset', {
+        leftAt: at(60),
+        detail: session({ closedFirst: 'server', how: 'reset', quietAtEndMs: 9_000, downQuietAtEndMs: 1 }),
+      }),
+      // Turned away in the waiting room: its quiet is the wait's.
+      row('refused', {
+        handedAt: null,
+        leftAt: at(60),
+        leftReason: 'refused:quota',
+        detail: session({ closedFirst: 'server', how: 'closed', quietAtEndMs: 9_000, downQuietAtEndMs: 1 }),
+      }),
+      // A pause shorter than the limit.
+      row('blip', {
+        leftAt: at(60),
+        detail: session({ closedFirst: 'server', how: 'closed', quietAtEndMs: 2_000, downQuietAtEndMs: 1 }),
+      }),
+      // Still on: no end yet.
+      row('on', { detail: session({ closedFirst: 'server', quietAtEndMs: 30_000, downQuietAtEndMs: 1 }) }),
+    ]
+    expect(raised(config, joins)).toEqual([
+      {
+        key: 'dropped:silent',
+        detail: expect.objectContaining({ figure: 24, limit: 5, why: 'player_silent', stalls: 6 }),
+      },
+      { key: 'dropped:reset', detail: expect.objectContaining({ why: 'reset' }) },
     ])
   })
 })

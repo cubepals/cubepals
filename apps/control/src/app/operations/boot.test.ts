@@ -516,7 +516,7 @@ describe('a resume', () => {
       boot.run(ctx, server, handle, vanilla, undefined, { startAgainOnHang: false }),
     ).rejects.toThrow()
     // Waited on as a boot, never killed as a hung resume.
-    expect(seen.marks).toEqual(['resume_observing', 'resume_running'])
+    expect(seen.marks).toEqual(['resume_observing', 'resume_running', 'resume_booted'])
     expect(seen.forceStops).toBe(0)
   }, 30_000)
 
@@ -547,7 +547,7 @@ describe('a resume', () => {
       boot.run(ctx, server, handle, vanilla, undefined, { startAgainOnHang: false }),
     ).rejects.toThrow()
     // Gone on to boot as it was, never killed as a hung resume, nor counted as one.
-    expect(seen.marks).toEqual(['resume_observing', 'resume_running'])
+    expect(seen.marks).toEqual(['resume_observing', 'resume_running', 'resume_booted'])
     expect(seen.forceStops).toBe(0)
   }, 30_000)
 

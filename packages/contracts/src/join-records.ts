@@ -91,6 +91,7 @@ export const SIGNAL_KINDS = [
   'kicked_early',
   'slow_tick',
   'legacy_login_listener',
+  'dropped',
 ] as const
 export type SignalKind = (typeof SIGNAL_KINDS)[number]
 
@@ -139,6 +140,12 @@ export const SignalsConfig = z.object({
   kickedEarly: z.object({ withinS: Figure.optional() }).optional(),
   slowTick: z.object({ msptOver: Figure.optional() }).optional(),
   legacyLoginListener: z.object({ oursOnly: z.boolean().optional() }).optional(),
+  /**
+   * A session cut off on the way between the player and the edge: the player's side silent for at
+   * least `quietS` while the edge still sent to them, then the server timing them out; or their
+   * connection reset (the edge's `detail.session`).
+   */
+  dropped: z.object({ quietS: Figure.optional() }).optional(),
 })
 export type SignalsConfig = z.infer<typeof SignalsConfig>
 

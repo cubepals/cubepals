@@ -6,7 +6,7 @@
  * The signals judged from joins alone, each kind a pure function of the joins read, the `SIGNALS`
  * setting and the time: a slow join, one that left while it loaded, a short stay, a player who
  * pinged again and didn't come back, a join or a look at a watched address, a crowd on one server,
- * an early kick, and a slow tick. A kind whose key the setting leaves out raises nothing. Each
+ * an early kick, a slow tick, and a player cut off on their way to the edge. A kind whose key the setting leaves out raises nothing. Each
  * signal's key says what it is about, so it is raised once.
  *
  * Not for the kinds that read other tables (wakes, the platform's hour, boot reports): those are
@@ -36,6 +36,8 @@ export interface JoinRow {
   pingedAfterAt: Date | null
   tick: { tps: number; mspt: number; online: number } | null
   serverSide: string
+  /** What the edge kept of the join; `session` is how it ended (`apps/edge/session-end.ts`). */
+  detail: Record<string, unknown>
   /** How the wake it asked for found the server, where it asked for one. */
   wake: 'memory' | 'stopped' | 'atRest' | null
 }
@@ -243,6 +245,46 @@ function kickedEarly(config: SignalsConfig, rows: readonly JoinRow[], now: Date)
   })
 }
 
+const msOf = (value: unknown): number | null =>
+  typeof value === 'number' && Number.isFinite(value) ? value : null
+
+/** How the edge saw a session that ended, where it was handed to its server and kept one. */
+function endOf(row: JoinRow): Record<string, unknown> | null {
+  // Never handed to its server: turned away in the waiting room or at the door, for its own reason.
+  if (row.handedAt === null || (row.leftReason ?? '').startsWith('refused:')) return null
+  const session = row.detail.session
+  if (row.leftAt === null || session === null || typeof session !== 'object') return null
+  return session as Record<string, unknown>
+}
+
+/** Why the way to the player ended a session: silent while the edge still sent, reset, or neither. */
+function cutOff(s: Record<string, unknown>, quietMs: number): 'player_silent' | 'reset' | null {
+  const quiet = msOf(s.quietAtEndMs) ?? 0
+  const sentSince = msOf(s.downQuietAtEndMs) ?? Number.POSITIVE_INFINITY
+  // A reset from the server's side, or a full way on to it, is the server's however quiet the player was.
+  const serverSide = s.how === 'reset' || s.heldAtEnd === true
+  if (s.closedFirst === 'server' && !serverSide && quiet >= quietMs && sentSince < quiet)
+    return 'player_silent'
+  return s.closedFirst === 'player' && s.how === 'reset' ? 'reset' : null
+}
+
+/**
+ * Cut off between the player and the edge: the server timed out a player whose side had gone quiet
+ * while the edge still sent to them, or the player's connection was reset. Neither the server nor
+ * the edge ended it; the way to the player did.
+ */
+export function dropped(config: SignalsConfig, rows: readonly JoinRow[], now: Date): Raised[] {
+  const limit = config.dropped?.quietS
+  if (limit === undefined) return []
+  return rows.flatMap((row) => {
+    const s = endOf(row)
+    const why = s === null ? null : cutOff(s, limit * SECOND_MS)
+    if (s === null || why === null) return []
+    const figure = Math.round((msOf(s.quietAtEndMs) ?? 0) / 100) / 10
+    return [raise('dropped', row, '', now, { figure, limit, why, stalls: msOf(s.stalls) })]
+  })
+}
+
 /** The server ticking slowly as the player came in. */
 function slowTick(config: SignalsConfig, rows: readonly JoinRow[], now: Date): Raised[] {
   const limit = config.slowTick?.msptOver
@@ -267,5 +309,6 @@ export function fromJoins(config: SignalsConfig, rows: readonly JoinRow[], now: 
     crowd,
     kickedEarly,
     slowTick,
+    dropped,
   ].flatMap((kind) => kind(config, rows, now))
 }

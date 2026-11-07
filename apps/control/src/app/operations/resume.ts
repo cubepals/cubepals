@@ -56,6 +56,7 @@ export class Resume {
   readonly #probe: ReadinessProbe
   readonly #logs: LogSource
   readonly #hungMs: number
+  readonly #bootMs: number
 
   constructor(deps: {
     runtime: Pick<Runtimes, 'waitRunning' | 'forceStop' | 'start'>
@@ -63,11 +64,14 @@ export class Resume {
     logs: LogSource
     /** `RESUME_HUNG_MS` by default; tests shorten it. */
     resumeMs?: number
+    /** `RESUME_MS` by default; tests shorten it. */
+    answerMs?: number
   }) {
     this.#runtime = deps.runtime
     this.#probe = deps.probe
     this.#logs = deps.logs
     this.#hungMs = deps.resumeMs ?? RESUME_HUNG_MS
+    this.#bootMs = deps.answerMs ?? RESUME_MS
   }
 
   /**
@@ -87,7 +91,7 @@ export class Resume {
   ): Promise<boolean> {
     const hungAt = Date.now() + this.#hungMs
     const running = AbortSignal.timeout(this.#hungMs)
-    let came: 'answered' | 'booting' | 'hung'
+    let came: 'answered' | 'booting' | 'unread' | 'hung'
     try {
       await ctx.mark('resume_observing')
       const first = await this.#runningOrAnswered(handle, endpoint(), running)
@@ -98,7 +102,7 @@ export class Resume {
       await ctx.mark('resume_running')
       // Running at last, it has `RESUME_MS` to answer or print: a boot from its disk that got
       // running late in the bound is never cut off before its output could show it boots.
-      came = await this.#answer(endpoint(), handle, since, Math.max(hungAt, Date.now() + RESUME_MS))
+      came = await this.#answer(endpoint(), handle, since, Math.max(hungAt, Date.now() + this.#bootMs))
     } catch (error) {
       // Not running in time is a hung resume; a machine that stopped is the boot's to explain.
       if (!running.aborted) return false
@@ -108,6 +112,10 @@ export class Resume {
     if (came === 'hung')
       await this.#startFresh(ctx, handle, new Error('It ran, but answered and printed nothing'))
     if (came === 'answered') await ctx.mark('resume_answered')
+    // The provider dropped the memory it kept (a deploy, a host move, maintenance): it boots from
+    // its disk, which its record keeps, so a slow wake says why it was one. A log that couldn't be
+    // read goes on as a boot too, but saw no boot, so it marks nothing.
+    if (came === 'booting') await ctx.mark('resume_booted')
     return came === 'answered'
   }
 
@@ -149,15 +157,15 @@ export class Resume {
    * How a resumed server that runs came back: `answered` a ping; `booting`, past `RESUME_MS`
    * without an answer and printing since `since`, as a boot from its disk does; or `hung` by
    * `hungAt`, answering nothing and printing nothing, frozen where it was. A log that can't be read
-   * says nothing either way, and leaves it to boot.
+   * says nothing either way: `unread`, which is left to boot like `booting`.
    */
   async #answer(
     endpoint: GameEndpoint,
     handle: RuntimeHandle,
     since: Date,
     hungAt: number,
-  ): Promise<'answered' | 'booting' | 'hung'> {
-    const bootAt = Date.now() + RESUME_MS
+  ): Promise<'answered' | 'booting' | 'unread' | 'hung'> {
+    const bootAt = Date.now() + this.#bootMs
     for (;;) {
       // Up to the first verdict, and never so short a ping can't be answered past it.
       const left = Math.max(PING_MS, Math.min(bootAt, hungAt) - Date.now())
@@ -167,14 +175,33 @@ export class Resume {
       )
       if (answered) return 'answered'
       const now = Date.now()
-      if (now >= bootAt || now >= hungAt) {
-        const lines = await this.#logs.recent(handle, LINES_READ).catch(() => null)
-        const printed = lines === null || lines.some((line) => line.at >= since)
-        if (printed && now >= bootAt) return 'booting'
-        if (!printed && now >= hungAt) return 'hung'
-      }
+      const verdict =
+        now >= bootAt || now >= hungAt
+          ? await this.#printed(handle, since, now >= bootAt, now >= hungAt)
+          : null
+      if (verdict !== null) return verdict
       await new Promise((resolve) => setTimeout(resolve, RESUME_PAUSE_MS))
     }
+  }
+
+  /**
+   * What the machine's log says of a resume not answering, once a verdict is due: `booting` where
+   * it printed since `since` and the boot's wait is past; `hung` where it printed nothing and the
+   * hung wait is past; `unread` where the log couldn't be read and the boot's wait is past. Null
+   * while no verdict is due yet.
+   */
+  async #printed(
+    handle: RuntimeHandle,
+    since: Date,
+    bootDue: boolean,
+    hungDue: boolean,
+  ): Promise<'booting' | 'unread' | 'hung' | null> {
+    const lines = await this.#logs.recent(handle, LINES_READ).catch(() => null)
+    if (lines === null) return bootDue ? 'unread' : null
+    const printed = lines.some((line) => line.at >= since)
+    if (printed && bootDue) return 'booting'
+    if (!printed && hungDue) return 'hung'
+    return null
   }
 
   /**
