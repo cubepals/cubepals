@@ -14,7 +14,7 @@
 import { HOUR_MS, MINUTE_MS } from '../../packages/contracts/src/durations.ts'
 import type { VisitReport } from '../../packages/contracts/src/join-records.ts'
 import { unmapped } from '../../packages/contracts/src/proxy-header.ts'
-import type { SessionEnd } from './session-end.ts'
+import type { SessionEnd, SessionWatch } from './session-end.ts'
 
 /** A connection's `ip:port`, as visits are found by: an IPv6 address in brackets. */
 export function sourceKey(address: string, port: number): string {
@@ -69,6 +69,8 @@ export class Visits {
    * the connection it made, for a server sent no PROXY header, which mc-router then can't read.
    */
   readonly #aliases = new Map<string, string>()
+  /** How each open connection's session is going (`session-end.ts`), by source, until it closes. */
+  readonly #sessions = new Map<string, SessionWatch>()
   /** Looks sent per server address this hour, and those left unsent. */
   readonly #looks = new Map<string, { since: number; sent: number; more: number }>()
 
@@ -128,6 +130,16 @@ export class Visits {
     return this.#visits.get(this.#aliases.get(source) ?? source)
   }
 
+  /** The session of the connection from `source` is watched by `watch`, until it closes. */
+  watching(source: string, watch: SessionWatch): void {
+    this.#sessions.set(source, watch)
+  }
+
+  /** The join from `source` was handed to its server from the waiting room: its silences count from now. */
+  handedOver(source: string): void {
+    this.#sessions.get(this.#aliases.get(source) ?? source)?.handedOver()
+  }
+
   /** mc-router sees the visit from `source` as coming from `local`, until it closes. */
   alias(local: string, source: string): void {
     this.#aliases.set(local, source)
@@ -159,6 +171,7 @@ export class Visits {
    * how the session went (`session-end.ts`) where it was watched.
    */
   closed(source: string, bytes: { up: number; down: number }, session?: SessionEnd): void {
+    this.#sessions.delete(source)
     const visit = this.#visits.get(source)
     for (const [local, aliased] of this.#aliases) if (aliased === source) this.#aliases.delete(local)
     if (visit === undefined) return

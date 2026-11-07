@@ -624,6 +624,8 @@ function heldVisit(header: Uint8Array | null) {
     ended: (why: string | null) => {
       if (source === null) return
       visits.update(source, why === null ? { handedAt: new Date().toISOString() } : { leftReason: why })
+      // Handed over: what the wait itself was quiet is no sign of the player's connection.
+      if (why === null) visits.handedOver(source)
       visits.open(source)
     },
   }

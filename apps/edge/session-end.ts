@@ -51,6 +51,12 @@ export interface SessionEnd {
 /** What a session ends as, once its connection closes. */
 export interface SessionWatch {
   end(): SessionEnd
+  /**
+   * The join was handed to its server now: the player's silences, and their stalls, count from
+   * here. A join held in the waiting room is spoken to every 10 s, so its wait's own pauses are no
+   * sign of the player's connection. What was held back on the way to the server still counts.
+   */
+  handedOver(): void
 }
 
 /**
@@ -98,6 +104,7 @@ export function watchSession(
   }
 
   return {
+    handedOver: () => quiet.restart(clock.now()),
     end() {
       const at = clock.now()
       const sum = quiet.at(at)
@@ -160,6 +167,13 @@ class Stretches {
     this.#close(at)
     this.#from = at
     this.#held = stillPaused
+  }
+
+  /** The player's own silences count from `at`, the one under way included from there. */
+  restart(at: number): void {
+    this.#stalls = 0
+    this.#longest = { ms: 0, from: at }
+    if (!this.#held) this.#from = Math.max(this.#from, at)
   }
 
   /** What the stretches add up to at `at`, the one under way counted as if it ended then. */
