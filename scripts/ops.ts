@@ -279,12 +279,14 @@ switch (command) {
       joins: JoinView[]
     }
     const { signals } = (await api('GET', `/signals?since=${from}`)) as { signals: SignalView[] }
+    // The API's `since` keeps every open signal, however old: only those raised in the window.
+    const raised = signals.filter((s) => s.serverId === id && Date.parse(s.at) >= Date.parse(from))
     say(
       timelineReport({
         server,
         operations: detailed,
         joins,
-        signals: signals.filter((s) => s.serverId === id),
+        signals: raised,
       }),
     )
     break
