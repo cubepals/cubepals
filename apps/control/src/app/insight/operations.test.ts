@@ -67,4 +67,22 @@ describe.skipIf(!hasDatabase)('operation_finished', () => {
     expect(woke).toMatchObject({ kind: 'start', status: 'succeeded', way: 'resumed', attempts: 1 })
     expect(typeof woke?.seconds).toBe('number')
   }, 60_000)
+
+  test('one that fails for good is kept too, as failed', async () => {
+    const owner = await h.user()
+    const created = await h.create(owner)
+    await h.until(created.id, 'running')
+    await h.settled(created.id)
+    const id = randomUUID()
+    await h.db.insert(schema.serverOperations).values({
+      id,
+      serverId: created.id,
+      kind: 'backup',
+      status: 'queued',
+      requestedBy: 'system:schedule',
+      idempotencyKey: `backup:${id}`,
+    })
+    await h.app.runner.giveUp(id, 'The provider refused it')
+    expect(await kept(id)).toEqual([expect.objectContaining({ kind: 'backup', status: 'failed' })])
+  }, 60_000)
 })

@@ -13,8 +13,10 @@ import { randomUUID } from 'node:crypto'
 import { MINUTE_MS, SECOND_MS } from '@blockly/contracts/durations'
 import type { SignalsConfig } from '@blockly/contracts/join-records'
 import { schema } from '@blockly/db'
+import { eq } from 'drizzle-orm'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
 import { Outbox } from '../../testing/outbox.ts'
+import { finishOperation, markRunning, recordAttemptError } from '../operations/persistence.ts'
 import { installTuning, tuning } from '../tuning.ts'
 import { tellSignals, type Written } from './signal-mail.ts'
 import { raiseSignals } from './signals.ts'
@@ -91,12 +93,23 @@ describe.skipIf(!hasDatabase)('signals from operations', () => {
       took: 20 * MINUTE_MS,
       running: true,
     })
-    const retried = await operation({
-      kind: 'stop',
-      steps: ['attempt', 'attempt'],
-      took: 5 * SECOND_MS,
-      error: 'Fly: 503',
+    // Tried again as the runner does: the first attempt's error, then a new attempt, which clears
+    // `error` and keeps it on its own step, then success.
+    const retried = await operation({ kind: 'stop', steps: ['attempt'], took: 5 * SECOND_MS, running: true })
+    await recordAttemptError(h.db, retried, 'Fly: 503')
+    await markRunning(h.db, retried)
+    await finishOperation(h.db, retried, 'succeeded')
+    // A backup on its second attempt, slow from its first: a retry's own `startedAt` is recent.
+    const longRetried = await operation({
+      kind: 'backup',
+      steps: ['attempt'],
+      took: 20 * MINUTE_MS,
+      running: true,
     })
+    await h.db
+      .update(schema.serverOperations)
+      .set({ startedAt: ago(30 * SECOND_MS) })
+      .where(eq(schema.serverOperations.id, longRetried))
     installTuning({
       ...deployed,
       joins: {
@@ -109,12 +122,13 @@ describe.skipIf(!hasDatabase)('signals from operations', () => {
         },
       },
     })
-    expect(await raiseSignals(h.db, now, tell)).toBe(4)
+    expect(await raiseSignals(h.db, now, tell)).toBe(5)
     const raised = await h.db.select().from(schema.signals)
     expect(raised.map((s) => s.key).sort()).toEqual(
       [
         `retried_operation:${retried}`,
         `slow_operation:${longBackup}`,
+        `slow_operation:${longRetried}`,
         `slow_operation:${slowResume}`,
         `wake_booted:${booted}`,
       ].sort(),

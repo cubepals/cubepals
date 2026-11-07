@@ -325,6 +325,7 @@ export class OperationRunner {
       }
       if (await finishOperation(tx, op.id, 'failed', message, detail ?? null)) {
         await this.#events.publish(tx, progressEvent(op, current, null, 'failed'))
+        await operationFinished(tx, op, current.ownerId, 'failed')
         operationEnded(op.kind, 'failed', Date.now() - op.createdAt.getTime())
         operationFailed(op.kind, step)
       }

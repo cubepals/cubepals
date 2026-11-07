@@ -28,7 +28,7 @@ interface OperationRow {
   server: string | null
   kind: string
   status: string
-  steps: readonly { step: string; at: string }[] | null
+  steps: readonly { step: string; at: string; after?: string }[] | null
   error: string | null
   startedAt: Date | null
   finishedAt: Date | null
@@ -93,9 +93,12 @@ function wakeBooted(config: SignalsConfig, ops: readonly OperationRow[], now: Da
   })
 }
 
-/** How long an operation took, or has taken so far, from its first attempt. */
-const secondsOf = (op: OperationRow, now: Date) =>
-  Math.round(((op.finishedAt ?? now).getTime() - (op.startedAt ?? op.createdAt).getTime()) / 1000)
+/** How long an operation took, or has taken so far, from its first attempt: a retry starts its own `startedAt`. */
+const secondsOf = (op: OperationRow, now: Date) => {
+  const first = op.steps?.find((entry) => entry.step === 'attempt')?.at
+  const from = first === undefined ? (op.startedAt ?? op.createdAt).getTime() : Date.parse(first)
+  return Math.round(((op.finishedAt ?? now).getTime() - from) / 1000)
+}
 
 /** An operation past its kind's figure, finished or still running; a resume against `resumeS`. */
 function slowOperations(config: SignalsConfig, ops: readonly OperationRow[], now: Date): Raised[] {
@@ -127,12 +130,16 @@ function slowOperations(config: SignalsConfig, ops: readonly OperationRow[], now
   })
 }
 
-/** An operation that took more than one attempt, with its last error. */
+/**
+ * An operation that took more than one attempt, with the error that made it try again: what the
+ * last attempt's step kept (`after`), since a new attempt clears `error`; its own error where it failed.
+ */
 function retriedOperations(config: SignalsConfig, ops: readonly OperationRow[], now: Date): Raised[] {
   if (config.retriedOperation === undefined) return []
   return ops.flatMap((op) => {
     const attempts = stepsOf(op).filter((step) => step === 'attempt').length
     if (attempts < 2) return []
+    const retriedAfter = [...(op.steps ?? [])].reverse().find((entry) => entry.after !== undefined)?.after
     return [
       {
         kind: 'retried_operation' as const,
@@ -140,7 +147,13 @@ function retriedOperations(config: SignalsConfig, ops: readonly OperationRow[], 
         serverId: op.serverId,
         joinId: null,
         at: now,
-        detail: { server: op.server, operation: op.id, operationKind: op.kind, attempts, error: op.error },
+        detail: {
+          server: op.server,
+          operation: op.id,
+          operationKind: op.kind,
+          attempts,
+          error: op.error ?? retriedAfter ?? null,
+        },
       },
     ]
   })

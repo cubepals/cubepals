@@ -98,7 +98,7 @@ export async function markRunning(q: Queryable, id: string): Promise<void> {
   const at = new Date()
   await q
     .update(operations)
-    .set({ status: 'running', startedAt: at, error: null, steps: withStep('attempt', at) })
+    .set({ status: 'running', startedAt: at, error: null, steps: attemptStep(at) })
     .where(and(eq(operations.id, id), inArray(operations.status, [...OPEN])))
 }
 
@@ -117,6 +117,13 @@ export async function recordMark(q: Queryable, id: string, mark: string): Promis
     .set({ steps: withStep(mark, new Date()) })
     .where(eq(operations.id, id))
 }
+
+/**
+ * `steps` with an `attempt` on the end, carrying the error the attempt before it ended on (`after`),
+ * which `error` no longer holds once this attempt begins: why it was tried again stays on the record.
+ */
+const attemptStep = (at: Date) =>
+  sql`coalesce(${operations.steps}, '[]'::jsonb) || jsonb_build_array(jsonb_strip_nulls(jsonb_build_object('step', 'attempt', 'at', ${at.toISOString()}::text, 'after', ${operations.error})))`
 
 /** `steps` with one more on the end (`OperationStepJson`), for where an operation's time went. */
 const withStep = (step: string, at: Date) =>
