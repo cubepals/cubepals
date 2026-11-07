@@ -288,6 +288,17 @@ export async function lastRunEnded(q: Queryable, serverId: string): Promise<Date
   return row?.stoppedAt ?? null
 }
 
+/** When the server's latest finished run ended, whether or not another is open now; null before any ended. */
+export async function lastRunStopped(q: Queryable, serverId: string): Promise<Date | null> {
+  const [row] = await q
+    .select({ stoppedAt: intervals.stoppedAt })
+    .from(intervals)
+    .where(and(eq(intervals.serverId, serverId), isNotNull(intervals.stoppedAt)))
+    .orderBy(desc(intervals.stoppedAt))
+    .limit(1)
+  return row?.stoppedAt ?? null
+}
+
 /**
  * How many times a connection woke this server in the last hour and nobody joined: the runs one
  * woke, or the starts one asked for, whichever is more, less the woken runs a player joined. So

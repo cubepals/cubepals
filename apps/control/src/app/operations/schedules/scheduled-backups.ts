@@ -25,7 +25,7 @@ import type { SnapshotHandle } from '../../ports/runtime.ts'
 import type { Runtimes } from '../../runtimes/router.ts'
 import { findServer, listByStatus, loadRuntime } from '../../servers/persistence.ts'
 import type { ServerTransitions } from '../../servers/transitions.ts'
-import { lastActivity } from '../../servers/usage.ts'
+import { lastActivity, lastRunStopped, openIntervalStart } from '../../servers/usage.ts'
 
 export function schedulingBackups(deps: {
   db: Db
@@ -53,7 +53,7 @@ export function schedulingBackups(deps: {
       if (binding.handle === null || binding.applied === null) continue
       // A server that slept since it was played has its restore point from then.
       const last = await latestRestorePoint(db, server.id)
-      if (last !== null && now.getTime() - last.createdAt.getTime() < DAY_MS) continue
+      if (last !== null && now.getTime() - (await dayFrom(server.id, last)) < DAY_MS) continue
       const played = await lastActivity(db, server.id)
       if (played === null || (last !== null && played <= last.createdAt)) continue
       await db.transaction((tx) =>
@@ -69,6 +69,20 @@ export function schedulingBackups(deps: {
     await expireBackups(now, servers)
     await deps.backups.eraseArchives()
     return queued
+  }
+
+  /**
+   * When a server's day toward its next scheduled backup began: its last restore point, or the
+   * start of the run it is in, where that restore point holds everything played before the run
+   * (taken once the run before had ended, as a sleep's is). A server just woken from such a sleep
+   * has nothing to keep that its restore point doesn't, so its saving isn't paused minutes after
+   * someone joined; it gets a backup a day into its run, or at its next sleep.
+   */
+  const dayFrom = async (serverId: string, last: BackupRecord): Promise<number> => {
+    const run = await openIntervalStart(db, serverId)
+    if (run === null || run <= last.createdAt) return last.createdAt.getTime()
+    const ended = await lastRunStopped(db, serverId)
+    return ended !== null && ended <= last.createdAt ? run.getTime() : last.createdAt.getTime()
   }
 
   const expireBackups = async (now: Date, servers: readonly MinecraftServer[]): Promise<void> => {

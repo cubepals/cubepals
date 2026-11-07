@@ -21,6 +21,7 @@ import {
   installOf,
   PLAN_ENV,
   PROXY_ENV,
+  RCON_ECHO_ENV,
   REPORT_ENV,
   toRuntimeSpec,
   usesProxyProtocol,
@@ -89,11 +90,12 @@ export function specDigest(spec: RuntimeSpec): string {
 /**
  * The spec as drift sees it: without what the owner's plan sets, the picture they chose, Paper's
  * reading a PROXY protocol header, which a server running from before it was asked takes at its
- * next start, where its join reporter reports joins and ticks, or Blockly's own steps before the image starts (`withoutOwnSteps`), whose text can
+ * next start, where its join reporter reports joins and ticks, whether RCON's commands show in
+ * operators' chat, or Blockly's own steps before the image starts (`withoutOwnSteps`), whose text can
  * change without changing what a server runs.
  */
 export function withoutPlanLimits(spec: RuntimeSpec): RuntimeSpec {
-  const ignored = [...PLAN_ENV, ...IDENTITY_ENV, PROXY_ENV, REPORT_ENV, VITALS_ENV]
+  const ignored = [...PLAN_ENV, ...IDENTITY_ENV, PROXY_ENV, REPORT_ENV, VITALS_ENV, RCON_ECHO_ENV]
   const { entrypoint: _entrypoint, ...rest } = spec
   const entrypoint = withoutOwnSteps(spec.entrypoint)
   return {
