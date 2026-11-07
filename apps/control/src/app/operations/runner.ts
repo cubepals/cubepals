@@ -66,6 +66,7 @@ type OperationMark =
   | RuntimeMark
   | SleepMark
   | ChangedMark
+  | MachineMark
 
 /**
  * Why a wake booted where it could have resumed, after `other_spec`: one for each part of the
@@ -73,6 +74,9 @@ type OperationMark =
  * `changed:drift:image`, `changed:identity`, or `changed:unknown` where the boot before kept none.
  */
 type ChangedMark = `changed:${string}`
+
+/** The provider's machine an operation acted on (`handlers/binding.ts`), kept after the provider forgets it. */
+type MachineMark = `machine:${string}`
 
 /**
  * How a sleep ended, on the stop that put the server to sleep (`handlers/winding-down.ts`):

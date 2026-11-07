@@ -55,14 +55,23 @@ export const bootedBack = (previous: AppliedConfigJson, back: DesiredRuntime): A
 
 export function serverBinding(deps: {
   db: Db
-  runtime: Pick<Runtimes, 'providers' | 'start' | 'stop' | 'forceStop'>
+  runtime: Pick<Runtimes, 'providers' | 'start' | 'stop' | 'forceStop' | 'locate'>
   jobs: Pick<JobQueue, 'enqueueEligibility'>
 }) {
   const { db, runtime } = deps
 
+  /** The machine a handle names, as the provider calls it, kept on the operation (`machine:<id>`). */
+  const machineOf = (handle: RuntimeHandle) =>
+    runtime.locate(handle).names.find((name) => name.label === 'Machine')?.value ?? null
+
   const progressSink = (ctx: OperationContext, server: MinecraftServer): ProgressSink => ({
     step: (step) => ctx.step(step),
-    handle: (handle) => saveHandle(db, server.id, handle, server.regionKey),
+    // Which machine the operation acted on, so its record says so after the provider forgets it.
+    handle: async (handle) => {
+      await saveHandle(db, server.id, handle, server.regionKey)
+      const machine = machineOf(handle)
+      if (machine !== null) await ctx.mark(`machine:${machine}`)
+    },
     // A machine stopped though its last sleep kept its memory: the provider dropped what it kept.
     mark: async (mark) =>
       ctx.mark(mark === 'not_asleep' && (await memoryKept(db, server.id)) ? 'memory_lost' : mark),

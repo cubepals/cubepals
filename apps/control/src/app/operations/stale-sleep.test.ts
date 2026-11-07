@@ -92,6 +92,8 @@ describe.skipIf(!hasDatabase)('a wake that boots says why', () => {
     expect(steps).toContain('booting')
     expect(steps).toContain('other_spec')
     expect(steps.filter((step) => step.startsWith('changed:'))).toEqual(['changed:drift:env.DIFFICULTY'])
+    // And which machine it booted, kept after the provider forgets it.
+    expect(steps.filter((step) => step.startsWith('machine:'))).toEqual([`machine:${id}/1`])
 
     // Asleep on what it now runs, its next wake resumes, and says nothing changed.
     await asleep(owner, id)
