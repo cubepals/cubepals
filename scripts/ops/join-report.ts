@@ -205,6 +205,9 @@ const numberOr = (value: unknown) => (typeof value === 'number' && Number.isFini
 const secondsOf = (ms: number) => Math.round(ms / 100) / 10
 
 function sessionOf({ join }: JoinDetailView): Session | null {
+  // A join never handed to its server ended in the waiting room or at the door, for the reason
+  // it was refused: its quiet is the wait's, and no drop.
+  if (join.handedAt === null || (join.leftReason ?? '').startsWith('refused:')) return null
   const raw = join.detail.session
   if (raw === null || typeof raw !== 'object') return null
   const s = raw as Record<string, unknown>

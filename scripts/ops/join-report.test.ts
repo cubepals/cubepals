@@ -258,3 +258,11 @@ test('a join held in the waiting room isn’t called stalling for the wait’s o
   }).join('\n')
   expect(direct).toContain('a connection that kept stalling')
 })
+
+test('a join turned away in the waiting room isn’t read as dropped', () => {
+  const session = { closedFirst: 'server', how: 'closed', quietAtEndMs: 9_000, downQuietAtEndMs: 1 }
+  const refused = { ...JOIN, handedAt: null, leftReason: 'refused:quota', detail: { session } }
+  const report = joinReport({ ...VIEW, signals: [], join: refused }).join('\n')
+  expect(report).not.toContain('## How the session ended')
+  expect(report).not.toContain('Dropped.')
+})

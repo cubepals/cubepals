@@ -201,6 +201,13 @@ describe('a player cut off between them and the edge', () => {
         leftAt: at(60),
         detail: session({ closedFirst: 'server', how: 'reset', quietAtEndMs: 9_000, downQuietAtEndMs: 1 }),
       }),
+      // Turned away in the waiting room: its quiet is the wait's.
+      row('refused', {
+        handedAt: null,
+        leftAt: at(60),
+        leftReason: 'refused:quota',
+        detail: session({ closedFirst: 'server', how: 'closed', quietAtEndMs: 9_000, downQuietAtEndMs: 1 }),
+      }),
       // A pause shorter than the limit.
       row('blip', {
         leftAt: at(60),

@@ -248,6 +248,26 @@ function kickedEarly(config: SignalsConfig, rows: readonly JoinRow[], now: Date)
 const msOf = (value: unknown): number | null =>
   typeof value === 'number' && Number.isFinite(value) ? value : null
 
+/** How the edge saw a session that ended, where it was handed to its server and kept one. */
+function endOf(row: JoinRow): Record<string, unknown> | null {
+  // Never handed to its server: turned away in the waiting room or at the door, for its own reason.
+  if (row.handedAt === null || (row.leftReason ?? '').startsWith('refused:')) return null
+  const session = row.detail.session
+  if (row.leftAt === null || session === null || typeof session !== 'object') return null
+  return session as Record<string, unknown>
+}
+
+/** Why the way to the player ended a session: silent while the edge still sent, reset, or neither. */
+function cutOff(s: Record<string, unknown>, quietMs: number): 'player_silent' | 'reset' | null {
+  const quiet = msOf(s.quietAtEndMs) ?? 0
+  const sentSince = msOf(s.downQuietAtEndMs) ?? Number.POSITIVE_INFINITY
+  // A reset from the server's side, or a full way on to it, is the server's however quiet the player was.
+  const serverSide = s.how === 'reset' || s.heldAtEnd === true
+  if (s.closedFirst === 'server' && !serverSide && quiet >= quietMs && sentSince < quiet)
+    return 'player_silent'
+  return s.closedFirst === 'player' && s.how === 'reset' ? 'reset' : null
+}
+
 /**
  * Cut off between the player and the edge: the server timed out a player whose side had gone quiet
  * while the edge still sent to them, or the player's connection was reset. Neither the server nor
@@ -257,26 +277,11 @@ export function dropped(config: SignalsConfig, rows: readonly JoinRow[], now: Da
   const limit = config.dropped?.quietS
   if (limit === undefined) return []
   return rows.flatMap((row) => {
-    const session = row.detail.session
-    if (row.leftAt === null || session === null || typeof session !== 'object') return []
-    const s = session as Record<string, unknown>
-    const quiet = msOf(s.quietAtEndMs) ?? 0
-    const sentSince = msOf(s.downQuietAtEndMs) ?? Number.POSITIVE_INFINITY
-    // A reset from the server's side, or a full way on to it, is the server's however quiet the player was.
-    const serverSide = s.how === 'reset' || s.heldAtEnd === true
-    const silent =
-      s.closedFirst === 'server' && !serverSide && quiet >= limit * SECOND_MS && sentSince < quiet
-    const reset = s.closedFirst === 'player' && s.how === 'reset'
-    if (!silent && !reset) return []
-    const figure = Math.round(quiet / 100) / 10
-    return [
-      raise('dropped', row, '', now, {
-        figure,
-        limit,
-        why: silent ? 'player_silent' : 'reset',
-        stalls: msOf(s.stalls),
-      }),
-    ]
+    const s = endOf(row)
+    const why = s === null ? null : cutOff(s, limit * SECOND_MS)
+    if (s === null || why === null) return []
+    const figure = Math.round((msOf(s.quietAtEndMs) ?? 0) / 100) / 10
+    return [raise('dropped', row, '', now, { figure, limit, why, stalls: msOf(s.stalls) })]
   })
 }
 

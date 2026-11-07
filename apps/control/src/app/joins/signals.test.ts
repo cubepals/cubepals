@@ -33,6 +33,7 @@ async function longSession(h: Harness, serverId: string, now: Date): Promise<str
     address: 'signalled.play.test',
     playerName: 'Alex',
     connectedAt: new Date(now.getTime() - 9 * HOUR_MS),
+    handedAt: new Date(now.getTime() - 9 * HOUR_MS + MINUTE_MS),
     leftAt: new Date(now.getTime() - MINUTE_MS),
     detail: { session },
   })
