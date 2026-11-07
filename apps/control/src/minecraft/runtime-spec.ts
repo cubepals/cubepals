@@ -115,6 +115,16 @@ export const REPORT_ENV = 'CUBEPALS_REPORT_URL'
 export const VITALS_ENV = 'CUBEPALS_VITALS_URL'
 
 /**
+ * Whether the game repeats what RCON runs in its operators' chat (`broadcast-rcon-to-ops`, on in
+ * Minecraft unless told). Only the control plane speaks RCON: a backup's `save-off`, `save-all
+ * flush` and `save-on`, who is online every minute, an owner's command from the site, whose answer
+ * the site shows. None of it is anything a player in the game did, so it stays out of their chat.
+ * Left out of what drift compares: it arrives at a start, never by restarting a server that runs,
+ * and a server asleep still wakes as it slept.
+ */
+export const RCON_ECHO_ENV = 'BROADCAST_RCON_TO_OPS'
+
+/**
  * Whether a server of `revision` reads a PROXY protocol header before each connection: Paper does,
  * so it sees each player's own address rather than the edge's. Minecraft itself and the mod
  * loaders have no such setting, and a header sent to them breaks the connection.
@@ -630,6 +640,7 @@ export function toRuntimeSpec(input: RuntimeSpecInput): RuntimeSpec {
       ...bedrock.env,
       ENABLE_RCON: 'TRUE',
       RCON_PORT: String(RCON_PORT),
+      [RCON_ECHO_ENV]: 'FALSE',
       // The control plane is the only writer of power state (§0, decision 3).
       ENABLE_AUTOPAUSE: 'FALSE',
       ENABLE_AUTOSTOP: 'FALSE',

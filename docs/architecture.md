@@ -1017,7 +1017,10 @@ Outcomes are written down in `job_health`, the successes of a minute together:
   per-account override. `stop{daily}` is from when Free counted its play by the day: a server
   stopped for it then sleeps like any other.
 - `backup-schedule`: per entitlement. Skips servers with no activity since their last restore
-  point, and skips the archive tier when the deployment has no archives. A restore point is
+  point, and skips the archive tier when the deployment has no archives. A server's day toward
+  its next one counts from its last restore point, or from the start of its run where that point
+  holds everything before the run (a sleep's), so a server just woken isn't paused to save what
+  its sleep already kept. A restore point is
   mostly a sleep's: a `stop` for `idle`, `user` or `daily` queues a `backup{sleep}` once the
   server is down, when the server itself read a player on since the newest ready restore point
   (`sleep`, `scheduled` or `manual`), so a wake nobody joined keeps none, nor does a login it

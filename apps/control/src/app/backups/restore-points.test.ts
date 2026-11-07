@@ -10,6 +10,9 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { randomUUID } from 'node:crypto'
 import { readFile, writeFile } from 'node:fs/promises'
+import { DAY_MS, HOUR_MS, MINUTE_MS } from '@blockly/contracts/durations'
+import { schema } from '@blockly/db'
+import { and, eq, isNull } from 'drizzle-orm'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
 import type { MinecraftRuntime } from '../ports/runtime.ts'
 import { lockServer } from '../servers/persistence.ts'
@@ -51,6 +54,15 @@ const play = async (id: string) => {
 const stop = async (owner: Owner, id: string, reason: 'idle' | 'user' | 'maintenance' = 'idle') => {
   await h.app.servers.stop(owner, id, randomUUID(), reason)
   await h.until(id, 'stopped')
+}
+/** A backup its owner asked for, recorded as taken `at`. */
+const backUpAt = async (owner: Owner, id: string, at: Date) => {
+  await h.app.backups.createBackup(owner, id, randomUUID())
+  await h.settled(id)
+  await h.db
+    .update(schema.backups)
+    .set({ createdAt: at })
+    .where(and(eq(schema.backups.serverId, id), eq(schema.backups.trigger, 'manual')))
 }
 const points = async (id: string) =>
   (await listBackups(h.db, id)).filter((b) => b.trigger === 'sleep' && b.status === 'ready')
@@ -110,6 +122,60 @@ describe.skipIf(!hasDatabase)('restore points', () => {
     expect(kept).toHaveLength(3)
     expect(kept.map((b) => b.id)).not.toContain(evening?.id)
   }, 60_000)
+
+  test('a server woken from a sleep keeps saving; its day’s backup waits a day into the run', async () => {
+    const { owner, id } = await running()
+    await play(id)
+    await stop(owner, id)
+    await h.settled(id)
+    expect(await points(id)).toHaveLength(1)
+    // Two days asleep: its restore point, and the run that point holds, are that old.
+    const slept = new Date(Date.now() - 2 * DAY_MS)
+    await h.db.update(schema.backups).set({ createdAt: slept }).where(eq(schema.backups.serverId, id))
+    await h.db
+      .update(schema.powerIntervals)
+      .set({
+        startedAt: new Date(slept.getTime() - HOUR_MS),
+        stoppedAt: new Date(slept.getTime() - MINUTE_MS),
+      })
+      .where(eq(schema.powerIntervals.serverId, id))
+    const scheduled = async () => (await listBackups(h.db, id)).filter((b) => b.trigger === 'scheduled')
+
+    // Woken, and someone plays: everything before is in its restore point, so nothing pauses saving.
+    await h.app.servers.start(owner, id, randomUUID())
+    await h.until(id, 'running')
+    await h.settled(id)
+    await play(id)
+    await h.app.schedules.backups()
+    await h.settled(id)
+    expect(await scheduled()).toHaveLength(0)
+
+    // A day into the run, still awake: the day's backup comes.
+    await h.db
+      .update(schema.powerIntervals)
+      .set({ startedAt: new Date(Date.now() - DAY_MS - HOUR_MS) })
+      .where(and(eq(schema.powerIntervals.serverId, id), isNull(schema.powerIntervals.stoppedAt)))
+    await h.app.schedules.backups()
+    await h.settled(id)
+    expect(await scheduled()).toHaveLength(1)
+  }, 30_000)
+
+  test('a server woken after a sleep that kept nothing is backed up as before', async () => {
+    const { owner, id } = await running()
+    // Its last restore point is two days old, and it was played after it: no sleep kept that play.
+    const old = new Date(Date.now() - 2 * DAY_MS)
+    await backUpAt(owner, id, old)
+    await play(id)
+    await stop(owner, id, 'maintenance')
+    await h.settled(id)
+    await h.app.servers.start(owner, id, randomUUID())
+    await h.until(id, 'running')
+    await h.settled(id)
+    await play(id)
+    await h.app.schedules.backups()
+    await h.settled(id)
+    expect((await listBackups(h.db, id)).filter((b) => b.trigger === 'scheduled')).toHaveLength(1)
+  }, 30_000)
 
   test('a login the server turned away is not play, and keeps no restore point', async () => {
     const { owner, id, slug } = await running()
