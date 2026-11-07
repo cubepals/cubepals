@@ -61,7 +61,8 @@ export async function operationFinished(
       seconds: Math.round((at.getTime() - op.createdAt.getTime()) / 1000),
       way: wayOf(steps),
       attempts: steps.filter((step) => step === 'attempt').length,
-      marks: steps.filter((step) => !PLAIN.has(step)).join(','),
+      // The machine is the operation's own (`machine:<id>`), not a value to count by.
+      marks: steps.filter((step) => !PLAIN.has(step) && !step.startsWith('machine:')).join(','),
       server_id: op.serverId,
     },
   })
