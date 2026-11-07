@@ -127,7 +127,8 @@ in a moment", and a plain message ends the hold.
 
 
 The operation retains `resume_observing` when the runtime's start request has returned,
-`resume_running` when the provider reports running first, and `resume_answered` when Minecraft
-answers. Their timestamps separate the provider's start call from the readiness wait without
+`resume_running` when the provider reports running first, `resume_answered` when Minecraft
+answers, and `resume_booted` when it printed a boot instead: the provider had dropped the memory it
+kept, and the wake went on as a cold boot (rung 2). Their timestamps separate the provider's start call from the readiness wait without
 changing the progress shown to players. A wake admitted before a delayed provider observation
 has `resume_answered` without `resume_running`.

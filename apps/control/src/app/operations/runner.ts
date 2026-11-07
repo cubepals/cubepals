@@ -43,7 +43,8 @@ export type OperationStep =
  * What an operation's record keeps for the platform beside its steps, never shown as one:
  * `resume_observing`, the start request finished and readiness checks began; `resume_running`,
  * the provider reported running; `resume_answered`, the game answered its status ping;
- * `resume_hung`, a resume given up on and started fresh (`resume.ts`); `host_refused`, a start its
+ * `resume_hung`, a resume given up on and started fresh, and `resume_booted`, one whose memory the
+ * provider had dropped, booting from its disk instead (both `resume.ts`); `host_refused`, a start its
  * server's own host couldn't serve; `no_room`, one its runtime had no room for, which went back to
  * sleep (both `handlers/host-refused.ts`). The rest say why a wake booted (`RuntimeMark`, and
  * `memory_lost` where its last sleep kept its memory and the provider stopped it since), how a
@@ -55,6 +56,7 @@ type OperationMark =
   | 'resume_running'
   | 'resume_answered'
   | 'resume_hung'
+  | 'resume_booted'
   | 'host_refused'
   | 'no_room'
   | 'memory_lost'

@@ -175,3 +175,35 @@ test('an observation whose deadline already ended opens no game connection', asy
     providerCancelled: true,
   })
 })
+
+test('a resume the provider turned into a boot from disk goes on as one, and its record says so', async () => {
+  const marks: string[] = []
+  const since = new Date()
+  const resume = new Resume({
+    runtime: {
+      waitRunning: async () => {},
+      forceStop: async () => {
+        throw new Error('a boot is never killed')
+      },
+      start: async (value) => value,
+    },
+    probe: {
+      ping: async () => {
+        throw new Error('still booting')
+      },
+    },
+    // Printing as it boots, as a machine whose memory was dropped does.
+    logs: {
+      recent: async () => [{ at: new Date(since.getTime() + 1), text: 'Starting init' }],
+      tail: async function* () {},
+    },
+    resumeMs: 100,
+    answerMs: 50,
+  })
+  const ctx = {
+    op: { id: 'resume-test', kind: 'start' },
+    mark: async (mark: string) => void marks.push(mark),
+  } as OperationContext
+  expect(await resume.cameBack(ctx, handle, () => endpoint, since)).toBe(false)
+  expect(marks).toEqual(['resume_observing', 'resume_running', 'resume_booted'])
+})

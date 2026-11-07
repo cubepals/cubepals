@@ -168,3 +168,62 @@ test('a join the server reported without its login says the login is missing', (
   expect(lines).toContain('- No login time: the server’s word of it didn’t reach this join.')
   expect(lines).not.toContain('Nothing: both halves told of every step.')
 })
+
+test('a session the server timed out while the player was quiet reads as a drop on the player’s side', () => {
+  const view: JoinDetailView = {
+    ...VIEW,
+    signals: [],
+    join: {
+      ...JOIN,
+      serverSide: 'not_reported',
+      detail: {
+        session: {
+          how: 'closed',
+          stalls: 6,
+          heldAtEnd: false,
+          heldStalls: 0,
+          closedFirst: 'server',
+          mostQueuedUp: 0,
+          quietAtEndMs: 23_967,
+          longestHeldMs: 0,
+          longestQuietMs: 23_967,
+          mostQueuedDown: 0,
+          downQuietAtEndMs: 1,
+          longestQuietFrom: '2026-10-20T15:49:36.024Z',
+        },
+      },
+    },
+  }
+  const report = joinReport(view).join('\n')
+  expect(report).toContain('## How the session ended')
+  expect(report).toContain('- Closed first by the server, closed')
+  expect(report).toContain('- Longest the player sent nothing: 24 s, from 15:49:36 UTC')
+  expect(report).toContain('- Times the player went quiet for 5 s or more: 6')
+  expect(report).toContain(
+    '- Dropped. Between the player and the edge: nothing came from the player for 24 s',
+  )
+  expect(report).toContain('a connection that kept stalling')
+  expect(report).not.toContain('Nothing crossed a limit.')
+})
+
+test('a session whose way on to the server was full points to the server’s side', () => {
+  const session = {
+    closedFirst: 'server',
+    how: 'closed',
+    quietAtEndMs: 9_000,
+    downQuietAtEndMs: 1,
+    heldAtEnd: true,
+    heldStalls: 2,
+    longestHeldMs: 7_000,
+  }
+  const report = joinReport({ ...VIEW, signals: [], join: { ...JOIN, detail: { session } } }).join('\n')
+  expect(report).toContain('The way on to the server was full 2 times, the longest 7 s, and at the end')
+  expect(report).toContain('the server side’s, not the player’s')
+  expect(report).not.toContain('Between the player and the edge')
+})
+
+test('a join with no end yet says when the edge tells of it', () => {
+  expect(joinReport({ ...VIEW, join: { ...JOIN, leftAt: null } }).join('\n')).toContain(
+    'two minutes after it',
+  )
+})

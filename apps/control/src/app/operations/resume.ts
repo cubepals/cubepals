@@ -56,6 +56,7 @@ export class Resume {
   readonly #probe: ReadinessProbe
   readonly #logs: LogSource
   readonly #hungMs: number
+  readonly #bootMs: number
 
   constructor(deps: {
     runtime: Pick<Runtimes, 'waitRunning' | 'forceStop' | 'start'>
@@ -63,11 +64,14 @@ export class Resume {
     logs: LogSource
     /** `RESUME_HUNG_MS` by default; tests shorten it. */
     resumeMs?: number
+    /** `RESUME_MS` by default; tests shorten it. */
+    answerMs?: number
   }) {
     this.#runtime = deps.runtime
     this.#probe = deps.probe
     this.#logs = deps.logs
     this.#hungMs = deps.resumeMs ?? RESUME_HUNG_MS
+    this.#bootMs = deps.answerMs ?? RESUME_MS
   }
 
   /**
@@ -98,7 +102,7 @@ export class Resume {
       await ctx.mark('resume_running')
       // Running at last, it has `RESUME_MS` to answer or print: a boot from its disk that got
       // running late in the bound is never cut off before its output could show it boots.
-      came = await this.#answer(endpoint(), handle, since, Math.max(hungAt, Date.now() + RESUME_MS))
+      came = await this.#answer(endpoint(), handle, since, Math.max(hungAt, Date.now() + this.#bootMs))
     } catch (error) {
       // Not running in time is a hung resume; a machine that stopped is the boot's to explain.
       if (!running.aborted) return false
@@ -108,6 +112,9 @@ export class Resume {
     if (came === 'hung')
       await this.#startFresh(ctx, handle, new Error('It ran, but answered and printed nothing'))
     if (came === 'answered') await ctx.mark('resume_answered')
+    // The provider dropped the memory it kept (a deploy, a host move, maintenance): it boots from
+    // its disk, which its record keeps, so a slow wake says why it was one.
+    if (came === 'booting') await ctx.mark('resume_booted')
     return came === 'answered'
   }
 
@@ -157,7 +164,7 @@ export class Resume {
     since: Date,
     hungAt: number,
   ): Promise<'answered' | 'booting' | 'hung'> {
-    const bootAt = Date.now() + RESUME_MS
+    const bootAt = Date.now() + this.#bootMs
     for (;;) {
       // Up to the first verdict, and never so short a ping can't be answered past it.
       const left = Math.max(PING_MS, Math.min(bootAt, hungAt) - Date.now())

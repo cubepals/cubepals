@@ -4,8 +4,8 @@
 
 /**
  * One join, written for a person: `ops.ts join --markdown` prints it as an incident report, with
- * who joined, how they reached the server, every step in order with its time, what crossed a limit,
- * and what nobody recorded. And the one-line forms `ops.ts joins` and `ops.ts signals` print. Pure:
+ * who joined, how they reached the server, every step in order with its time, how the session
+ * ended and which side that points to, what crossed a limit, and what nobody recorded. And the one-line forms `ops.ts joins` and `ops.ts signals` print. Pure:
  * it reads only the views the operators' API answers with.
  */
 import type { JoinDetailView, JoinView, SignalView } from '@blockly/contracts/join-records'
@@ -116,7 +116,10 @@ function unknowns(view: JoinDetailView): string[] {
   if (join.pingedAt === null) lines.push('- No server-list ping before the join.')
   if (join.serverSide === 'reported' && join.inWorldAt === null)
     lines.push('- Never reached the world, by the server’s word.')
-  if (join.leftAt === null) lines.push('- No leaving recorded: still on, or neither side has said yet.')
+  if (join.leftAt === null)
+    lines.push(
+      '- No leaving recorded: still on, or neither side has said yet (the edge tells of a join’s end two minutes after it).',
+    )
   if (join.wakeOperationId !== null && view.wake === null) lines.push('- Its wake’s start is no longer kept.')
   return lines
 }
@@ -129,6 +132,7 @@ export function joinReport(view: JoinDetailView): string[] {
     ...who(view),
     ...howTheyCame(view),
     ...timelineTable(view),
+    ...sessionEnd(view),
     ...lookedWrong(view),
     '',
     '## What we don’t know',
@@ -180,11 +184,119 @@ function timelineTable(view: JoinDetailView): string[] {
   ]
 }
 
-function lookedWrong({ signals }: JoinDetailView): string[] {
-  const lines = signals.map((s) => {
+/** The edge's word on how the session went (`apps/edge/session-end.ts`), as numbers; null without one. */
+interface Session {
+  closedFirst: string | null
+  how: string | null
+  error: string | null
+  quietAtEndMs: number | null
+  longestQuietMs: number | null
+  longestQuietFrom: string | null
+  stalls: number | null
+  downQuietAtEndMs: number | null
+  mostQueuedDown: number | null
+  longestHeldMs: number | null
+  heldStalls: number | null
+  heldAtEnd: boolean
+}
+
+const numberOr = (value: unknown) => (typeof value === 'number' && Number.isFinite(value) ? value : null)
+const secondsOf = (ms: number) => Math.round(ms / 100) / 10
+
+function sessionOf({ join }: JoinDetailView): Session | null {
+  const raw = join.detail.session
+  if (raw === null || typeof raw !== 'object') return null
+  const s = raw as Record<string, unknown>
+  return {
+    closedFirst: text(s.closedFirst),
+    how: text(s.how),
+    error: text(s.error),
+    quietAtEndMs: numberOr(s.quietAtEndMs),
+    longestQuietMs: numberOr(s.longestQuietMs),
+    longestQuietFrom: text(s.longestQuietFrom),
+    stalls: numberOr(s.stalls),
+    downQuietAtEndMs: numberOr(s.downQuietAtEndMs),
+    mostQueuedDown: numberOr(s.mostQueuedDown),
+    longestHeldMs: numberOr(s.longestHeldMs),
+    heldStalls: numberOr(s.heldStalls),
+    heldAtEnd: s.heldAtEnd === true,
+  }
+}
+
+/** Seconds of silence a client in the game never has: it sends something every fraction of one. */
+const QUIET_MS = 5_000
+
+/**
+ * Which side a session's end points to, in a line (docs/diagnosis.md, How a session ended); null
+ * when it says nothing either way. A player quiet for seconds at the end while the edge still had
+ * a way to them, and the server closing first, is a drop between the player and the edge.
+ */
+function sideOf(s: Session): string | null {
+  if (s.heldAtEnd)
+    return 'The way on to the server was full when it ended: the server side’s, not the player’s.'
+  const quiet = s.quietAtEndMs ?? 0
+  const downQuiet = s.downQuietAtEndMs ?? 0
+  if (s.closedFirst === 'server' && quiet >= QUIET_MS && downQuiet < quiet)
+    return `Between the player and the edge: nothing came from the player for ${secondsOf(quiet)} s while the edge still sent to them, and the server timed them out. Not Cubepals’ servers.`
+  if (s.closedFirst === 'player' && s.how === 'reset')
+    return 'The player’s connection was reset: their side, or the way between them and the edge.'
+  return null
+}
+
+/** What the edge measured of the session, a line each; a figure it didn't keep is left out. */
+function sessionLines(s: Session): string[] {
+  const from = s.longestQuietFrom === null ? '' : `, from ${time(s.longestQuietFrom)} UTC`
+  const heldEnd = s.heldAtEnd ? ', and at the end' : ''
+  const lines: [boolean, string][] = [
+    [
+      s.quietAtEndMs !== null,
+      `- The player had sent nothing for ${secondsOf(s.quietAtEndMs ?? 0)} s when it ended`,
+    ],
+    [
+      s.longestQuietMs !== null,
+      `- Longest the player sent nothing: ${secondsOf(s.longestQuietMs ?? 0)} s${from}`,
+    ],
+    [s.stalls !== null, `- Times the player went quiet for 5 s or more: ${s.stalls}`],
+    [
+      s.downQuietAtEndMs !== null,
+      `- Toward the player: last sent ${secondsOf(s.downQuietAtEndMs ?? 0)} s before the end, at most ${s.mostQueuedDown ?? 0} bytes waiting at the edge`,
+    ],
+    [
+      (s.heldStalls ?? 0) > 0 || s.heldAtEnd,
+      `- The way on to the server was full ${s.heldStalls ?? 0} times, the longest ${secondsOf(s.longestHeldMs ?? 0)} s${heldEnd}`,
+    ],
+  ]
+  return lines.flatMap(([shown, line]) => (shown ? [line] : []))
+}
+
+/** How the session ended, as the edge that relayed it watched it. */
+function sessionEnd(view: JoinDetailView): string[] {
+  const s = sessionOf(view)
+  if (s === null) return []
+  const how = s.how === null ? '' : `, ${s.how}`
+  const error = s.error === null ? '' : ` (${s.error})`
+  const side = sideOf(s)
+  return [
+    '',
+    '## How the session ended',
+    '',
+    `- Closed first by the ${s.closedFirst ?? 'unknown side'}${how}${error}`,
+    ...sessionLines(s),
+    ...(side === null ? [] : ['', side]),
+  ]
+}
+
+function lookedWrong(view: JoinDetailView): string[] {
+  const lines = view.signals.map((s) => {
     const shown = figure(s.detail)
     return `- ${kindOf(s.kind)}${shown === null ? '' : `: ${shown}`}`
   })
+  // A drop isn't a signal, but it is what went wrong.
+  const s = sessionOf(view)
+  const side = s === null ? null : sideOf(s)
+  if (side !== null) lines.push(`- Dropped. ${side}`)
+  if (s !== null && (s.stalls ?? 0) > 1)
+    lines.push(`- The player went quiet for 5 s or more ${s.stalls} times: a connection that kept stalling.`)
   return ['', '## What looked wrong', '', ...(lines.length === 0 ? ['Nothing crossed a limit.'] : lines)]
 }
 
