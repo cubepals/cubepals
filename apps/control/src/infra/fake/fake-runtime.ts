@@ -210,7 +210,7 @@ export class FakeRuntime implements MinecraftRuntime {
     progress: ProgressSink,
   ): Promise<RuntimeHandle> {
     const asleep = this.#boxes.get(key)
-    if (this.sleeps.resumes(asleep, spec)) {
+    if (this.sleeps.resumes(asleep, spec, progress)) {
       await progress.step('resuming')
       await this.#start(asleep)
       return this.#handle(asleep)

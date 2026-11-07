@@ -32,6 +32,11 @@ function schedules(
   return [
     { job: 'reconcile', run: () => app.schedules.reconcile() },
     { job: 'drift', run: () => app.schedules.drift() },
+    {
+      job: 'stale-sleep',
+      run: () => app.schedules.staleSleep(),
+      says: (n) => `refreshed ${n} asleep whose wake would have booted`,
+    },
     { job: 'relocations', run: () => app.schedules.relocations(), says: (n) => `moved ${n}` },
     { job: 'presence-sync', run: () => app.schedules.presenceSync() },
     { job: 'idle-check', run: () => app.schedules.idleCheck() },

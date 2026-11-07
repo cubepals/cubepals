@@ -14,12 +14,19 @@ import { rewritesWorld } from '../../../domain/revision/revision.ts'
 import type { MinecraftServer } from '../../../domain/server/server.ts'
 import { aside, inFull, PermanentFailure } from '../../errors.ts'
 import type { AccessPolicy } from '../../policy/access-policy.ts'
-import { RuntimeFull, type RuntimeHandle, type RuntimeSpec, runtimeKey } from '../../ports/runtime.ts'
+import {
+  type ProgressSink,
+  RuntimeFull,
+  type RuntimeHandle,
+  type RuntimeSpec,
+  runtimeKey,
+} from '../../ports/runtime.ts'
 import { switchNeverBooted, switchUnstarted } from '../../runtimes/persistence.ts'
 import type { Runtimes } from '../../runtimes/router.ts'
 import type { RuntimePlacement } from '../../runtimes/service.ts'
 import { heldStorage } from '../../servers/kept-storage.ts'
 import { loadRevision, lockServer, type RuntimeBinding, saveHandle } from '../../servers/persistence.ts'
+import { changedParts } from '../../servers/resume-parts.ts'
 import { desiredRuns } from '../../servers/revision-reads.ts'
 import type { DesiredRuntime, RuntimeSpecs } from '../../servers/specs.ts'
 import type { ServerTransitions } from '../../servers/transitions.ts'
@@ -57,6 +64,26 @@ const asItSlept = (
   reached === 'resuming' && applied !== null && applied.specDigest !== desired.digest
     ? { ...desired, digest: applied.specDigest }
     : desired
+
+/**
+ * The progress a start reports, with why a wake booted where it could have resumed: after the
+ * runtime's `other_spec`, a `changed:<part>` for each part of the resume key that differs from
+ * what the machine went to sleep on (`resume-parts.ts`).
+ */
+const sayingWhy = (
+  sink: ProgressSink,
+  ctx: OperationContext,
+  applied: AppliedConfigJson | null,
+  desired: () => DesiredRuntime,
+): ProgressSink => ({
+  ...sink,
+  mark: async (mark) => {
+    await sink.mark?.(mark)
+    if (mark !== 'other_spec') return
+    for (const part of changedParts(applied?.resumeParts, desired().resumeParts))
+      await ctx.mark(`changed:${part}`)
+  },
+})
 
 /** What a server's start onto another runtime reads and writes. */
 interface OtherRuntimes {
@@ -183,7 +210,7 @@ export function bringingUp(deps: {
         runtimeKey(server.id),
         { regionKey: server.regionKey },
         spec,
-        progressSink(ctx, server),
+        sayingWhy(progressSink(ctx, server), ctx, binding.applied, () => desired),
         desired.install,
         storage,
       )

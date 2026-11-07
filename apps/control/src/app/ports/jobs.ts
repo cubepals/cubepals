@@ -10,6 +10,7 @@ import type { ReleaseRef } from '../../domain/mods/curation.ts'
 export type ScheduledJob =
   | 'reconcile'
   | 'drift'
+  | 'stale-sleep'
   | 'relocations'
   | 'presence-sync'
   | 'idle-check'

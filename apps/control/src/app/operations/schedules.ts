@@ -25,6 +25,7 @@
  * - `scheduled-backups.ts`: queues the daily backups and retires the ones gone or past their lifetime.
  * - `session-cap.ts`: warns, then stops, a run that reaches its account's session cap.
  * - `spend.ts`: works out what today cost and, past the daily limit, pauses starts and creation.
+ * - `stale-sleep.ts`: refreshes in the background a server asleep whose wake would boot, so a player's resumes.
  * - `store-sweep.ts`: hands servers idle past their plan's days to the `store` operation.
  * - `stray.ts`: finds compute the provider runs that no running server here accounts for.
  */
@@ -55,6 +56,7 @@ import { relocating } from './schedules/relocations.ts'
 import { schedulingBackups } from './schedules/scheduled-backups.ts'
 import { sessionCaps } from './schedules/session-cap.ts'
 import { type SpendCheck, SpendWatchdog } from './schedules/spend.ts'
+import { staleSleepers } from './schedules/stale-sleep.ts'
 import { storingIdle } from './schedules/store-sweep.ts'
 
 export { IDLE_GRACE_MS, type IdleDecision, WAKE_PROBATION_MS } from './schedules/idle.ts'
@@ -72,6 +74,7 @@ export class Schedules {
   readonly #reconcile: (now: Date) => Promise<void>
   readonly #relocations: (now: Date, limit: number) => Promise<number>
   readonly #drift: (limit: number) => Promise<number>
+  readonly #staleSleep: ReturnType<typeof staleSleepers>
   readonly #scheduledBackups: (now: Date, limit: number) => Promise<number>
   readonly #presenceSync: () => Promise<void>
   readonly #sessionCheck: (now: Date) => Promise<number>
@@ -123,6 +126,12 @@ export class Schedules {
       runtime: deps.runtime,
       specs: deps.specs,
       transitions: deps.transitions,
+    })
+    this.#staleSleep = staleSleepers({
+      db: deps.db,
+      runtime: deps.runtime,
+      specs: deps.specs,
+      refresh: (id) => deps.service.refreshAsleep(id),
     })
     this.#scheduledBackups = schedulingBackups({
       db: deps.db,
@@ -204,6 +213,11 @@ export class Schedules {
 
   async drift(limit = 5): Promise<number> {
     return this.#drift(limit)
+  }
+
+  /** `stale-sleep`: servers asleep whose wake would boot, refreshed first in the background (`schedules/stale-sleep.ts`). */
+  async staleSleep(options: Parameters<ReturnType<typeof staleSleepers>>[0] = {}): Promise<number> {
+    return this.#staleSleep(options)
   }
 
   async backups(now = new Date(), limit = 20): Promise<number> {

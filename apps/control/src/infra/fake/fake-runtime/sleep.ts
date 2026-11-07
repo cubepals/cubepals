@@ -8,7 +8,12 @@
  * freezes, wedges or finds no room on its host), and what a sleep and a wake do to one machine. Which verbs sleep or wake a machine, and that a stop ends
  * one asleep, are `fake-runtime.ts`'s; what its workload does meanwhile is the workload's.
  */
-import { HostFull, type ObservedState, type RuntimeSpec } from '../../../app/ports/runtime.ts'
+import {
+  HostFull,
+  type ObservedState,
+  type ProgressSink,
+  type RuntimeSpec,
+} from '../../../app/ports/runtime.ts'
 import { Hold } from './hold.ts'
 
 /**
@@ -106,15 +111,17 @@ export class Sleeps {
 
   /**
    * Whether a start of `machine` on `spec` resumes it: asleep on that very spec, or on one its
-   * `resumesOn` says it may wake on as it slept, as Fly's runtime reads it.
+   * `resumesOn` says it may wake on as it slept, as Fly's runtime reads it. Asked by a start
+   * (`progress`), one asleep on another spec says so, as Fly's does (`other_spec`).
    */
-  resumes(machine: Sleeper | undefined, spec: RuntimeSpec): machine is Sleeper {
+  resumes(machine: Sleeper | undefined, spec: RuntimeSpec, progress?: ProgressSink): machine is Sleeper {
     if (machine?.state !== 'suspended') return false
     const slept = this.#slept.get(machine.key)
     if (slept === JSON.stringify(spec)) return true
-    return (
+    const same =
       spec.resumesOn !== undefined && slept !== undefined && JSON.parse(slept).resumesOn === spec.resumesOn
-    )
+    if (!same) void progress?.mark?.('other_spec')
+    return same
   }
 
   /**

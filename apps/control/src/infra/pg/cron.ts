@@ -64,6 +64,8 @@ export const CRON: Record<ScheduledJob | WorkerHeartbeat, string> = {
   'usage-close': '*/10 * * * *',
   // Whose each server is and what it's called, at the provider: a rename shows there within minutes.
   'provider-tags': '*/10 * * * *',
+  // A server asleep whose wake would boot, refreshed first so the player's resumes: a few a pass.
+  'stale-sleep': '*/10 * * * *',
   // What a runtime keeps tidy behind its port (the fleet's uploads, copies and health records).
   'runtime-upkeep': '* * * * *',
   // Funnel events kept as they happened, sent to PostHog within a minute.

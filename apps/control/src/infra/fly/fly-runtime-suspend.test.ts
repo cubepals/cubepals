@@ -357,3 +357,27 @@ describe('FlyRuntime waking a server whose host has no room left', () => {
     expect(machine.state).toBe('suspended')
   })
 })
+
+describe('FlyRuntime reading which servers asleep a wake would boot', () => {
+  test('says which servers asleep a wake would boot, from one listing of the organization', async () => {
+    const { fake, runtime, sleep } = await running()
+    const changed = { ...spec, env: { ...spec.env, VERSION: '26.4' } }
+    const other = '11111111-2222-4333-8444-555555555555' as RuntimeKey
+    // Awake, it isn't asleep on anything: a wake has nothing to boot.
+    expect(await runtime.wakesWouldBoot(new Map([[KEY, changed]]))).toEqual(new Set())
+    await sleep()
+    const lists = fake.orgLists.length
+    // Asleep on what it would run, it resumes; on a new configuration, it would boot. The listing
+    // gives no mounts, and needs none.
+    expect(await runtime.wakesWouldBoot(new Map([[KEY, spec]]))).toEqual(new Set())
+    expect(
+      await runtime.wakesWouldBoot(
+        new Map([
+          [KEY, changed],
+          [other, changed],
+        ]),
+      ),
+    ).toEqual(new Set([KEY]))
+    expect(fake.orgLists.length).toBe(lists + 2)
+  })
+})

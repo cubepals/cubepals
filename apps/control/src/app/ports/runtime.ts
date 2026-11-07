@@ -445,6 +445,14 @@ export interface MinecraftRuntime {
    */
   tag(servers: ReadonlyMap<RuntimeKey, RuntimeTags>): Promise<number>
   /**
+   * Of the servers given, each with what a start of it would run now, the ones whose compute is
+   * asleep with its memory on something else, so that a wake would boot it rather than resume it
+   * (`asleepOn`): what the background refresh wakes first (`schedules/stale-sleep.ts`). Read in as
+   * few calls as the provider allows. A runtime that doesn't sleep servers has none, and one that
+   * can't tell leaves this out.
+   */
+  wakesWouldBoot?(asleep: ReadonlyMap<RuntimeKey, RuntimeSpec>): Promise<ReadonlySet<RuntimeKey>>
+  /**
    * Pure, from the handle: what the provider calls what it holds for a server, for an operator
    * looking for it there, and a link to it in the provider's console where it has one.
    */

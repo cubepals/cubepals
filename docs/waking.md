@@ -19,15 +19,29 @@ Blockly does about it. A resume that hangs, and the fallbacks for it, are
    it stopped instead (`stop_reason`, `unsaved`, `players_on`, `unsynced`, `no_sleep`,
    `runtime_stopped`); a start that boots, why (`not_asleep`, `memory_lost` where the sleep kept
    the memory and the machine was found stopped, `other_spec`, `no_compute`); and a boot's
-   `let_in`, once its players may join, before the platform reads what the boot printed.
+   `let_in`, once its players may join, before the platform reads what the boot printed. After
+   `other_spec`, a `changed:<part>` for each part of the resume key that differs from what the
+   machine went to sleep on: `changed:drift:<field>` for a field of what drift compares
+   (`changed:drift:image`, `changed:drift:env.DIFFICULTY`), or `changed:compat`,
+   `changed:stopCheaters`, `changed:ownFiles`, `changed:identity`. `changed:unknown` means the
+   boot before it kept no parts to compare with (`app/servers/resume-parts.ts`; each boot keeps
+   them in `server_runtimes.applied`).
 2. **Stopped.** Nothing in Blockly turns a suspended machine into a stopped one after a while. The
    memory goes when:
    - Fly drops it: a host migration, maintenance, a lost snapshot. Fly promises no resume and
      names no time.
    - The next start finds the machine on another spec, and updates it first, which drops it
      (`asleepOn`, `infra/fly/machine-config.ts`). That happens after a new image release, a key
-     rotation, or a change saved while it slept. Icon, message and plan limits don't count
-     (`withoutPlanLimits`, `app/servers/specs.ts`).
+     rotation, or a change saved while it slept. Plan limits don't count
+     (`withoutPlanLimits`, `app/servers/specs.ts`). So a player never waits for it: every ten
+     minutes, `stale-sleep` finds servers asleep for 10 minutes or more whose wake would boot, by
+     the runtime's own reading of each machine (`wakesWouldBoot`) or the key its last boot
+     recorded, and refreshes a few a pass in the background (`app/servers/refresh.ts`): booted on
+     what they should run, asleep again after the probation, so the player's wake resumes. A server
+     with an operation in flight is left for a later pass, and one is refreshed at most once in six
+     hours. A player who joins while it refreshes is let in as at any start
+     (`app/operations/schedules/stale-sleep.ts`). An icon or message saved while it sleeps refreshes
+     it at once.
    - A restore, a move or a rest stops it first.
 3. **At rest.** Once nobody has played for the plan's `storeAfterIdleDays` (Free 14, Plus 30),
    the hourly `store-sweep` (at minute 47) stops it, packs its world into the archive store, and
