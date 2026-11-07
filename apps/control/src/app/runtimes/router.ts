@@ -325,11 +325,12 @@ export class RuntimeRouter implements Runtimes {
   exportSnapshot(
     snapshot: SnapshotHandle,
     target: ArchiveTarget,
+    signal?: AbortSignal,
   ): Promise<{ sizeBytes: number; sha256: string }> {
     const member = this.#ofSnapshot(snapshot)
     if (member === null)
       return Promise.reject(new RuntimeUnsupported('router', 'exporting a snapshot no runtime here took'))
-    return member.exportSnapshot(snapshot, target)
+    return member.exportSnapshot(snapshot, target, signal)
   }
 
   exec(handle: RuntimeHandle, command: readonly string[], timeoutSeconds: number): Promise<ExecResult> {

@@ -99,6 +99,11 @@ export interface JobAttempt {
   operationId: string
   retryCount: number
   retryLimit: number
+  /**
+   * Aborted once this attempt's claim is gone: its queue's deadline passed, or another worker took
+   * it, so another attempt may already run. Work that outlives it would only race that one.
+   */
+  signal?: AbortSignal
 }
 
 /**

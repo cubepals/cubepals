@@ -42,6 +42,7 @@ function fixture(status: 'running' | 'stopped', trigger: 'sleep' | 'manual') {
     throw new Error('A rejected restore point must not touch its world')
   }
   const context: OperationContext = {
+    signal: new AbortController().signal,
     server,
     op: {
       id: 'operation',

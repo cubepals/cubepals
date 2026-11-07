@@ -522,6 +522,7 @@ export class FlyRuntime implements MinecraftRuntime {
   async exportSnapshot(
     snapshot: SnapshotHandle,
     target: ArchiveTarget,
+    signal?: AbortSignal,
   ): Promise<{ sizeBytes: number; sha256: string }> {
     const ref = decodeSnapshot(snapshot)
     // Twice the world's size: the archive is written beside the world before it is uploaded.
@@ -539,7 +540,7 @@ export class FlyRuntime implements MinecraftRuntime {
     const volumeId = idOf(volume, 'a volume')
     const job = (script: string) =>
       whenRoom(this.#roomWait, () =>
-        helperJob(this.#fly, this.#deployment, ref.app, ref.region, volumeId, script),
+        helperJob(this.#fly, this.#deployment, ref.app, ref.region, volumeId, script, signal),
       )
     try {
       await volumeReady(this.#fly, ref.app, volumeId)

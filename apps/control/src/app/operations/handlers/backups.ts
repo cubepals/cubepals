@@ -173,7 +173,9 @@ export function backingUp(deps: BackingUpDeps) {
         throw new PermanentFailure('The backup it was to be made from is gone.')
       await ctx.step('storage')
       const upload = await deps.archives.archiveTarget(target.archiveKey, EXPORT_LINK_SECONDS, 'runtime')
-      const exported = await pack(snapshot.snapshotHandle, upload)
+      const exported = await pack(snapshot.snapshotHandle, upload, ctx.signal)
+      // Taken over past its deadline: the attempt holding it now records the archive, not this one.
+      ctx.signal.throwIfAborted()
       const stored = await deps.archives.head(target.archiveKey)
       if (stored?.sizeBytes !== exported.sizeBytes)
         throw new Error(

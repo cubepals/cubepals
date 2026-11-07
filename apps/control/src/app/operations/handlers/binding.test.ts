@@ -89,6 +89,7 @@ const progress = async () => {
     const steps: Parameters<OperationContext['step']>[0][] = []
     const marks: Parameters<OperationContext['mark']>[0][] = []
     const ctx: OperationContext = {
+      signal: new AbortController().signal,
       server,
       op,
       step: async (step) => {

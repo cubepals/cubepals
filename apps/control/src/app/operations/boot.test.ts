@@ -182,6 +182,7 @@ function machine(options: {
     rconPasswords: () => [],
   })
   const ctx: OperationContext = {
+    signal: new AbortController().signal,
     op: { id: 'operation-1', kind: 'provision' } as OperationRecord,
     server,
     step: async () => {},
