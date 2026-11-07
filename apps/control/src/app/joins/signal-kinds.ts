@@ -262,8 +262,10 @@ function dropped(config: SignalsConfig, rows: readonly JoinRow[], now: Date): Ra
     const s = session as Record<string, unknown>
     const quiet = msOf(s.quietAtEndMs) ?? 0
     const sentSince = msOf(s.downQuietAtEndMs) ?? Number.POSITIVE_INFINITY
+    // A reset from the server's side, or a full way on to it, is the server's however quiet the player was.
+    const serverSide = s.how === 'reset' || s.heldAtEnd === true
     const silent =
-      s.closedFirst === 'server' && s.heldAtEnd !== true && quiet >= limit * SECOND_MS && sentSince < quiet
+      s.closedFirst === 'server' && !serverSide && quiet >= limit * SECOND_MS && sentSince < quiet
     const reset = s.closedFirst === 'player' && s.how === 'reset'
     if (!silent && !reset) return []
     const figure = Math.round(quiet / 100) / 10

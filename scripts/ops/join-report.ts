@@ -237,7 +237,8 @@ function sideOf(s: Session): string | null {
     return 'The way on to the server was full when it ended: the server side’s, not the player’s.'
   const quiet = s.quietAtEndMs ?? 0
   const downQuiet = s.downQuietAtEndMs ?? 0
-  if (s.closedFirst === 'server' && quiet >= QUIET_MS && downQuiet < quiet)
+  // A reset from the server's side is the server's, however quiet the player was.
+  if (s.closedFirst === 'server' && s.how !== 'reset' && quiet >= QUIET_MS && downQuiet < quiet)
     return `Between the player and the edge: nothing came from the player for ${secondsOf(quiet)} s while the edge still sent to them, and the server timed them out. Not Cubepals’ servers.`
   if (s.closedFirst === 'player' && s.how === 'reset')
     return 'The player’s connection was reset: their side, or the way between them and the edge.'

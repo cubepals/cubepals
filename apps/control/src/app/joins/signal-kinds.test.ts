@@ -196,6 +196,11 @@ describe('a player cut off between them and the edge', () => {
           heldAtEnd: true,
         }),
       }),
+      // Reset from the server's side while the player was quiet: the server's.
+      row('server-reset', {
+        leftAt: at(60),
+        detail: session({ closedFirst: 'server', how: 'reset', quietAtEndMs: 9_000, downQuietAtEndMs: 1 }),
+      }),
       // A pause shorter than the limit.
       row('blip', {
         leftAt: at(60),

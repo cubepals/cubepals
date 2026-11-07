@@ -227,3 +227,16 @@ test('a join with no end yet says when the edge tells of it', () => {
     'two minutes after it',
   )
 })
+
+test('a server-side reset while the player was quiet isn’t put on the player’s path', () => {
+  const session = {
+    closedFirst: 'server',
+    how: 'reset',
+    error: 'ECONNRESET',
+    quietAtEndMs: 9_000,
+    downQuietAtEndMs: 1,
+  }
+  const report = joinReport({ ...VIEW, signals: [], join: { ...JOIN, detail: { session } } }).join('\n')
+  expect(report).toContain('- Closed first by the server, reset (ECONNRESET)')
+  expect(report).not.toContain('Between the player and the edge')
+})
