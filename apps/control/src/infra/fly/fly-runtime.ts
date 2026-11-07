@@ -22,6 +22,7 @@
  * - `helper-jobs.ts`: the scripts helper machines run, and what they print.
  * - `discovery.ts`: this deployment's servers found among the organization's apps and machines.
  * - `tags.ts`: servers' tags written onto their machines' metadata.
+ * - `asleep.ts`: which machines asleep a wake would boot rather than resume.
  * - `strays.ts`: machines in a server's app that nothing names, found and destroyed.
  */
 
@@ -57,6 +58,7 @@ import {
   requireOwnApp,
   setSecrets,
 } from './fly-runtime/apps.ts'
+import { wakesWouldBoot } from './fly-runtime/asleep.ts'
 import { changedSince, inventory } from './fly-runtime/discovery.ts'
 import {
   exportJob,
@@ -669,6 +671,10 @@ export class FlyRuntime implements MinecraftRuntime {
     const number = ref.ports[port]
     if (number === undefined) throw new Error(`This runtime exposes no port named ${port}`)
     return { host: `${ref.app}.flycast`, port: number }
+  }
+
+  wakesWouldBoot(asleep: ReadonlyMap<RuntimeKey, RuntimeSpec>): Promise<ReadonlySet<RuntimeKey>> {
+    return wakesWouldBoot(this.#fly, this.#org, this.#deployment, asleep)
   }
 
   async tag(servers: ReadonlyMap<RuntimeKey, RuntimeTags>): Promise<number> {

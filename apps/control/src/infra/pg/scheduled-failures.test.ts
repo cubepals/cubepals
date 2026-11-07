@@ -18,6 +18,7 @@ import { startBoss, workSchedules } from './jobs.ts'
 const JOBS: ScheduledJob[] = [
   'reconcile',
   'drift',
+  'stale-sleep',
   'relocations',
   'presence-sync',
   'idle-check',

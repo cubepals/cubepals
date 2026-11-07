@@ -122,6 +122,8 @@ export interface Runtimes extends Pick<MinecraftRuntime, HandleVerbs> {
   stableEndpoint(handle: RuntimeHandle): boolean
   /** What one runtime's own machines cost and hold; null where only its servers are billed. */
   capacity(provider: string): Promise<RuntimeCapacity | null>
+  /** Of the servers given, those a wake would boot rather than resume, by every runtime that can say. */
+  wakesWouldBoot(asleep: ReadonlyMap<RuntimeKey, RuntimeSpec>): Promise<ReadonlySet<RuntimeKey>>
 }
 
 /** Several listings read as one: every part is yielded, and a part that failed is thrown at the end. */
@@ -399,6 +401,21 @@ export class RuntimeRouter implements Runtimes {
     }
     if (failures.length > 0) throw new AggregateError(failures, `Tagged ${written}; some runtimes failed`)
     return written
+  }
+
+  /** Each runtime that sleeps servers says which of its own a wake would boot; one that can't never holds up the others. */
+  async wakesWouldBoot(asleep: ReadonlyMap<RuntimeKey, RuntimeSpec>): Promise<ReadonlySet<RuntimeKey>> {
+    const boots = new Set<RuntimeKey>()
+    const failures: unknown[] = []
+    for (const member of this.#members.values()) {
+      try {
+        for (const key of (await member.wakesWouldBoot?.(asleep)) ?? []) boots.add(key)
+      } catch (error) {
+        failures.push(error)
+      }
+    }
+    if (failures.length > 0 && boots.size === 0) throw new AggregateError(failures, 'No runtime could say')
+    return boots
   }
 
   locate(handle: RuntimeHandle): RuntimeLocation {

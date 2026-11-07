@@ -47,7 +47,11 @@ const configurations = async () => {
       proxyProtocol: desired.proxyProtocol,
       compat: desired.compat,
       placedStopCheaters: desired.stopCheaters,
+      resumesOn: desired.spec.resumesOn as string,
+      resumeParts: desired.resumeParts,
     })
+    // What a later wake compares to say why it booted: never the server's secrets, even as a digest.
+    expect(Object.keys(desired.resumeParts.drift)).not.toContain('secrets')
     const back = await h.app.specs.forConfig(h.db, server, { ...previous, memoryTier: '4g' })
     expect(bootedBack(previous, back)).toEqual({
       ...previous,
@@ -56,6 +60,8 @@ const configurations = async () => {
       proxyProtocol: back.proxyProtocol,
       compat: back.compat,
       placedStopCheaters: back.stopCheaters,
+      resumesOn: back.spec.resumesOn as string,
+      resumeParts: back.resumeParts,
     })
     expect(back.digest).not.toBe(previous.specDigest)
   } finally {

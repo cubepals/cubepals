@@ -33,7 +33,14 @@ export const appliedConfig = (server: MinecraftServer, desired: DesiredRuntime) 
   proxyProtocol: desired.proxyProtocol,
   compat: desired.compat,
   placedStopCheaters: desired.stopCheaters,
+  ...keyOf(desired),
 })
+
+/** The resume key a boot leaves its machine asleep on, and its parts (`resume-parts.ts`). */
+const keyOf = (desired: DesiredRuntime) =>
+  desired.spec.resumesOn === undefined
+    ? {}
+    : { resumesOn: desired.spec.resumesOn, resumeParts: desired.resumeParts }
 
 /** What a server runs once the configuration it ran before, `previous`, booted again as `back`. */
 export const bootedBack = (previous: AppliedConfigJson, back: DesiredRuntime): AppliedConfigJson => ({
@@ -43,6 +50,7 @@ export const bootedBack = (previous: AppliedConfigJson, back: DesiredRuntime): A
   proxyProtocol: back.proxyProtocol,
   compat: back.compat,
   placedStopCheaters: back.stopCheaters,
+  ...keyOf(back),
 })
 
 export function serverBinding(deps: {

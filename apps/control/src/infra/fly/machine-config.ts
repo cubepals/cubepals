@@ -102,17 +102,24 @@ const specDigest = ({ resumesOn: _resumesOn, ...spec }: RuntimeSpec) =>
  * boot.
  */
 export function asleepOn(machine: Machine | null, spec: RuntimeSpec): string | null {
-  const asleep = isAsleep(machine)
+  if (!sleptOn(machine, spec)) return null
+  return machine?.config?.mounts?.[0]?.volume ?? null
+}
+
+/**
+ * Whether a machine is asleep, or going to sleep, on `spec`, read from its metadata alone, as the
+ * organization's listing gives it: on exactly it, or on one its `resumesOn` says it may wake on.
+ */
+export function sleptOn(machine: Machine | null, spec: RuntimeSpec): boolean {
   const metadata = machine?.config?.metadata ?? {}
   const same =
     metadata[META.digest] === specDigest(spec) ||
     (spec.resumesOn !== undefined && metadata[META.resumes] === spec.resumesOn)
-  if (!asleep || !same) return null
-  return machine?.config?.mounts?.[0]?.volume ?? null
+  return isAsleep(machine) && same
 }
 
 /** Whether a machine is asleep with its memory, or on its way there. */
-const isAsleep = (machine: Machine | null): boolean =>
+export const isAsleep = (machine: Machine | null): boolean =>
   machine?.state === 'suspended' || machine?.state === 'suspending'
 
 /**

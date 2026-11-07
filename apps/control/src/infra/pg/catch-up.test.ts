@@ -65,6 +65,7 @@ describe.skipIf(!hasDatabase)('a worker that starts after being stopped for hour
       [
         'reconcile',
         'drift',
+        'stale-sleep',
         'relocations',
         'presence-sync',
         'idle-check',

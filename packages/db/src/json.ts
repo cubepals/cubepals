@@ -209,6 +209,27 @@ export interface AppliedConfigJson {
    * compared with while the server runs. Absent before a boot said so.
    */
   placedStopCheaters?: boolean
+  /**
+   * The key a wake from memory compares (`resumesOn`), as its boot had it, and its parts, each as a
+   * short digest (`ResumePartsJson`): which of them changed says why a later wake booted instead.
+   * Absent before boots kept them.
+   */
+  resumesOn?: string
+  resumeParts?: ResumePartsJson
+}
+
+/**
+ * What a server's resume key is made of, each part a short digest: what drift compares, field by
+ * field (`env.NAME` for each variable), and what only a start reads: the Via plugins, Stop
+ * cheaters, Cubepals' own files and what the server list shows. An empty part is one that adds
+ * nothing to the key.
+ */
+export interface ResumePartsJson {
+  drift: Record<string, string>
+  compat: string
+  stopCheaters: string
+  ownFiles: string
+  identity: string
 }
 
 export interface ObservedJson {

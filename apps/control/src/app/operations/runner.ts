@@ -64,6 +64,14 @@ type OperationMark =
   | 'saved'
   | RuntimeMark
   | SleepMark
+  | ChangedMark
+
+/**
+ * Why a wake booted where it could have resumed, after `other_spec`: one for each part of the
+ * resume key that changed since the machine went to sleep (`servers/resume-parts.ts`), such as
+ * `changed:drift:image`, `changed:identity`, or `changed:unknown` where the boot before kept none.
+ */
+type ChangedMark = `changed:${string}`
 
 /**
  * How a sleep ended, on the stop that put the server to sleep (`handlers/winding-down.ts`):

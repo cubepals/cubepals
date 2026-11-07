@@ -4,7 +4,7 @@
 
 import { createHash } from 'node:crypto'
 import { BLOCKLY_ICON } from '@blockly/contracts'
-import type { Queryable } from '@blockly/db'
+import type { Queryable, ResumePartsJson } from '@blockly/db'
 import { entitlementsOf } from '../../domain/account/entitlements.ts'
 import type { PinnedMod } from '../../domain/mods/artifact.ts'
 import type { CarriedFile } from '../../domain/revision/carried.ts'
@@ -46,6 +46,7 @@ import { tuning } from '../tuning.ts'
 import { tooLongForAStart, withCompressedFiles } from './carried-files.ts'
 import { noOfficialFiles, type OfficialFiles, withCurrentOwnFiles } from './own-files.ts'
 import { grownStorage, loadRevision, loadWorld } from './persistence.ts'
+import { resumeParts } from './resume-parts.ts'
 
 export interface DesiredRuntime {
   revision: ServerRevision
@@ -68,6 +69,8 @@ export interface DesiredRuntime {
   compat: string[]
   /** Whether its boot runs Stop cheaters (`app/stop-cheaters/`). */
   stopCheaters: boolean
+  /** What its resume key (`spec.resumesOn`) is made of, part by part (`resume-parts.ts`). */
+  resumeParts: ResumePartsJson
 }
 
 /** The spec says which key its secrets come from, so a rotation changes every digest and drift applies it. */
@@ -240,7 +243,8 @@ export class RuntimeSpecs {
     // The Via plugins arrive at a start, never through this digest: a running server isn't
     // restarted for Cubepals' compatibility layer, or for a newer pin of it. An owner's change of
     // which come, left waiting for everyone to leave, drift brings by its revision (`waiting.ts`).
-    const driftDigest = specDigest(withoutPlanLimits(label(toRuntimeSpec(input))))
+    const drifting = withoutPlanLimits(label(toRuntimeSpec(input)))
+    const driftDigest = specDigest(drifting)
     const compat = projectsOf(placed)
     // What drift leaves for the next start, a machine asleep can leave too: it wakes as it slept.
     // But not without the Via plugins it should have, or with ones turned off: a sleeping server
@@ -259,12 +263,8 @@ export class RuntimeSpecs {
     // one asleep on others boots for them, which a change to either does at once in the background
     // (`refresh.ts`), so a player's wake still resumes. One asleep on the same wakes as it slept.
     const shown = `identity:${identityDigest(labelled.env)}`
-    const startOnly = [
-      ...(compat.length === 0 ? [] : [compat.join(','), COMPAT_PREFIX]),
-      ...grim,
-      ...newer,
-      shown,
-    ]
+    const compatPart = compat.length === 0 ? [] : [compat.join(','), COMPAT_PREFIX]
+    const startOnly = [...compatPart, ...grim, ...newer, shown]
     const resumesOn = createHash('sha256')
       .update(`${driftDigest} ${startOnly.join(' ')}`)
       .digest('hex')
@@ -280,6 +280,13 @@ export class RuntimeSpecs {
       proxyProtocol: usesProxyProtocol(revision),
       compat,
       stopCheaters: stop.placed !== null,
+      resumeParts: resumeParts({
+        drift: drifting,
+        compat: compatPart,
+        stopCheaters: grim,
+        ownFiles: newer,
+        identity: shown,
+      }),
     }
   }
 }
