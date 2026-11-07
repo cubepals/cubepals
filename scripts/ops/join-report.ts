@@ -24,6 +24,7 @@ const KINDS: Record<string, string> = {
   kicked_early: 'Kicked soon after joining',
   slow_tick: 'Slow tick',
   legacy_login_listener: 'Plugin listening at login',
+  dropped: 'Dropped between the player and the edge',
 }
 
 const kindOf = (kind: string) => KINDS[kind] ?? kind

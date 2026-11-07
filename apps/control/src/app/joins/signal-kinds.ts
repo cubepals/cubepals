@@ -6,7 +6,7 @@
  * The signals judged from joins alone, each kind a pure function of the joins read, the `SIGNALS`
  * setting and the time: a slow join, one that left while it loaded, a short stay, a player who
  * pinged again and didn't come back, a join or a look at a watched address, a crowd on one server,
- * an early kick, and a slow tick. A kind whose key the setting leaves out raises nothing. Each
+ * an early kick, a slow tick, and a player cut off on their way to the edge. A kind whose key the setting leaves out raises nothing. Each
  * signal's key says what it is about, so it is raised once.
  *
  * Not for the kinds that read other tables (wakes, the platform's hour, boot reports): those are
@@ -36,6 +36,8 @@ export interface JoinRow {
   pingedAfterAt: Date | null
   tick: { tps: number; mspt: number; online: number } | null
   serverSide: string
+  /** What the edge kept of the join; `session` is how it ended (`apps/edge/session-end.ts`). */
+  detail: Record<string, unknown>
   /** How the wake it asked for found the server, where it asked for one. */
   wake: 'memory' | 'stopped' | 'atRest' | null
 }
@@ -243,6 +245,39 @@ function kickedEarly(config: SignalsConfig, rows: readonly JoinRow[], now: Date)
   })
 }
 
+const msOf = (value: unknown): number | null =>
+  typeof value === 'number' && Number.isFinite(value) ? value : null
+
+/**
+ * Cut off between the player and the edge: the server timed out a player whose side had gone quiet
+ * while the edge still sent to them, or the player's connection was reset. Neither the server nor
+ * the edge ended it; the way to the player did.
+ */
+function dropped(config: SignalsConfig, rows: readonly JoinRow[], now: Date): Raised[] {
+  const limit = config.dropped?.quietS
+  if (limit === undefined) return []
+  return rows.flatMap((row) => {
+    const session = row.detail.session
+    if (row.leftAt === null || session === null || typeof session !== 'object') return []
+    const s = session as Record<string, unknown>
+    const quiet = msOf(s.quietAtEndMs) ?? 0
+    const sentSince = msOf(s.downQuietAtEndMs) ?? Number.POSITIVE_INFINITY
+    const silent =
+      s.closedFirst === 'server' && s.heldAtEnd !== true && quiet >= limit * SECOND_MS && sentSince < quiet
+    const reset = s.closedFirst === 'player' && s.how === 'reset'
+    if (!silent && !reset) return []
+    const figure = Math.round(quiet / 100) / 10
+    return [
+      raise('dropped', row, '', now, {
+        figure,
+        limit,
+        why: silent ? 'player_silent' : 'reset',
+        stalls: msOf(s.stalls),
+      }),
+    ]
+  })
+}
+
 /** The server ticking slowly as the player came in. */
 function slowTick(config: SignalsConfig, rows: readonly JoinRow[], now: Date): Raised[] {
   const limit = config.slowTick?.msptOver
@@ -267,5 +302,6 @@ export function fromJoins(config: SignalsConfig, rows: readonly JoinRow[], now: 
     crowd,
     kickedEarly,
     slowTick,
+    dropped,
   ].flatMap((kind) => kind(config, rows, now))
 }
