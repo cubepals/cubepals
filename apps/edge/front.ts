@@ -413,6 +413,7 @@ class Arrival {
         // `bytesRead` came from the player, `bytesWritten` went back to them; and how it went.
         const client = this.#client
         const session = watchSession(client, toRouter)
+        visits.watching(source, session)
         client.once('close', () =>
           visits.closed(source, { up: client.bytesRead, down: client.bytesWritten }, session.end()),
         )

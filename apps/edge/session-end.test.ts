@@ -246,3 +246,35 @@ describe('stretches the front door held back, its way to the server full', () =>
     expect(ends[0]?.quietAtEndMs).toBeGreaterThanOrEqual(250)
   })
 })
+
+describe('a join held in the waiting room', () => {
+  test('counts the player’s silences from its hand-over, not the wait’s', async () => {
+    let now = 0
+    const clock = { now: () => now, wall: () => 1_700_000_000_000 + now }
+    const { EventEmitter } = await import('node:events')
+    const player = Object.assign(new EventEmitter(), {
+      writableLength: 0,
+      isPaused: () => false,
+    }) as unknown as Socket
+    const server = Object.assign(new EventEmitter(), {
+      writableLength: 0,
+      destroyed: false,
+    }) as unknown as Socket
+    const watch = watchSession(player, server, clock)
+    // The waiting room asks every 10 s, and the client answers each time: four 10 s silences.
+    for (const at of [10_000, 20_000, 30_000, 40_000]) {
+      now = at
+      player.emit('data', Buffer.from('x'))
+    }
+    now = 41_000
+    watch.handedOver()
+    // In the game: steady, then a 6 s stall, then a quit.
+    for (const at of [41_500, 42_000, 48_000, 48_500]) {
+      now = at
+      player.emit('data', Buffer.from('x'))
+    }
+    now = 49_000
+    player.emit('end')
+    expect(watch.end()).toMatchObject({ stalls: 1, longestQuietMs: 6_000, closedFirst: 'player' })
+  })
+})
