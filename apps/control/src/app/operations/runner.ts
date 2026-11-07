@@ -7,6 +7,7 @@ import type { OperationKind, Phase, ServerStatus } from '../../domain/server/lif
 import type { MinecraftServer } from '../../domain/server/server.ts'
 import { note, within } from '../diagnostics/context.ts'
 import { DiagnosedFailure, inFull, inPlainWords, PermanentFailure } from '../errors.ts'
+import { operationFinished } from '../insight/operations.ts'
 import { operationEnded, operationFailed } from '../platform/telemetry.ts'
 import type { EventBus } from '../ports/events.ts'
 import type { JobAttempt } from '../ports/jobs.ts'
@@ -344,6 +345,7 @@ export class OperationRunner {
     await this.#db.transaction(async (tx) => {
       if (await finishOperation(tx, op.id, status, reason, detail ?? null)) {
         await this.#events.publish(tx, progressEvent(op, server, null, status))
+        await operationFinished(tx, op, server.ownerId, status)
         operationEnded(op.kind, status, Date.now() - op.createdAt.getTime())
         if (status === 'failed') operationFailed(op.kind, reached)
       }

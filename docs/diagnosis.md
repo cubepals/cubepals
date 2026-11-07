@@ -199,6 +199,15 @@ and `request_id`. To find one account's: `$exception` events where `distinct_id`
 record here with an `error` of 5xx and a `request_id` is the same failure as the exception with that
 `request_id`.
 
+## Operations in PostHog
+
+Each finished operation is sent as `operation_finished` (`app/insight/operations.ts`), with the
+account as `distinct_id`, as the funnel's events are: `kind`, `status`, `seconds` from being asked,
+`way` (`resumed` or `booted` for a start), `attempts`, `marks` (the steps that say why, such as
+`other_spec,changed:drift:image` or `slept`) and `server_id`. A test account's are never sent. How
+wakes go, resume rate and wake time by day, is a trend of `operation_finished` where `kind` is
+`start`, broken down by `way`.
+
 ## What this doesn't see
 
 - A query on pg-boss's own pool (jobs) is timed by pg-boss itself, not kept here

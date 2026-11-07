@@ -4,7 +4,7 @@
 
 /**
  * A server as an operator names it: by what a player says, not only its id. Its id, its slug, the
- * address players join (`v0idworld.play.cubepals.com`, whose first label is the slug), or its name
+ * address players join (`<slug>.<play domain>`, whose first label is the slug), or its name
  * in any case. Servers purged for good are never found. For the operators' API (`/ops/v1/servers/find`)
  * and every `ops.ts` command that takes a server.
  */
@@ -34,7 +34,7 @@ export class ServerFinder {
   async find(ref: string): Promise<FoundServer[]> {
     const given = ref.trim()
     if (given === '') return []
-    // An address's first label is its slug: `steve.play.cubepals.com`, or `steve.play.cubepals.com:25565`.
+    // An address's first label is its slug, with or without the play domain's port after it.
     const label = given.toLowerCase().split(/[.:]/)[0] ?? ''
     const byId = z.uuid().safeParse(given).success ? [eq(servers.id, given)] : []
     return this.#db
