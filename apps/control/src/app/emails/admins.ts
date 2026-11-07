@@ -3,8 +3,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * What the platform tells every admin by email: an alert it raised (platform/alerts.ts), and a day
- * whose spend passed the daily limit (operations/schedules/spend.ts).
+ * What the platform tells every admin by email: an alert it raised (platform/alerts.ts), a day
+ * whose spend passed the daily limit (operations/schedules/spend.ts), and the signals just raised
+ * of the kinds `SIGNALS` emails (joins/signal-mail.ts).
  */
 import { dollars } from '../../domain/policy/spend.ts'
 import { ADMIN, box, type Email, esc, INK, layout, MONO, MUTED, p, SANS, small } from '../emails.ts'
@@ -70,6 +71,39 @@ export function spendLimit(input: {
         ),
       action: { label: 'Turn back on or raise the limit', url },
       after: small("Check Fly's own figure on the organization's billing page before you do."),
+      why: ADMIN,
+    }),
+  }
+}
+
+/** One signal as the digest lists it: its kind, its server, and what it found, in a line. */
+export interface SignalLine {
+  kind: string
+  server: string | null
+  said: string
+}
+
+/** The signals one pass raised that the setting emails, as one email. */
+export function signalDigest(input: { lines: readonly SignalLine[]; origin: string }): Email {
+  const count = input.lines.length
+  const subject = `Cubepals: ${count} new ${count === 1 ? 'signal' : 'signals'}${count === 1 ? `, ${input.lines[0]?.kind}` : ''}`
+  const text = input.lines.map((l) => `- ${l.kind} on ${l.server ?? 'the platform'}: ${l.said}`).join('\n')
+  const after = 'Each signal is emailed once, as it is raised. `ops.ts signals` lists the open ones.'
+  return {
+    subject,
+    preheader: after,
+    text: `${text}\n\n${after}`,
+    html: layout({
+      origin: input.origin,
+      preheader: after,
+      chip: { label: 'Signals', tone: 'danger' },
+      heading: esc(`${count} new ${count === 1 ? 'signal' : 'signals'}`),
+      body: input.lines
+        .map((l) =>
+          p(`<strong>${esc(l.kind)}</strong> on ${esc(l.server ?? 'the platform')}: ${esc(l.said)}`),
+        )
+        .join(''),
+      after: small(esc(after)),
       why: ADMIN,
     }),
   }

@@ -30,6 +30,7 @@ import type { AccountService } from '../../app/accounts/service.ts'
 import type { OperatorActor } from '../../app/actor.ts'
 import { AppError, NotFound } from '../../app/errors.ts'
 import type { PlatformHealth } from '../../app/platform/health.ts'
+import type { ServerFinder } from '../../app/servers/finding.ts'
 import type { ServerQueries } from '../../app/servers/queries.ts'
 import type { MinecraftServerService } from '../../app/servers/service.ts'
 import type { UpkeepNow } from '../../app/servers/upkeep-now.ts'
@@ -56,6 +57,7 @@ export type OpsApiOptions = ServerPagesOptions &
       'createFor' | 'start' | 'stop' | 'retry' | 'deleteServer' | 'undeleteServer'
     >
     queries: Pick<ServerQueries, 'get'>
+    serverFinder: Pick<ServerFinder, 'find'>
     upkeep: Pick<UpkeepNow, 'rest' | 'purge'>
     health: Pick<PlatformHealth, 'view' | 'operations' | 'operation'>
     token: string
@@ -186,7 +188,10 @@ const RETRY_INSTEAD = new AppError(
   "It didn't start last time: try it again with retry (`ops.ts retry <server>`), as its owner's Try again does.",
 )
 
-function serverRoutes(app: Hono, { accountQueries, servers, queries, upkeep }: OpsApiOptions): void {
+function serverRoutes(
+  app: Hono,
+  { accountQueries, servers, queries, serverFinder, upkeep }: OpsApiOptions,
+): void {
   app.post(`${OPS_BASE}/servers`, async (c) => {
     const operator = operatorOf(c)
     const { owner, idempotencyKey, ...request } = CreateBody.parse(await bodyOf(c))
@@ -197,6 +202,10 @@ function serverRoutes(app: Hono, { accountQueries, servers, queries, upkeep }: O
     })
     return c.json(await queries.get(operator, made.id), 201)
   })
+  // Before `:id`, which would take it: a server by its id, slug, address or name.
+  app.get(`${OPS_BASE}/servers/find`, async (c) =>
+    c.json({ servers: await serverFinder.find(z.string().min(1).parse(c.req.query('ref'))) }),
+  )
   app.get(`${OPS_BASE}/servers/:id`, async (c) => c.json(await queries.get(operatorOf(c), c.req.param('id'))))
   app.post(`${OPS_BASE}/servers/:id/start`, async (c) => {
     const operator = operatorOf(c)

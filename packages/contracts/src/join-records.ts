@@ -92,6 +92,9 @@ export const SIGNAL_KINDS = [
   'slow_tick',
   'legacy_login_listener',
   'dropped',
+  'wake_booted',
+  'slow_operation',
+  'retried_operation',
 ] as const
 export type SignalKind = (typeof SIGNAL_KINDS)[number]
 
@@ -146,6 +149,25 @@ export const SignalsConfig = z.object({
    * connection reset (the edge's `detail.session`).
    */
   dropped: z.object({ quietS: Figure.optional() }).optional(),
+  /**
+   * A wake that booted although the server slept with its memory, with why: the runtime's reason
+   * (`other_spec`, `memory_lost`, `resume_booted`, `resume_hung`) and the `changed:*` parts.
+   */
+  wakeBooted: On.optional(),
+  /**
+   * An operation past its figure in seconds, by kind (`start`, `stop`, `backup`, `archive`, …),
+   * finished or still running; a start that resumed is held to `resumeS` instead.
+   */
+  slowOperation: z
+    .object({ byKindS: z.record(z.string(), Figure).optional(), resumeS: Figure.optional() })
+    .optional(),
+  /** An operation that took more than one attempt, with its last error. */
+  retriedOperation: On.optional(),
+  /**
+   * Which kinds of signal are emailed to the admin inbox as they are raised, in one digest a pass,
+   * each signal once (`app/platform/alerts.ts`). Absent or empty, none.
+   */
+  notify: z.array(z.enum(SIGNAL_KINDS)).optional(),
 })
 export type SignalsConfig = z.infer<typeof SignalsConfig>
 

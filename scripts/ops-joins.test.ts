@@ -27,6 +27,7 @@ const SIGNAL: SignalView = {
   closedBy: null,
 }
 
+const CASTLE = '0f0e0d0c-0b0a-4908-8706-050403020100'
 let open: SignalView[] = []
 let paths: string[] = []
 let api: ReturnType<typeof Bun.serve>
@@ -39,6 +40,10 @@ beforeAll(() => {
       const { pathname, search } = new URL(request.url)
       paths.push(`${request.method} ${pathname}${search}`)
       if (pathname === '/ops/v1/signals') return Response.json({ signals: open })
+      if (pathname === '/ops/v1/servers/find')
+        return Response.json({
+          servers: [{ id: CASTLE, slug: 'castle', name: 'Castle', owner: 'a@example.test' }],
+        })
       if (pathname.endsWith('/close'))
         return Response.json({ ...SIGNAL, closedAt: SIGNAL.at, closedBy: 'operator:ada' })
       return Response.json({ joins: [] })
@@ -115,7 +120,9 @@ describe('ops.ts join and joins', () => {
       `GET /ops/v1/joins/find?player=${JOIN_ID}`,
       'GET /ops/v1/joins/find?player=Steve',
       'GET /ops/v1/joins/find?player=8667ba71-b85a-4004-af54-457a9734eed7&at=2026-10-20T09%3A00%3A00.000Z',
-      'GET /ops/v1/joins?server=castle&player=Steve&limit=5',
+      // A server by what an operator calls it, found first, then asked about by its id.
+      'GET /ops/v1/servers/find?ref=castle',
+      `GET /ops/v1/joins?server=${CASTLE}&player=Steve&limit=5`,
     ])
   })
 })

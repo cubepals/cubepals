@@ -256,6 +256,8 @@ export interface OperationProgressJson {
 export interface OperationStepJson {
   step: string
   at: string
+  /** On an `attempt` after the first: the error the attempt before it ended on, kept as it was. */
+  after?: string
 }
 
 export interface AccessDetailsJson {

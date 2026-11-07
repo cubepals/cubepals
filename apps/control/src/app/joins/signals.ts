@@ -6,8 +6,8 @@
  * The `signals` job: every minute, each kind of signal the `SIGNALS` setting turns on is judged,
  * and each one found is raised once (`signals`, unique by key), with the server's and the player's
  * names, the address, the figure and its limit. Kinds judged from joins alone are
- * `signal-kinds.ts`'s; those that read wakes, the platform's hour or a server's boot report are
- * here. A signal left open a day is closed as expired.
+ * `signal-kinds.ts`'s; those judged from how operations went are `operation-signals.ts`'s; those
+ * that read wakes, the platform's hour or a server's boot report are here. A signal left open a day is closed as expired.
  *
  * The setting is the operators', never in this repository: unset, or not a `SignalsConfig`, no
  * kind runs, and the log says so once.
@@ -17,7 +17,9 @@ import { SignalsConfig } from '@blockly/contracts/join-records'
 import { type Db, type Queryable, schema } from '@blockly/db'
 import { and, count, eq, gt, inArray, isNotNull, isNull, lt, lte, sql } from 'drizzle-orm'
 import { tuning } from '../tuning.ts'
+import { operationSignals } from './operation-signals.ts'
 import { dropped, fromJoins, type JoinRow, type Raised, watched } from './signal-kinds.ts'
+import type { Written } from './signal-mail.ts'
 
 const {
   joins,
@@ -46,8 +48,15 @@ function signalsConfig(): SignalsConfig | null {
   return null
 }
 
-/** Raises what the setting finds at `now`, and closes what has been open a day. How many it raised. */
-export async function raiseSignals(db: Db, now: Date): Promise<number> {
+/**
+ * Raises what the setting finds at `now`, and closes what has been open a day. How many it raised.
+ * What it raised goes to `tell` too, which emails the kinds the setting asks for (`signal-mail.ts`).
+ */
+export async function raiseSignals(
+  db: Db,
+  now: Date,
+  tell?: (config: SignalsConfig, written: Written[]) => Promise<unknown>,
+): Promise<number> {
   await db
     .update(signals)
     .set({ closedAt: now, closedBy: 'system:expired' })
@@ -64,13 +73,16 @@ export async function raiseSignals(db: Db, now: Date): Promise<number> {
     ...(await repeatedWakes(db, config, now)),
     ...(await platformCrowd(db, config, now)),
     ...(await legacyLoginListeners(db, config, now)),
+    ...(await operationSignals(db, config, now)),
   ]
   if (raised.length === 0) return 0
   const written = await db
     .insert(signals)
     .values(raised)
     .onConflictDoNothing({ target: signals.key })
-    .returning({ id: signals.id })
+    .returning({ kind: signals.kind, detail: signals.detail })
+  if (tell !== undefined && written.length > 0)
+    await tell(config, written).catch((error: unknown) => console.error('signals: telling failed', error))
   return written.length
 }
 

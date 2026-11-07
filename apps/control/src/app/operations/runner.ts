@@ -7,6 +7,7 @@ import type { OperationKind, Phase, ServerStatus } from '../../domain/server/lif
 import type { MinecraftServer } from '../../domain/server/server.ts'
 import { note, within } from '../diagnostics/context.ts'
 import { DiagnosedFailure, inFull, inPlainWords, PermanentFailure } from '../errors.ts'
+import { operationFinished } from '../insight/operations.ts'
 import { operationEnded, operationFailed } from '../platform/telemetry.ts'
 import type { EventBus } from '../ports/events.ts'
 import type { JobAttempt } from '../ports/jobs.ts'
@@ -65,6 +66,7 @@ type OperationMark =
   | RuntimeMark
   | SleepMark
   | ChangedMark
+  | MachineMark
 
 /**
  * Why a wake booted where it could have resumed, after `other_spec`: one for each part of the
@@ -72,6 +74,9 @@ type OperationMark =
  * `changed:drift:image`, `changed:identity`, or `changed:unknown` where the boot before kept none.
  */
 type ChangedMark = `changed:${string}`
+
+/** The provider's machine an operation acted on (`handlers/binding.ts`), kept after the provider forgets it. */
+type MachineMark = `machine:${string}`
 
 /**
  * How a sleep ended, on the stop that put the server to sleep (`handlers/winding-down.ts`):
@@ -320,6 +325,7 @@ export class OperationRunner {
       }
       if (await finishOperation(tx, op.id, 'failed', message, detail ?? null)) {
         await this.#events.publish(tx, progressEvent(op, current, null, 'failed'))
+        await operationFinished(tx, op, current.ownerId, 'failed')
         operationEnded(op.kind, 'failed', Date.now() - op.createdAt.getTime())
         operationFailed(op.kind, step)
       }
@@ -344,6 +350,7 @@ export class OperationRunner {
     await this.#db.transaction(async (tx) => {
       if (await finishOperation(tx, op.id, status, reason, detail ?? null)) {
         await this.#events.publish(tx, progressEvent(op, server, null, status))
+        await operationFinished(tx, op, server.ownerId, status)
         operationEnded(op.kind, status, Date.now() - op.createdAt.getTime())
         if (status === 'failed') operationFailed(op.kind, reached)
       }

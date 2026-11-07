@@ -18,6 +18,7 @@ import type {
   JoinDetailView,
   JoinView,
   ServerJoinEvent,
+  SignalsConfig,
   SignalView,
   VisitReport,
 } from '@blockly/contracts/join-records'
@@ -27,11 +28,12 @@ import { z } from 'zod'
 import { type OperatorActor, requestedBy } from '../actor.ts'
 import { NotFound } from '../errors.ts'
 import type { Limits } from '../ports/limits.ts'
-import type { PlayAddressing } from '../ports/platform.ts'
+import type { Mailer, PlayAddressing } from '../ports/platform.ts'
 import type { SecretKeyring } from '../secrets.ts'
 import { tuning } from '../tuning.ts'
 import { closeSignal, findJoin, type JoinFilter, joinDetail, listJoins, listSignals } from './queries.ts'
 import { recordServerEvents } from './server-events.ts'
+import { tellSignals, type Written } from './signal-mail.ts'
 import { raiseSignals } from './signals.ts'
 import { recordVisits } from './visits.ts'
 
@@ -53,6 +55,7 @@ export class JoinService {
   readonly #addressing: PlayAddressing
   readonly #ring: SecretKeyring
   readonly #limits: Limits
+  readonly #tell: ((config: SignalsConfig, written: Written[]) => Promise<unknown>) | undefined
 
   constructor(deps: {
     db: Db
@@ -60,11 +63,21 @@ export class JoinService {
     /** The runtime keyring, which keys each network's hash to its server (`known-addresses.ts`). */
     runtimeSecrets: SecretKeyring
     limits: Limits
+    /** Where the signals `SIGNALS` emails go: ADMIN_ALERT_EMAILS, or every admin (`signal-mail.ts`). */
+    mailer?: Mailer
+    adminInbox?: readonly string[]
+    webOrigin?: string
   }) {
     this.#db = deps.db
     this.#addressing = deps.addressing
     this.#ring = deps.runtimeSecrets
     this.#limits = deps.limits
+    const { mailer, adminInbox = [], webOrigin = '' } = deps
+    this.#tell =
+      mailer === undefined
+        ? undefined
+        : (config, written) =>
+            tellSignals({ db: deps.db, mailer, inbox: adminInbox, origin: webOrigin }, config.notify, written)
   }
 
   /** Whether `serverId` may post another report this second, counting it when it may. */
@@ -126,7 +139,7 @@ export class JoinService {
 
   /** `signals`: raises what the `SIGNALS` setting finds, and closes what has been open a day. */
   raiseSignals(now = new Date()): Promise<number> {
-    return raiseSignals(this.#db, now)
+    return raiseSignals(this.#db, now, this.#tell)
   }
 
   /**

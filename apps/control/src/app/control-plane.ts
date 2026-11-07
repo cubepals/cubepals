@@ -64,6 +64,7 @@ import type { Runtimes } from './runtimes/router.ts'
 import { RuntimePlacement } from './runtimes/service.ts'
 import type { SecretKeyring } from './secrets.ts'
 import { AfkKick } from './servers/afk-kick.ts'
+import { ServerFinder } from './servers/finding.ts'
 import { officialFilesOf } from './servers/own-files.ts'
 import { OwnerNotices } from './servers/owner-notices.ts'
 import { markNotLoaded } from './servers/persistence.ts'
@@ -423,13 +424,19 @@ function revisionService(
 
 /**
  * The parts, with what keeps and reads what ran slow or failed and whose it was (`diagnostics/`),
- * and how each Paper server ticks (`vitals/`).
+ * how each Paper server ticks (`vitals/`), and a server found by what an operator calls it
+ * (`servers/finding.ts`).
  */
 function withHealthRecords<Parts extends object>(
   ports: Pick<ControlPlanePorts, 'db' | 'limits'>,
   parts: Parts,
 ) {
-  return { ...parts, diagnostics: new DiagnosticsService(ports.db), vitals: new VitalsService(ports) }
+  return {
+    ...parts,
+    diagnostics: new DiagnosticsService(ports.db),
+    vitals: new VitalsService(ports),
+    serverFinder: new ServerFinder(ports.db),
+  }
 }
 
 export type ControlPlane = ReturnType<typeof composeControlPlane>

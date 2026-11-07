@@ -14,16 +14,21 @@ them up. Each command below has a tool of the same purpose, named after it.
 
 | The question | Ask | Tool |
 |---|---|---|
+| What happened on this server? | `ops.ts timeline <server> [--since 24h\|7d\|<ISO>]`: its operations and why each went as it did, its joins and how each session ended, its signals, in time order | |
 | Why is this one person having a bad time? | `ops.ts diagnose <email or id> [--since 24h\|7d\|<ISO>]` | `account_diagnose` |
 | Which queries, procedures or requests are slow or failing, and for whom? | `ops.ts diagnostics summary [--by name\|account\|server\|origin\|kind]` | `diagnostics_summary` |
 | What exactly happened to that one? | `ops.ts diagnostics --name <q:…> \| --account <email> \| --server <id>` | `diagnostics_list` |
 | Is the database itself struggling? | `ops.ts database [--order total\|mean\|calls\|max]` | `database_now` |
 | Why did this join fail or take so long? | `ops.ts join <player or join id> --markdown` | `join_get` |
-| Why did this start or wake fail or take so long? | `ops.ts operations --server <id> --status failed`, then `ops.ts operation <id>` | `operations_list`, `operation_get` |
+| Why did this start or wake fail or take so long? | `ops.ts operations --server <server> --status failed`, then `ops.ts operation <id>` | `operations_list`, `operation_get` |
 | Which servers lag, and whose are they? | `ops.ts vitals [--account <email>] [--since 24h]` | `vitals_list` |
 | How did this one server tick? | `ops.ts vitals <server> [--since 24h]` | `server_vitals` |
 | What does the server's own log say? | `ops.ts console <server> --lines 200` | `console_read` |
 | Is the platform as a whole up and fast? | `ops.ts health`, and the metrics ([metrics.md](metrics.md)) | `health` |
+
+Every command that takes a `<server>`, and every `--server`, takes what a player calls it: its slug,
+the address they join (`v0idworld.play.cubepals.com`), its name, or its id
+(`/ops/v1/servers/find`). One that names several servers says each and stops.
 
 `diagnose` is the one to run first for a person. It puts together, for the account and its servers
 since the moment given (a day ago by default):
@@ -75,6 +80,21 @@ server closing first, happened between the player and the edge, not in Cubepals'
 `ops.ts join <id> --markdown` prints all of this under "How the session ended", and says which side
 it points to. The edge sends a join's end two minutes after the player leaves, so a join read
 sooner shows no leaving yet.
+
+## How wakes and operations went
+
+The `signals` job also reads operations, for the kinds `SIGNALS` turns on
+(`app/joins/operation-signals.ts`), each raised once per operation:
+
+- `wake_booted`: a start that booted although its server slept with its memory, with the runtime's
+  `reasons` (`other_spec`, `memory_lost`, `resume_booted`, `resume_hung`) and what `changed` since
+  it went to sleep (the wake's `changed:*` marks, [waking.md](waking.md)).
+- `slow_operation`: an operation past its kind's figure in seconds (`byKindS`), finished or
+  still `running`, with the step it is on; a start that resumed is held to `resumeS`.
+- `retried_operation`: an operation that took more than one attempt, with its last error.
+
+The kinds `notify` lists are emailed to the admin inbox as one digest a pass, each signal once
+(`app/joins/signal-mail.ts`). `ops.ts signals` lists the open ones.
 
 ## What ran slow or failed
 
@@ -178,6 +198,15 @@ anything the API didn't catch, with `distinct_id` the account it was for when on
 and `request_id`. To find one account's: `$exception` events where `distinct_id` is its id. A
 record here with an `error` of 5xx and a `request_id` is the same failure as the exception with that
 `request_id`.
+
+## Operations in PostHog
+
+Each finished operation is sent as `operation_finished` (`app/insight/operations.ts`), with the
+account as `distinct_id`, as the funnel's events are: `kind`, `status`, `seconds` from being asked,
+`way` (`resumed` or `booted` for a start), `attempts`, `marks` (the steps that say why, such as
+`other_spec,changed:drift:image` or `slept`) and `server_id`. A test account's are never sent. How
+wakes go, resume rate and wake time by day, is a trend of `operation_finished` where `kind` is
+`start`, broken down by `way`.
 
 ## What this doesn't see
 

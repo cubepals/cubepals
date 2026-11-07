@@ -20,6 +20,7 @@ import type { UserActor } from '../actor.ts'
 import { NotFound } from '../errors.ts'
 import type { BillingProvider } from '../ports/optional.ts'
 import { tuning } from '../tuning.ts'
+import { OPERATION_FINISHED } from './operations.ts'
 import { FUNNEL } from './record.ts'
 import { FEEDBACK_SURVEY, MOMENT_SURVEY } from './service.ts'
 
@@ -72,10 +73,11 @@ beforeEach(() => {
 })
 
 /** Sends what is kept, as the worker does, and answers what this pass sent about `userId`. */
+/** What the funnel sent for the account; each operation's own event has its tests in `operations.test.ts`. */
 const sent = async (userId: string) => {
   const before = posthog.events.length
   await h.app.insight.drain()
-  return posthog.events.slice(before).filter((e) => e.distinctId === userId)
+  return posthog.events.slice(before).filter((e) => e.distinctId === userId && e.event !== OPERATION_FINISHED)
 }
 /** An account with a moment noticed `daysAgo`, as `record.ts` keeps one. */
 const withMoment = async (moment: string, daysAgo = 0, owner?: UserActor) => {

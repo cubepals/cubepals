@@ -21,6 +21,10 @@
  *                                    [--size 5|10|20|more] [--region <key>]
  *                                                   a server for that account, as the web makes one
  *   bun scripts/ops.ts server <server>              one server, as its owner's page reads it
+ *   bun scripts/ops.ts timeline <server> [--since 24h|7d|<ISO>]
+ *                                                   one server's story in time order: its
+ *                                                   operations and why each went as it did, its
+ *                                                   joins and how each session ended, its signals
  *   bun scripts/ops.ts start|stop <server>
  *   bun scripts/ops.ts retry <server>               a server that didn't start last time, tried
  *                                                   again as its owner's Try again does; start
@@ -116,6 +120,7 @@
  * - `diagnostics-report.ts`: an account's trouble as an incident report, what ran slow or failed
  *   one a line and grouped, and the database now.
  * - `vitals-report.ts`: how servers tick: the platform now, one a line, and one server's minutes.
+ * - `timeline-report.ts`: one server's operations, joins and signals in time order.
  */
 import type { HealthOperationView, HealthView, HealthWindow, OperationStepsView } from '@blockly/contracts'
 import type {
@@ -134,6 +139,7 @@ import { ConsoleCommand, namesServer, PLATFORM } from './lib/operator-inputs.ts'
 import { reachProduction } from './lib/production-reach.ts'
 import { databaseReport, diagnosisReport, diagnosticLine, summaryReport } from './ops/diagnostics-report.ts'
 import { joinLine, joinReport, signalLine } from './ops/join-report.ts'
+import { timelineReport } from './ops/timeline-report.ts'
 import { platformLine, serverVitalsReport, vitalsLine } from './ops/vitals-report.ts'
 
 const [command = 'help', ...rest] = process.argv.slice(2).filter((arg) => arg !== '--production')
@@ -150,7 +156,26 @@ const uuid = (what: string) => {
   const given = first(what)
   return z.uuid().safeParse(given).success ? given : fail(`${command} needs ${what}, a uuid`)
 }
-const serverId = () => uuid('a server id')
+/**
+ * The server the command names: its id, or what an operator calls it (its slug, the address players
+ * join, its name), found through the API; one that names several is said, with each, and stops.
+ */
+async function serverId(ref: string = first('a server')): Promise<string> {
+  if (z.uuid().safeParse(ref).success) return ref
+  // Checked before any call: what names a server never reaches into another path.
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: a control character is what it refuses
+  if (ref.includes('/') || ref.includes('..') || /[\u0000-\u001f]/.test(ref) || ref.length > 200)
+    fail(`${command} needs a server: its id, slug, address or name`)
+  const { servers } = (await api('GET', `/servers/find?ref=${encodeURIComponent(ref)}`)) as {
+    servers: { id: string; slug: string; owner: string }[]
+  }
+  const [only] = servers
+  if (servers.length === 1 && only !== undefined && z.uuid().safeParse(only.id).success) return only.id
+  if (servers.length === 0) fail(`no server is called ${ref}`)
+  return fail(
+    `${ref} names ${servers.length} servers: ${servers.map((s) => `${s.slug} (${s.id}, ${s.owner})`).join('; ')}`,
+  )
+}
 /** Stops here unless --confirm names the server exactly. */
 async function confirmServer(id: string): Promise<void> {
   const confirm = option('confirm') ?? fail(`${command} needs --confirm, the server's name exactly`)
@@ -238,23 +263,57 @@ switch (command) {
     break
   }
   case 'server':
-    show(await api('GET', `/servers/${serverId()}`))
+    show(await api('GET', `/servers/${await serverId()}`))
     break
+  case 'timeline': {
+    const id = await serverId()
+    const from = since(option('since') ?? '24h')
+    const server = (await api('GET', `/servers/${id}`)) as { id: string; name: string; slug: string }
+    const { operations } = (await api(
+      'GET',
+      `/operations?server=${id}&since=${encodeURIComponent(from)}&limit=200`,
+    )) as {
+      operations: HealthOperationView[]
+    }
+    const detailed = await Promise.all(
+      operations.map(async (op) => (await api('GET', `/operations/${op.id}`)) as OperationStepsView),
+    )
+    const { joins } = (await api(
+      'GET',
+      `/joins?server=${id}&since=${encodeURIComponent(from)}&limit=500`,
+    )) as {
+      joins: JoinView[]
+    }
+    const { signals } = (await api('GET', `/signals?since=${encodeURIComponent(from)}`)) as {
+      signals: SignalView[]
+    }
+    // The API's `since` keeps every open signal, however old: only those raised in the window.
+    const raised = signals.filter((s) => s.serverId === id && Date.parse(s.at) >= Date.parse(from))
+    say(
+      timelineReport({
+        server,
+        operations: detailed,
+        joins,
+        signals: raised,
+      }),
+    )
+    break
+  }
   case 'start':
   case 'stop':
   case 'retry':
   case 'untrash':
   case 'rest':
-    show(await api('POST', `/servers/${serverId()}/${command}`))
+    show(await api('POST', `/servers/${await serverId()}/${command}`))
     break
   case 'trash':
   case 'purge': {
     const confirmName = option('confirm') ?? fail(`${command} needs --confirm, the server's name exactly`)
-    show(await api('POST', `/servers/${serverId()}/${command}`, { confirmName }))
+    show(await api('POST', `/servers/${await serverId()}/${command}`, { confirmName }))
     break
   }
   case 'console': {
-    const server = `/servers/${serverId()}/console`
+    const server = `/servers/${await serverId()}/console`
     const sent = positional.slice(1).join(' ')
     if (sent && !ConsoleCommand.safeParse(sent).success)
       fail('a console command is one line of plain text, without control characters')
@@ -269,7 +328,7 @@ switch (command) {
     break
   }
   case 'identity': {
-    const server = serverId()
+    const server = await serverId()
     const icon = option('icon')
     const identity = {
       ...(option('name') === undefined ? {} : { name: option('name') }),
@@ -285,10 +344,10 @@ switch (command) {
     break
   }
   case 'message':
-    show(await api('PUT', `/servers/${serverId()}/message`, { motd: positional.slice(1).join(' ') }))
+    show(await api('PUT', `/servers/${await serverId()}/message`, { motd: positional.slice(1).join(' ') }))
     break
   case 'mods': {
-    const mods = `/servers/${serverId()}/mods`
+    const mods = `/servers/${await serverId()}/mods`
     const [, action, ...refs] = positional
     if (action === undefined) show(await api('GET', mods))
     else if (action === 'search') show(await api('GET', `${mods}/search?text=${encoded(refs.join(' '))}`))
@@ -317,12 +376,12 @@ switch (command) {
     break
   }
   case 'players':
-    show(await api('GET', `/servers/${serverId()}/access`))
+    show(await api('GET', `/servers/${await serverId()}/access`))
     break
   case 'whitelist':
   case 'operator':
   case 'helper': {
-    const access = `/servers/${serverId()}/access`
+    const access = `/servers/${await serverId()}/access`
     const action = second('add, remove, or for the whitelist on or off')
     if (command === 'whitelist' && (action === 'on' || action === 'off'))
       show(await api('PUT', `${access}/whitelist`, { enabled: action === 'on' }))
@@ -340,9 +399,9 @@ switch (command) {
   }
   case 'ban': {
     const name = second('a player')
-    await confirmServer(serverId())
+    await confirmServer(await serverId())
     show(
-      await api('POST', `/servers/${serverId()}/access/ban`, {
+      await api('POST', `/servers/${await serverId()}/access/ban`, {
         name,
         ...(option('reason') ? { reason: option('reason') } : {}),
       }),
@@ -350,10 +409,10 @@ switch (command) {
     break
   }
   case 'pardon':
-    show(await api('DELETE', `/servers/${serverId()}/access/ban/${encoded(second('a player'))}`))
+    show(await api('DELETE', `/servers/${await serverId()}/access/ban/${encoded(second('a player'))}`))
     break
   case 'moderation': {
-    const moderation = `/servers/${serverId()}/moderation`
+    const moderation = `/servers/${await serverId()}/moderation`
     if (positional[1] === undefined) show(await api('GET', moderation))
     else {
       const enabled = onOff(positional[1], 'moderation')
@@ -368,17 +427,17 @@ switch (command) {
     break
   }
   case 'listing': {
-    const listing = `/servers/${serverId()}/listing`
+    const listing = `/servers/${await serverId()}/listing`
     const action = positional[1]
     if (action === undefined) show(await api('GET', listing))
     else if (action === 'publish' || action === 'unlist') {
-      if (action === 'unlist') await confirmServer(serverId())
+      if (action === 'unlist') await confirmServer(await serverId())
       show(await api('PUT', listing, { public: action === 'publish' }))
     } else fail('listing takes publish or unlist')
     break
   }
   case 'notice': {
-    const notice = `/servers/${serverId()}/notice`
+    const notice = `/servers/${await serverId()}/notice`
     const kind = positional[1]
     if (kind === 'address')
       show(await api('POST', notice, { kind, from: option('from') ?? fail('notice address needs --from') }))
@@ -389,7 +448,7 @@ switch (command) {
   case 'official': {
     const official = onOff(positional[1], 'official')
     const reason = option('reason') ?? fail('official needs --reason, which the audit log keeps')
-    show(await api('PUT', `/servers/${serverId()}/official`, { official, reason }))
+    show(await api('PUT', `/servers/${await serverId()}/official`, { official, reason }))
     break
   }
   case 'allowlist': {
@@ -460,7 +519,7 @@ switch (command) {
     const query = new URLSearchParams()
     for (const name of ['kind', 'slow', 'status', 'server', 'limit']) {
       const given = option(name)
-      if (given !== undefined) query.set(name, given)
+      if (given !== undefined) query.set(name, name === 'server' ? await serverId(given) : given)
     }
     const from = option('since')
     if (from !== undefined) query.set('since', since(from))
@@ -482,7 +541,7 @@ switch (command) {
     const query = new URLSearchParams()
     for (const name of ['server', 'player', 'address', 'limit']) {
       const given = option(name)
-      if (given !== undefined) query.set(name, given)
+      if (given !== undefined) query.set(name, name === 'server' ? await serverId(given) : given)
     }
     const from = option('since')
     if (from !== undefined) query.set('since', since(from))
@@ -568,7 +627,7 @@ switch (command) {
       const query = from === undefined ? '' : `?since=${encoded(since(from))}`
       const view = (await api(
         'GET',
-        `/servers/${encoded(uuid('a server id'))}/vitals${query}`,
+        `/servers/${encoded(await serverId())}/vitals${query}`,
       )) as ServerVitalsView
       if (option('json')) show(view)
       else for (const line of serverVitalsReport(view)) say(line)
