@@ -150,9 +150,9 @@ export function worldCopies(deps: {
    * A snapshot's world packed into the store at `target`. One its runtime can't pack at all (a
    * world too big for a single upload) fails at once: every try would pack it whole again.
    */
-  const pack = async (snapshot: SnapshotHandle, target: ArchiveTarget) => {
+  const pack = async (snapshot: SnapshotHandle, target: ArchiveTarget, signal?: AbortSignal) => {
     try {
-      return await runtime.exportSnapshot(snapshot, target)
+      return await runtime.exportSnapshot(snapshot, target, signal)
     } catch (error) {
       if (!(error instanceof RuntimeUnsupported)) throw error
       throw new PermanentFailure('This world is too big to pack into one archive.', { cause: error })

@@ -93,6 +93,11 @@ export interface OperationContext {
    * waits a long time asks as it waits, and throws `NoLongerApplies` once it isn't.
    */
   stillApplies(): Promise<boolean>
+  /**
+   * Aborted once this attempt no longer holds its operation (`JobAttempt.signal`): long work, an
+   * archive's upload say, stops there rather than race the attempt that took over.
+   */
+  signal: AbortSignal
 }
 
 /**
@@ -132,6 +137,9 @@ export interface OperationHandler {
    */
   abandon?(op: OperationRecord, reason: string, ended: 'failed' | 'cancelled'): Promise<void>
 }
+
+/** The attempt's own signal, or one that never aborts where its queue gives none. */
+const heldBy = (attempt: JobAttempt): AbortSignal => attempt.signal ?? new AbortController().signal
 
 /**
  * Runs one operation attempt. pg-boss owns delivery, ordering and retries; the domain owns what a
@@ -188,6 +196,7 @@ export class OperationRunner {
     const ctx: OperationContext = {
       op,
       server,
+      signal: heldBy(attempt),
       reached: () => reached,
       step: async (step) => {
         reached = step

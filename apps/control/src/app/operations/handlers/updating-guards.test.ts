@@ -72,6 +72,7 @@ async function fixture() {
   }
   const steps: Parameters<OperationContext['step']>[0][] = []
   const ctx: OperationContext = {
+    signal: new AbortController().signal,
     server,
     op: { ...operation, kind: 'apply', input: { boot: true } },
     step: async (step) => {

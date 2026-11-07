@@ -610,6 +610,7 @@ export async function workServerOperations(
       operationId,
       retryCount: job.retryCount,
       retryLimit: retryLimit ?? (await retryLimitOf(boss, job.id)),
+      signal: job.signal,
     }).catch((error: unknown) => {
       if (!(error instanceof Error) || !error.message.includes('\u0000')) throw error
       throw new Error(error.message.replaceAll('\u0000', ''))

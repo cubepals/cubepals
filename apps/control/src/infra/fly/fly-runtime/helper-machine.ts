@@ -57,7 +57,10 @@ export async function helperJob(
   region: string,
   volumeId: string,
   script: string,
+  /** Aborted, the job is given up between reads and its machine destroyed, as on any failure. */
+  signal?: AbortSignal,
 ): Promise<string> {
+  signal?.throwIfAborted()
   const helper = launched(
     await fly.POST('/v1/apps/{app_name}/machines', {
       params: { path: { app_name: app } },
@@ -99,6 +102,7 @@ export async function helperJob(
     const began = Date.now()
     const deadline = began + JOB_DEADLINE_MS
     while (Date.now() < deadline) {
+      signal?.throwIfAborted()
       // Its result; else whether it still runs; else, read once more, since it may have just
       // finished. A job that ended without a result fails now, not at the deadline.
       const line = (

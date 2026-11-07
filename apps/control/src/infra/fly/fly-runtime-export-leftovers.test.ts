@@ -156,3 +156,34 @@ describe('FlyRuntime clearing what an export left', () => {
     expect((fake.volumes.get(APP) ?? []).map((v) => v.name)).toEqual(['minecraft_data'])
   })
 })
+
+describe('FlyRuntime stopping an export it no longer holds', () => {
+  test('an export its operation no longer holds stops, and leaves no helper or volume', async () => {
+    const fake = new FakeFly()
+    const taken = new AbortController()
+    let reads = 0
+    // The job runs on and on: each read of its result says it is still running.
+    const fetch = async (request: Request) => {
+      const url = new URL(request.url)
+      if (request.method === 'POST' && url.pathname.endsWith('/exec')) {
+        const body = (await request.clone().json()) as { command: string[] }
+        if ((body.command[2] ?? '').includes('cat /tmp/job.result')) {
+          // Past its deadline, another attempt took the operation over.
+          if (++reads === 2) taken.abort(new Error('taken over'))
+          return Response.json({ exit_code: 0, stdout: 'running\n', stderr: '' })
+        }
+      }
+      return fake.fetch(request)
+    }
+    const runtime = runtimeOn(fetch)
+    const handle = await runtime.ensureProvisioned(KEY, { regionKey: 'eu-central' }, spec, progress)
+    const { snapshot } = await runtime.snapshot(handle)
+    const outcome = await runtime.exportSnapshot(snapshot, recordingTarget(), taken.signal).then(
+      () => 'exported',
+      (error: unknown) => String(error),
+    )
+    expect(outcome).toContain('taken over')
+    expect(helpersLeft(fake)).toEqual([])
+    expect(exportsLeft(fake)).toEqual([])
+  }, 30_000)
+})

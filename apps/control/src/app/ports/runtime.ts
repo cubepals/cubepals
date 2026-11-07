@@ -353,6 +353,8 @@ export interface MinecraftRuntime {
   exportSnapshot(
     snapshot: SnapshotHandle,
     target: ArchiveTarget,
+    /** Stops the export where the operation that asked no longer holds it, clearing what it made. */
+    signal?: AbortSignal,
   ): Promise<{ sizeBytes: number; sha256: string }>
   /** Short maintenance commands inside the running workload. */
   exec(handle: RuntimeHandle, command: readonly string[], timeoutSeconds: number): Promise<ExecResult>
