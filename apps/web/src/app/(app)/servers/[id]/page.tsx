@@ -340,8 +340,12 @@ const POWER_PRESS = { sleep: 'server_sleep', wake: 'server_wake', start: 'server
  */
 const restsNow = (server: ServerView) => outOfPlay(server) !== null && server.activeOperation === null
 
-/** Asleep, and a join wakes it: nobody need start it first. */
-const wakesOnJoin = (server: ServerView) => presentStatus(server).pill === 'sleeping' && !restsNow(server)
+/**
+ * Asleep, and a join wakes it: nobody need start it first. Not a month's hours used up, which
+ * sleeps until the 1st whoever joins.
+ */
+const wakesOnJoin = (server: ServerView) =>
+  presentStatus(server).pill === 'sleeping' && !restsNow(server) && server.stopReason !== 'hours'
 
 /** The plan's hours in all are played (Free's 20): it waits, world kept, for Plus. */
 const outForGood = (server: ServerView) => outOfPlay(server) === 'trial'
