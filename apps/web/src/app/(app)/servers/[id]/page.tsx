@@ -30,10 +30,10 @@ import {
 } from '../../../../lib/present'
 import {
   ActionButton,
+  AddressCopy,
   Badge,
   Button,
   Card,
-  CopyField,
   EmptyState,
   GetPack,
   ICON,
@@ -109,7 +109,7 @@ function Overview({ server }: { server: ServerView }) {
           )}
         </div>
         <div className="bk-stack" style={{ maxWidth: 'var(--width-form)', gap: 'var(--space-8)' }}>
-          <CopyField value={server.joinAddress} mark={ctaMark('copy_address')} />
+          <AddressCopy serverId={server.id} address={server.joinAddress} />
           <p className="type-body-sm" style={{ color: 'var(--ink-muted)' }}>
             {joinLine(server.gameVersion, pack, server.joins, letsBedrockIn(server))}
           </p>
@@ -190,7 +190,7 @@ function Working({
             <span className="type-label" style={{ color: 'var(--ink)' }}>
               Send this to your friends while you wait
             </span>
-            <CopyField value={server.joinAddress} mark={ctaMark('copy_address')} />
+            <AddressCopy serverId={server.id} address={server.joinAddress} />
             <p className="type-body-sm" style={{ color: 'var(--ink-muted)' }}>
               {joinLine(server.gameVersion, pack, server.joins, letsBedrockIn(server))}
             </p>

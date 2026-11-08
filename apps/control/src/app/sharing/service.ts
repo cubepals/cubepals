@@ -40,11 +40,20 @@ export class SharingService {
   }
 
   /** The owner copied their server's invite link: kept once for the server. Anyone else's isn't found. */
-  async inviteShared(actor: UserActor, serverId: string): Promise<void> {
+  inviteShared(actor: UserActor, serverId: string): Promise<void> {
+    return this.#ownerCopied(actor, serverId, FUNNEL.inviteShared)
+  }
+
+  /** The owner copied their server's address: kept once for the server. Anyone else's isn't found. */
+  addressCopied(actor: UserActor, serverId: string): Promise<void> {
+    return this.#ownerCopied(actor, serverId, FUNNEL.addressCopied)
+  }
+
+  async #ownerCopied(actor: UserActor, serverId: string, event: string): Promise<void> {
     const server = await findServer(this.#db, serverId)
     if (server === null || server.ownerId !== actor.userId) throw new NotFound('Server')
     await noteOnce(this.#db, {
-      event: FUNNEL.inviteShared,
+      event,
       subject: server.id,
       userId: server.ownerId,
       properties: { serverId: server.id },
