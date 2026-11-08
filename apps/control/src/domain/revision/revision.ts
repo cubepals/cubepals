@@ -187,16 +187,23 @@ export function settingsProblems(settings: ServerSettings, capacity: number): st
     problems.push(`Spawn protection goes from 0 to ${SETTING_BOUNDS.spawnProtection.max} blocks.`)
   if (!Number.isInteger(settings.maxPlayers) || settings.maxPlayers < 1 || settings.maxPlayers > capacity)
     problems.push(`This size holds up to ${capacity} players. Pick a bigger size for more.`)
-  // One line, which the list wraps onto its two by the game's own widths; codes take no room.
-  const motdSeal = sealProblem(settings.motd, 'Server messages')
-  if (motdText(settings.motd).trim().length === 0) problems.push('Write something to show under the name.')
-  else if (/\p{Cc}/u.test(settings.motd)) problems.push('The server message is one line of text.')
-  else if (motdSeal !== null) problems.push(motdSeal)
-  else {
-    const { cutCount } = motdLayout(settings.motd)
-    if (cutCount > 0) problems.push(motdCutSentence(cutCount))
-  }
+  const motd = messageProblem(settings.motd)
+  if (motd !== null) problems.push(motd)
   return problems
+}
+
+/**
+ * What is wrong with a message for the server list, worded for the person writing it; null when
+ * nothing is. One line, which the list wraps onto its two by the game's own widths; codes take no
+ * room. A server's own message is held to it, and so is an operator's notice on an account.
+ */
+export function messageProblem(motd: string): string | null {
+  if (motdText(motd).trim().length === 0) return 'Write something to show under the name.'
+  if (/\p{Cc}/u.test(motd)) return 'The server message is one line of text.'
+  const seal = sealProblem(motd, 'Server messages')
+  if (seal !== null) return seal
+  const { cutCount } = motdLayout(motd)
+  return cutCount > 0 ? motdCutSentence(cutCount) : null
 }
 
 export type RevisionChange =

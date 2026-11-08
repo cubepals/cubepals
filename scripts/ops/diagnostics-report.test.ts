@@ -129,6 +129,7 @@ test('an account’s trouble reads as an incident report, saying none where ther
       status: 'active',
       test: false,
     },
+    notice: null,
     since: '2026-11-03T12:00:00.000Z',
     servers: [{ id: 'server-1', name: 'Castle', slug: 'castle', status: 'failed', deleted: false }],
     operations: {
@@ -169,4 +170,20 @@ test('an account’s trouble reads as an incident report, saying none where ther
   expect(report).toContain('None of its servers reported ticks.')
   expect(report).toContain(`- ${diagnosticLine(SLOW)}`)
   expect(report.at(-1)).toBe('- Look in PostHog.')
+  expect(report.some((line) => line.startsWith('Notice:'))).toBe(false)
+  // An operator's notice on it, and when it limits the account.
+  const noticed = diagnosisReport({
+    ...view,
+    notice: {
+      text: '&cUnder review',
+      setAt: '2026-11-04T09:00:00.000Z',
+      setBy: 'operator:ada',
+      limitAt: '2026-11-06T09:00:00.000Z',
+      limitedAt: null,
+    },
+  })
+  expect(noticed.slice(3, 5)).toEqual([
+    '',
+    'Notice: “&cUnder review”, set 2026-11-04 09:00:00 by operator:ada, limits it 2026-11-06 09:00:00',
+  ])
 })

@@ -30,10 +30,10 @@ import {
 } from '../../../../lib/present'
 import {
   ActionButton,
+  AddressCopy,
   Badge,
   Button,
   Card,
-  CopyField,
   EmptyState,
   GetPack,
   ICON,
@@ -52,6 +52,7 @@ import { FreeHoursUsed } from '../../free-hours-used'
 import { HoursLeft } from '../../hours-left'
 import { PlusOffer } from '../../plus-offer'
 import { BootLine } from './boot-line'
+import { firstJoinWays, onPhone } from './first-join-ways'
 import { useChanged } from './settings/shared'
 import { requestId, useServer } from './use-server'
 import { useWakeRequest } from './wake'
@@ -108,7 +109,7 @@ function Overview({ server }: { server: ServerView }) {
           )}
         </div>
         <div className="bk-stack" style={{ maxWidth: 'var(--width-form)', gap: 'var(--space-8)' }}>
-          <CopyField value={server.joinAddress} mark={ctaMark('copy_address')} />
+          <AddressCopy serverId={server.id} address={server.joinAddress} />
           <p className="type-body-sm" style={{ color: 'var(--ink-muted)' }}>
             {joinLine(server.gameVersion, pack, server.joins, letsBedrockIn(server))}
           </p>
@@ -189,7 +190,7 @@ function Working({
             <span className="type-label" style={{ color: 'var(--ink)' }}>
               Send this to your friends while you wait
             </span>
-            <CopyField value={server.joinAddress} mark={ctaMark('copy_address')} />
+            <AddressCopy serverId={server.id} address={server.joinAddress} />
             <p className="type-body-sm" style={{ color: 'var(--ink-muted)' }}>
               {joinLine(server.gameVersion, pack, server.joins, letsBedrockIn(server))}
             </p>
@@ -323,7 +324,7 @@ function Actions({ server, wake }: { server: ServerView; wake: Wake }) {
         <MadeForAWhile server={server} at={server.expiresAt} onKept={() => kept.settled()} />
       )}
       {kept.said === 'done' && <Note tone="success">Kept. It stays until you delete it.</Note>}
-      {running && <NextStep server={server} />}
+      <NextStep server={server} />
       {stopped && server.crash?.outOfMemory && <MoreRoom server={server} />}
       {error && <Refused server={server} error={error} />}
     </div>
@@ -338,6 +339,13 @@ const POWER_PRESS = { sleep: 'server_sleep', wake: 'server_wake', start: 'server
  * the note on when it is back is the first thing under the address.
  */
 const restsNow = (server: ServerView) => outOfPlay(server) !== null && server.activeOperation === null
+
+/**
+ * Asleep, and a join wakes it: nobody need start it first. Not a month's hours used up, which
+ * sleeps until the 1st whoever joins.
+ */
+const wakesOnJoin = (server: ServerView) =>
+  presentStatus(server).pill === 'sleeping' && !restsNow(server) && server.stopReason !== 'hours'
 
 /** The plan's hours in all are played (Free's 20): it waits, world kept, for Plus. */
 const outForGood = (server: ServerView) => outOfPlay(server) === 'trial'
@@ -651,6 +659,7 @@ function PlayersCard({ server }: { server: ServerView }) {
 /** Who can join a server that isn't running: anyone, once it wakes, unless its owner's play is out. */
 function playersLine(server: ServerView): string {
   if (outOfPlay(server) === 'trial') return 'Nobody can join while the free trial is over.'
+  if (wakesOnJoin(server)) return 'Anyone joining wakes it up.'
   return 'Start the server and your friends can join.'
 }
 
@@ -696,6 +705,8 @@ function OverviewSkeleton() {
  * world yours — dismissible, never repeated, and never a tour.
  */
 function NextStep({ server }: { server: ServerView }) {
+  // Up, or asleep with a join to wake it: either way the address works now.
+  if (server.status !== 'running' && !wakesOnJoin(server)) return null
   if (!server.everPlayed) return <FirstFriend server={server} />
   // A pack chose its mods, and a server playing one has no list of its own to add to.
   if (server.onlyServer && server.modCount === 0 && server.modpack === null)
@@ -703,16 +714,29 @@ function NextStep({ server }: { server: ServerView }) {
   return null
 }
 
-/** Nobody has joined yet: the only thing missing is the link, so here it is. */
+/**
+ * Nobody has joined yet, the owner included: most new servers stop here, before anyone tries the
+ * address. So the first step is the owner's own join, in the game they have, the one this device
+ * runs first; then the link for friends.
+ */
 function FirstFriend({ server }: { server: ServerView }) {
   const trpc = useTRPC()
   const share = useQuery(trpc.sharing.own.queryOptions({ serverId: server.id }))
   const { hidden, dismiss } = useNudge(`blockly.first-friend.${server.id}`)
+  const [phone, setPhone] = useState(false)
+  useEffect(() => setPhone(onPhone(navigator.userAgent)), [])
   if (hidden || share.data === undefined) return null
+  const ways = firstJoinWays(letsBedrockIn(server), phone)
   return (
     <Note tone="success">
-      <span className="bk-stack" style={{ gap: 'var(--space-12)' }}>
-        <span>Nobody has joined yet. This link shows your friends what the server is and how to get in.</span>
+      <div className="bk-stack" style={{ gap: 'var(--space-12)' }}>
+        <span>Nobody has joined yet. Join it yourself first, with the address above:</span>
+        <ul className="bk-stack" style={{ gap: 'var(--space-4)', paddingInlineStart: 'var(--space-20)' }}>
+          {ways.map((way) => (
+            <li key={way}>{way}</li>
+          ))}
+        </ul>
+        <span>Then send your friends this link. It shows them what the server is and how to get in.</span>
         <InviteCopy serverId={server.id} url={share.data.inviteUrl} label="Copy link" />
         <span>
           <button
@@ -724,7 +748,7 @@ function FirstFriend({ server }: { server: ServerView }) {
             Got it
           </button>
         </span>
-      </span>
+      </div>
     </Note>
   )
 }

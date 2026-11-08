@@ -190,7 +190,7 @@ export class EdgeService {
    */
   async listed(): Promise<{ routes: EdgeRoutes; from: Date; unrouted: boolean }> {
     const { print, inputs } = await this.#inputs()
-    const { servers: live, bindings, comingBack, booting, trials, motds, plays } = inputs
+    const { servers: live, bindings, comingBack, booting, trials, motds, notices, plays } = inputs
     const restarting = restartingOf(live, comingBack)
     const unstoring = new Set(comingBack.filter((o) => o.kind === 'unstore').map((o) => o.serverId))
     const over = trialOver(trials)
@@ -216,6 +216,7 @@ export class EdgeService {
           ...(waking ? { waking: true as const } : {}),
           ...wakeOf(state, server.status, medianOf(medians, server.id, way)),
           ...this.#identityOf(server, state, motds),
+          ...operatorNotice(notices.get(server.id)),
           ...(binding?.proxyProtocol ? { proxyProtocol: true as const } : {}),
           ...joinsOf(plays, state, binding, server.desiredRevisionId),
         })
@@ -752,6 +753,10 @@ function runOf(
   const back = status === 'restoring' && unstoring
   return { state, back, waking: state === 'asleep' && (status === 'starting' || back) }
 }
+
+/** An operator's notice on the server's owner, as the game reads it; nothing without one. */
+const operatorNotice = (notice: string | undefined): Pick<EdgeRoutes['routes'][number], 'notice'> =>
+  notice === undefined ? {} : { notice: motdForGame(notice) }
 
 /**
  * What a route says about a server that isn't running: why, and for one asleep because its owner's

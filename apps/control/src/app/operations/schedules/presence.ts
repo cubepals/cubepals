@@ -7,8 +7,9 @@
  * an access change, or what the owner asked for on a player's page, waiting for someone who has
  * just joined. A console that stops or starts answering again also marks or clears a lost host.
  * On the same connection it reads how a server ticks (`tick query`) where the reporter plugin
- * doesn't sample it, which `vitals/console-samples.ts` keeps. Stopping a server nobody is on is
- * `idle.ts`'s; rebuilding one off a lost host is `relocations.ts`'s.
+ * doesn't sample it, which `vitals/console-samples.ts` keeps, and says an operator's notice on its
+ * owner to the players on it (`notice-said.ts`). Stopping a server nobody is on is `idle.ts`'s;
+ * rebuilding one off a lost host is `relocations.ts`'s.
  */
 import { MINUTE_MS } from '@blockly/contracts/durations'
 import type { Db } from '@blockly/db'
@@ -22,6 +23,7 @@ import {
 } from '../../../minecraft/console.ts'
 import { PORT_NAMES } from '../../../minecraft/runtime-spec.ts'
 import { readAccess } from '../../access/persistence.ts'
+import { noticesOf } from '../../accounts/notice.ts'
 import { playersSeen } from '../../insight/record.ts'
 import type { PlayerService } from '../../players/service.ts'
 import type { EventBus } from '../../ports/events.ts'
@@ -33,6 +35,7 @@ import type { RuntimeSpecs } from '../../servers/specs.ts'
 import type { ServerTransitions } from '../../servers/transitions.ts'
 import { type PresentPlayer, recordPlay, replacePresence } from '../../servers/usage.ts'
 import { recordConsoleTick, reportingServers } from '../../vitals/console-samples.ts'
+import { sayNotice } from './notice-said.ts'
 import { observedJson, recordHostLost } from './observations.ts'
 import { placementsOf } from './placements.ts'
 
@@ -91,6 +94,10 @@ export function readingPresence(deps: {
       db,
       running.map((s) => s.id),
     )
+    const notices = await noticesOf(
+      db,
+      running.map((s) => s.ownerId),
+    )
     for (const server of running) {
       const { handle, observed, provider } = placementOf(server.id)
       if (handle === null) continue
@@ -146,6 +153,8 @@ export function readingPresence(deps: {
           })
       })
       await deliverWaiting(server, handle, reading.players)
+      const notice = notices.get(server.ownerId)
+      await sayNotice({ db, console: deps.console }, { id: server.id, target }, notice, reading.players)
     }
   }
 

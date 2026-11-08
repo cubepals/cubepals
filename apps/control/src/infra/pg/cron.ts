@@ -40,6 +40,8 @@ export const CRON: Record<ScheduledJob | WorkerHeartbeat, string> = {
   'backup-schedule': '23 * * * *',
   'artifact-gc': '37 4 * * *',
   'standing-sweep': '* * * * *',
+  // An account notice's limit, put on within a minute of the time it names (app/accounts/notice.ts).
+  'account-notices': '* * * * *',
   // Extra play counted and sent to be billed (app/billing/extra-usage.ts).
   'extra-play-report': '* * * * *',
   'listing-eligibility-sweep': '51 3 * * *',

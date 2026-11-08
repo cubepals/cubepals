@@ -41,7 +41,10 @@ export function restingJoin(name: string | undefined): string {
   ].join('\n')
 }
 
+/** Why it rests and where to go, as the server list's second line says it. */
+export const RESTING_STATUS = 'Free trial over · open its address in a browser'
+
 /** What the server list shows: the server's own message, if any, then why it rests and where to go. */
 export function restingStatus(motd: string | undefined): string {
-  return asleepMessage(motd, 'Free trial over · open its address in a browser')
+  return asleepMessage(motd, RESTING_STATUS)
 }

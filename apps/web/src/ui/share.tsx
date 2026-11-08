@@ -24,7 +24,7 @@ import { Note, Skeleton } from './surfaces'
  * switch that makes a page anyone can find, whether others may make one like it, and whether
  * friends may chip in to it. The invite link is also copied from the Players page, where an owner
  * looks for their friends, and from the server's page until somebody joins: each copy is
- * `InviteCopy`'s.
+ * `InviteCopy`'s. The owner's copies of the address, here and on the server's page, are `AddressCopy`'s.
  */
 export function ShareButton({ serverId, name }: { serverId: string; name: string }) {
   const [open, setOpen] = useState(false)
@@ -100,7 +100,7 @@ function ShareSheet({ serverId, name, onClose }: { serverId: string; name: strin
 
           <div className="bk-stack" style={{ gap: 'var(--space-8)' }}>
             <span className="bk-field__label">Or just the address</span>
-            <CopyField value={view.joinAddress} mark={{ 'data-cta': 'copy_address' }} />
+            <AddressCopy serverId={serverId} address={view.joinAddress} />
           </div>
 
           <div className="bk-stack" style={{ gap: 'var(--space-8)' }}>
@@ -165,6 +165,22 @@ export function InviteCopy({ serverId, url, label }: { serverId: string; url: st
       label={label}
       mark={{ 'data-cta': 'copy_invite' }}
       onCopied={() => shared.mutate({ serverId })}
+    />
+  )
+}
+
+/**
+ * The server's address and a button that copies it, counted as `cta_pressed` in the page's own
+ * steps and, for the owner's account, as the address copied. Sent and forgotten, as `InviteCopy`'s.
+ */
+export function AddressCopy({ serverId, address }: { serverId: string; address: string }) {
+  const trpc = useTRPC()
+  const copied = useMutation(trpc.sharing.addressCopied.mutationOptions())
+  return (
+    <CopyField
+      value={address}
+      mark={{ 'data-cta': 'copy_address' }}
+      onCopied={() => copied.mutate({ serverId })}
     />
   )
 }

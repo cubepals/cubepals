@@ -12,6 +12,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { DAY_MS, MINUTE_MS } from '@blockly/contracts/durations'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 
@@ -20,6 +21,16 @@ const SERVER = '0d2f4e6a-8b1c-4d3e-9f50-a1b2c3d4e5f6'
 const LEAKY = '9e8d7c6b-5a49-4382-a1b0-c9d8e7f6a5b4'
 const MCP = join(import.meta.dir, 'ops-mcp.ts')
 const OPS = join(import.meta.dir, 'ops.ts')
+/** The MCP tools that can't be undone, or take something away from someone. */
+const DESTRUCTIVE = [
+  'account_create',
+  'account_notice_set',
+  'listing_unlist',
+  'platform_set',
+  'player_ban',
+  'server_purge',
+  'server_trash',
+]
 
 interface Call {
   method: string
@@ -145,14 +156,7 @@ describe('ops-mcp.ts', () => {
     test('every destructive tool asks for a confirm, and says it is destructive', async () => {
       const { tools } = await client.listTools()
       const destructive = tools.filter((tool) => tool.annotations?.destructiveHint).map((tool) => tool.name)
-      expect(destructive.sort()).toEqual([
-        'account_create',
-        'listing_unlist',
-        'platform_set',
-        'player_ban',
-        'server_purge',
-        'server_trash',
-      ])
+      expect(destructive.sort()).toEqual(DESTRUCTIVE)
       for (const name of destructive)
         expect(tools.find((tool) => tool.name === name)?.inputSchema.required).toContain('confirm')
     })
@@ -215,6 +219,36 @@ describe('ops-mcp.ts', () => {
   })
 })
 
+describe('ops-mcp.ts: an account’s notice', () => {
+  let client: Client
+  beforeAll(async () => {
+    client = new Client({ name: 'ops-test', version: '1.0.0' })
+    await client.connect(
+      new StdioClientTransport({ command: 'bun', args: [MCP], env: env(), stderr: 'pipe' }),
+    )
+  })
+  afterAll(() => client.close())
+  const call = async (name: string, args: Record<string, unknown>) =>
+    ((await client.callTool({ name, arguments: args })) as { isError?: boolean }).isError ?? false
+
+  test('an account’s notice is read, set once confirm names the account again, and cleared', async () => {
+    const set = { account: 'owner@example.test', text: '&cUnder review' }
+    expect(await call('account_notice_set', { ...set, confirm: 'owner@example.tes' })).toBe(true)
+    expect(await call('account_notice_set', set)).toBe(true)
+    expect(writes()).toEqual([])
+    const limitAt = '2026-11-10T12:00:00.000Z'
+    expect(await call('account_notice_set', { ...set, limitAt, confirm: set.account })).toBe(false)
+    expect(await call('account_notice_get', { account: set.account })).toBe(false)
+    expect(await call('account_notice_clear', { account: set.account })).toBe(false)
+    const path = '/ops/v1/accounts/owner%40example.test/notice'
+    expect(calls.map(({ method, path, body }) => [method, path, body])).toEqual([
+      ['PUT', path, { text: '&cUnder review', limitAt }],
+      ['GET', path, undefined],
+      ['DELETE', path, undefined],
+    ])
+  })
+})
+
 describe('ops.ts', () => {
   test('ban, unlist, trash and purge call nothing that changes anything until --confirm is the server’s name', async () => {
     for (const args of [
@@ -251,6 +285,35 @@ describe('ops.ts', () => {
     ).toBe(0)
     expect((await ops(['platform', 'set', 'startsEnabled', 'false', '--confirm', 'platform'])).code).toBe(0)
     expect(writes()).toHaveLength(2)
+  })
+
+  test('notice reads, sets and clears an account’s, and needs --confirm only to limit it', async () => {
+    const path = '/ops/v1/accounts/owner%40example.test/notice'
+    expect(
+      (await ops(['notice', 'owner@example.test', 'set', '&cUnder', 'review', '--limit-in', '48h'])).code,
+    ).toBe(1)
+    expect((await ops(['notice', 'owner@example.test', 'set', 'Hi', '--limit-in', 'soon'])).code).toBe(1)
+    expect((await ops(['notice', 'owner@example.test', 'set'])).code).toBe(1)
+    expect(writes()).toEqual([])
+    const before = Date.now()
+    const limited = ['set', '&cUnder', 'review', '--limit-in', '48h', '--confirm', 'owner@example.test']
+    expect((await ops(['notice', 'owner@example.test', ...limited])).code).toBe(0)
+    expect((await ops(['notice', 'owner@example.test', 'set', 'Just', 'saying'])).code).toBe(0)
+    expect((await ops(['notice', 'owner@example.test'])).code).toBe(0)
+    expect((await ops(['notice', 'owner@example.test', 'clear'])).code).toBe(0)
+    const [first, second, read, cleared] = calls
+    expect(first).toMatchObject({ method: 'PUT', path, body: { text: '&cUnder review' } })
+    const limitAt = Date.parse((first?.body as { limitAt: string } | undefined)?.limitAt ?? '')
+    expect(limitAt - before).toBeGreaterThanOrEqual(2 * DAY_MS)
+    expect(limitAt - before).toBeLessThan(2 * DAY_MS + MINUTE_MS)
+    expect(second).toMatchObject({ method: 'PUT', path, body: { text: 'Just saying', limitAt: null } })
+    expect([read?.method, read?.path, cleared?.method, cleared?.path]).toEqual(['GET', path, 'DELETE', path])
+    // A server's own notices to its owner are as they were.
+    calls = []
+    expect((await ops(['notice', SERVER, 'unlisted'])).code).toBe(0)
+    expect(writes().map(({ method, path }) => [method, path])).toEqual([
+      ['POST', `/ops/v1/servers/${SERVER}/notice`],
+    ])
   })
 
   test('a server id, an operation id and a console command are checked before any call', async () => {

@@ -95,6 +95,11 @@ function schedules(
       },
     },
     {
+      job: 'account-notices',
+      run: () => app.accounts.notices.applyDue(),
+      says: (n) => `limited ${n} accounts at the time their notice named`,
+    },
+    {
       job: 'extra-play-report',
       // Play hours chipped in covered is drawn first: it is never counted as extra.
       run: async () => {

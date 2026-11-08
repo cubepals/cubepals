@@ -5,9 +5,10 @@
 /**
  * Accounts and their servers, acted on from the command line, on the internal listener with the
  * operator token (docs/production.md): an account found, read, or made for a person, its plan and
- * limits set, and a server made for it, started, stopped, tried again after a start that failed
- * (as its owner's Try again does), sent to the trash and taken back out, rested in the archive
- * store now, or purged now. What an owner does on a server's own pages is
+ * limits set, a notice put on it or taken off (`app/accounts/notice.ts`), and a server made for
+ * it, started, stopped, tried again after a start that failed (as its owner's Try again does),
+ * sent to the trash and taken back out, rested in the archive store now, or purged now. What an
+ * owner does on a server's own pages is
  * `server-pages.ts`'s; Browse and its allowlist are `listings.ts`'s; the admins' platform switches
  * are `platform.ts`'s; uploaded jars' malware checks are `jar-checks.ts`'s; joins and their signals are `joins.ts`'s; what ran slow or failed, and the database now, are `diagnostics.ts`'s; how servers tick is `vitals.ts`'s. All of it is under `/ops/v1`. `scripts/ops.ts` is its command line, and `scripts/production-check.ts`
  * runs a server's whole life through it. Production's health reads as the admin Health page
@@ -22,9 +23,11 @@ import {
   CreateTestAccountInput,
   HealthOperationsInput,
   PartySize,
+  ServerSettingsInput,
 } from '@blockly/contracts'
 import { Hono } from 'hono'
 import { z } from 'zod'
+import type { AccountNotices } from '../../app/accounts/notice.ts'
 import type { AccountDetail, AccountQueries } from '../../app/accounts/queries.ts'
 import type { AccountService } from '../../app/accounts/service.ts'
 import type { OperatorActor } from '../../app/actor.ts'
@@ -50,7 +53,9 @@ export type OpsApiOptions = ServerPagesOptions &
   DiagnosticsOptions &
   VitalsOptions &
   PlatformOptions & {
-    accounts: Pick<AccountService, 'setPlan' | 'setLimits' | 'createAccount'>
+    accounts: Pick<AccountService, 'setPlan' | 'setLimits' | 'createAccount'> & {
+      notices: Pick<AccountNotices, 'get' | 'set' | 'clear'>
+    }
     accountQueries: Pick<AccountQueries, 'list' | 'get'>
     servers: Pick<
       MinecraftServerService,
@@ -69,6 +74,11 @@ const PlanBody = z.object({ plan: z.string().min(1) })
 /** A person's address, and what to call them; named after the address unless told. */
 const AccountBody = CreateTestAccountInput.pick({ email: true }).extend({
   name: z.string().trim().min(1).max(100).optional(),
+})
+/** A notice's text, held to a server message's length, and when it limits the account, if it does. */
+const NoticeBody = z.object({
+  text: ServerSettingsInput.shape.motd,
+  limitAt: z.iso.datetime({ offset: true }).nullable().default(null),
 })
 const LimitsBody = z.object({
   maxServers: z.number().int().nullable(),
@@ -93,6 +103,10 @@ const accountView = ({ standing, ...account }: AccountDetail) => ({
   limits: standing.limitOverrides,
   restrictions: standing.restrictions,
 })
+
+/** What clearing a notice says of the limit it put on, which stays until `limits` lifts it. */
+const LIMIT_STAYS =
+  'The running limit this notice put on stays: lift it with `ops.ts limits <account> --running plan`.'
 
 /** An account by its id, or by its email address exactly. */
 async function accountOf(
@@ -143,7 +157,8 @@ function healthRoutes(app: Hono, { health }: OpsApiOptions): void {
   )
 }
 
-function accountRoutes(app: Hono, { accounts, accountQueries }: OpsApiOptions): void {
+function accountRoutes(app: Hono, options: OpsApiOptions): void {
+  const { accounts, accountQueries } = options
   app.get(`${OPS_BASE}/accounts`, async (c) => {
     const search = c.req.query('search') ?? ''
     const found = await accountQueries.list(operatorOf(c), { search, offset: 0, limit: 50 })
@@ -179,6 +194,35 @@ function accountRoutes(app: Hono, { accounts, accountQueries }: OpsApiOptions): 
     const { userId } = await accountOf(accountQueries, operator, c.req.param('account'))
     await accounts.setLimits(operator, userId, limits)
     return c.json(accountView(await accountQueries.get(operator, userId)))
+  })
+  noticeRoutes(app, options)
+}
+
+function noticeRoutes(app: Hono, { accountQueries, accounts }: OpsApiOptions): void {
+  const NOTICE = `${OPS_BASE}/accounts/:account/notice`
+  app.get(NOTICE, async (c) => {
+    const operator = operatorOf(c)
+    const { userId } = await accountOf(accountQueries, operator, c.req.param('account'))
+    return c.json({ notice: await accounts.notices.get(operator, userId) })
+  })
+  app.put(NOTICE, async (c) => {
+    const operator = operatorOf(c)
+    const { text, limitAt } = NoticeBody.parse(await bodyOf(c))
+    const { userId } = await accountOf(accountQueries, operator, c.req.param('account'))
+    const notice = await accounts.notices.set(operator, userId, {
+      text,
+      limitAt: limitAt === null ? null : new Date(limitAt),
+    })
+    return c.json({ notice })
+  })
+  app.delete(NOTICE, async (c) => {
+    const operator = operatorOf(c)
+    const { userId } = await accountOf(accountQueries, operator, c.req.param('account'))
+    const cleared = await accounts.notices.clear(operator, userId)
+    return c.json({
+      cleared,
+      ...(cleared === null || cleared.limitedAt === null ? {} : { limitStays: LIMIT_STAYS }),
+    })
   })
 }
 

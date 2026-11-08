@@ -74,6 +74,17 @@ export interface FrontOptions {
   readyWaitMs?: number
   /** Where each join and ping is recorded (`visits.ts`); nothing is, without it. */
   visits?: Visits
+  /**
+   * What a running server's answer to a ping at `hostname` goes back through on its way to the
+   * player, for an operator's notice on its owner (`ping-notice.ts`); null, or left out, for none.
+   */
+  notice?: (hostname: string) => Rewrite | null
+}
+
+/** What changes a server's bytes on their way back to the player: what of each goes on, and what is left at its end. */
+export interface Rewrite {
+  take(chunk: Uint8Array): Uint8Array
+  flush(): Uint8Array
 }
 
 /** How long a connection the edge makes may wait, to connect and then with nothing said. */
@@ -167,7 +178,13 @@ function headerFor(source: Source | null, port: number): Uint8Array {
  * Connects `client` to the server at `destination`, which first gets what the client sent so far.
  * A server that doesn't take it in time, or a connection gone quiet both ways, is closed.
  */
-export function pipe(client: Socket, destination: string, sent: Uint8Array, timeouts: Timeouts): Socket {
+export function pipe(
+  client: Socket,
+  destination: string,
+  sent: Uint8Array,
+  timeouts: Timeouts,
+  back: Rewrite | null = null,
+): Socket {
   const colon = destination.lastIndexOf(':')
   const server = connect({
     host: destination.slice(0, colon).replace(/^\[|\]$/g, ''),
@@ -184,7 +201,15 @@ export function pipe(client: Socket, destination: string, sent: Uint8Array, time
   client.on('timeout', () => client.destroy())
   client.setTimeout(timeouts.idleMs)
   server.write(sent)
-  client.pipe(server).pipe(client)
+  client.pipe(server)
+  if (back === null) server.pipe(client)
+  else {
+    server.on('data', (chunk: Buffer) => {
+      const out = back.take(chunk)
+      if (out.length > 0) client.write(out)
+    })
+    server.once('end', () => client.end(back.flush()))
+  }
   client.once('close', () => server.destroy())
   server.once('close', () => client.destroy())
   client.once('error', () => server.destroy())
@@ -361,10 +386,16 @@ class Arrival {
         return void this.#broken()
       }
     }
-    const toRouter = pipe(this.#client, `127.0.0.1:${router}`, sent, timeouts)
+    const toRouter = pipe(this.#client, `127.0.0.1:${router}`, sent, timeouts, this.#back(handshake))
     this.#handed = true
     this.#measure(toRouter, handshake.joining ? 'join' : 'ping', known(handshake.hostname))
     visit?.admitted(toRouter)
+  }
+
+  /** What a ping's answer goes back through: its server's owner's notice, if any. A join's goes as it is. */
+  #back(handshake: Handshake): Rewrite | null {
+    if (handshake.joining || this.#options.notice === undefined) return null
+    return this.#options.notice(handshake.hostname)
   }
 
   /**

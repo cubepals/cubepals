@@ -133,6 +133,12 @@ describe.skipIf(!hasDatabase)('a join the game refused', () => {
     expect(await reason()).toBeNull()
     await h.app.joins.recordServerEvents(to.id, [login])
     expect(await reason()).toBe('refused:whitelist')
+    // The funnel hears of the stop from the server's word too, not only from the edge's.
+    const kept = await h.db
+      .select({ subject: schema.insightEvents.subject })
+      .from(schema.insightEvents)
+      .where(eq(schema.insightEvents.event, 'join_stopped'))
+    expect(kept.map((e) => e.subject)).toContain(`${to.id}:refused:whitelist`)
   }, 30_000)
 
   test('and nothing else is given a reason', async () => {

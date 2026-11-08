@@ -52,6 +52,7 @@ describe('the API router', () => {
       'chipIns.own',
       'chipIns.setOpen',
       'sharing.inviteShared',
+      'sharing.addressCopied',
       'sharing.inviteOpened',
     ])
       expect(procedures).toContain(path)

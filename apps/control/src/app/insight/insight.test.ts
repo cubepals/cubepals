@@ -11,6 +11,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
 import { randomUUID } from 'node:crypto'
 import { DAY_MS } from '@blockly/contracts/durations'
+import type { VisitReport } from '@blockly/contracts/join-records'
 import { schema } from '@blockly/db'
 import { and, eq } from 'drizzle-orm'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
@@ -351,6 +352,55 @@ describe.skipIf(!hasDatabase)('the funnel, for an invitation', () => {
       await h.app.sharing.inviteOpened(inviteCode, owner)
     await h.app.sharing.inviteOpened(inviteCode, null)
     expect(await sent(owner.userId)).toEqual([])
+  }, 30_000)
+})
+
+// Before anyone plays: the owner copying the address, then the edge's first try to join and its stops.
+describe.skipIf(!hasDatabase)('the funnel, before the first join', () => {
+  test('a copied address is its owner’s, once per server, and someone else’s server is not found', async () => {
+    const owner = await h.user()
+    const { id } = await h.create(owner)
+    await sent(owner.userId)
+    await h.app.sharing.addressCopied(owner, id)
+    await h.app.sharing.addressCopied(owner, id)
+    expect((await sent(owner.userId)).map((e) => [e.event, e.properties])).toEqual([
+      [FUNNEL.addressCopied, { serverId: id }],
+    ])
+    const other = await h.user('Alex')
+    const theirs = await h.create(other)
+    expect(await h.app.sharing.addressCopied(owner, theirs.id).catch((e) => e)).toBeInstanceOf(NotFound)
+  }, 30_000)
+
+  test('the first try is kept once per server, and each reason it stopped once, never a ping', async () => {
+    const owner = await h.user()
+    const { id } = await h.create(owner)
+    const address = `${(await h.server(id)).slug}.play.test`
+    await sent(owner.userId)
+    const visit = (fields: Partial<VisitReport>): VisitReport => ({
+      joinId: randomUUID(),
+      edgeId: 'edge-1',
+      region: 'fra',
+      address,
+      source: '203.0.113.7:50001',
+      phase: 'close',
+      connectedAt: new Date().toISOString(),
+      ...fields,
+    })
+    // A server-list ping is no try.
+    await h.app.joins.recordVisits([visit({ phase: 'look' })])
+    expect(await sent(owner.userId)).toEqual([])
+    const steve = { name: 'Steve', uuid: '8667ba71-b85a-4004-af54-457a9734eed7' }
+    const left = { player: steve, path: 'held' as const, leftAt: new Date().toISOString() }
+    await h.app.joins.recordVisits([visit({ ...left, leftReason: 'gave_up_waiting' })])
+    await h.app.joins.recordVisits([visit({ ...left, leftReason: 'gave_up_waiting' })])
+    await h.app.joins.recordVisits([visit({ ...left, leftReason: 'refused:quota' })])
+    // Events kept at the same moment go in any order.
+    const events = (await sent(owner.userId)).map((e) => [e.event, e.properties])
+    expect(events.sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)))).toEqual([
+      [FUNNEL.joinFirstTried, { serverId: id, edition: 'java' }],
+      [FUNNEL.joinStopped, { serverId: id, edition: 'java', reason: 'gave_up_waiting' }],
+      [FUNNEL.joinStopped, { serverId: id, edition: 'java', reason: 'refused:quota' }],
+    ])
   }, 30_000)
 })
 

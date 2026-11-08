@@ -18,6 +18,7 @@ import { and, desc, eq, gt, lt, or, sql } from 'drizzle-orm'
 import { keptFor } from '../../domain/server/kept-addresses.ts'
 import { normalizeUuid } from '../../minecraft/console.ts'
 import { addressHash } from '../edge/known-addresses.ts'
+import { joinTried } from '../insight/record.ts'
 import { wakeCompleted } from '../platform/telemetry.ts'
 import type { PlayAddressing } from '../ports/platform.ts'
 import type { SecretKeyring } from '../secrets.ts'
@@ -135,6 +136,8 @@ export async function recordVisits(
     await q.insert(joins).values(row).onConflictDoUpdate({ target: joins.id, set })
     // Its end is known now: where the game turned it away for its own lists, that is why.
     if (row.leftAt !== null) await noteRefusal(q, row.id)
+    // The funnel's word of it, once its reason, if any, is known.
+    if (row.serverId !== null) await joinTried(q, row.id)
     // Timed once, by the report that first says the server was ready.
     const asked = before?.wakeAskedAt ?? row.wakeAskedAt
     if (before?.readyAt == null && row.readyAt != null && asked != null)

@@ -314,6 +314,30 @@ bun scripts/ops.ts --production database --order mean                # what runs
 The MCP server's `account_diagnose`, `diagnostics_list`, `diagnostics_summary` and `database_now`
 answer the same, and its instructions tell an agent which to start with.
 
+An account can carry a notice from the people who run Cubepals: one line, written as a server's
+message is, with `&` or `§` codes, and held to the same length. While it is on, every server the
+account owns shows it in Minecraft's server list in place of the owner's own message, asleep or
+running, and says it in chat, from Cubepals, to whoever joins and again every ten minutes while
+anyone is on. The owner's own message stays as they saved it, and nothing restarts for the notice:
+a sleeping server's answer is the edge's own, and a running server's answer has its message
+changed by the edge on its way back.
+
+```sh
+bun scripts/ops.ts --production notice you@example.com                     # the notice, if any
+bun scripts/ops.ts --production notice you@example.com set "&cThis account is under review"
+bun scripts/ops.ts --production notice you@example.com set "&cRead your email" \
+  --limit-in 48h --confirm you@example.com                                  # limits the account then
+bun scripts/ops.ts --production notice you@example.com clear
+```
+
+A notice with `--limit-in` or `--limit-at <ISO>` also limits the account at that time, once, within
+a minute of it (the `account-notices` job): its own running limit goes to 0, as `limits --running 0`
+sets it, and what it runs is stopped, its worlds saved. Setting, clearing and the limit are each in
+the account's audit log, and `account` and `diagnose` show the notice. Clearing the notice doesn't
+lift a limit it already put on, and says so: `limits you@example.com --running plan` does. The MCP
+server's `account_notice_get`, `account_notice_set` and `account_notice_clear` do the same, and
+`account_notice_set` takes the account again as `confirm`.
+
 The top of `scripts/ops.ts` lists every command. `--production` opens `fly proxy` to
 `bly-prod-control`'s internal listener with production's own `FLY_API_TOKEN` and `OPERATOR_TOKEN`,
 read from `local/production/production.env`; neither is printed, and a shell's own Fly token never

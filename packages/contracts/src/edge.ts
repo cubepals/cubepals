@@ -57,6 +57,12 @@ export const EdgeRoute = z.object({
    */
   motd: z.string().optional(),
   /**
+   * An operator's notice on the server's owner, as the game reads it (section-sign codes): the edge
+   * shows it to a ping in place of the server's own message, running or asleep, leaving the
+   * server's own setting as it is. Absent while there is none.
+   */
+  notice: z.string().optional(),
+  /**
    * Where the edge fetches an asleep server's picture, a 64 square PNG, to show a ping. The link
    * changes whenever the picture does, so the edge fetches each once. Absent while it has none.
    */
