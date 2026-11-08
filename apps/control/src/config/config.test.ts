@@ -427,6 +427,14 @@ describe('private tuning', () => {
   const free = { ...DEFAULT_FREE_LINK_TUNING, link: 0.2, medium: 0.5, high: 0.8 }
   const abuse = { ...DEFAULT_ABUSE_LIMITS, giftsPerDay: 2 }
 
+  test('free-link tuning made before players who moved were scored gets their defaults', () => {
+    const { movedPlayers: _p, movedWithinMs: _w, movedLookMs: _l, ...older } = free
+    const { playersMoved: _m, ...weights } = free.weights
+    expect(
+      loadConfig({ ...env, FREE_LINK_TUNING: JSON.stringify({ ...older, weights }) }).freeLinkTuning,
+    ).toEqual(free)
+  })
+
   test('is read from its JSON, and is the default where none is set outside production', () => {
     const config = loadConfig({
       ...env,

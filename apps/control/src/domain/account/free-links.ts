@@ -19,15 +19,29 @@ import type { FreeLinkTuning, LinkSignals } from './tuning.ts'
  * - `inbox`: both emails reach one inbox (`emailKey`), 1 or 0;
  * - `signedUpClose`: how close together they signed up, 1 at once, falling to 0 over
  *   `signedUpCloseMs`;
- * - `network`: they signed up from one network (`addressKey`), 1 or 0, known for `networkKeptMs`.
+ * - `network`: they signed up from one network (`addressKey`), 1 or 0, known for `networkKeptMs`;
+ * - `playersMoved`: the later one signed up within `movedWithinMs` of the earlier one's players
+ *   being turned away for its free hours, and they have at least `movedPlayers` players in
+ *   common, as a share of the fewer either has (`playersMoved`).
  *
  * A pair's score is their weighted sum, held to 1, the weights a deployment's own
  * (`FreeLinkTuning`). A pair at `link` or more joins its accounts' group, and the group's
  * confidence sets one of three levels: under `medium`, nothing happens; from `medium`, admins see
  * it under Linked accounts and in the alert inbox, and nothing changes for the accounts; from
- * `high`, the later accounts share the first one's free hours.
+ * `high`, the later accounts share the first one's free hours. The signals in `SHOWN_ONLY` can
+ * take a group as far as `medium`, never to `high`: friends who each run a server for the same
+ * group look the same, so whether those accounts are one person's is an admin's call.
  */
-export const NO_SIGNALS: LinkSignals = { mainPlayer: 0, inbox: 0, signedUpClose: 0, network: 0 }
+export const NO_SIGNALS: LinkSignals = {
+  mainPlayer: 0,
+  inbox: 0,
+  signedUpClose: 0,
+  network: 0,
+  playersMoved: 0,
+}
+
+/** Signals that show a pair to admins and never, on their own, make its accounts share hours. */
+const SHOWN_ONLY: ReadonlyArray<keyof LinkSignals> = ['playersMoved']
 
 export type Confidence = 'low' | 'medium' | 'high'
 
@@ -35,8 +49,28 @@ export type Confidence = 'low' | 'medium' | 'high'
 export function linkScore(signals: LinkSignals, tuning: FreeLinkTuning): number {
   let sum = 0
   for (const key of Object.keys(tuning.weights) as Array<keyof LinkSignals>)
-    sum += tuning.weights[key] * Math.min(1, Math.max(0, signals[key]))
+    sum += tuning.weights[key] * Math.min(1, Math.max(0, signals[key] ?? 0))
   return Math.min(1, sum)
+}
+
+/** A pair's score from the signals that may make accounts share hours: all but `SHOWN_ONLY`. */
+export const sharingScore = (signals: LinkSignals, tuning: FreeLinkTuning): number =>
+  linkScore({ ...signals, ...Object.fromEntries(SHOWN_ONLY.map((key) => [key, 0])) }, tuning)
+
+/**
+ * The `playersMoved` signal from the players each account's servers have, the earlier's and the
+ * later's, when the later signed up soon after the earlier ran out: the players they have in
+ * common as a share of the fewer either has, or 0 under `movedPlayers` in common.
+ */
+export function playersMoved(
+  earlier: ReadonlySet<string>,
+  later: ReadonlySet<string>,
+  tuning: FreeLinkTuning,
+): number {
+  let common = 0
+  for (const uuid of later) if (earlier.has(uuid)) common++
+  if (common < tuning.movedPlayers) return 0
+  return common / Math.min(earlier.size, later.size)
 }
 
 /** How close two sign-ups were, as `signedUpClose` counts it. */
@@ -76,6 +110,8 @@ export interface ScoredPair {
   a: string
   b: string
   score: number
+  /** Its `sharingScore`; the score itself when absent. */
+  sharing?: number
 }
 
 /** Accounts that are one person's as far as Blockly can tell, the first to sign up first. */
@@ -94,12 +130,39 @@ export const levelOf = (confidence: number, tuning: FreeLinkTuning): Confidence 
  * tree). A group's confidence is the chance at least one of those links is right, read as
  * independent: 1 − Π(1 − score). So a group grows surer with each account that links into it, and
  * no weaker than its strongest link. `createdAt` orders each group's members, the first first.
+ *
+ * Which accounts share hours is settled on the sharing scores alone: the groups they make that
+ * reach `high` are kept as they are, whatever a shown-only link adds. The accounts left over are
+ * grouped on the full scores, held under `high`, so a shown-only link shows them and shares nothing.
  */
 export function linkedGroups(
   pairs: readonly ScoredPair[],
   createdAt: ReadonlyMap<string, Date>,
   tuning: FreeLinkTuning,
 ): LinkedGroup[] {
+  const made = (id: string) => createdAt.get(id)?.getTime() ?? Number.POSITIVE_INFINITY
+  const group = (ids: string[], confidence: number): LinkedGroup => ({
+    members: ids.sort((x, y) => made(x) - made(y) || x.localeCompare(y)),
+    confidence,
+    level: levelOf(confidence, tuning),
+  })
+  const sharingPairs = pairs.map((p) => ({ ...p, score: Math.min(p.score, p.sharing ?? p.score) }))
+  const sharing = spanningGroups(sharingPairs, tuning).filter((g) => g.confidence >= tuning.high)
+  const shares = new Set(sharing.flatMap((g) => g.ids))
+  // The most a group that shares nothing is shown with.
+  const shownAtMost = Math.max(tuning.medium, tuning.high - 0.01)
+  const shown = spanningGroups(pairs, tuning).flatMap(({ ids, confidence }) => {
+    const left = ids.filter((id) => !shares.has(id))
+    return left.length === 0 ? [] : [group(left, Math.min(confidence, shownAtMost))]
+  })
+  return [...sharing.map(({ ids, confidence }) => group(ids, confidence)), ...shown]
+}
+
+/** The maximum spanning trees of the pairs at `link` or above, each with its confidence. */
+function spanningGroups(
+  pairs: readonly ScoredPair[],
+  tuning: FreeLinkTuning,
+): Array<{ ids: string[]; confidence: number }> {
   const parent = new Map<string, string>()
   const find = (id: string): string => {
     let root = id
@@ -118,13 +181,5 @@ export function linkedGroups(
   }
   const members = new Map<string, string[]>()
   for (const id of parent.keys()) members.set(find(id), [...(members.get(find(id)) ?? []), id])
-  const made = (id: string) => createdAt.get(id)?.getTime() ?? Number.POSITIVE_INFINITY
-  return [...members].map(([root, ids]) => {
-    const confidence = 1 - (doubt.get(root) ?? 1)
-    return {
-      members: ids.sort((x, y) => made(x) - made(y) || x.localeCompare(y)),
-      confidence,
-      level: levelOf(confidence, tuning),
-    }
-  })
+  return [...members].map(([root, ids]) => ({ ids, confidence: 1 - (doubt.get(root) ?? 1) }))
 }

@@ -7,8 +7,10 @@
  * play is counted from its own readings; a visiting friend, a group with two genuine accounts, a
  * shared address and offline-mode names link nothing; one main player on two accounts is shown to
  * admins and changes nothing, and on three is sure enough that they share the first one's hours,
- * the day's and the 20, on the audit log, until a release that holds; one inbox's accounts share
- * at once; and an admin's hold stops free starts and deletes nothing.
+ * the day's and the 20, on the audit log, until a release that holds; a group of players that moved
+ * to a new account soon after the old one ran out of free hours is shown and emailed to admins and
+ * changes nothing; one inbox's accounts share at once; and an admin's hold stops free starts and
+ * deletes nothing.
  */
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { randomUUID } from 'node:crypto'
@@ -18,6 +20,7 @@ import { and, eq, inArray } from 'drizzle-orm'
 import { entitlementsFor } from '../../domain/account/entitlements.ts'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
 import type { UserActor } from '../actor.ts'
+import { PlatformAlerts } from '../platform/alerts.ts'
 import { recordEdgePresence, replacePresence } from '../servers/usage.ts'
 import { tuning } from '../tuning.ts'
 import { addCandidate, type Candidates } from './free-links.ts'
@@ -257,6 +260,134 @@ describe.skipIf(!hasDatabase)('one main player on several free accounts', () => 
     await h.app.servers.start(third, thirdServer.id, randomUUID())
     await h.until(thirdServer.id, 'running')
     await h.settled(thirdServer.id)
+  }, 120_000)
+})
+
+describe.skipIf(!hasDatabase)('players who moved from an account out of free hours', () => {
+  harness()
+
+  /** A join to the server turned away, at `at`, because its owner's free hours ran out. */
+  const outOfHours = (serverId: string, at: Date) =>
+    h.db.insert(schema.joins).values({
+      id: randomUUID(),
+      kind: 'join',
+      serverId,
+      address: 'test.play.example.test',
+      path: 'held',
+      connectedAt: at,
+      leftAt: at,
+      leftReason: 'refused:quota',
+    })
+
+  test('to a new account are shown and emailed to admins once each, and change nothing', async () => {
+    // Four friends who play alike: no main player on either server.
+    const group = [randomUUID(), randomUUID(), randomUUID(), randomUUID()]
+    const staff = await admin()
+    await h.db.insert(schema.platformAdmins).values({ userId: staff.userId, grantedBy: 'test' })
+    const first = await owner()
+    const firstServer = await stopped(first)
+    await verified(firstServer.id, Object.fromEntries(group.map((p) => [p, 3])))
+    const second = await owner()
+    const signedUp = new Date(Date.now() - HOUR_S * SECOND_MS)
+    await h.db.update(schema.users).set({ createdAt: signedUp }).where(eq(schema.users.id, second.userId))
+    await verified((await stopped(second)).id, Object.fromEntries(group.map((p) => [p, 1])))
+
+    // Turned away long before the second signed up: friends with a server each, nothing more.
+    await outOfHours(firstServer.id, new Date(signedUp.getTime() - tuning().freeLinks.movedWithinMs - DAY_MS))
+    expect(await h.app.accounts.freePlay.relink()).toBe(0)
+    expect(await linksAmong([first, second])).toEqual([])
+
+    // Turned away just before: shown and emailed, and both keep their own hours.
+    await outOfHours(firstServer.id, new Date(signedUp.getTime() - HOUR_S * SECOND_MS))
+    expect(await h.app.accounts.freePlay.relink()).toBe(0)
+    const [link] = await h.app.accounts.freePlay.links(staff)
+    expect(link).toMatchObject({
+      account: { userId: second.userId },
+      linked: { userId: first.userId },
+      signals: { playersMoved: 1, mainPlayer: 0 },
+      shared: false,
+    })
+    expect(await sharers(second)).toEqual([second.userId])
+    const told = () =>
+      h.mail
+        .to(`${staff.userId}@example.test`)
+        .filter((m) => m.text.includes(`${second.userId}@example.test`))
+    await h.app.alerts.sweep()
+    expect(told()).toHaveLength(1)
+    expect(told()[0]?.text).toContain(
+      `${second.userId}@example.test and ${first.userId}@example.test: 4 players in common (Player0, Player1, Player2, Player3), and it signed up soon after the other's free hours ran out`,
+    )
+    await h.app.alerts.sweep()
+    expect(told()).toHaveLength(1)
+
+    // A third account the same group moves to is a new case, emailed again, even when the first
+    // try to email it fails.
+    const third = await owner()
+    await h.db.update(schema.users).set({ createdAt: new Date() }).where(eq(schema.users.id, third.userId))
+    await verified((await stopped(third)).id, Object.fromEntries(group.map((p) => [p, 1])))
+    await outOfHours(firstServer.id, new Date(Date.now() - MINUTE_MS))
+    expect(await h.app.accounts.freePlay.relink()).toBe(0)
+    const down = new PlatformAlerts({
+      db: h.db,
+      jobs: h.jobs,
+      catalog: h.app.catalog,
+      webOrigin: 'http://localhost:3000',
+      mailer: {
+        send: async () => {
+          throw new Error('the mail provider is down')
+        },
+      },
+    })
+    await down.sweep()
+    await h.app.alerts.sweep()
+    expect(
+      h.mail.to(`${staff.userId}@example.test`).filter((m) => m.text.includes(third.userId)),
+    ).toHaveLength(1)
+    expect(await sharers(third)).toEqual([third.userId])
+  }, 120_000)
+})
+
+describe.skipIf(!hasDatabase)('players who moved to an account that shares another’s hours', () => {
+  harness()
+
+  test('show that pair as sharing nothing, and leave the sharing pair as it was', async () => {
+    const group = [randomUUID(), randomUUID(), randomUUID()]
+    const staff = await admin()
+    const older = await owner()
+    const olderServer = await stopped(older)
+    await verified(olderServer.id, Object.fromEntries(group.map((p) => [p, 3])))
+    // Two accounts of one inbox, which share at once, the later of them where the players went.
+    const inbox = `${randomUUID()}@example.test`
+    const [first, later] = [await owner(), await owner()]
+    await h.db
+      .update(schema.users)
+      .set({ createdAt: new Date(Date.now() - DAY_MS) })
+      .where(eq(schema.users.id, first.userId))
+    await h.db
+      .update(schema.users)
+      .set({ createdAt: new Date(Date.now() - HOUR_S * SECOND_MS) })
+      .where(eq(schema.users.id, later.userId))
+    await h.app.accounts.freePlay.signedUp(first.userId, inbox)
+    await h.app.accounts.freePlay.signedUp(later.userId, inbox)
+    await verified((await stopped(later)).id, Object.fromEntries(group.map((p) => [p, 1])))
+    await h.db.insert(schema.joins).values({
+      id: randomUUID(),
+      kind: 'join',
+      serverId: olderServer.id,
+      address: 'test.play.example.test',
+      path: 'held',
+      connectedAt: new Date(Date.now() - 2 * HOUR_S * SECOND_MS),
+      leftReason: 'refused:quota',
+    })
+    await h.app.accounts.freePlay.relink()
+    const shown = await h.app.accounts.freePlay.links(staff)
+    expect(shown.find((l) => l.linked.userId === older.userId)).toMatchObject({
+      account: { userId: later.userId },
+      shared: false,
+    })
+    expect(shown.find((l) => l.linked.userId === first.userId)).toMatchObject({ shared: true })
+    expect((await sharers(later)).sort()).toEqual([first.userId, later.userId].sort())
+    expect(await sharers(older)).toEqual([older.userId])
   }, 120_000)
 })
 

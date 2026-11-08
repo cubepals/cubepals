@@ -60,7 +60,8 @@ export interface AccountDetailView extends AccountView {
 /**
  * Two accounts that look like one person's free hours, as admins see them, `account` the one that
  * signed up later. `signals` are what they have in common, each from 0 to 1: one main player
- * (scaled by its share of the play on both), one inbox, signing up close together, and one network.
+ * (scaled by its share of the play on both), one inbox, signing up close together, one network,
+ * and the earlier one's players on the later one's servers once the earlier ran out of free hours.
  * `score` is the pair's; `confidence` is its group's, which is `shared` once Blockly is sure enough
  * to count the group's free play as one.
  */
@@ -68,7 +69,7 @@ export interface FreeLinkView {
   account: { userId: string; email: string; held: boolean }
   linked: { userId: string; email: string; held: boolean }
   score: number
-  signals: { mainPlayer: number; inbox: number; signedUpClose: number; network: number }
+  signals: { mainPlayer: number; inbox: number; signedUpClose: number; network: number; playersMoved: number }
   confidence: number
   shared: boolean
   since: string

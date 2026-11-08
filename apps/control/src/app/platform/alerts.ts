@@ -6,8 +6,9 @@ import type { AlertKey, AlertView } from '@blockly/contracts'
 import { DAY_MS, HOUR_MS, MINUTE_MS, SECOND_MS } from '@blockly/contracts/durations'
 import type { Db } from '@blockly/db'
 import { entitlementsFor, entitlementsOf, PLAN_KEYS } from '../../domain/account/entitlements.ts'
-import { unreviewedLinks } from '../accounts/free-play.ts'
+import { type UnreviewedLink, unreviewedLinks } from '../accounts/free-play.ts'
 import { adminInbox, loadStanding } from '../accounts/persistence.ts'
+import { playersInCommon } from '../accounts/players-moved.ts'
 import type { Actor } from '../actor.ts'
 import { reporterPin } from '../artifacts/reporter.ts'
 import { unsentExtra, waitingExtra } from '../billing/extra-usage.ts'
@@ -63,6 +64,11 @@ const WHERE: Record<AlertKey, string> = {
 interface Condition {
   key: AlertKey
   summary: string
+  /**
+   * What names each of its cases in the summary, as it is written there: a case the last summary
+   * didn't name is emailed again. A case whose details change is the same case.
+   */
+  cases?: readonly string[]
 }
 
 /**
@@ -114,11 +120,12 @@ export class PlatformAlerts {
     })
   }
 
-  /** `admin-alerts`: raise what appeared, clear what passed, and tell admins about the new. */
+  /** `admin-alerts`: raise what appeared, clear what passed, and tell admins about the new, new cases included. */
   async sweep(now = new Date()): Promise<{ raised: AlertKey[]; cleared: AlertKey[] }> {
     const conditions = await this.#conditions(now)
     const stored = await loadAlerts(this.#db)
     const raised: AlertKey[] = []
+    const retold = withNewCases(conditions, stored)
     const cleared: AlertKey[] = []
     for (const condition of conditions) {
       const record = stored.get(condition.key)
@@ -126,7 +133,7 @@ export class PlatformAlerts {
         await raiseAlert(this.#db, condition.key, condition.summary, now)
         raised.push(condition.key)
       } else if (record.summary !== condition.summary) {
-        await restateAlert(this.#db, condition.key, condition.summary)
+        await restateAlert(this.#db, condition.key, condition.summary, retold.includes(condition.key))
       }
     }
     for (const record of stored.values()) {
@@ -134,9 +141,9 @@ export class PlatformAlerts {
       await clearAlert(this.#db, record.key, now)
       cleared.push(record.key as AlertKey)
     }
-    // Raised ones, and any whose email didn't go out last time.
+    // Raised ones, ones with a new case, and any whose email didn't go out last time.
     const unsent = conditions.filter(
-      (c) => raised.includes(c.key) || (stored.get(c.key)?.notifiedAt === null && !cleared.includes(c.key)),
+      (c) => [...raised, ...retold].includes(c.key) || stored.get(c.key)?.notifiedAt === null,
     )
     for (const condition of unsent) {
       console.error(`admin alert: ${condition.summary}`)
@@ -215,6 +222,20 @@ export class PlatformAlerts {
     }
     return told
   }
+}
+
+/** The conditions raised already whose summary now names a case the stored one didn't. */
+function withNewCases(
+  conditions: readonly Condition[],
+  stored: Awaited<ReturnType<typeof loadAlerts>>,
+): AlertKey[] {
+  return conditions
+    .filter((c) => {
+      const record = stored.get(c.key)
+      if (record === undefined || record.clearedAt !== null) return false
+      return (c.cases ?? []).some((name) => !record.summary.includes(name))
+    })
+    .map((c) => c.key)
 }
 
 /** A span as an admin reads it: minutes under two hours, then hours. */
@@ -331,19 +352,46 @@ async function wakeConditions(db: Db, now: Date): Promise<Condition[]> {
 /**
  * Accounts Blockly linked as one person's free hours that no admin has looked at, in groups sure
  * enough to show (`medium`): those it is surest of share them already, and an admin decides whether
- * to hold or release them.
+ * to hold or release them. Each pair is a line of its own, naming both accounts and what links
+ * them, and a pair new since the last email is emailed again.
  */
 async function linkedCondition(db: Db): Promise<Condition[]> {
   const linked = await unreviewedLinks(db)
-  if (linked === 0) return []
-  const one = linked === 1
+  if (linked.length === 0) return []
+  const one = linked.length === 1
+  const lines: string[] = []
+  for (const link of linked) lines.push(await linkLine(db, link))
   return [
     {
       key: 'free_accounts_linked',
-      summary: `${linked} ${one ? 'pair of accounts looks' : 'pairs of accounts look'} like one person's free hours (one inbox, or one main player). Those Cubepals is sure of share them now; hold or release ${one ? 'it' : 'them'} under Linked accounts.`,
+      summary: `${linked.length} ${one ? 'pair of accounts looks' : 'pairs of accounts look'} like one person's free hours. Those Cubepals is sure of share them now; hold or release ${one ? 'it' : 'them'} under Linked accounts. ${lines.join(' ')}`,
+      cases: linked.map(pairName),
     },
   ]
 }
+
+/** One linked pair in a line: both accounts, the later first, what links them, and how sure. */
+async function linkLine(db: Db, link: UnreviewedLink): Promise<string> {
+  const s = link.signals
+  const moved =
+    (s.playersMoved ?? 0) > 0
+      ? await playersInCommon(db, link.account.id, link.linked.id).then(
+          (names) =>
+            `${names.length} ${names.length === 1 ? 'player' : 'players'} in common (${names.join(', ')}), and it signed up soon after the other's free hours ran out`,
+        )
+      : false
+  const why = [
+    s.inbox >= 1 && 'one inbox',
+    s.mainPlayer > 0 && 'one main player',
+    moved,
+    s.signedUpClose > 0 && 'signed up close together',
+    s.network >= 1 && 'one network',
+  ].filter((said) => said !== false)
+  return `${pairName(link)} ${why.join('; ')}; ${Math.round(link.confidence * 100)}% sure, ${link.shared ? 'sharing free hours' : 'nothing changed for them'}.`
+}
+
+/** How a linked pair's line starts: both accounts, the later first. */
+const pairName = (link: UnreviewedLink) => `${link.account.email} and ${link.linked.email}:`
 
 /** Extra play Polar refused until it was no longer sent: hours played and never billed. */
 async function unsentCondition(db: Db): Promise<Condition[]> {

@@ -10,7 +10,7 @@
  * Who counts free play by these is `play-total.ts`.
  */
 import { type Queryable, schema } from '@blockly/db'
-import { and, count, eq, gte, isNotNull, isNull, ne, or } from 'drizzle-orm'
+import { and, asc, eq, gte, inArray, isNotNull, isNull, ne, or } from 'drizzle-orm'
 import { tuning } from '../tuning.ts'
 import { loadStanding } from './persistence.ts'
 
@@ -82,10 +82,29 @@ export async function freeSharers(
   return { ids, why: own.some((row) => row.signals.inbox >= 1) ? 'email' : 'players' }
 }
 
-/** Links in groups admins are shown (`medium` and up) that nobody has held or released yet. */
-export async function unreviewedLinks(q: Queryable): Promise<number> {
-  const [row] = await q
-    .select({ n: count() })
+/** A link in a group admins are shown that nobody has held or released yet: who, and why. */
+export interface UnreviewedLink {
+  account: { id: string; email: string }
+  linked: { id: string; email: string }
+  signals: (typeof links.$inferSelect)['signals']
+  confidence: number
+  /** Whether the two share free hours: one group, sure enough to share. */
+  shared: boolean
+}
+
+/** Whether two accounts' free play counts as one: in one group, at `high`, as `freeSharers` reads it. */
+export const sharing = (
+  x: { groupId: string | null; confidence: number | null } | undefined,
+  y: { groupId: string | null; confidence: number | null } | undefined,
+): boolean =>
+  x?.groupId != null &&
+  x.groupId === y?.groupId &&
+  Math.min(x.confidence ?? 0, y.confidence ?? 0) >= tuning().freeLinks.high
+
+/** Links in groups admins are shown (`medium` and up) that nobody has held or released yet, oldest first. */
+export async function unreviewedLinks(q: Queryable): Promise<UnreviewedLink[]> {
+  const rows = await q
+    .select({ link: links, confidence: play.confidence })
     .from(links)
     .innerJoin(play, eq(play.userId, links.accountId))
     .where(
@@ -95,7 +114,27 @@ export async function unreviewedLinks(q: Queryable): Promise<number> {
         gte(play.confidence, tuning().freeLinks.medium),
       ),
     )
-  return row?.n ?? 0
+    .orderBy(asc(links.createdAt))
+  const ids = [...new Set(rows.flatMap(({ link }) => [link.accountId, link.linkedId]))]
+  if (ids.length === 0) return []
+  const people = await q
+    .select({
+      id: schema.users.id,
+      email: schema.users.email,
+      groupId: play.groupId,
+      confidence: play.confidence,
+    })
+    .from(schema.users)
+    .leftJoin(play, eq(play.userId, schema.users.id))
+    .where(inArray(schema.users.id, ids))
+  const byId = new Map(people.map((p) => [p.id, p]))
+  return rows.map(({ link, confidence }) => ({
+    account: { id: link.accountId, email: byId.get(link.accountId)?.email ?? '' },
+    linked: { id: link.linkedId, email: byId.get(link.linkedId)?.email ?? '' },
+    signals: link.signals,
+    confidence: confidence ?? 0,
+    shared: sharing(byId.get(link.accountId), byId.get(link.linkedId)),
+  }))
 }
 
 /** Whether an admin holds this account's free play: none of its free servers starts or is made. */

@@ -17,6 +17,11 @@ export interface LinkSignals {
   inbox: number
   signedUpClose: number
   network: number
+  /**
+   * The later account's players are the earlier one's, and it signed up soon after the earlier one
+   * ran out of free hours. It shows a pair to admins; on its own it never shares hours.
+   */
+  playersMoved: number
 }
 
 /** How free accounts are linked (`domain/account/free-links.ts`). */
@@ -34,6 +39,14 @@ export interface FreeLinkTuning {
   mainForS: number
   /** How long the network an account signed up from is kept. */
   networkKeptMs: number
+  /**
+   * For `playersMoved`: the least players two accounts have in common, how soon after the earlier
+   * one's players were turned away for its free hours the later one signed up, and how recently
+   * the later one signed up for its servers to be looked at.
+   */
+  movedPlayers: number
+  movedWithinMs: number
+  movedLookMs: number
 }
 
 /** Caps on what one person can do in a while, against stolen cards and guessing. */
@@ -131,7 +144,7 @@ export interface CapacityTuning {
 }
 
 export const DEFAULT_FREE_LINK_TUNING: FreeLinkTuning = {
-  weights: { mainPlayer: 1, inbox: 1, signedUpClose: 0.1, network: 0.1 },
+  weights: { mainPlayer: 1, inbox: 1, signedUpClose: 0.1, network: 0.1, playersMoved: 0.7 },
   link: 0.3,
   medium: 0.6,
   high: 0.95,
@@ -139,6 +152,9 @@ export const DEFAULT_FREE_LINK_TUNING: FreeLinkTuning = {
   mainShare: 0.6,
   mainForS: 2 * HOUR_S,
   networkKeptMs: 3 * DAY_MS,
+  movedPlayers: 2,
+  movedWithinMs: 7 * DAY_MS,
+  movedLookMs: 30 * DAY_MS,
 }
 
 export const DEFAULT_ABUSE_LIMITS: AbuseLimits = {

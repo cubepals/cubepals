@@ -56,7 +56,13 @@ export const freeLinks = pgTable(
       .references(() => users.id, { onDelete: 'cascade' }),
     score: real('score').notNull(),
     signals: jsonb('signals')
-      .$type<{ mainPlayer: number; inbox: number; signedUpClose: number; network: number }>()
+      .$type<{
+        mainPlayer: number
+        inbox: number
+        signedUpClose: number
+        network: number
+        playersMoved?: number
+      }>()
       .notNull(),
     createdAt: createdAt(),
     /** When an admin looked at it, holding or releasing: it no longer raises an alert. */

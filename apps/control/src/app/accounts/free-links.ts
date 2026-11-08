@@ -5,8 +5,8 @@
 /**
  * The facts `domain/account/free-links.ts` scores, read, and what it decides, written: the free
  * accounts whose servers have one main player, each candidate pair's signals and score, and the
- * group and confidence of every linked account. Candidates come from one inbox and one main player;
- * the other signals add to a pair's score. The tuning is the deployment's own (`../tuning.ts`).
+ * group and confidence of every linked account. Candidates come from one inbox, one main player
+ * and players who moved (`players-moved.ts`); the other signals add to a pair's score. The tuning is the deployment's own (`../tuning.ts`).
  * What Blockly does with a group is `free-play-guard.ts`'s.
  */
 import { DAY_MS } from '@blockly/contracts/durations'
@@ -20,6 +20,7 @@ import {
   mainPlayer,
   NO_SIGNALS,
   sameMain,
+  sharingScore,
   signedUpClose,
 } from '../../domain/account/free-links.ts'
 import type { LinkSignals } from '../../domain/account/tuning.ts'
@@ -208,10 +209,15 @@ export interface NowShared {
  */
 export async function regroup(tx: Tx): Promise<NowShared[]> {
   await tx.execute(sql`select pg_advisory_xact_lock(hashtext('blockly:free-groups'))`)
-  const pairs = await tx
-    .select({ a: links.accountId, b: links.linkedId, score: links.score })
-    .from(links)
-    .where(isNull(links.releasedAt))
+  const pairs = (
+    await tx
+      .select({ a: links.accountId, b: links.linkedId, score: links.score, signals: links.signals })
+      .from(links)
+      .where(isNull(links.releasedAt))
+  ).map(({ signals, ...pair }) => ({
+    ...pair,
+    sharing: sharingScore({ ...NO_SIGNALS, ...signals }, tuning().freeLinks),
+  }))
   const ids = [...new Set(pairs.flatMap((p) => [p.a, p.b]))]
   const created =
     ids.length === 0

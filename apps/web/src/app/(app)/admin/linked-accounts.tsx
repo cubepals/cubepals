@@ -26,6 +26,8 @@ function why(link: FreeLinkView): string {
   const seen = [
     signals.inbox >= 1 && 'one inbox',
     signals.mainPlayer > 0 && `one main player (${percent(signals.mainPlayer)})`,
+    signals.playersMoved > 0 &&
+      `the other’s players, after its free hours ran out (${percent(signals.playersMoved)})`,
     signals.signedUpClose > 0 && `signed up close together (${percent(signals.signedUpClose)})`,
     signals.network >= 1 && 'one network',
   ]
