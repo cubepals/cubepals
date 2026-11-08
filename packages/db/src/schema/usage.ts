@@ -121,6 +121,8 @@ export const noticeSaid = pgTable('notice_said', {
   serverId: uuid('server_id')
     .primaryKey()
     .references(() => minecraftServers.id, { onDelete: 'cascade' }),
+  /** Which notice it was, by when it was set: what was kept of a notice since replaced counts for none. */
+  noticeSetAt: ts('notice_set_at').notNull(),
   /** The uuids of the players on at the last reading. */
   players: text('players').array().notNull().default(sql`'{}'::text[]`),
   /** Null until it was said once. */

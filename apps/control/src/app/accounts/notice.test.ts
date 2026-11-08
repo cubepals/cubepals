@@ -16,34 +16,35 @@ import { and, eq } from 'drizzle-orm'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
 import type { Actor } from '../actor.ts'
 import { AppError, NotFound } from '../errors.ts'
+import { AccountNotices } from './notice.ts'
 
 const ADA: Actor = { kind: 'operator', name: 'ada' }
 const NOTICE = '&cThis account is under review'
 
+let h: Harness
+
+beforeAll(async () => {
+  if (hasDatabase) h = await startHarness()
+}, 30_000)
+
+afterAll(async () => {
+  await h?.close()
+})
+
+const running = async (name: string) => {
+  const owner = await h.user(name)
+  const server = await h.create(owner, { name })
+  await h.until(server.id, 'running')
+  await h.settled(server.id)
+  return { owner, id: server.id }
+}
+const audit = (userId: string, action: string) =>
+  h.db
+    .select()
+    .from(schema.auditLog)
+    .where(and(eq(schema.auditLog.subjectId, userId), eq(schema.auditLog.action, action)))
+
 describe.skipIf(!hasDatabase)('an account’s notice', () => {
-  let h: Harness
-
-  beforeAll(async () => {
-    h = await startHarness()
-  }, 30_000)
-
-  afterAll(async () => {
-    await h.close()
-  })
-
-  const running = async (name: string) => {
-    const owner = await h.user(name)
-    const server = await h.create(owner, { name })
-    await h.until(server.id, 'running')
-    await h.settled(server.id)
-    return { owner, id: server.id }
-  }
-  const audit = (userId: string, action: string) =>
-    h.db
-      .select()
-      .from(schema.auditLog)
-      .where(and(eq(schema.auditLog.subjectId, userId), eq(schema.auditLog.action, action)))
-
   test('is held to what a server message may say, and only operators set it', async () => {
     const owner = await h.user('Wordy')
     const notices = h.app.accounts.notices
@@ -73,7 +74,9 @@ describe.skipIf(!hasDatabase)('an account’s notice', () => {
     // Cleared again, there was none.
     expect(await notices.clear(ADA, owner.userId)).toBeNull()
   })
+})
 
+describe.skipIf(!hasDatabase)('an account’s notice’s limit', () => {
   test('limits the account once when its time comes: nothing runs, and what ran is stopped', async () => {
     const { owner, id } = await running('Limited')
     const notices = h.app.accounts.notices
@@ -95,7 +98,7 @@ describe.skipIf(!hasDatabase)('an account’s notice', () => {
     const [limited] = await audit(owner.userId, 'account.notice_limited')
     expect(limited).toMatchObject({
       actor: 'operator:ada',
-      data: { limitAt: limitAt.toISOString(), stopped: 1 },
+      data: { limitAt: limitAt.toISOString() },
     })
     // The limit is the operator's, as `limits` would have set it.
     expect(await audit(owner.userId, 'account.limits_set')).toHaveLength(2)
@@ -130,5 +133,34 @@ describe.skipIf(!hasDatabase)('an account’s notice', () => {
       expect((await h.server(id)).lifecycle.status).toBe('running')
       expect(await audit(owner.userId, 'account.notice_limited')).toEqual([])
     }
+  }, 60_000)
+
+  test('a limit claimed is saved with its claim, even when stopping what runs fails', async () => {
+    const { owner, id } = await running('Unstoppable')
+    const accounts = h.app.accounts
+    const notices = new AccountNotices({
+      db: h.db,
+      accounts: {
+        setLimits: (...args: Parameters<typeof accounts.setLimits>) => accounts.setLimits(...args),
+        stopServersOf: async () => {
+          throw new Error('The provider is down')
+        },
+      },
+    })
+    const now = new Date()
+    const set = await notices.set(ADA, owner.userId, {
+      text: NOTICE,
+      limitAt: new Date(now.getTime() - MINUTE_MS),
+    })
+    expect(await notices.limitIfStillDue(owner.userId, set.setAt, now)).toBe(true)
+    const detail = await h.app.accountQueries.get(ADA, owner.userId)
+    expect(detail.standing.limitOverrides).toEqual({ maxRunning: 0 })
+    expect(detail.notice?.limitedAt).toEqual(now)
+    expect(await audit(owner.userId, 'account.limits_set')).toHaveLength(1)
+    expect(await audit(owner.userId, 'account.notice_limited')).toHaveLength(1)
+    expect((await h.server(id)).lifecycle.status).toBe('running')
+    // What still runs past its running limit, the standing sweep stops.
+    await h.app.accounts.enforce()
+    await h.until(id, 'stopped')
   }, 60_000)
 })

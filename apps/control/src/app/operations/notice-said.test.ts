@@ -64,8 +64,12 @@ describe.skipIf(!hasDatabase)('an account’s notice in game', () => {
       .where(eq(schema.noticeSaid.serverId, id))
     await h.app.schedules.presenceSync()
     expect(said()).toHaveLength(3)
-    // A new notice is heard at the next reading, by whoever is on.
+    // A new notice is heard at the next reading, by whoever is on, even where a pass that read the
+    // old one kept, after the new one was set, that it had just said it.
+    const [kept] = await h.db.select().from(schema.noticeSaid).where(eq(schema.noticeSaid.serverId, id))
     await notices.set(ADA, owner.userId, { text: '&eNew words', limitAt: null })
+    if (kept === undefined) throw new Error('Nothing was kept of the notice')
+    await h.db.insert(schema.noticeSaid).values({ ...kept, saidAt: new Date() })
     await h.app.schedules.presenceSync()
     expect(h.minecraft.said(id).at(-1)).toBe('[Cubepals] §eNew words')
     await notices.clear(ADA, owner.userId)

@@ -1,5 +1,5 @@
 {
-  "id": "7e447f5f-7dba-4479-821b-7d4555d3c924",
+  "id": "7067443f-ea25-4ee0-b2ad-e5012f07ad73",
   "prevId": "ec547afe-bdf5-4f84-8f72-42dc5bbef484",
   "version": "7",
   "dialect": "postgresql",
@@ -9484,6 +9484,12 @@
           "name": "server_id",
           "type": "uuid",
           "primaryKey": true,
+          "notNull": true
+        },
+        "notice_set_at": {
+          "name": "notice_set_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
           "notNull": true
         },
         "players": {

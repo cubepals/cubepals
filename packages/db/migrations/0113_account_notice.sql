@@ -1,5 +1,6 @@
 CREATE TABLE "notice_said" (
 	"server_id" uuid PRIMARY KEY NOT NULL,
+	"notice_set_at" timestamp with time zone NOT NULL,
 	"players" text[] DEFAULT '{}'::text[] NOT NULL,
 	"said_at" timestamp with time zone
 );
