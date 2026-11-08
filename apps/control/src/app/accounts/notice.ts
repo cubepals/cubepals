@@ -5,7 +5,8 @@
 /**
  * An operator's notice on an account (`domain/account/notice.ts`), kept with its standing: read,
  * set and cleared through the operators' API, each in the audit log, and its limit put on the
- * account once, when its time comes (`account-notices`, every minute). That limit is the one an
+ * account once, when its time comes (`account-notices`, every minute), claimed first so a notice
+ * cleared or replaced meanwhile is left alone. That limit is the one an
  * operator sets by hand: the account's own running limit at 0, as `ops.ts limits <account>
  * --running 0` sets it, and its running servers stopped the way any lowered limit stops them,
  * their worlds saved. Clearing a notice leaves a limit it put in place: lifting it is `limits`.
@@ -180,55 +181,86 @@ export class AccountNotices {
   }
 
   /**
-   * `account-notices`: each notice whose limit is due puts it on its account, once: the running
-   * limit at 0 through the account's limits (its other limits kept), what runs stopped, and the
-   * notice marked done. One account that fails doesn't keep the rest from theirs; the pass fails
+   * `account-notices`: each notice whose limit is due puts it on its account, once
+   * (`limitIfStillDue`). One account that fails doesn't keep the rest from theirs; the pass fails
    * after, saying which. How many were limited.
    */
   async applyDue(now = new Date()): Promise<number> {
     const due = await this.#db
-      .select({ userId: standing.userId, setBy: standing.noticeSetBy, limitAt: standing.noticeLimitAt })
+      .select({ userId: standing.userId, setAt: standing.noticeSetAt })
       .from(standing)
       .where(
         and(isNotNull(standing.notice), isNull(standing.noticeLimitedAt), lte(standing.noticeLimitAt, now)),
       )
     const failed: string[] = []
-    for (const { userId, setBy, limitAt } of due) {
+    let limited = 0
+    for (const { userId, setAt } of due) {
+      if (setAt === null) continue
       try {
-        await this.#limit(userId, setBy ?? '', limitAt ?? now, now)
+        if (await this.limitIfStillDue(userId, setAt, now)) limited++
       } catch (error) {
         failed.push(`${userId}: ${error instanceof Error ? error.message : String(error)}`)
       }
     }
     if (failed.length > 0) throw new Error(`Notices' limits not put on: ${failed.join('; ')}`)
-    return due.length
+    return limited
   }
 
-  async #limit(userId: string, setBy: string, limitAt: Date, now: Date): Promise<void> {
-    const actor = actorOf(setBy)
-    const { limitOverrides } = await loadStanding(this.#db, userId, now)
-    // As `ops.ts limits` sends them: each limit kept as it is, the running one at 0. Done again,
-    // after a pass that failed before marking it, it changes nothing.
-    await this.#accounts.setLimits(actor, userId, {
-      maxServers: limitOverrides.maxServers ?? null,
-      maxRunning: 0,
-      includedUnits: limitOverrides.includedUnits ?? null,
-    })
-    const stopped = await this.#accounts.stopServersOf(userId, 'entitlement')
-    await this.#db.transaction(async (tx) => {
-      const marked = await tx
+  /**
+   * Puts the limit of the notice set at `setAt` on the account, if that notice is still the
+   * account's and still due: claimed first, under the standing's lock, so a notice cleared or
+   * replaced since it was read is left alone. Then the running limit at 0 through the account's
+   * limits (its other limits kept, as `ops.ts limits` sends them), what runs stopped, and the
+   * audit entry. Whether it was put on. One that fails gives its claim back, and the next pass
+   * tries it again.
+   */
+  async limitIfStillDue(userId: string, setAt: Date, now = new Date()): Promise<boolean> {
+    const [claimed] = await this.#db.transaction(async (tx) => {
+      if ((await lockStanding(tx, userId)) === null) return []
+      return tx
         .update(standing)
         .set({ noticeLimitedAt: now, updatedAt: now })
-        .where(and(eq(standing.userId, userId), isNotNull(standing.notice), isNull(standing.noticeLimitedAt)))
-        .returning({ userId: standing.userId })
-      if (marked.length === 0) return
-      await tx.insert(schema.auditLog).values({
+        .where(
+          and(
+            eq(standing.userId, userId),
+            eq(standing.noticeSetAt, setAt),
+            isNotNull(standing.notice),
+            isNull(standing.noticeLimitedAt),
+            lte(standing.noticeLimitAt, now),
+          ),
+        )
+        .returning({ setBy: standing.noticeSetBy, limitAt: standing.noticeLimitAt })
+    })
+    if (claimed === undefined) return false
+    try {
+      const setBy = claimed.setBy ?? ''
+      const { limitOverrides } = await loadStanding(this.#db, userId, now)
+      await this.#accounts.setLimits(actorOf(setBy), userId, {
+        maxServers: limitOverrides.maxServers ?? null,
+        maxRunning: 0,
+        includedUnits: limitOverrides.includedUnits ?? null,
+      })
+      const stopped = await this.#accounts.stopServersOf(userId, 'entitlement')
+      await this.#db.insert(schema.auditLog).values({
         actor: setBy,
         action: 'account.notice_limited',
         subjectType: 'account',
         subjectId: userId,
-        data: { limitAt: limitAt.toISOString(), stopped },
+        data: { limitAt: (claimed.limitAt ?? now).toISOString(), stopped },
       })
-    })
+      return true
+    } catch (error) {
+      await this.#db
+        .update(standing)
+        .set({ noticeLimitedAt: null })
+        .where(
+          and(
+            eq(standing.userId, userId),
+            eq(standing.noticeSetAt, setAt),
+            eq(standing.noticeLimitedAt, now),
+          ),
+        )
+      throw error
+    }
   }
 }

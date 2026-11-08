@@ -107,4 +107,28 @@ describe.skipIf(!hasDatabase)('an account’s notice', () => {
     const after = await h.app.accountQueries.get(ADA, owner.userId)
     expect(after.standing.limitOverrides).toEqual({ maxServers: 4, maxRunning: 0 })
   }, 60_000)
+
+  test('a notice replaced or cleared since it was read limits nothing', async () => {
+    const notices = h.app.accounts.notices
+    for (const change of ['replaced later', 'replaced telling', 'cleared'] as const) {
+      const { owner, id } = await running(`Changed ${change}`)
+      const now = new Date()
+      const old = await notices.set(ADA, owner.userId, {
+        text: NOTICE,
+        limitAt: new Date(now.getTime() - MINUTE_MS),
+      })
+      if (change === 'cleared') await notices.clear(ADA, owner.userId)
+      else
+        await notices.set(ADA, owner.userId, {
+          text: 'Something else',
+          limitAt: change === 'replaced later' ? new Date(now.getTime() + HOUR_MS) : null,
+        })
+      expect(await notices.limitIfStillDue(owner.userId, old.setAt, now)).toBe(false)
+      const detail = await h.app.accountQueries.get(ADA, owner.userId)
+      expect(detail.standing.limitOverrides).toEqual({})
+      expect(detail.notice?.limitedAt ?? null).toBeNull()
+      expect((await h.server(id)).lifecycle.status).toBe('running')
+      expect(await audit(owner.userId, 'account.notice_limited')).toEqual([])
+    }
+  }, 60_000)
 })
