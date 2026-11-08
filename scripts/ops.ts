@@ -25,6 +25,10 @@
  *                                                   from then, named again with --confirm. Clearing
  *                                                   leaves a limit already put on: lift it with
  *                                                   `limits <email|id> --running plan`
+ *   bun scripts/ops.ts linked <email|id> handled <email|id>
+ *                                                   a pair under Linked accounts dealt with: it is
+ *                                                   no longer new or in the alert, and nothing else
+ *                                                   changes for either account
  *   bun scripts/ops.ts create <email|id> <name> [--play survival|creative] [--template <key>]
  *                                    [--size 5|10|20|more] [--region <key>]
  *                                                   a server for that account, as the web makes one
@@ -254,6 +258,13 @@ switch (command) {
   case 'account':
     show(await api('GET', `/accounts/${encoded(first('an email or account id'))}`))
     break
+  case 'linked': {
+    const account = first('an email or account id')
+    if (positional[1] !== 'handled') fail('linked takes handled and the other account')
+    const other = positional[2] ?? fail('linked handled needs the other account')
+    show(await api('POST', `/accounts/${encoded(account)}/linked/${encoded(other)}/handled`))
+    break
+  }
   case 'plan': {
     const plan = positional[1] ?? fail('plan needs the account and plus or free')
     show(await api('PUT', `/accounts/${encoded(first('an email or account id'))}/plan`, { plan }))

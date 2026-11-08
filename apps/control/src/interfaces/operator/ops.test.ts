@@ -121,6 +121,7 @@ function recordingApi(calls: Array<[string, ...unknown[]]>) {
     } as unknown as OpsApiOptions['accountQueries'],
     accounts: {
       notices: noticesRecorded(record),
+      freePlay: { handled: record('freePlay.handled') },
       setPlan: record('accounts.setPlan'),
       setLimits: record('accounts.setLimits'),
       createAccount: record('accounts.createAccount', { userId: OWNER }),
@@ -340,6 +341,15 @@ describe('the operators’ API: an account’s notice', () => {
       ['notices.get', ADA, OWNER],
       ['notices.clear', ADA, OWNER],
     ])
+  })
+})
+
+describe('the operators’ API: a linked pair', () => {
+  test('is marked handled as the operator, by both accounts', async () => {
+    const response = await call('POST', '/accounts/owner@example.test/linked/owner@example.test/handled')
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({ handled: { account: OWNER, linked: OWNER } })
+    expect(named('freePlay.handled')).toEqual([['freePlay.handled', ADA, OWNER, OWNER]])
   })
 })
 

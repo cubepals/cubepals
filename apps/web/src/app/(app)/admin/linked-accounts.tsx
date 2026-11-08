@@ -6,10 +6,11 @@
 
 /**
  * Accounts that look like one person's free hours, on the admin accounts page: each pair with what
- * links it and how sure Cubepals is of its group, and a hold or a release for the newer account.
- * Only a group Cubepals is sure of shares its free hours; the others are here to look at. Holding
- * stops the account's free servers starting, and deletes nothing; releasing gives it its own free
- * hours again, for good.
+ * links it and how sure Cubepals is of its group, a hold or a release for the newer account, and
+ * Handled for a new pair. Only a group Cubepals is sure of shares its free hours; the others are
+ * here to look at. Holding stops the account's free servers starting, and deletes nothing;
+ * releasing gives it its own free hours again, for good; Handled marks the pair dealt with, which
+ * takes it off the alert, and changes nothing else.
  */
 import type { FreeLinkView } from '@blockly/contracts'
 import { MINUTE_MS } from '@blockly/contracts/durations'
@@ -48,13 +49,14 @@ export function LinkedAccounts() {
   const refresh = () => queries.invalidateQueries({ queryKey: trpc.admin.pathKey() })
   const hold = useMutation(trpc.admin.holdFree.mutationOptions({ onSuccess: refresh }))
   const release = useMutation(trpc.admin.releaseFree.mutationOptions({ onSuccess: refresh }))
-  const pending = hold.isPending || release.isPending
-  const failure = links.error ?? hold.error ?? release.error
+  const handled = useMutation(trpc.admin.handledFreeLink.mutationOptions({ onSuccess: refresh }))
+  const pending = hold.isPending || release.isPending || handled.isPending
+  const failure = links.error ?? hold.error ?? release.error ?? handled.error
 
   return (
     <FormSection
       title="Linked accounts"
-      description="Accounts that look like one person’s free hours. Those Cubepals is sure of share them already; the others only show here. Hold stops the newer one’s free servers starting and deletes nothing; Release gives it its own free hours again, for good."
+      description="Accounts that look like one person using the free hours twice. Pairs Cubepals is sure of already share one set of free hours; the others only show here. Hold stops the newer account’s free servers starting and deletes nothing. Release gives it its own free hours again, for good. Handled marks the pair as dealt with and changes nothing else."
     >
       {failure && <Note tone="danger">{messageOf(failure)}</Note>}
       {links.isPending ? (
@@ -98,6 +100,18 @@ export function LinkedAccounts() {
                 >
                   Release
                 </Button>
+                {!link.reviewed && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={pending}
+                    onClick={() =>
+                      handled.mutate({ accountId: link.account.userId, linkedId: link.linked.userId })
+                    }
+                  >
+                    Handled
+                  </Button>
+                )}
               </span>
             }
           />

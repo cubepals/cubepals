@@ -29,6 +29,7 @@ const routes = createOpsApi({ token: TOKEN } as unknown as OpsApiOptions)
     path: path
       .replace(':id', SERVER)
       .replace(':account', 'owner@example.test')
+      .replace(':linked', 'friend@example.test')
       .replace(':list', 'ban')
       .replace(':player', 'Griefer')
       .replace(':catalog', 'modrinth')
