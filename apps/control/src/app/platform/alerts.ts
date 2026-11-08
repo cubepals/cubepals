@@ -6,7 +6,6 @@ import type { AlertKey, AlertView } from '@blockly/contracts'
 import { DAY_MS, HOUR_MS, MINUTE_MS, SECOND_MS } from '@blockly/contracts/durations'
 import type { Db } from '@blockly/db'
 import { entitlementsFor, entitlementsOf, PLAN_KEYS } from '../../domain/account/entitlements.ts'
-import { levelOf } from '../../domain/account/free-links.ts'
 import { type UnreviewedLink, unreviewedLinks } from '../accounts/free-play.ts'
 import { adminInbox, loadStanding } from '../accounts/persistence.ts'
 import { playersInCommon } from '../accounts/players-moved.ts'
@@ -26,7 +25,6 @@ import type { Mailer } from '../ports/platform.ts'
 import { CERTIFICATE_RENEWAL, CERTIFICATE_WARN_MS, storedAcmeCertificate } from '../realtime/certificate.ts'
 import { KEEP_MS, serversKeepingStorage } from '../servers/kept-storage.ts'
 import { anyStopCheatersOn } from '../stop-cheaters/persistence.ts'
-import { tuning } from '../tuning.ts'
 import { FAILING_IN_A_ROW, overdue, quietSince } from './job-record.ts'
 import {
   alertNotified,
@@ -66,8 +64,11 @@ const WHERE: Record<AlertKey, string> = {
 interface Condition {
   key: AlertKey
   summary: string
-  /** Its cases, one a line: a line the last summary didn't hold is emailed again. */
-  lines?: readonly string[]
+  /**
+   * What names each of its cases in the summary, as it is written there: a case the last summary
+   * didn't name is emailed again. A case whose details change is the same case.
+   */
+  cases?: readonly string[]
 }
 
 /**
@@ -223,7 +224,7 @@ export class PlatformAlerts {
   }
 }
 
-/** The conditions raised already whose summary now holds a case, a line, the stored one didn't. */
+/** The conditions raised already whose summary now names a case the stored one didn't. */
 function withNewCases(
   conditions: readonly Condition[],
   stored: Awaited<ReturnType<typeof loadAlerts>>,
@@ -232,7 +233,7 @@ function withNewCases(
     .filter((c) => {
       const record = stored.get(c.key)
       if (record === undefined || record.clearedAt !== null) return false
-      return (c.lines ?? []).some((line) => !record.summary.includes(line))
+      return (c.cases ?? []).some((name) => !record.summary.includes(name))
     })
     .map((c) => c.key)
 }
@@ -364,7 +365,7 @@ async function linkedCondition(db: Db): Promise<Condition[]> {
     {
       key: 'free_accounts_linked',
       summary: `${linked.length} ${one ? 'pair of accounts looks' : 'pairs of accounts look'} like one person's free hours. Those Cubepals is sure of share them now; hold or release ${one ? 'it' : 'them'} under Linked accounts. ${lines.join(' ')}`,
-      lines,
+      cases: linked.map(pairName),
     },
   ]
 }
@@ -386,9 +387,11 @@ async function linkLine(db: Db, link: UnreviewedLink): Promise<string> {
     s.signedUpClose > 0 && 'signed up close together',
     s.network >= 1 && 'one network',
   ].filter((said) => said !== false)
-  const shared = levelOf(link.confidence, tuning().freeLinks) === 'high'
-  return `${link.account.email} and ${link.linked.email}: ${why.join('; ')}; ${Math.round(link.confidence * 100)}% sure, ${shared ? 'sharing free hours' : 'nothing changed for them'}.`
+  return `${pairName(link)} ${why.join('; ')}; ${Math.round(link.confidence * 100)}% sure, ${link.shared ? 'sharing free hours' : 'nothing changed for them'}.`
 }
+
+/** How a linked pair's line starts: both accounts, the later first. */
+const pairName = (link: UnreviewedLink) => `${link.account.email} and ${link.linked.email}:`
 
 /** Extra play Polar refused until it was no longer sent: hours played and never billed. */
 async function unsentCondition(db: Db): Promise<Condition[]> {

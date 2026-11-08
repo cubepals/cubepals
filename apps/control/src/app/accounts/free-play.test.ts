@@ -347,6 +347,50 @@ describe.skipIf(!hasDatabase)('players who moved from an account out of free hou
   }, 120_000)
 })
 
+describe.skipIf(!hasDatabase)('players who moved to an account that shares another’s hours', () => {
+  harness()
+
+  test('show that pair as sharing nothing, and leave the sharing pair as it was', async () => {
+    const group = [randomUUID(), randomUUID(), randomUUID()]
+    const staff = await admin()
+    const older = await owner()
+    const olderServer = await stopped(older)
+    await verified(olderServer.id, Object.fromEntries(group.map((p) => [p, 3])))
+    // Two accounts of one inbox, which share at once, the later of them where the players went.
+    const inbox = `${randomUUID()}@example.test`
+    const [first, later] = [await owner(), await owner()]
+    await h.db
+      .update(schema.users)
+      .set({ createdAt: new Date(Date.now() - DAY_MS) })
+      .where(eq(schema.users.id, first.userId))
+    await h.db
+      .update(schema.users)
+      .set({ createdAt: new Date(Date.now() - HOUR_S * SECOND_MS) })
+      .where(eq(schema.users.id, later.userId))
+    await h.app.accounts.freePlay.signedUp(first.userId, inbox)
+    await h.app.accounts.freePlay.signedUp(later.userId, inbox)
+    await verified((await stopped(later)).id, Object.fromEntries(group.map((p) => [p, 1])))
+    await h.db.insert(schema.joins).values({
+      id: randomUUID(),
+      kind: 'join',
+      serverId: olderServer.id,
+      address: 'test.play.example.test',
+      path: 'held',
+      connectedAt: new Date(Date.now() - 2 * HOUR_S * SECOND_MS),
+      leftReason: 'refused:quota',
+    })
+    await h.app.accounts.freePlay.relink()
+    const shown = await h.app.accounts.freePlay.links(staff)
+    expect(shown.find((l) => l.linked.userId === older.userId)).toMatchObject({
+      account: { userId: later.userId },
+      shared: false,
+    })
+    expect(shown.find((l) => l.linked.userId === first.userId)).toMatchObject({ shared: true })
+    expect((await sharers(later)).sort()).toEqual([first.userId, later.userId].sort())
+    expect(await sharers(older)).toEqual([older.userId])
+  }, 120_000)
+})
+
 describe.skipIf(!hasDatabase)('one inbox’s accounts', () => {
   harness()
 

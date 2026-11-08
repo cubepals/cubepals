@@ -88,7 +88,18 @@ export interface UnreviewedLink {
   linked: { id: string; email: string }
   signals: (typeof links.$inferSelect)['signals']
   confidence: number
+  /** Whether the two share free hours: one group, sure enough to share. */
+  shared: boolean
 }
+
+/** Whether two accounts' free play counts as one: in one group, at `high`, as `freeSharers` reads it. */
+export const sharing = (
+  x: { groupId: string | null; confidence: number | null } | undefined,
+  y: { groupId: string | null; confidence: number | null } | undefined,
+): boolean =>
+  x?.groupId != null &&
+  x.groupId === y?.groupId &&
+  Math.min(x.confidence ?? 0, y.confidence ?? 0) >= tuning().freeLinks.high
 
 /** Links in groups admins are shown (`medium` and up) that nobody has held or released yet, oldest first. */
 export async function unreviewedLinks(q: Queryable): Promise<UnreviewedLink[]> {
@@ -107,15 +118,22 @@ export async function unreviewedLinks(q: Queryable): Promise<UnreviewedLink[]> {
   const ids = [...new Set(rows.flatMap(({ link }) => [link.accountId, link.linkedId]))]
   if (ids.length === 0) return []
   const people = await q
-    .select({ id: schema.users.id, email: schema.users.email })
+    .select({
+      id: schema.users.id,
+      email: schema.users.email,
+      groupId: play.groupId,
+      confidence: play.confidence,
+    })
     .from(schema.users)
+    .leftJoin(play, eq(play.userId, schema.users.id))
     .where(inArray(schema.users.id, ids))
-  const email = new Map(people.map((p) => [p.id, p.email]))
+  const byId = new Map(people.map((p) => [p.id, p]))
   return rows.map(({ link, confidence }) => ({
-    account: { id: link.accountId, email: email.get(link.accountId) ?? '' },
-    linked: { id: link.linkedId, email: email.get(link.linkedId) ?? '' },
+    account: { id: link.accountId, email: byId.get(link.accountId)?.email ?? '' },
+    linked: { id: link.linkedId, email: byId.get(link.linkedId)?.email ?? '' },
     signals: link.signals,
     confidence: confidence ?? 0,
+    shared: sharing(byId.get(link.accountId), byId.get(link.linkedId)),
   }))
 }
 

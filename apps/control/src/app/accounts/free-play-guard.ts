@@ -14,7 +14,7 @@
 import type { FreeLinkView } from '@blockly/contracts'
 import { type Db, schema, type Tx } from '@blockly/db'
 import { and, desc, eq, gte, inArray, isNull, or } from 'drizzle-orm'
-import { levelOf, NO_SIGNALS } from '../../domain/account/free-links.ts'
+import { NO_SIGNALS } from '../../domain/account/free-links.ts'
 import { addressKey } from '../../domain/account/free-play.ts'
 import type { Actor } from '../actor.ts'
 import { NotFound } from '../errors.ts'
@@ -28,7 +28,7 @@ import {
   regroup,
   scorePairs,
 } from './free-links.ts'
-import { keepEmailKey, unkeyedAccounts } from './free-play.ts'
+import { keepEmailKey, sharing, unkeyedAccounts } from './free-play.ts'
 import { movedPlayerPairs } from './players-moved.ts'
 
 const links = schema.freeLinks
@@ -103,7 +103,13 @@ export class FreePlayGuard {
     const ids = [...new Set(rows.flatMap(({ link }) => [link.accountId, link.linkedId]))]
     if (ids.length === 0) return []
     const people = await this.#db
-      .select({ id: schema.users.id, email: schema.users.email, heldAt: play.heldAt })
+      .select({
+        id: schema.users.id,
+        email: schema.users.email,
+        heldAt: play.heldAt,
+        groupId: play.groupId,
+        confidence: play.confidence,
+      })
       .from(schema.users)
       .leftJoin(play, eq(play.userId, schema.users.id))
       .where(inArray(schema.users.id, ids))
@@ -119,7 +125,7 @@ export class FreePlayGuard {
       score: link.score,
       signals: { ...NO_SIGNALS, ...link.signals },
       confidence: confidence ?? 0,
-      shared: levelOf(confidence ?? 0, tuning().freeLinks) === 'high',
+      shared: sharing(byId.get(link.accountId), byId.get(link.linkedId)),
       since: link.createdAt.toISOString(),
       reviewed: link.reviewedAt !== null,
     }))
