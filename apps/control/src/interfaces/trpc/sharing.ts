@@ -23,6 +23,10 @@ export const sharing = router({
   inviteShared: authedProcedure
     .input(ServerRef)
     .mutation(({ ctx, input }) => ctx.services.sharing.inviteShared(ctx.actor, input.serverId)),
+  /** The owner copied the server's address. */
+  addressCopied: authedProcedure
+    .input(ServerRef)
+    .mutation(({ ctx, input }) => ctx.services.sharing.addressCopied(ctx.actor, input.serverId)),
   /** The invitation's page ran in someone's browser; it answers nothing either way. */
   inviteOpened: publicProcedure
     .input(InviteRef)

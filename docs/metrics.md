@@ -147,8 +147,10 @@ Where a server's joins stop, and why. These are not Prometheus figures, as they 
 |---|---|
 | Server created | `server_created`, once per server. |
 | Invite shared | `invite_shared`, once per server: the owner copied its invite link, from Share, the Players page or the server's page (`sharing.inviteShared`). |
+| Address copied | `address_copied`, once per server: the owner copied its address, from its page or Share (`sharing.addressCopied`). |
 | Invite opened | `invite_opened`, once per server: someone other than the owner opened `/join/<code>` in a browser. The page calls `sharing.inviteOpened` once it has shown the invitation; the page's own read, its title and its card picture keep nothing, so a link preview never counts. |
-| Join tried | A `joins` row with `kind = 'join'`: `connected_at` at the edge, `handed_at` once it was handed to the server, then `login_at` to `in_world_at` from the server's reporter. |
+| Join tried | A `joins` row with `kind = 'join'`: `connected_at` at the edge, `handed_at` once it was handed to the server, then `login_at` to `in_world_at` from the server's reporter. The server's first is `join_first_tried`, with `edition` (`java`, `bedrock`, or `unknown` before the player named itself). |
+| Join stopped | `join_stopped`, once per server and reason: a try the edge turned away (`refused:*`) or the player left the wait (`gave_up_waiting`), never in the world, with `reason` and `edition`. The reasons below are read from `joins` for every try. |
 | Stopped: version | `left_reason = 'refused:wrong_game'`: the edge turned away a client the server can't take. |
 | Stopped: hours used | `left_reason = 'refused:quota'`; and `join_turned_away` for each try, with its `reason` (`free_hours`), and `server_turned_away` for who came by. |
 | Stopped: whitelist | `left_reason = 'refused:whitelist'`: handed to the server, never in the world, and once the edge said it ended, the server's whitelist was on with the player on neither it nor the operators (`joins/refusals.ts`). On a server with a reporter, only a join it told of the login of: the game reads its lists once it has verified the account, so one that never logged in falls under Other. A server with no reporter (vanilla) tells of no login, so there it is read from the lists alone, and an unverified account kept out of a whitelisted server counts here. |

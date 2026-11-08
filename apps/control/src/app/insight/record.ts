@@ -8,6 +8,7 @@
  * worker sends what is kept (`InsightService.drain`), so no request waits on the analytics
  * service, and "once" is the database's word, not the service's. Not for anything a person reads.
  */
+import { isBedrockUuid } from '@blockly/contracts'
 import { type Queryable, schema } from '@blockly/db'
 import { and, asc, countDistinct, eq, gt, sql } from 'drizzle-orm'
 
@@ -19,6 +20,12 @@ export const FUNNEL = {
   inviteShared: 'invite_shared',
   /** Someone opened the invitation in a browser: a link preview runs no script, so never one. */
   inviteOpened: 'invite_opened',
+  /** The owner copied the server's address (`sharing.addressCopied`). */
+  addressCopied: 'address_copied',
+  /** The server's first try to join that the edge took, by anyone: a join, not a server-list ping. */
+  joinFirstTried: 'join_first_tried',
+  /** A try to join that stopped before the world, once per server and reason (`joins.left_reason`). */
+  joinStopped: 'join_stopped',
   serverFirstStarted: 'server_first_started',
   serverFirstJoin: 'server_first_join',
   firstFriendJoined: 'moment_first_friend_joined',
@@ -162,5 +169,42 @@ export async function playEnded(
     subject: `${server.id}:${key}`,
     userId: server.ownerId,
     properties: { serverId: server.id, reason, online },
+  })
+}
+
+/** Where a try to join stopped before the world for good: the edge turned it away, or the player left the wait. */
+const stoppedFor = (reason: string | null): reason is string =>
+  reason !== null && (reason.startsWith('refused:') || reason === 'gave_up_waiting')
+
+/**
+ * The edge told of a try to join (`joins/visits.ts`): the server's first is kept once, and so is
+ * its first stop for each reason, each with the game it came from. A player Floodgate made is a
+ * Bedrock one; one turned away before it named itself is `unknown`.
+ */
+export async function joinTried(q: Queryable, joinId: string): Promise<void> {
+  const [join] = await q
+    .select({
+      serverId: schema.joins.serverId,
+      kind: schema.joins.kind,
+      playerUuid: schema.joins.playerUuid,
+      leftReason: schema.joins.leftReason,
+      inWorldAt: schema.joins.inWorldAt,
+      at: schema.joins.connectedAt,
+      ownerId: servers.ownerId,
+    })
+    .from(schema.joins)
+    .innerJoin(servers, eq(servers.id, schema.joins.serverId))
+    .where(eq(schema.joins.id, joinId))
+  if (join?.serverId == null || join.kind !== 'join') return
+  const edition = join.playerUuid === null ? 'unknown' : isBedrockUuid(join.playerUuid) ? 'bedrock' : 'java'
+  const properties = { serverId: join.serverId, edition }
+  const mark = { userId: join.ownerId, at: join.at }
+  await noteOnce(q, { ...mark, event: FUNNEL.joinFirstTried, subject: join.serverId, properties })
+  if (join.inWorldAt !== null || !stoppedFor(join.leftReason)) return
+  await noteOnce(q, {
+    ...mark,
+    event: FUNNEL.joinStopped,
+    subject: `${join.serverId}:${join.leftReason}`,
+    properties: { ...properties, reason: join.leftReason },
   })
 }
