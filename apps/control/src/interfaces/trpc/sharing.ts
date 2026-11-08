@@ -1,7 +1,3 @@
-// SPDX-FileCopyrightText: 2026 The Cubepals Authors
-//
-// SPDX-License-Identifier: AGPL-3.0-only
-
 import { InviteRef, JoinThroughInviteInput, PageRef, ServerRef } from '@blockly/contracts'
 import { authedProcedure, publicProcedure, router } from './trpc.ts'
 
