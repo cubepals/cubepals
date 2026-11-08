@@ -16,6 +16,7 @@ import { MINUTE_MS } from '@blockly/contracts/durations'
 import type { ServerJoinEvent } from '@blockly/contracts/join-records'
 import { type Queryable, schema } from '@blockly/db'
 import { and, desc, eq, gt, isNotNull, isNull, or, sql } from 'drizzle-orm'
+import { joinTried } from '../insight/record.ts'
 import { joinCompleted } from '../platform/telemetry.ts'
 import type { PlayAddressing } from '../ports/platform.ts'
 import { findServer } from '../servers/persistence.ts'
@@ -116,8 +117,11 @@ async function recordMoment(
     })
     .where(eq(joins.id, id))
   // The edge may have told of its end already: where the game turned it away for its own lists,
-  // that is why.
-  if (event.kind === 'login') await noteRefusal(q, id)
+  // that is why, and the funnel hears of the stop now rather than never.
+  if (event.kind === 'login') {
+    await noteRefusal(q, id)
+    await joinTried(q, id)
+  }
   // Timed once, from the edge's handshake; a join the edge said nothing of has no handshake.
   if (before !== undefined && before.inWorldAt === null && before.detail.edge !== 'missing')
     joinCompleted(before.path, before.edgeRegion, at.getTime() - before.connectedAt.getTime())
