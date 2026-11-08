@@ -16,7 +16,7 @@
  * what the flags lead to (`routed.ts`).
  */
 import { type Db, type Queryable, schema } from '@blockly/db'
-import { and, eq, inArray, isNull, type SQL, type SQLWrapper, sql } from 'drizzle-orm'
+import { and, eq, inArray, isNotNull, isNull, type SQL, type SQLWrapper, sql } from 'drizzle-orm'
 import type { PinnedMod } from '../../domain/mods/artifact.ts'
 import { type Loader, type OtherVersions, otherVersionsOf } from '../../domain/revision/revision.ts'
 import type { ServerStatus } from '../../domain/server/lifecycle.ts'
@@ -25,6 +25,7 @@ import type { RuntimeHandle } from '../ports/runtime.ts'
 import { motdsOf } from '../servers/persistence.ts'
 
 const {
+  accountStanding: standing,
   compatPlugins,
   minecraftServers: servers,
   serverRuntimes: runtimes,
@@ -61,6 +62,8 @@ export interface RouteInputs {
   trials: Awaited<ReturnType<typeof trialStops>>
   /** The message of the day each asleep server's revision sets. */
   motds: Map<string, string>
+  /** An operator's notice on each live server's owner, as written, by server (`accounts/notice.ts`). */
+  notices: Map<string, string>
   /**
    * What each server's revision runs, by revision, for the revision it starts with and the one
    * its run booted: its release and server type, and of its mods
@@ -157,6 +160,14 @@ const bootingRows = (q: Queryable) =>
       ),
     )
 
+/** The live servers whose owner has a notice on their account, with it. */
+const noticeRows = (q: Queryable) =>
+  q
+    .select({ serverId: servers.id, notice: sql<string>`${standing.notice}` })
+    .from(servers)
+    .innerJoin(standing, eq(standing.userId, servers.ownerId))
+    .where(and(isNull(servers.deletedAt), isNotNull(standing.notice)))
+
 /** Which Via plugins are pinned for which release: a pin or its removal moves what a next boot places. */
 const pinRows = (q: Queryable) =>
   q.select({ gameVersion: compatPlugins.gameVersion, projectId: compatPlugins.projectId }).from(compatPlugins)
@@ -211,7 +222,7 @@ export async function fingerprint(q: Queryable, providers: readonly string[]): P
     floor(extract(epoch from statement_timestamp()) * 1000)::bigint,
     left(md5(concat_ws('|', ${digestOf(serverRows(q))}, ${digestOf(bindingRows(q, providers))},
       ${digestOf(comingBackRows(q))}, ${digestOf(bootingRows(q))}, ${digestOf(trialStops(q))},
-      ${digestOf(pinRows(q))})), 16),
+      ${digestOf(pinRows(q))}, ${digestOf(noticeRows(q))})), 16),
     ${waiting(sql`${servers.routedAt}`)},
     ${waiting(sql`${servers.routeListedAt}`)}) as v`)
   const [ms, digest, unrouted, unlisted] = (rows[0]?.v ?? '').split(' ')
@@ -256,6 +267,7 @@ export async function readInputs(
             tx,
             asleep.flatMap((s) => (s.desiredRevisionId === null ? [] : [s.desiredRevisionId])),
           ),
+          notices: new Map((await noticeRows(tx)).map((row) => [row.serverId, row.notice])),
           plays: await playsOf(tx, [
             ...live.flatMap((s) => (s.desiredRevisionId === null ? [] : [s.desiredRevisionId])),
             ...bindings.flatMap((b) => (b.revisionId === null ? [] : [b.revisionId])),

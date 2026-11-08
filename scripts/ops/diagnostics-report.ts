@@ -99,6 +99,18 @@ const operationLine = (op: HealthOperationView) =>
   `${at(op.createdAt)} ${op.kind} on ${op.serverName}: ${op.status}${op.step === null ? '' : ` at ${op.step}`}, ${op.seconds} s${op.error === null ? '' : ` — ${one(op.error)}`}`
 
 /** One account's trouble as an incident report, in Markdown. */
+/** The notice an operator put on the account, as its servers show it, and its limit; nothing without one. */
+function noticeLines(notice: AccountDiagnosisView['notice']): string[] {
+  if (notice === null) return []
+  const limit =
+    notice.limitedAt !== null
+      ? `, limited it ${at(notice.limitedAt)}`
+      : notice.limitAt !== null
+        ? `, limits it ${at(notice.limitAt)}`
+        : ''
+  return ['', `Notice: “${notice.text}”, set ${at(notice.setAt)} by ${notice.setBy}${limit}`]
+}
+
 export function diagnosisReport(view: AccountDiagnosisView): string[] {
   const { account } = view
   const section = (title: string, rows: string[], none: string) => [
@@ -111,6 +123,7 @@ export function diagnosisReport(view: AccountDiagnosisView): string[] {
     `# ${account.email}`,
     '',
     `${account.name}, ${account.plan}, ${account.status}${account.test ? ', a test account' : ''} · \`${account.id}\` · since ${at(view.since)}`,
+    ...noticeLines(view.notice),
     ...section(
       'Servers',
       view.servers.map((s) => `${s.name} (${s.status}${s.deleted ? ', in the trash' : ''}) \`${s.id}\``),

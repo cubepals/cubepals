@@ -7,6 +7,8 @@
  * they wrote it, and the sleeping notice on the second, in grey. The list draws two lines and
  * wraps a line too wide for it, so a message that would wrap is cut to one line first, or the
  * notice would be pushed out of sight. A server with no message of its own shows the notice alone.
+ * An operator's notice on its owner takes its own message's place, and is never cut: one that
+ * takes both lines shows alone.
  *
  * Not for deciding whether a server sleeps, or for its picture: those are the agent's.
  */
@@ -105,4 +107,13 @@ function* pieces(line: string): Generator<{ text: string; code: boolean }> {
 export function asleepMessage(motd: string | undefined, notice: string): string {
   if (motd === undefined || motd.trim() === '') return notice
   return `${oneLine(motd)}\n§r§7${notice}`
+}
+
+/**
+ * The list's message for a sleeping server whose owner has an operator's notice on them: the notice
+ * in place of its own message, with `status` under it where the notice leaves that line free, and
+ * alone, whole, where it doesn't.
+ */
+export function noticedMessage(notice: string, status: string): string {
+  return width(notice) <= LIST_WIDTH ? asleepMessage(notice, status) : notice
 }

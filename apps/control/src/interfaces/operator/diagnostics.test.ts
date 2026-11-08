@@ -25,6 +25,7 @@ const account = {
   email: 'owner@example.test',
   standing: { status: 'active', plan: 'plus', testAccount: false },
   serverList: [{ id: SERVER, name: 'World', slug: 'world', status: 'running', deleted: false }],
+  notice: null,
 } as unknown as AccountDetail
 
 const join = (fields: Partial<JoinView>) =>

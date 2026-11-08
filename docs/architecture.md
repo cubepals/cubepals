@@ -1039,6 +1039,9 @@ Outcomes are written down in `job_health`, the successes of a minute together:
   warns as a month's play runs out and stops everything once it has (the free trial's is `session-check`'s);
   otherwise it stops what the
   plan doesn't run, and the servers started last beyond its running limit (§15.5 billing).
+- `account-notices`: every minute. An operator's notice on an account whose limit is due puts it
+  on, once: the account's own running limit at 0 and its running servers stopped
+  (`app/accounts/notice.ts`, docs/production.md § From the command line).
 - `usage-close`: closes power intervals for servers seen stopped.
 - `store-sweep`: hourly. Servers idle past their plan's days → `store` (§15.5 stored worlds).
 - `disk-check`: every 10 minutes. Running servers whose plan grows disks are measured; one past

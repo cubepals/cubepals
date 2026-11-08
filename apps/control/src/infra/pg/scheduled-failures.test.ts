@@ -37,6 +37,7 @@ const JOBS: ScheduledJob[] = [
   'backup-schedule',
   'artifact-gc',
   'standing-sweep',
+  'account-notices',
   'extra-play-report',
   'listing-eligibility-sweep',
   'admin-alerts',

@@ -17,6 +17,14 @@
  *   bun scripts/ops.ts limits <email|id> [--servers n] [--running n] [--hours n]
  *                                                   its own limits over its plan's; `--servers plan`
  *                                                   (or running, hours) gives back the plan's own
+ *   bun scripts/ops.ts notice <email|id> [set <text> | clear]
+ *                    [--limit-in 48h | --limit-at <ISO>] [--confirm <email|id>]
+ *                                                   an operator's notice on the account: every
+ *                                                   server it owns shows it in the server list and
+ *                                                   says it in chat; with a limit, nothing of it runs
+ *                                                   from then, named again with --confirm. Clearing
+ *                                                   leaves a limit already put on: lift it with
+ *                                                   `limits <email|id> --running plan`
  *   bun scripts/ops.ts create <email|id> <name> [--play survival|creative] [--template <key>]
  *                                    [--size 5|10|20|more] [--region <key>]
  *                                                   a server for that account, as the web makes one
@@ -196,12 +204,30 @@ function limit(name: string, current: number | null | undefined): number | null 
   return value
 }
 
+/** How long `24h`, `7d` or `90m` is; null for anything else. */
+function span(given: string): number | null {
+  const parts = /^(\d+)([mhd])$/.exec(given)
+  if (parts === null) return null
+  return Number(parts[1]) * { m: MINUTE_MS, h: HOUR_MS, d: DAY_MS }[parts[2] as 'm' | 'h' | 'd']
+}
+
 /** `24h`, `7d` or `90m` ago, or a moment as given. */
 function since(given: string): string {
-  const ago = /^(\d+)([mhd])$/.exec(given)
-  if (ago === null) return given
-  const unit = { m: MINUTE_MS, h: HOUR_MS, d: DAY_MS }[ago[2] as 'm' | 'h' | 'd']
-  return new Date(Date.now() - Number(ago[1]) * unit).toISOString()
+  const ago = span(given)
+  return ago === null ? given : new Date(Date.now() - ago).toISOString()
+}
+
+/** When a notice limits its account, by --limit-in or --limit-at; null without either. */
+function limitAt(): string | null {
+  const within = option('limit-in')
+  const at = option('limit-at')
+  if (within !== undefined && at !== undefined) fail('notice set takes --limit-in or --limit-at, not both')
+  if (within !== undefined) {
+    const ahead = span(within) ?? fail('--limit-in is a time from now: 90m, 48h or 7d')
+    return new Date(Date.now() + ahead).toISOString()
+  }
+  if (at === undefined) return null
+  return Number.isNaN(Date.parse(at)) ? fail('--limit-at is a moment, as ISO 8601 writes it') : at
 }
 
 if (process.argv.includes('--production'))
@@ -437,12 +463,32 @@ switch (command) {
     break
   }
   case 'notice': {
-    const notice = `/servers/${await serverId()}/notice`
     const kind = positional[1]
-    if (kind === 'address')
-      show(await api('POST', notice, { kind, from: option('from') ?? fail('notice address needs --from') }))
-    else if (kind === 'unlisted') show(await api('POST', notice, { kind }))
-    else fail('notice takes address or unlisted')
+    if (kind === 'address' || kind === 'unlisted') {
+      const notice = `/servers/${await serverId()}/notice`
+      if (kind === 'address')
+        show(await api('POST', notice, { kind, from: option('from') ?? fail('notice address needs --from') }))
+      else show(await api('POST', notice, { kind }))
+      break
+    }
+    // Otherwise the notice on an account.
+    const account = first('an email or account id, or a server and address or unlisted')
+    const notice = `/accounts/${encoded(account)}/notice`
+    if (kind === undefined) show(await api('GET', notice))
+    else if (kind === 'set') {
+      const text = positional.slice(2).join(' ') || fail('notice set needs the notice’s text')
+      const limit = limitAt()
+      if (limit !== null && option('confirm') !== account)
+        fail(`a notice with a limit stops what the account runs then: confirm with --confirm ${account}`)
+      show(await api('PUT', notice, { text, limitAt: limit }))
+    } else if (kind === 'clear') {
+      const { cleared, limitStays } = (await api('DELETE', notice)) as {
+        cleared: unknown
+        limitStays?: string
+      }
+      show(cleared === null ? 'The account had no notice.' : { cleared })
+      if (limitStays !== undefined) say(limitStays)
+    } else fail('notice takes set or clear for an account, or address or unlisted for a server')
     break
   }
   case 'official': {

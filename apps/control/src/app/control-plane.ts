@@ -6,6 +6,7 @@ import type { Db } from '@blockly/db'
 import { PlayerFaces } from './access/faces.ts'
 import { AccessReconciler } from './access/reconciler.ts'
 import { AccessService } from './access/service.ts'
+import { AccountNotices } from './accounts/notice.ts'
 import { AccountQueries } from './accounts/queries.ts'
 import { AccountService } from './accounts/service.ts'
 import { buildBrandPack } from './artifacts/brand-pack.ts'
@@ -335,7 +336,7 @@ export function composeControlPlane(ports: ControlPlanePorts, settings: ControlP
     specs,
     servers: Object.assign(servers, { afkKick: new AfkKick(db, events) }),
     notices,
-    accounts,
+    accounts: Object.assign(accounts, { notices: new AccountNotices({ db, accounts }) }),
     accountQueries: new AccountQueries({ db, policy }),
     billing,
     listings,

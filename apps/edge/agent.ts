@@ -15,7 +15,7 @@ import { EDGE_ID_HEADER, NEWER_OUTCOMES, NEWER_REASONS } from '../../packages/co
 import { LOCAL_HEADER, readProxyHeader } from '../../packages/contracts/src/proxy-header.ts'
 import { OWN_ICON_MAX_BYTES } from '../../packages/contracts/src/server-list.ts'
 import { GAME_PORT } from '../control/src/minecraft/ports.ts'
-import { asleepMessage } from './asleep.ts'
+import { asleepMessage, noticedMessage } from './asleep.ts'
 import { type Bedrock, bedrockFromEnv, startBedrock } from './bedrock.ts'
 import { browserRedirect } from './browser-redirect.ts'
 import { takes, wrongGame } from './clients.ts'
@@ -29,9 +29,10 @@ import { Gate } from './limits.ts'
 import { mappings } from './mappings.ts'
 import { holdBegun, observeGeyser, polled } from './metrics.ts'
 import { hostnameOf, type Join, Notice, type NoticeText, pingOf, statusRequest } from './notice.ts'
+import { runningNotice } from './ping-notice.ts'
 import { PingWakes } from './ping-wake.ts'
 import { RoutesPoll } from './poll.ts'
-import { restingJoin, restingStatus } from './resting.ts'
+import { RESTING_STATUS, restingJoin } from './resting.ts'
 import { RouterRoutes } from './router.ts'
 import { VisitReporter } from './visit-reporter.ts'
 import { sourceKey, VISIT_TIMES, Visits } from './visits.ts'
@@ -476,9 +477,8 @@ function asleep(address: string): NoticeText {
   const route = routes.find((r) => r.hostname === name)
   const icon = route?.icon === undefined ? undefined : icons.get(route.icon)
   const waking = wakingLine.of(name, route?.waking === true || wakingHere(name), route?.wakeSeconds)
-  const status = resting(route)
-    ? restingStatus(route?.motd)
-    : asleepMessage(route?.motd, waking ?? ASLEEP.status)
+  const line = resting(route) ? RESTING_STATUS : (waking ?? ASLEEP.status)
+  const status = route?.notice ? noticedMessage(route.notice, line) : asleepMessage(route?.motd, line)
   return { ...ASLEEP, status, ...(icon ? { icon } : {}), ...(route?.joins ? { joins: route.joins } : {}) }
 }
 
@@ -775,6 +775,7 @@ const door: FrontOptions = {
   },
   timeouts: TIMEOUTS,
   ready: poll.firstHold,
+  notice: (name) => runningNotice(routes.find((r) => r.hostname === name)),
 }
 front(door)
 await router.ready(30_000)

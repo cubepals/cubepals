@@ -4,8 +4,8 @@
 
 /**
  * When servers ran and who played on them: the power intervals play is metered by, the
- * disposable presence a sync rewrites, the play counted a day at a time, and everyone a server has
- * seen.
+ * disposable presence a sync rewrites, the play counted a day at a time, everyone a server has
+ * seen, and when its players were last told its owner's notice.
  */
 import { sql } from 'drizzle-orm'
 import {
@@ -110,6 +110,21 @@ export const serverUsageDays = pgTable(
 export const serverActivity = pgTable('server_activity', {
   serverId: uuid('server_id').primaryKey(),
   lastPlayerAt: ts('last_player_at').notNull(),
+})
+
+/**
+ * Where a server's players were last told its owner's notice (`account_standing.notice`), as the
+ * presence sync tells them: who was on at its last reading, and when the notice was last said. A
+ * player not among them hears it on their first reading; everyone hears it again after a while.
+ */
+export const noticeSaid = pgTable('notice_said', {
+  serverId: uuid('server_id')
+    .primaryKey()
+    .references(() => minecraftServers.id, { onDelete: 'cascade' }),
+  /** The uuids of the players on at the last reading. */
+  players: text('players').array().notNull().default(sql`'{}'::text[]`),
+  /** Null until it was said once. */
+  saidAt: ts('said_at'),
 })
 
 // ─── Who has played: kept, unlike presence ──────────────────────────────────────────────────

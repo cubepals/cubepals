@@ -5,7 +5,7 @@
 import { describe, expect, test } from 'bun:test'
 import { accessCommand, parseAccessFiles } from './access.ts'
 import { ARCADE_FILES } from './arcade.ts'
-import { announce, normalizeUuid, parseOnlinePlayers, refusedCommand } from './console.ts'
+import { announce, announceNotice, normalizeUuid, parseOnlinePlayers, refusedCommand } from './console.ts'
 import { WAITING_FILES } from './duels-waiting.ts'
 import { installCheck, installProblems, parseInstalled } from './install-check.ts'
 import { diskName, jarsOf } from './jars.ts'
@@ -389,6 +389,15 @@ describe('console', () => {
         { text: '[Cubepals] ', color: 'aqua' },
         { text: 'Server stops in 2 minutes. Bye "all"', color: 'yellow' },
       ],
+    })
+    expect(command).not.toContain('\n')
+  })
+
+  test('an account notice is said from Cubepals, its codes as the game reads them, on one line', () => {
+    const command = announceNotice('&cUnder review &lnow\n§6soon')
+    expect(JSON.parse(command.slice('tellraw @a '.length))).toEqual({
+      text: '',
+      extra: [{ text: '[Cubepals] ', color: 'aqua' }, { text: '§cUnder review §lnow §6soon' }],
     })
     expect(command).not.toContain('\n')
   })
