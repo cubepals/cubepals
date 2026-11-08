@@ -10,7 +10,7 @@
  * Who counts free play by these is `play-total.ts`.
  */
 import { type Queryable, schema } from '@blockly/db'
-import { and, count, eq, gte, isNotNull, isNull, ne, or } from 'drizzle-orm'
+import { and, asc, eq, gte, inArray, isNotNull, isNull, ne, or } from 'drizzle-orm'
 import { tuning } from '../tuning.ts'
 import { loadStanding } from './persistence.ts'
 
@@ -82,10 +82,18 @@ export async function freeSharers(
   return { ids, why: own.some((row) => row.signals.inbox >= 1) ? 'email' : 'players' }
 }
 
-/** Links in groups admins are shown (`medium` and up) that nobody has held or released yet. */
-export async function unreviewedLinks(q: Queryable): Promise<number> {
-  const [row] = await q
-    .select({ n: count() })
+/** A link in a group admins are shown that nobody has held or released yet: who, and why. */
+export interface UnreviewedLink {
+  account: { id: string; email: string }
+  linked: { id: string; email: string }
+  signals: (typeof links.$inferSelect)['signals']
+  confidence: number
+}
+
+/** Links in groups admins are shown (`medium` and up) that nobody has held or released yet, oldest first. */
+export async function unreviewedLinks(q: Queryable): Promise<UnreviewedLink[]> {
+  const rows = await q
+    .select({ link: links, confidence: play.confidence })
     .from(links)
     .innerJoin(play, eq(play.userId, links.accountId))
     .where(
@@ -95,7 +103,20 @@ export async function unreviewedLinks(q: Queryable): Promise<number> {
         gte(play.confidence, tuning().freeLinks.medium),
       ),
     )
-  return row?.n ?? 0
+    .orderBy(asc(links.createdAt))
+  const ids = [...new Set(rows.flatMap(({ link }) => [link.accountId, link.linkedId]))]
+  if (ids.length === 0) return []
+  const people = await q
+    .select({ id: schema.users.id, email: schema.users.email })
+    .from(schema.users)
+    .where(inArray(schema.users.id, ids))
+  const email = new Map(people.map((p) => [p.id, p.email]))
+  return rows.map(({ link, confidence }) => ({
+    account: { id: link.accountId, email: email.get(link.accountId) ?? '' },
+    linked: { id: link.linkedId, email: email.get(link.linkedId) ?? '' },
+    signals: link.signals,
+    confidence: confidence ?? 0,
+  }))
 }
 
 /** Whether an admin holds this account's free play: none of its free servers starts or is made. */

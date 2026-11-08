@@ -5,7 +5,7 @@
 /**
  * What Blockly does to keep free hours one person's: keeps a new account's inbox and sign-up
  * network and links it to the others of its inbox, links free accounts one main player plays most
- * on, puts linked accounts into groups and acts by how sure it is of each
+ * on and new ones whose players moved from another that ran out of free hours, puts linked accounts into groups and acts by how sure it is of each
  * (`domain/account/free-links.ts`), and lets an admin hold or release them. Every account that
  * comes to share another's hours, and every hold and release, is on the account's audit log. An
  * address never refuses anything. The facts and their queries are `free-play.ts`'s and
@@ -14,7 +14,7 @@
 import type { FreeLinkView } from '@blockly/contracts'
 import { type Db, schema, type Tx } from '@blockly/db'
 import { and, desc, eq, gte, inArray, isNull, or } from 'drizzle-orm'
-import { levelOf } from '../../domain/account/free-links.ts'
+import { levelOf, NO_SIGNALS } from '../../domain/account/free-links.ts'
 import { addressKey } from '../../domain/account/free-play.ts'
 import type { Actor } from '../actor.ts'
 import { NotFound } from '../errors.ts'
@@ -29,6 +29,7 @@ import {
   scorePairs,
 } from './free-links.ts'
 import { keepEmailKey, unkeyedAccounts } from './free-play.ts'
+import { movedPlayerPairs } from './players-moved.ts'
 
 const links = schema.freeLinks
 const play = schema.freePlay
@@ -73,13 +74,17 @@ export class FreePlayGuard {
   }
 
   /**
-   * `free-play-links`: free accounts one main player plays most on, scored and linked, every group
-   * made again, and networks past keeping forgotten. How many accounts came to share another's hours.
+   * `free-play-links`: free accounts one main player plays most on, and new ones whose players
+   * moved from another that ran out of free hours, scored and linked, every group made again, and
+   * networks past keeping forgotten. How many accounts came to share another's hours.
    */
   async relink(now = new Date()): Promise<number> {
     return this.#db.transaction(async (tx) => {
       await forgetNetworks(tx, now)
-      await scorePairs(tx, await mainPlayerPairs(tx, now))
+      const found = await mainPlayerPairs(tx, now)
+      for (const { a, b, signals } of (await movedPlayerPairs(tx, now)).values())
+        addCandidate(found, a, b, signals)
+      await scorePairs(tx, found)
       const shared = await regroup(tx)
       await sharedAudit(tx, shared)
       return shared.length
@@ -112,7 +117,7 @@ export class FreePlayGuard {
       account: person(link.accountId),
       linked: person(link.linkedId),
       score: link.score,
-      signals: link.signals,
+      signals: { ...NO_SIGNALS, ...link.signals },
       confidence: confidence ?? 0,
       shared: levelOf(confidence ?? 0, tuning().freeLinks) === 'high',
       since: link.createdAt.toISOString(),

@@ -4,7 +4,7 @@
 
 import { z } from 'zod'
 import { PAID_PLANS } from '../domain/account/entitlements.ts'
-import { DEFAULT_ABUSE_LIMITS } from '../domain/account/tuning.ts'
+import { DEFAULT_ABUSE_LIMITS, DEFAULT_FREE_LINK_TUNING } from '../domain/account/tuning.ts'
 
 /**
  * Everything a deployment can differ in. Parsed once at boot and consumed by the composition
@@ -169,6 +169,7 @@ const FreeLinkTuning = z
         inbox: z.number().nonnegative(),
         signedUpClose: z.number().nonnegative(),
         network: z.number().nonnegative(),
+        playersMoved: z.number().nonnegative().default(DEFAULT_FREE_LINK_TUNING.weights.playersMoved),
       }),
       link: Share,
       medium: Share,
@@ -177,6 +178,9 @@ const FreeLinkTuning = z
       mainShare: Share,
       mainForS: Count,
       networkKeptMs: Count,
+      movedPlayers: Count.default(DEFAULT_FREE_LINK_TUNING.movedPlayers),
+      movedWithinMs: Count.default(DEFAULT_FREE_LINK_TUNING.movedWithinMs),
+      movedLookMs: Count.default(DEFAULT_FREE_LINK_TUNING.movedLookMs),
     },
     { error: 'FREE_LINK_TUNING is the deployment’s free-link tuning, as JSON (docs/configuration.md)' },
   )
