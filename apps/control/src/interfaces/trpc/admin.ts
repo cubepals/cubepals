@@ -19,6 +19,7 @@ import {
   FlySuspendInput,
   HealthOperationsInput,
   LimitsInput,
+  LinkedPairRef,
   MaintenanceStopInput,
   MarkOfficialInput,
   ModerateInput,
@@ -111,6 +112,12 @@ export const admin = router({
   releaseFree: adminProcedure
     .input(AccountRef)
     .mutation(({ ctx, input }) => ctx.services.accounts.freePlay.release(ctx.actor, input.userId)),
+  /** A linked pair dealt with: no longer new, and nothing else changes for either account. */
+  handledFreeLink: adminProcedure
+    .input(LinkedPairRef)
+    .mutation(({ ctx, input }) =>
+      ctx.services.accounts.freePlay.handled(ctx.actor, input.accountId, input.linkedId),
+    ),
   /** An account to test Cubepals with: confirmed, on the plan picked, and marked as a test account. */
   createTestAccount: adminProcedure
     .input(CreateTestAccountInput)

@@ -351,8 +351,8 @@ async function wakeConditions(db: Db, now: Date): Promise<Condition[]> {
 
 /**
  * Accounts Blockly linked as one person's free hours that no admin has looked at, in groups sure
- * enough to show (`medium`): those it is surest of share them already, and an admin decides whether
- * to hold or release them. Each pair is a line of its own, naming both accounts and what links
+ * enough to show (`medium`): those it is surest of share one set of free hours already, and an admin
+ * holds, releases or marks each pair handled, which clears it from here. Each pair is a line of its own, naming both accounts and what links
  * them, and a pair new since the last email is emailed again.
  */
 async function linkedCondition(db: Db): Promise<Condition[]> {
@@ -364,7 +364,7 @@ async function linkedCondition(db: Db): Promise<Condition[]> {
   return [
     {
       key: 'free_accounts_linked',
-      summary: `${linked.length} ${one ? 'pair of accounts looks' : 'pairs of accounts look'} like one person's free hours. Those Cubepals is sure of share them now; hold or release ${one ? 'it' : 'them'} under Linked accounts. ${lines.join(' ')}`,
+      summary: `${linked.length} ${one ? 'pair of accounts looks' : 'pairs of accounts look'} like one person using the free hours twice. Review ${one ? 'it' : 'them'} under Linked accounts: Hold, Release, or Handled. ${lines.join(' ')}`,
       cases: linked.map(pairName),
     },
   ]

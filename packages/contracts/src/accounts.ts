@@ -84,6 +84,8 @@ export const AccountSearchInput = z.object({
   offset: z.number().int().min(0).max(100_000).default(0),
 })
 export const AccountRef = z.object({ userId })
+/** A linked pair (`FreeLinkView`), by its two accounts. */
+export const LinkedPairRef = z.object({ accountId: userId, linkedId: userId })
 export const StandingReasonInput = z.object({ userId, reason: z.string().trim().min(1).max(500) })
 export const RestrictionsInput = z.object({
   userId,

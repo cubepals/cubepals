@@ -5,7 +5,8 @@
 /**
  * Accounts and their servers, acted on from the command line, on the internal listener with the
  * operator token (docs/production.md): an account found, read, or made for a person, its plan and
- * limits set, a notice put on it or taken off (`app/accounts/notice.ts`), and a server made for
+ * limits set, a notice put on it or taken off (`app/accounts/notice.ts`), a linked pair it is on
+ * marked handled (`app/accounts/free-play-guard.ts`), and a server made for
  * it, started, stopped, tried again after a start that failed (as its owner's Try again does),
  * sent to the trash and taken back out, rested in the archive store now, or purged now. What an
  * owner does on a server's own pages is
@@ -27,6 +28,7 @@ import {
 } from '@blockly/contracts'
 import { Hono } from 'hono'
 import { z } from 'zod'
+import type { FreePlayGuard } from '../../app/accounts/free-play-guard.ts'
 import type { AccountNotices } from '../../app/accounts/notice.ts'
 import type { AccountDetail, AccountQueries } from '../../app/accounts/queries.ts'
 import type { AccountService } from '../../app/accounts/service.ts'
@@ -55,6 +57,7 @@ export type OpsApiOptions = ServerPagesOptions &
   PlatformOptions & {
     accounts: Pick<AccountService, 'setPlan' | 'setLimits' | 'createAccount'> & {
       notices: Pick<AccountNotices, 'get' | 'set' | 'clear'>
+      freePlay: Pick<FreePlayGuard, 'handled'>
     }
     accountQueries: Pick<AccountQueries, 'list' | 'get'>
     servers: Pick<
@@ -196,6 +199,14 @@ function accountRoutes(app: Hono, options: OpsApiOptions): void {
     return c.json(accountView(await accountQueries.get(operator, userId)))
   })
   noticeRoutes(app, options)
+  // A linked pair dealt with (Handled under Linked accounts): nothing else changes for either.
+  app.post(`${OPS_BASE}/accounts/:account/linked/:linked/handled`, async (c) => {
+    const operator = operatorOf(c)
+    const { userId } = await accountOf(accountQueries, operator, c.req.param('account'))
+    const linked = await accountOf(accountQueries, operator, c.req.param('linked'))
+    await accounts.freePlay.handled(operator, userId, linked.userId)
+    return c.json({ handled: { account: userId, linked: linked.userId } })
+  })
 }
 
 function noticeRoutes(app: Hono, { accountQueries, accounts }: OpsApiOptions): void {

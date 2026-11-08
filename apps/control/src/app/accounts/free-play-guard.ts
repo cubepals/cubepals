@@ -6,8 +6,9 @@
  * What Blockly does to keep free hours one person's: keeps a new account's inbox and sign-up
  * network and links it to the others of its inbox, links free accounts one main player plays most
  * on and new ones whose players moved from another that ran out of free hours, puts linked accounts into groups and acts by how sure it is of each
- * (`domain/account/free-links.ts`), and lets an admin hold or release them. Every account that
- * comes to share another's hours, and every hold and release, is on the account's audit log. An
+ * (`domain/account/free-links.ts`), and lets an admin hold or release them, or mark a pair handled.
+ * Every account that comes to share another's hours, and every hold, release and handled pair, is on
+ * the account's audit log. An
  * address never refuses anything. The facts and their queries are `free-play.ts`'s and
  * `free-links.ts`'s.
  */
@@ -16,7 +17,7 @@ import { type Db, schema, type Tx } from '@blockly/db'
 import { and, desc, eq, gte, inArray, isNull, or } from 'drizzle-orm'
 import { NO_SIGNALS } from '../../domain/account/free-links.ts'
 import { addressKey } from '../../domain/account/free-play.ts'
-import type { Actor } from '../actor.ts'
+import { type Actor, requestedBy, runsThePlatform } from '../actor.ts'
 import { NotFound } from '../errors.ts'
 import { tuning } from '../tuning.ts'
 import {
@@ -131,6 +132,31 @@ export class FreePlayGuard {
     }))
   }
 
+  /**
+   * One pair dealt with: marked reviewed, so it is no longer new under Linked accounts or in the
+   * alert inbox, and nothing else changes. No hold, no release, and whether the pair shares free
+   * hours stays as it was. On the audit log of the later account.
+   */
+  async handled(actor: Actor, accountId: string, linkedId: string, now = new Date()): Promise<void> {
+    if (!runsThePlatform(actor)) throw new NotFound('Linked accounts')
+    await this.#db.transaction(async (tx) => {
+      const marked = await tx
+        .update(links)
+        .set({ reviewedAt: now })
+        .where(and(pairOf(accountId, linkedId), isNull(links.releasedAt)))
+        .returning({ accountId: links.accountId, linkedId: links.linkedId })
+      const [pair] = marked
+      if (pair === undefined) throw new NotFound('Linked accounts')
+      await tx.insert(schema.auditLog).values({
+        actor: requestedBy(actor),
+        action: 'account.free_link_handled',
+        subjectType: 'account',
+        subjectId: pair.accountId,
+        data: { with: pair.linkedId },
+      })
+    })
+  }
+
   /** No free server of this account starts or is made until it is released. Nothing is deleted. */
   async hold(actor: Actor, userId: string, now = new Date()): Promise<void> {
     if (actor.kind !== 'admin') throw new NotFound('Account')
@@ -175,6 +201,10 @@ export class FreePlayGuard {
     })
   }
 }
+
+/** The link between two accounts, whichever of them signed up later. */
+const pairOf = (x: string, y: string) =>
+  or(and(eq(links.accountId, x), eq(links.linkedId, y)), and(eq(links.accountId, y), eq(links.linkedId, x)))
 
 /** The links an account is on either side of. */
 const involving = (userId: string) => or(eq(links.accountId, userId), eq(links.linkedId, userId))

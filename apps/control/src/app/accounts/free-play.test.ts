@@ -20,6 +20,7 @@ import { and, eq, inArray } from 'drizzle-orm'
 import { entitlementsFor } from '../../domain/account/entitlements.ts'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
 import type { UserActor } from '../actor.ts'
+import { NotFound } from '../errors.ts'
 import { PlatformAlerts } from '../platform/alerts.ts'
 import { recordEdgePresence, replacePresence } from '../servers/usage.ts'
 import { tuning } from '../tuning.ts'
@@ -344,6 +345,28 @@ describe.skipIf(!hasDatabase)('players who moved from an account out of free hou
       h.mail.to(`${staff.userId}@example.test`).filter((m) => m.text.includes(third.userId)),
     ).toHaveLength(1)
     expect(await sharers(third)).toEqual([third.userId])
+
+    // Handled, both pairs: no longer new, the alert gone, and nothing else changed.
+    await expect(h.app.accounts.freePlay.handled(second, second.userId, first.userId)).rejects.toBeInstanceOf(
+      NotFound,
+    )
+    for (const later of [second, third])
+      await h.app.accounts.freePlay.handled(staff, first.userId, later.userId)
+    expect((await h.app.accounts.freePlay.links(staff)).map((l) => [l.reviewed, l.shared])).toEqual([
+      [true, false],
+      [true, false],
+    ])
+    expect((await h.app.alerts.active(staff)).map((a) => a.key)).not.toContain('free_accounts_linked')
+    await h.app.alerts.sweep()
+    expect(await logged(second.userId, 'account.free_link_handled')).toEqual([
+      { actor: `admin:${staff.userId}`, data: { with: first.userId } },
+    ])
+    expect(await sharers(second)).toEqual([second.userId])
+    const [row] = await h.db.select().from(schema.freePlay).where(eq(schema.freePlay.userId, second.userId))
+    expect(row?.heldAt).toBeNull()
+    // The next pass leaves a handled pair handled.
+    await h.app.accounts.freePlay.relink()
+    expect((await h.app.accounts.freePlay.links(staff)).every((l) => l.reviewed)).toBe(true)
   }, 120_000)
 })
 
