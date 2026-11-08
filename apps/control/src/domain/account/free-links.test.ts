@@ -183,6 +183,16 @@ describe('players who moved', () => {
     expect(1 - (1 - moved) ** 3).toBeGreaterThanOrEqual(T.high)
     expect(shown).toMatchObject({ members: ids, level: 'medium' })
     expect(shown?.confidence).toBeLessThan(T.high)
+    // A shown-only link stronger than the links a group shares on takes nothing from it.
+    const sure = 0.65
+    const sharingChain = ids.slice(1).map((id, i) => ({ a: id, b: ids[i] as string, score: sure }))
+    const [before] = linkedGroups(sharingChain, made, T)
+    expect(before?.confidence).toBeCloseTo(1 - (1 - sure) ** 3)
+    const withShown = linkedGroups([...sharingChain, { a: 'd', b: 'a', score: 0.7, sharing: 0 }], made, T)
+    expect(withShown).toEqual(before === undefined ? [] : [before])
+    // An account linked to a sharing group only by a shown-only link is shown on its own, sharing nothing.
+    const [, alone] = linkedGroups([...sharingChain, { a: 'e', b: 'a', score: moved, sharing: 0 }], made, T)
+    expect(alone).toMatchObject({ members: ['e'], level: 'medium' })
     // A link sure enough to share on its own still shares.
     const [shared] = linkedGroups([...chain, { a: 'd', b: 'a', score: 1, sharing: 1 }], made, T)
     expect(shared?.level).toBe('high')

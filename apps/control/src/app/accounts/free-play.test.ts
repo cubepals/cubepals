@@ -20,6 +20,7 @@ import { and, eq, inArray } from 'drizzle-orm'
 import { entitlementsFor } from '../../domain/account/entitlements.ts'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
 import type { UserActor } from '../actor.ts'
+import { PlatformAlerts } from '../platform/alerts.ts'
 import { recordEdgePresence, replacePresence } from '../servers/usage.ts'
 import { tuning } from '../tuning.ts'
 import { addCandidate, type Candidates } from './free-links.ts'
@@ -319,12 +320,25 @@ describe.skipIf(!hasDatabase)('players who moved from an account out of free hou
     await h.app.alerts.sweep()
     expect(told()).toHaveLength(1)
 
-    // A third account the same group moves to is a new case, emailed again.
+    // A third account the same group moves to is a new case, emailed again, even when the first
+    // try to email it fails.
     const third = await owner()
     await h.db.update(schema.users).set({ createdAt: new Date() }).where(eq(schema.users.id, third.userId))
     await verified((await stopped(third)).id, Object.fromEntries(group.map((p) => [p, 1])))
     await outOfHours(firstServer.id, new Date(Date.now() - MINUTE_MS))
     expect(await h.app.accounts.freePlay.relink()).toBe(0)
+    const down = new PlatformAlerts({
+      db: h.db,
+      jobs: h.jobs,
+      catalog: h.app.catalog,
+      webOrigin: 'http://localhost:3000',
+      mailer: {
+        send: async () => {
+          throw new Error('the mail provider is down')
+        },
+      },
+    })
+    await down.sweep()
     await h.app.alerts.sweep()
     expect(
       h.mail.to(`${staff.userId}@example.test`).filter((m) => m.text.includes(third.userId)),

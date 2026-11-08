@@ -132,7 +132,7 @@ export class PlatformAlerts {
         await raiseAlert(this.#db, condition.key, condition.summary, now)
         raised.push(condition.key)
       } else if (record.summary !== condition.summary) {
-        await restateAlert(this.#db, condition.key, condition.summary)
+        await restateAlert(this.#db, condition.key, condition.summary, retold.includes(condition.key))
       }
     }
     for (const record of stored.values()) {

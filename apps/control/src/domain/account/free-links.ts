@@ -129,15 +129,40 @@ export const levelOf = (confidence: number, tuning: FreeLinkTuning): Confidence 
  * strongest first, so the links that join a group are its strongest ones (a maximum spanning
  * tree). A group's confidence is the chance at least one of those links is right, read as
  * independent: 1 − Π(1 − score). So a group grows surer with each account that links into it, and
- * no weaker than its strongest link. Its confidence reaches `high` only when its links' sharing
- * scores, read the same way, do too; short of that it stays under `high`, at `medium` or more when
- * its full scores get there. `createdAt` orders each group's members, the first first.
+ * no weaker than its strongest link. `createdAt` orders each group's members, the first first.
+ *
+ * Which accounts share hours is settled on the sharing scores alone: the groups they make that
+ * reach `high` are kept as they are, whatever a shown-only link adds. The accounts left over are
+ * grouped on the full scores, held under `high`, so a shown-only link shows them and shares nothing.
  */
 export function linkedGroups(
   pairs: readonly ScoredPair[],
   createdAt: ReadonlyMap<string, Date>,
   tuning: FreeLinkTuning,
 ): LinkedGroup[] {
+  const made = (id: string) => createdAt.get(id)?.getTime() ?? Number.POSITIVE_INFINITY
+  const group = (ids: string[], confidence: number): LinkedGroup => ({
+    members: ids.sort((x, y) => made(x) - made(y) || x.localeCompare(y)),
+    confidence,
+    level: levelOf(confidence, tuning),
+  })
+  const sharingPairs = pairs.map((p) => ({ ...p, score: Math.min(p.score, p.sharing ?? p.score) }))
+  const sharing = spanningGroups(sharingPairs, tuning).filter((g) => g.confidence >= tuning.high)
+  const shares = new Set(sharing.flatMap((g) => g.ids))
+  // The most a group that shares nothing is shown with.
+  const shownAtMost = Math.max(tuning.medium, tuning.high - 0.01)
+  const shown = spanningGroups(pairs, tuning).flatMap(({ ids, confidence }) => {
+    const left = ids.filter((id) => !shares.has(id))
+    return left.length === 0 ? [] : [group(left, Math.min(confidence, shownAtMost))]
+  })
+  return [...sharing.map(({ ids, confidence }) => group(ids, confidence)), ...shown]
+}
+
+/** The maximum spanning trees of the pairs at `link` or above, each with its confidence. */
+function spanningGroups(
+  pairs: readonly ScoredPair[],
+  tuning: FreeLinkTuning,
+): Array<{ ids: string[]; confidence: number }> {
   const parent = new Map<string, string>()
   const find = (id: string): string => {
     let root = id
@@ -146,7 +171,6 @@ export function linkedGroups(
     return root
   }
   const doubt = new Map<string, number>()
-  const sharingDoubt = new Map<string, number>()
   for (const pair of [...pairs].filter((p) => p.score >= tuning.link).sort((x, y) => y.score - x.score)) {
     const ra = find(pair.a)
     const rb = find(pair.b)
@@ -154,23 +178,8 @@ export function linkedGroups(
     parent.set(rb, ra)
     doubt.set(ra, (doubt.get(ra) ?? 1) * (doubt.get(rb) ?? 1) * (1 - pair.score))
     doubt.delete(rb)
-    const sharing = Math.min(pair.score, pair.sharing ?? pair.score)
-    sharingDoubt.set(ra, (sharingDoubt.get(ra) ?? 1) * (sharingDoubt.get(rb) ?? 1) * (1 - sharing))
-    sharingDoubt.delete(rb)
   }
   const members = new Map<string, string[]>()
   for (const id of parent.keys()) members.set(find(id), [...(members.get(find(id)) ?? []), id])
-  const made = (id: string) => createdAt.get(id)?.getTime() ?? Number.POSITIVE_INFINITY
-  // The most a group whose sharing scores fall short of `high` is shown with.
-  const shownAtMost = Math.max(tuning.medium, tuning.high - 0.01)
-  return [...members].map(([root, ids]) => {
-    const full = 1 - (doubt.get(root) ?? 1)
-    const sharing = 1 - (sharingDoubt.get(root) ?? 1)
-    const confidence = sharing >= tuning.high ? full : Math.max(sharing, Math.min(full, shownAtMost))
-    return {
-      members: ids.sort((x, y) => made(x) - made(y) || x.localeCompare(y)),
-      confidence,
-      level: levelOf(confidence, tuning),
-    }
-  })
+  return [...members].map(([root, ids]) => ({ ids, confidence: 1 - (doubt.get(root) ?? 1) }))
 }

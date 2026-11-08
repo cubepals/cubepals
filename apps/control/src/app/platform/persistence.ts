@@ -214,8 +214,17 @@ export async function raiseAlert(q: Queryable, key: string, summary: string, at:
     .onConflictDoUpdate({ target: alerts.key, set: raised })
 }
 
-export async function restateAlert(q: Queryable, key: string, summary: string): Promise<void> {
-  await q.update(alerts).set({ summary }).where(eq(alerts.key, key))
+/** A raised alert's new summary; `unsent` when it holds a case to email, until the email goes out. */
+export async function restateAlert(
+  q: Queryable,
+  key: string,
+  summary: string,
+  unsent: boolean,
+): Promise<void> {
+  await q
+    .update(alerts)
+    .set(unsent ? { summary, notifiedAt: null } : { summary })
+    .where(eq(alerts.key, key))
 }
 
 export async function alertNotified(q: Queryable, key: string, at: Date): Promise<void> {
