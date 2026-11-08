@@ -8,8 +8,9 @@
  *
  *   bun scripts/ops-mcp.ts [--production]
  *
- * One tool for each `scripts/ops.ts` command: accounts, a server's life, its console, identity,
- * mods and players pages, Browse and its allowlist, the platform switches, uploaded jars' malware
+ * One tool for each `scripts/ops.ts` command: accounts and the notice an operator puts on one, a
+ * server's life, its console, identity, mods and players pages, Browse and its allowlist, the
+ * platform switches, uploaded jars' malware
  * checks, joins and their signals, production's health, and diagnosis: one account's trouble, what
  * ran slow or failed and whose it was, and the database now. Its instructions tell an agent where
  * to start.
@@ -181,6 +182,36 @@ tool(
       },
     ]
   },
+)
+
+const notice = (ref: string) => `/accounts/${encodeURIComponent(ref)}/notice`
+tool(
+  'account_notice_get',
+  'An operator’s notice on an account: its text, who set it and when, when it limits the account and whether it has; null while there is none.',
+  { account },
+  (a) => ['GET', notice(a.account)],
+  read,
+)
+tool(
+  'account_notice_set',
+  `${NOT_UNDONE}every player on the account's servers reads it, and with limitAt it limits the account at that moment, once: its running limit set to 0 and what it runs stopped (worlds saved), which clearing the notice doesn’t undo. Puts a notice on an account in place of any before: every server it owns shows it in the server list in place of its own message, running or asleep, and says it in chat to whoever joins and every ten minutes. One line, with & or § formatting codes, held to what a server message may be. Only when a person asks for it.`,
+  {
+    account,
+    text: Line.min(1).describe('The notice, as a server message is written'),
+    limitAt: Line.optional().describe('An ISO moment with its offset, when it limits the account'),
+    confirm: Line.describe('The account as given, again, to confirm'),
+  },
+  ({ account: ref, text, limitAt, confirm }) => {
+    if (confirm !== ref) throw new Error('Not done: confirm is not the account as given.')
+    return ['PUT', notice(ref), { text, limitAt: limitAt ?? null }]
+  },
+  gone,
+)
+tool(
+  'account_notice_clear',
+  'Takes an account’s notice away: its servers show their own messages again, and a limit still to come never comes. A limit it already put on stays, and the answer says so: lift it with account_set_limits, maxRunning null.',
+  { account },
+  (a) => ['DELETE', notice(a.account)],
 )
 
 // ─── A server's life ────────────────────────────────────────────────────────────────────────────

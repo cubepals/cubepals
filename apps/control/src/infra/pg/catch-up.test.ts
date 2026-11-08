@@ -84,6 +84,7 @@ describe.skipIf(!hasDatabase)('a worker that starts after being stopped for hour
         'backup-schedule',
         'artifact-gc',
         'standing-sweep',
+        'account-notices',
         'extra-play-report',
         'listing-eligibility-sweep',
         'admin-alerts',

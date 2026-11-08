@@ -6,7 +6,7 @@
  * Everything the control plane knows about why one account is having a bad time, put together
  * in one answer for an operator or an agent: who it is, its servers, the operations on them that
  * failed or ran slowest, joins that never reached the world, the signals raised on its servers,
- * how its Paper servers ticked, and what ran slow or failed for it, grouped and newest. It reads;
+ * an operator's notice on it, how its Paper servers ticked, and what ran slow or failed for it, grouped and newest. It reads;
  * it changes nothing.
  *
  * Not for the account's standing, plan or limits in full, which `GET /ops/v1/accounts/<account>`
@@ -34,7 +34,7 @@ const JOINS_PER_SERVER = 20
 export async function diagnoseAccount(
   sources: DiagnosisSources,
   actor: Actor,
-  account: Pick<AccountDetail, 'userId' | 'email' | 'name' | 'standing' | 'serverList'>,
+  account: Pick<AccountDetail, 'userId' | 'email' | 'name' | 'standing' | 'serverList' | 'notice'>,
   since: Date,
   now = new Date(),
 ): Promise<AccountDiagnosisView> {
@@ -62,6 +62,15 @@ export async function diagnoseAccount(
       status: account.standing.status,
       test: account.standing.testAccount,
     },
+    notice:
+      account.notice === null
+        ? null
+        : {
+            ...account.notice,
+            setAt: account.notice.setAt.toISOString(),
+            limitAt: account.notice.limitAt?.toISOString() ?? null,
+            limitedAt: account.notice.limitedAt?.toISOString() ?? null,
+          },
     since: since.toISOString(),
     servers,
     operations,

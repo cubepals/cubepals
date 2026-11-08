@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /** Console commands the platform itself issues, and parsers for their answers. */
+import { motdForGame } from '@blockly/contracts/server-list'
 
 export const SAVE_ALL_FLUSH = 'save-all flush'
 export const SAVE_OFF = 'save-off'
@@ -22,6 +23,19 @@ export function announce(message: string): string {
       { text: '[Cubepals] ', color: 'aqua' },
       { text, color: 'yellow' },
     ],
+  }
+  return `tellraw @a ${JSON.stringify(line)}`
+}
+
+/**
+ * An operator's notice on the server's owner, said to every player as `announce` says a line, with
+ * its formatting codes as the game reads them (`§`) in its text, which chat draws as the server
+ * list does.
+ */
+export function announceNotice(notice: string): string {
+  const line = {
+    text: '',
+    extra: [{ text: '[Cubepals] ', color: 'aqua' }, { text: motdForGame(oneLine(notice)) }],
   }
   return `tellraw @a ${JSON.stringify(line)}`
 }

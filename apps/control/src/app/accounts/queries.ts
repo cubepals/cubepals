@@ -17,6 +17,7 @@ import {
 } from '../../domain/account/entitlements.ts'
 import { ceilingsFor } from '../../domain/account/extra-play.ts'
 import { METER_UNITS, UNIT_CENTS } from '../../domain/account/meter.ts'
+import type { AccountNotice } from '../../domain/account/notice.ts'
 import { DEFAULT_TIME_ZONE, monthStart } from '../../domain/account/play-day.ts'
 import type { AccountStanding } from '../../domain/account/standing.ts'
 import type { Capability, DenialCode } from '../../domain/policy/policy.ts'
@@ -33,6 +34,7 @@ import { NotFound } from '../errors.ts'
 import type { AccessPolicy } from '../policy/access-policy.ts'
 import { listUnpurged } from '../servers/persistence.ts'
 import { tuning } from '../tuning.ts'
+import { noticeOf } from './notice.ts'
 import {
   type AccountRow,
   countServers,
@@ -180,6 +182,8 @@ export interface AccountDetail extends AccountRow {
   serverList: Array<{ id: string; name: string; slug: string; status: string; deleted: boolean }>
   /** What admins and the platform did to the account, newest first. */
   history: Array<{ at: Date; actor: string; action: string; data: Record<string, unknown> }>
+  /** An operator's notice on it (`notice.ts`); null while there is none. */
+  notice: AccountNotice | null
 }
 
 /** Accounts as their owners and admins see them. */
@@ -345,6 +349,7 @@ export class AccountQueries {
         action: h.action,
         data: h.data,
       })),
+      notice: await noticeOf(this.#db, userId),
     }
   }
 

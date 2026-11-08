@@ -326,11 +326,13 @@ export class AccountService {
    * Limits above or below the plan's, for this account only; null returns to the plan's. Hours of
    * play a month (`includedUnits`) are given the same way: to make up for a bad month, or to test.
    * Hours lowered once the account has played this month apply from the next (`keepPlayedBlock`).
+   * Given `within`, it is written in that transaction, to commit with what else it holds.
    */
   async setLimits(
     actor: Actor,
     userId: string,
     limits: { maxServers: number | null; maxRunning: number | null; includedUnits?: number | null },
+    within?: Tx,
   ): Promise<void> {
     for (const value of [limits.maxServers, limits.maxRunning])
       if (value !== null && (!Number.isInteger(value) || value < 0 || value > 1000))
@@ -343,10 +345,17 @@ export class AccountService {
       ...(limits.maxRunning === null ? {} : { maxRunning: limits.maxRunning }),
       ...(hours === null ? {} : { includedUnits: hours }),
     }
-    await this.#change(actor, userId, 'account.limits_set', { limits: overrides }, async (tx) => {
-      await keepPlayedBlock(tx, userId, new Date())
-      await saveStanding(tx, userId, { limitOverrides: overrides })
-    })
+    await this.#change(
+      actor,
+      userId,
+      'account.limits_set',
+      { limits: overrides },
+      async (tx) => {
+        await keepPlayedBlock(tx, userId, new Date())
+        await saveStanding(tx, userId, { limitOverrides: overrides })
+      },
+      within,
+    )
   }
 
   async grantAdmin(actor: Actor, userId: string): Promise<void> {
@@ -671,9 +680,10 @@ export class AccountService {
     action: string,
     data: Record<string, unknown>,
     apply: (tx: Tx, standing: NonNullable<Awaited<ReturnType<typeof lockStanding>>>) => Promise<void>,
+    within?: Tx,
   ): Promise<void> {
     if (!runsThePlatform(actor)) throw new NotFound('Account')
-    await this.#db.transaction(async (tx) => {
+    const change = async (tx: Tx) => {
       const standing = await lockStanding(tx, userId)
       if (standing === null) throw new NotFound('Account')
       await apply(tx, standing)
@@ -686,7 +696,8 @@ export class AccountService {
       })
       // Standing, restrictions and plans are eligibility inputs (§15.3).
       await this.#jobs.enqueueEligibility(await listingsOfOwner(tx, userId), tx)
-    })
+    }
+    await (within === undefined ? this.#db.transaction(change) : change(within))
   }
 }
 

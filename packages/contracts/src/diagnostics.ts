@@ -175,6 +175,17 @@ export type DatabaseQuery = z.infer<typeof DatabaseQuery>
  */
 export interface AccountDiagnosisView {
   account: { id: string; email: string; name: string; plan: string; status: string; test: boolean }
+  /**
+   * An operator's notice on the account (`ops.ts notice`), which its servers show players, and when
+   * it limits the account and did; null while there is none.
+   */
+  notice: {
+    text: string
+    setAt: string
+    setBy: string
+    limitAt: string | null
+    limitedAt: string | null
+  } | null
   since: string
   servers: Array<{ id: string; name: string; slug: string; status: string; deleted: boolean }>
   operations: { failed: HealthOperationView[]; slowest: HealthOperationView[] }

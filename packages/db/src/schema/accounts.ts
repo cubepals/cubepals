@@ -9,7 +9,7 @@
  * own recurring work last went.
  */
 import { sql } from 'drizzle-orm'
-import { boolean, check, date, integer, jsonb, pgEnum, pgTable, text } from 'drizzle-orm/pg-core'
+import { boolean, check, date, index, integer, jsonb, pgEnum, pgTable, text } from 'drizzle-orm/pg-core'
 import type { AccountRestrictionsJson, LimitOverridesJson } from '../json.ts'
 import { users } from './auth.ts'
 import { createdAt, ts, updatedAt } from './columns.ts'
@@ -28,73 +28,101 @@ export const platformAdmins = pgTable('platform_admins', {
   grantedAt: ts('granted_at').notNull().defaultNow(),
 })
 
-export const accountStanding = pgTable('account_standing', {
-  userId: text('user_id')
-    .primaryKey()
-    .references(() => users.id),
-  status: accountStatus('status').notNull().default('active'),
-  reason: text('reason'),
-  plan: text('plan').notNull().default('free'),
-  restrictions: jsonb('restrictions').$type<AccountRestrictionsJson>().notNull().default({}),
-  limitOverrides: jsonb('limit_overrides').$type<LimitOverridesJson>().notNull().default({}),
-  /** Play past the plan's included block that the owner allows, in meter units (§15.5). */
-  extraUnitsAllowed: integer('extra_units_allowed').notNull().default(0),
-  /**
-   * Minutes a player may stand still before the server kicks them, where the owner set it
-   * themselves; null leaves the plan's own. On metered play an idle player spends money.
-   */
-  afkKickMinutes: integer('afk_kick_minutes'),
-  /**
-   * The last warning about this month's play that was sent, as `YYYY-MM:percent`. A month and a
-   * threshold together, so the same warning is never sent twice and a new month starts quiet.
-   */
-  playWarned: text('play_warned'),
-  /**
-   * The last email about extra play sent, as `YYYY-MM:mark`: `0` when it started being used, then
-   * 80 and 100 of what the owner allowed. Kept the way `playWarned` is.
-   */
-  extraWarned: text('extra_warned'),
-  /**
-   * The owner's time zone, as their browser last reported it ("Europe/Paris"): where a plan's day
-   * begins. Null until it has; the day is UTC's until then. Nobody picks it. It is the zone the
-   * current month is counted in: a zone reported later waits in `nextTimeZone`.
-   */
-  timeZone: text('time_zone'),
-  /**
-   * When `timeZone` took over from the zone before it, and when the month and day it took over in
-   * began, in that zone before: that month and day run from then. Null when it has been the zone
-   * from the start.
-   */
-  timeZoneFrom: ts('time_zone_from'),
-  timeZoneBegan: ts('time_zone_began'),
-  /**
-   * A zone the browser reported that differs from `timeZone`, and when it takes over: once the
-   * month has begun again in both, so a change never opens a month's hours early. Null when none
-   * waits.
-   */
-  nextTimeZone: text('next_time_zone'),
-  nextTimeZoneFrom: ts('next_time_zone_from'),
-  /**
-   * Where the account came from, as the link that brought it said (`?ref=` or `utm_source=`),
-   * kept once in the week after sign-up; null when no link said. No cookie carries it.
-   */
-  signupSource: text('signup_source'),
-  /**
-   * The rest of the link's campaign tags (`utm_medium`, `utm_campaign`, `utm_content`,
-   * `utm_term`), kept with the source and the same way: once, in the first week, never replaced.
-   */
-  signupMedium: text('signup_medium'),
-  signupCampaign: text('signup_campaign'),
-  signupContent: text('signup_content'),
-  signupTerm: text('signup_term'),
-  /**
-   * An account the people who run Cubepals use to test it: made by an admin or marked by one. It
-   * is left out of the business's numbers and never sent to the billing provider or analytics.
-   */
-  testAccount: boolean('test_account').notNull().default(false),
-  createdAt: createdAt(),
-  updatedAt: updatedAt(),
-})
+export const accountStanding = pgTable(
+  'account_standing',
+  {
+    userId: text('user_id')
+      .primaryKey()
+      .references(() => users.id),
+    status: accountStatus('status').notNull().default('active'),
+    reason: text('reason'),
+    plan: text('plan').notNull().default('free'),
+    restrictions: jsonb('restrictions').$type<AccountRestrictionsJson>().notNull().default({}),
+    limitOverrides: jsonb('limit_overrides').$type<LimitOverridesJson>().notNull().default({}),
+    /** Play past the plan's included block that the owner allows, in meter units (§15.5). */
+    extraUnitsAllowed: integer('extra_units_allowed').notNull().default(0),
+    /**
+     * Minutes a player may stand still before the server kicks them, where the owner set it
+     * themselves; null leaves the plan's own. On metered play an idle player spends money.
+     */
+    afkKickMinutes: integer('afk_kick_minutes'),
+    /**
+     * The last warning about this month's play that was sent, as `YYYY-MM:percent`. A month and a
+     * threshold together, so the same warning is never sent twice and a new month starts quiet.
+     */
+    playWarned: text('play_warned'),
+    /**
+     * The last email about extra play sent, as `YYYY-MM:mark`: `0` when it started being used, then
+     * 80 and 100 of what the owner allowed. Kept the way `playWarned` is.
+     */
+    extraWarned: text('extra_warned'),
+    /**
+     * The owner's time zone, as their browser last reported it ("Europe/Paris"): where a plan's day
+     * begins. Null until it has; the day is UTC's until then. Nobody picks it. It is the zone the
+     * current month is counted in: a zone reported later waits in `nextTimeZone`.
+     */
+    timeZone: text('time_zone'),
+    /**
+     * When `timeZone` took over from the zone before it, and when the month and day it took over in
+     * began, in that zone before: that month and day run from then. Null when it has been the zone
+     * from the start.
+     */
+    timeZoneFrom: ts('time_zone_from'),
+    timeZoneBegan: ts('time_zone_began'),
+    /**
+     * A zone the browser reported that differs from `timeZone`, and when it takes over: once the
+     * month has begun again in both, so a change never opens a month's hours early. Null when none
+     * waits.
+     */
+    nextTimeZone: text('next_time_zone'),
+    nextTimeZoneFrom: ts('next_time_zone_from'),
+    /**
+     * Where the account came from, as the link that brought it said (`?ref=` or `utm_source=`),
+     * kept once in the week after sign-up; null when no link said. No cookie carries it.
+     */
+    signupSource: text('signup_source'),
+    /**
+     * The rest of the link's campaign tags (`utm_medium`, `utm_campaign`, `utm_content`,
+     * `utm_term`), kept with the source and the same way: once, in the first week, never replaced.
+     */
+    signupMedium: text('signup_medium'),
+    signupCampaign: text('signup_campaign'),
+    signupContent: text('signup_content'),
+    signupTerm: text('signup_term'),
+    /**
+     * An account the people who run Cubepals use to test it: made by an admin or marked by one. It
+     * is left out of the business's numbers and never sent to the billing provider or analytics.
+     */
+    testAccount: boolean('test_account').notNull().default(false),
+    /**
+     * A notice an operator put on the account: one line, formatting codes as a server's message
+     * takes them, which every server it owns shows in the server list in place of its own message,
+     * and says in its chat (`app/accounts/notice.ts`). Null while there is none; who set it and when
+     * go with it.
+     */
+    notice: text('notice'),
+    noticeSetAt: ts('notice_set_at'),
+    noticeSetBy: text('notice_set_by'),
+    /**
+     * When the notice limits the account: no server running, and those that run stopped. Null for
+     * a notice that only tells. `noticeLimitedAt` says it was done, once.
+     */
+    noticeLimitAt: ts('notice_limit_at'),
+    noticeLimitedAt: ts('notice_limited_at'),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    check(
+      'account_standing_notice_set',
+      sql`${t.notice} is null or (${t.noticeSetAt} is not null and ${t.noticeSetBy} is not null)`,
+    ),
+    // The notices whose limit is still to come, which a sweep reads every minute.
+    index('account_standing_notice_due')
+      .on(t.noticeLimitAt)
+      .where(sql`${t.notice} is not null and ${t.noticeLimitedAt} is null`),
+  ],
+)
 
 export const platformControls = pgTable(
   'platform_controls',

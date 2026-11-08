@@ -58,6 +58,23 @@ const detail = {
   history: [],
 } as unknown as AccountDetail
 
+const LIMIT_AT = '2026-11-10T12:00:00.000Z'
+/** A notice as the service keeps one. */
+const NOTICE = {
+  text: '&cThis account is under review',
+  setAt: new Date(0),
+  setBy: 'operator:ada',
+  limitAt: new Date(LIMIT_AT),
+  limitedAt: null,
+}
+
+/** The account notices, answering NOTICE, written down by `record`. */
+const noticesRecorded = (record: ReturnType<typeof recorder>) => ({
+  get: record('notices.get', null),
+  set: record('notices.set', NOTICE),
+  clear: record('notices.clear', { ...NOTICE, limitedAt: new Date(LIMIT_AT) }),
+})
+
 /** What the server finder answers: the one server it was asked for. */
 const FOUND = [{ id: SERVER, slug: 'v0idworld', name: 'Void', status: 'stopped', owner: OWNER }]
 
@@ -77,14 +94,18 @@ const TOKEN_AND_DIAGNOSTICS = {
   serverFinder: finder,
 }
 
+/** A service's method that writes each call it gets down in `calls`, and answers `answer`. */
+const recorder =
+  (calls: Array<[string, ...unknown[]]>) =>
+  (name: string, answer: unknown = undefined) =>
+  async (...args: unknown[]) => {
+    calls.push([name, ...args])
+    return answer
+  }
+
 /** The API over services that only write down each call they get, in `calls`. */
 function recordingApi(calls: Array<[string, ...unknown[]]>) {
-  const record =
-    (name: string, answer: unknown = undefined) =>
-    async (...args: unknown[]) => {
-      calls.push([name, ...args])
-      return answer
-    }
+  const record = recorder(calls)
   return createOpsApi({
     ...TOKEN_AND_DIAGNOSTICS,
     joins: {
@@ -99,6 +120,7 @@ function recordingApi(calls: Array<[string, ...unknown[]]>) {
       get: record('accounts.get', detail),
     } as unknown as OpsApiOptions['accountQueries'],
     accounts: {
+      notices: noticesRecorded(record),
       setPlan: record('accounts.setPlan'),
       setLimits: record('accounts.setLimits'),
       createAccount: record('accounts.createAccount', { userId: OWNER }),
@@ -279,6 +301,45 @@ describe('the operators’ API: accounts', () => {
     ])
     expect((await call('POST', '/accounts', { email: 'not an address' })).status).toBe(400)
     expect(named('accounts.createAccount')).toHaveLength(1)
+  })
+})
+
+describe('the operators’ API: an account’s notice', () => {
+  test('puts a notice on an account as the operator, with when it limits the account', async () => {
+    const set = await call('PUT', '/accounts/owner@example.test/notice', {
+      text: NOTICE.text,
+      limitAt: '2026-11-10T15:00:00+03:00',
+    })
+    expect(set.status).toBe(200)
+    expect(named('notices.set')).toEqual([
+      ['notices.set', ADA, OWNER, { text: NOTICE.text, limitAt: new Date(LIMIT_AT) }],
+    ])
+    // Without a time, it only tells.
+    await call('PUT', `/accounts/${OWNER}/notice`, { text: 'Hello' })
+    expect(named('notices.set')[1]).toEqual(['notices.set', ADA, OWNER, { text: 'Hello', limitAt: null }])
+  })
+
+  test('refuses a notice longer than a server message may be, or a time that isn’t one, before the service', async () => {
+    const long = await call('PUT', `/accounts/${OWNER}/notice`, { text: 'x'.repeat(201) })
+    expect(long.status).toBe(400)
+    expect(((await long.json()) as { error: { code: string } }).error.code).toBe('invalid')
+    const when = await call('PUT', `/accounts/${OWNER}/notice`, { text: 'Hi', limitAt: 'tomorrow' })
+    expect(when.status).toBe(400)
+    expect(named('notices.set')).toEqual([])
+  })
+
+  test('reads the notice, and clears it saying a limit it put on stays', async () => {
+    const read = await call('GET', `/accounts/${OWNER}/notice`)
+    expect(await read.json()).toEqual({ notice: null })
+    const cleared = await call('DELETE', `/accounts/${OWNER}/notice`)
+    expect(cleared.status).toBe(200)
+    const body = (await cleared.json()) as { cleared: { text: string }; limitStays?: string }
+    expect(body.cleared.text).toBe(NOTICE.text)
+    expect(body.limitStays).toContain('limits <account> --running plan')
+    expect(calls.filter(([name]) => name.startsWith('notices.'))).toEqual([
+      ['notices.get', ADA, OWNER],
+      ['notices.clear', ADA, OWNER],
+    ])
   })
 })
 

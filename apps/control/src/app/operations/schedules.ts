@@ -15,6 +15,7 @@
  * - `expiring.ts`: sends to the trash a server whose time is up, warning first where a plan says.
  * - `idle.ts`: decides whether an empty running server has been idle long enough to stop.
  * - `leftovers.ts`: deletes storage a failed wake, restore or move left beside a server's world.
+ * - `notice-said.ts`: says an operator's notice on a server's owner in its chat, in the presence pass.
  * - `observations.ts`: writes what a runtime said about a server's compute into its `observed` record.
  * - `orphans.ts`: stops compute no running server accounts for; destroys what no binding holds.
  * - `placements.ts`: reads what a sweep looks at of many servers, in one read: where each runs, and its status.
