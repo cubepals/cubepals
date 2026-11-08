@@ -36,9 +36,7 @@ import {
   FinishWorldUploadInput,
   FreshStartInput,
   GameModeInput,
-  InviteRef,
   ItemIconsInput,
-  JoinThroughInviteInput,
   JoinWaitlistInput,
   LetInFromUploadInput,
   LiftInput,
@@ -52,7 +50,6 @@ import {
   PackImportRef,
   PackLinkInput,
   PackVersionsInput,
-  PageRef,
   PlanVersionInput,
   PlayerInput,
   PowerInput,
@@ -94,6 +91,7 @@ import { chipIns } from './chip-ins.ts'
 import { gifts } from './gifts.ts'
 import { insight } from './insight.ts'
 import { ownIcon } from './own-icon.ts'
+import { sharing } from './sharing.ts'
 import { authedProcedure, ownerOrAdminProcedure, publicProcedure, router, sessionOf } from './trpc.ts'
 
 /** Each procedure: parse, get the actor, call one service method, return. Nothing else. */
@@ -737,36 +735,6 @@ const listings = router({
   deleteNote: authedProcedure
     .input(NoteRef)
     .mutation(({ ctx, input }) => ctx.services.guestbook.deleteNote(ctx.actor, input.noteId)),
-})
-
-/** Sharing a server: its page, an invitation, and what the owner sees behind Share. */
-const sharing = router({
-  /** Anyone may open a public page, signed in or not. */
-  page: publicProcedure
-    .input(PageRef)
-    .query(({ ctx, input }) =>
-      ctx.services.sharingQueries.page(input.slug, ctx.actor, { reactions: true, from: ctx.clientAddress }),
-    ),
-  invite: publicProcedure
-    .input(InviteRef)
-    .query(({ ctx, input }) => ctx.services.sharingQueries.invite(input.code, ctx.actor, ctx.clientAddress)),
-  /** The invitee puts their own Minecraft name on the whitelist; no account needed. */
-  join: publicProcedure
-    .input(JoinThroughInviteInput)
-    .mutation(({ ctx, input }) => ctx.services.sharing.joinThroughInvite(input.code, input.playerName)),
-  own: authedProcedure
-    .input(ServerRef)
-    .query(({ ctx, input }) => ctx.services.sharingQueries.share(ctx.actor, input.serverId)),
-  /** The owner copied the invite link. */
-  inviteShared: authedProcedure
-    .input(ServerRef)
-    .mutation(({ ctx, input }) => ctx.services.sharing.inviteShared(ctx.actor, input.serverId)),
-  /** The invitation's page ran in someone's browser; it answers nothing either way. */
-  inviteOpened: publicProcedure
-    .input(InviteRef)
-    .mutation(({ ctx, input }) =>
-      ctx.services.sharing.inviteOpened(input.code, ctx.actor, ctx.clientAddress),
-    ),
 })
 
 const platform = router({
