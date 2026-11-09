@@ -7,15 +7,26 @@
 /**
  * What an owner would otherwise type into the console for one player, as buttons on their page: a
  * trip to coordinates or to someone else playing, an item, health and hunger back, levels, a kick,
- * and an emptied inventory, which asks first. Each is done at once, while the player is on; the
- * commands are the control plane's to build (`minecraft/player-powers.ts`), never typed here.
+ * and an emptied inventory, which asks first. Each is done at once while the player is on. For
+ * someone away, or a server asleep, a trip, items, levels and an emptying wait for their next
+ * join, and the page says what waits (`waiting.tsx`); a heal, a kick and a trip to someone else
+ * show only while they play. The commands are the control plane's to build
+ * (`minecraft/player-powers.ts`), never typed here.
  */
-import { type DIMENSIONS, MOST_GIVEN, type PlayerPower, type PlayerView, shownName } from '@blockly/contracts'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import {
+  type DIMENSIONS,
+  MOST_GIVEN,
+  MOST_LEVELS,
+  type PlayerPower,
+  type PlayerView,
+  shownName,
+} from '@blockly/contracts'
+import { useMutation } from '@tanstack/react-query'
 import { useState } from 'react'
 import { messageOf, useTRPC } from '../../../../../../lib/api'
 import { said, useOutcome } from '../../../../../../lib/outcome'
 import { Button, FormSection, Modal, Note, Select, SuggestField, TextField } from '../../../../../../ui'
+import { useRefresh, Waiting, waitingOf } from './waiting'
 
 type Dimension = (typeof DIMENSIONS)[number]
 
@@ -54,37 +65,52 @@ function whole(text: string): number | null {
 export function PlayerPowers({
   serverId,
   player,
+  running,
   others,
 }: {
   serverId: string
   player: PlayerView
+  running: boolean
   /** Everyone else playing now, for a trip to one of them. */
   others: readonly { name: string; uuid: string }[]
 }) {
   const name = shownName(player)
-  if (!player.online)
-    return (
-      <FormSection
-        title="Teleport, give and more"
-        description={`Teleporting, giving items, healing and kicking show here while ${name} is playing.`}
-      />
-    )
+  const on = running && player.online
   return (
     <>
-      <FormSection title="Teleport" description={`Send ${name} to coordinates, or to someone playing.`}>
+      <FormSection
+        title="Teleport"
+        description={
+          on ? `Send ${name} to coordinates, or to someone playing.` : `Send ${name} there as they next join.`
+        }
+      >
         <ToPlace serverId={serverId} player={player} />
-        {others.length > 0 && <ToPlayer serverId={serverId} player={player} others={others} />}
+        <Kept serverId={serverId} player={player} kind="place" />
+        {on && others.length > 0 && <ToPlayer serverId={serverId} player={player} others={others} />}
       </FormSection>
-      <FormSection title="Give an item" description={`Straight into ${name}’s inventory.`}>
+      <FormSection
+        title="Give an item"
+        description={
+          on ? `Straight into ${name}’s inventory.` : `Into ${name}’s inventory as they next join.`
+        }
+      >
         <GiveItem serverId={serverId} player={player} />
+        <Kept serverId={serverId} player={player} kind="give" />
       </FormSection>
-      <FormSection title="Quick actions">
+      <FormSection
+        title="Quick actions"
+        description={
+          on ? undefined : `These wait for ${name} to join. Healing and kicking show while they play.`
+        }
+      >
         <div className="bk-row" style={{ gap: 'var(--space-12)', flexWrap: 'wrap', alignItems: 'flex-end' }}>
-          <Heal serverId={serverId} player={player} />
+          {on && <Heal serverId={serverId} player={player} />}
           <ClearInventory serverId={serverId} player={player} />
         </div>
+        <Kept serverId={serverId} player={player} kind="clear_inventory" />
         <Levels serverId={serverId} player={player} />
-        <Kick serverId={serverId} player={player} />
+        <Kept serverId={serverId} player={player} kind="levels" />
+        {on && <Kick serverId={serverId} player={player} />}
       </FormSection>
     </>
   )
@@ -95,19 +121,21 @@ interface PowerProps {
   player: PlayerView
 }
 
-/** One power's call, its button's words for how it went, and the page read again after. */
+/**
+ * One power's call, its button's words for how it went, and the page read again after. Kept for
+ * their next join, the button says nothing: the line under it says what waits.
+ */
 function usePower({ serverId, player }: PowerProps) {
   const trpc = useTRPC()
-  const queries = useQueryClient()
+  const refresh = useRefresh(serverId, player.uuid)
   const outcome = useOutcome(undefined)
   const act = useMutation(
     trpc.players.act.mutationOptions({
-      onSuccess: () => outcome.settled(),
+      onSuccess: (result) => {
+        if (result.done === 'now') outcome.settled()
+      },
       onError: () => outcome.refused(),
-      onSettled: () =>
-        void queries.invalidateQueries({
-          queryKey: trpc.players.get.queryKey({ serverId, playerUuid: player.uuid }),
-        }),
+      onSettled: refresh,
     }),
   )
   return {
@@ -116,6 +144,53 @@ function usePower({ serverId, player }: PowerProps) {
     error: act.isError ? messageOf(act.error) : null,
     words: (done: string) => said(outcome, { done, failed: 'Didn’t work' }),
   }
+}
+
+/** What waits of one kind for their next join, in a sentence, with a way to take it back. */
+function Kept({
+  serverId,
+  player,
+  kind,
+}: PowerProps & { kind: 'place' | 'give' | 'levels' | 'clear_inventory' }) {
+  const line = keptLine(player, kind)
+  if (line === null) return null
+  return (
+    <Waiting serverId={serverId} player={player} kind={kind}>
+      {line}
+    </Waiting>
+  )
+}
+
+function keptLine(player: PlayerView, kind: 'place' | 'give' | 'levels' | 'clear_inventory'): string | null {
+  const when = `When ${shownName(player)} next joins`
+  switch (kind) {
+    case 'place': {
+      const trip = waitingOf(player, 'place')
+      if (trip?.what !== 'there') return null
+      const world = WORLDS.find((w) => w.value === trip.there.dimension)?.label ?? trip.there.dimension
+      const { x, y, z } = trip.there
+      const at = y === null ? `${x}, ${z}, on the ground` : `${x}, ${y}, ${z}`
+      return `${when}, they go to ${at} in the ${world}.`
+    }
+    case 'give': {
+      const items = waitingOf(player, 'give')?.items ?? []
+      if (items.length === 0) return null
+      return `${when}, they get ${items.map((i) => `${i.count} ${itemName(i.item)}`).join(', ')}.`
+    }
+    case 'levels': {
+      const levels = waitingOf(player, 'levels')?.levels
+      return levels === undefined ? null : `${when}, they get ${levels} levels.`
+    }
+    case 'clear_inventory':
+      return waitingOf(player, 'clear_inventory')
+        ? `${when}, their inventory is emptied, before any items waiting for them.`
+        : null
+  }
+}
+
+/** `minecraft:golden_apple` reads "golden apple"; a mod's keeps its name: `create:wrench`. */
+function itemName(id: string): string {
+  return id.startsWith('minecraft:') ? id.slice('minecraft:'.length).replaceAll('_', ' ') : id
 }
 
 function Failed({ error }: { error: string | null }) {
@@ -259,7 +334,7 @@ function Levels(props: PowerProps) {
   const power = usePower(props)
   const [levels, setLevels] = useState('5')
   const n = whole(levels)
-  const ready = n !== null && n >= 1 && n <= 1000
+  const ready = n !== null && n >= 1 && n <= MOST_LEVELS
   return (
     <form
       className="bk-stack"
@@ -354,7 +429,8 @@ function ClearInventory(props: PowerProps) {
         }
       >
         <p className="type-body-sm">
-          Everything {name} carries and wears is gone for good. Their ender chest stays as it is.
+          Everything {name} carries and wears is gone for good. Their ender chest stays as it is. If they’re
+          away, it happens as they next join, and you can cancel it until then.
         </p>
       </Modal>
     </div>

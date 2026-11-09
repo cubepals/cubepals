@@ -799,6 +799,13 @@
       "when": 1794098120615,
       "tag": "0113_account_notice",
       "breakpoints": true
+    },
+    {
+      "idx": 114,
+      "version": "7",
+      "when": 1794233301957,
+      "tag": "0114_player_powers_wait",
+      "breakpoints": true
     }
   ]
 }

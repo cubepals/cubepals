@@ -7,13 +7,14 @@
  * server went to sleep, and what waits for them to join. Who has played, and when, is
  * `servers/usage.ts`'s; this only reads it.
  */
+import type { WAITING_KINDS } from '@blockly/contracts'
 import { type PlayerSnapshotJson, type Queryable, schema } from '@blockly/db'
 import { and, eq, inArray } from 'drizzle-orm'
 
 const snapshots = schema.serverPlayerSnapshots
 const waiting = schema.playerActionsWaiting
 
-export type WaitingKind = 'place' | 'game_mode'
+export type WaitingKind = (typeof WAITING_KINDS)[number]
 
 export interface WaitingAction {
   playerUuid: string
@@ -70,7 +71,7 @@ export async function listWaiting(
     .where(and(eq(waiting.serverId, serverId), inArray(waiting.playerUuid, [...players])))
 }
 
-/** The newest ask wins: a second trip replaces the first, and a second mode the first. */
+/** What is written replaces what waited of its kind; how two asks meet is `kept-powers.ts`'s. */
 export async function putWaiting(q: Queryable, serverId: string, action: WaitingAction): Promise<void> {
   await q
     .insert(waiting)
@@ -86,18 +87,51 @@ export async function putWaiting(q: Queryable, serverId: string, action: Waiting
     })
 }
 
-/** Takes it away, and says what it was; null where nothing of that kind waited. */
+/**
+ * Takes it away, and says what it was; null where nothing of that kind waited, or, given `was`,
+ * where what waits has changed since it was read (more items asked for meanwhile).
+ */
 export async function dropWaiting(
   q: Queryable,
   serverId: string,
   playerUuid: string,
   kind: WaitingKind,
+  was?: string,
 ): Promise<{ what: string } | null> {
   const [row] = await q
     .delete(waiting)
-    .where(and(eq(waiting.serverId, serverId), eq(waiting.playerUuid, playerUuid), eq(waiting.kind, kind)))
+    .where(
+      and(
+        eq(waiting.serverId, serverId),
+        eq(waiting.playerUuid, playerUuid),
+        eq(waiting.kind, kind),
+        was === undefined ? undefined : eq(waiting.what, was),
+      ),
+    )
     .returning({ what: waiting.what })
   return row ?? null
+}
+
+/** What waits becomes `now`, where it is still `was`: part of it done, the rest still waiting. */
+export async function narrowWaiting(
+  q: Queryable,
+  serverId: string,
+  playerUuid: string,
+  kind: WaitingKind,
+  was: string,
+  now: string,
+): Promise<void> {
+  await q
+    .update(waiting)
+    .set({ what: now })
+    .where(
+      and(
+        eq(waiting.serverId, serverId),
+        eq(waiting.playerUuid, playerUuid),
+        eq(waiting.kind, kind),
+        eq(waiting.what, was),
+      ),
+    )
 }
 
 /** Someone who has played here: their newest name and when they were last on. */

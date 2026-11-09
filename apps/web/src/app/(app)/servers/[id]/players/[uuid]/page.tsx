@@ -11,7 +11,7 @@
  * (`powers.tsx`), whether they can join, run commands, are banned or help moderate
  * (`switches.tsx`), and their warnings, mutes and bans (`moderation.tsx`).
  * A change for someone who is away waits for them to join, and the page says so, with a way to
- * take it back. While the server sleeps, it shows what was kept as it went to sleep.
+ * take it back (`waiting.tsx`). While the server sleeps, it shows what was kept as it went to sleep.
  */
 import {
   type GameMode,
@@ -21,7 +21,7 @@ import {
   shownName,
   type WaitingView,
 } from '@blockly/contracts'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import { ChevronLeft } from 'lucide-react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
@@ -45,6 +45,7 @@ import { PlayerModeration } from './moderation'
 import { PlayerPowers } from './powers'
 import { PlayerRemovals } from './removals'
 import { AccessSwitches } from './switches'
+import { useRefresh, Waiting, waitingOf } from './waiting'
 
 export default function PlayerPage() {
   const server = useServer()
@@ -103,13 +104,12 @@ export default function PlayerPage() {
           )}
         </>
       )}
-      {running && (
-        <PlayerPowers
-          serverId={server.id}
-          player={p}
-          others={(server.data.players?.people ?? []).filter((o) => o.uuid !== p.uuid)}
-        />
-      )}
+      <PlayerPowers
+        serverId={server.id}
+        player={p}
+        running={running}
+        others={(server.data.players?.people ?? []).filter((o) => o.uuid !== p.uuid)}
+      />
       <AccessSwitches serverId={server.id} player={p} running={running} />
       <PlayerModeration serverId={server.id} player={p} running={running} />
       <PlayerRemovals serverId={server.id} player={p} />
@@ -171,7 +171,7 @@ function placeLine(place: PlaceView): string {
 }
 
 function Places({ serverId, player }: { serverId: string; player: PlayerView }) {
-  const trip = player.waiting.find((w) => w.kind === 'place')
+  const trip = waitingOf(player, 'place')
   return (
     <>
       <FormSection
@@ -272,14 +272,14 @@ function GameModeSection({ serverId, player }: { serverId: string; player: Playe
   const trpc = useTRPC()
   const refresh = useRefresh(serverId, player.uuid)
   const set = useMutation(trpc.players.setGameMode.mutationOptions({ onSettled: refresh }))
-  const waiting = player.waiting.find((w) => w.kind === 'game_mode')
+  const waiting = waitingOf(player, 'game_mode')
   const label = (mode: string) => MODES.find((m) => m.value === mode)?.label ?? mode
   return (
     <FormSection title="Game mode" description={`For ${shownName(player)} alone.`}>
       <Tabs
         label="Game mode"
         items={MODES}
-        value={(waiting?.what as GameMode | undefined) ?? player.gameMode ?? 'survival'}
+        value={waiting?.what ?? player.gameMode ?? 'survival'}
         onChange={(mode) => set.mutate({ serverId, playerUuid: player.uuid, mode })}
       />
       {waiting && (
@@ -290,43 +290,4 @@ function GameModeSection({ serverId, player }: { serverId: string; player: Playe
       {set.isError && <Note tone="danger">{messageOf(set.error)}</Note>}
     </FormSection>
   )
-}
-
-/** Something kept for when they next join, and the way to take it back. */
-function Waiting({
-  serverId,
-  player,
-  kind,
-  children,
-}: {
-  serverId: string
-  player: PlayerView
-  kind: 'place' | 'game_mode'
-  children: string
-}) {
-  const trpc = useTRPC()
-  const refresh = useRefresh(serverId, player.uuid)
-  const cancel = useMutation(trpc.players.cancel.mutationOptions({ onSettled: refresh }))
-  return (
-    <div className="bk-row" style={{ gap: 'var(--space-12)', flexWrap: 'wrap' }}>
-      <p className="bk-field__help" style={{ margin: 0 }}>
-        {children}
-      </p>
-      <Button
-        variant="ghost"
-        size="sm"
-        disabled={cancel.isPending}
-        onClick={() => cancel.mutate({ serverId, playerUuid: player.uuid, kind })}
-      >
-        Cancel
-      </Button>
-    </div>
-  )
-}
-
-function useRefresh(serverId: string, playerUuid: string) {
-  const trpc = useTRPC()
-  const queries = useQueryClient()
-  return () =>
-    void queries.invalidateQueries({ queryKey: trpc.players.get.queryKey({ serverId, playerUuid }) })
 }
