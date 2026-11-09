@@ -157,6 +157,30 @@ describe.skipIf(!hasDatabase)('an emptied inventory, kept', () => {
   }, 30_000)
 })
 
+describe.skipIf(!hasDatabase)('an emptied inventory, kept, as they join', () => {
+  test('a waiting put-back of the oldest copy outlasts a waiting emptying ahead of it', async () => {
+    const { owner, id, kai } = await carrying()
+    for (let i = 0; i < 3; i++) {
+      if (i > 0) h.minecraft.inventories(id).carry(kai.uuid, { inventory: [{ ...TORCHES, slot: 0 }] })
+      await h.app.players.act(owner, id, kai.uuid, { kind: 'clear_inventory' })
+    }
+    const kept = (await h.app.players.view(owner, id, kai.uuid)).kept
+    const oldest = kept.at(-1)?.id ?? ''
+    expect(kept).toHaveLength(3)
+
+    h.minecraft.leave(id, kai.uuid)
+    await h.app.schedules.presenceSync()
+    await h.app.players.putBack(owner, id, kai.uuid, oldest)
+    await h.app.players.act(owner, id, kai.uuid, { kind: 'clear_inventory' })
+
+    // They come back carrying something, so the emptying keeps a fourth copy before the put-back runs.
+    h.minecraft.inventories(id).carry(kai.uuid, { inventory: [{ id: 'minecraft:bread', count: 1, slot: 0 }] })
+    h.minecraft.join(id, kai)
+    await h.app.schedules.presenceSync()
+    expect(items(h.minecraft.inventories(id).carried(kai.uuid))).toEqual([SWORD, TORCHES, HELMET])
+  }, 30_000)
+})
+
 async function waitFor(done: () => boolean): Promise<void> {
   for (let i = 0; i < 200 && !done(); i++) await new Promise((r) => setTimeout(r, 10))
 }
