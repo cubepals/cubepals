@@ -23,7 +23,15 @@ import {
 } from '../../minecraft/kept-inventory.ts'
 import { powerSteps } from '../../minecraft/player-powers.ts'
 import type { RuntimeHandle } from '../ports/runtime.ts'
-import { addKept, claimKept, dropIdleKept, dropKept, listKept, releaseKept } from './persistence.ts'
+import {
+  addKept,
+  claimKept,
+  dropIdleKept,
+  dropKept,
+  listKept,
+  listWaiting,
+  releaseKept,
+} from './persistence.ts'
 import type { PlayerReading } from './reading.ts'
 
 /** How many emptied inventories are kept for each player, newest first. */
@@ -206,7 +214,13 @@ export class KeptInventories {
    * which goes once it is all back.
    */
   async #trim(q: Queryable, serverId: string, handle: RuntimeHandle, playerUuid: string): Promise<void> {
-    const older = (await listKept(q, serverId, playerUuid)).slice(KEPT_PER_PLAYER)
+    const waiting = new Set(
+      (await listWaiting(q, serverId, [playerUuid])).filter((w) => w.kind === 'put_back').map((w) => w.what),
+    )
+    // One waiting to be put back stays past the newest few, until it is back.
+    const older = (await listKept(q, serverId, playerUuid))
+      .slice(KEPT_PER_PLAYER)
+      .filter((k) => !waiting.has(k.id))
     const stale = new Date(Date.now() - PUTTING_BACK_STALE_MS)
     for (const old of older)
       if (await dropIdleKept(q, serverId, old.id, stale)) await this.#forget(serverId, handle, old.id)
