@@ -33,10 +33,11 @@
  * - `access-commands.ts`: what the whitelist, op, ban and pardon commands answer and change.
  * - `game-rules.ts`: the world's game rules, by each release's names, apart for each dimension on Paper.
  * - `image.ts`: the jars and the pack the image installs on the volume before the game starts.
+ * - `inventories.ts`: what each player carries, and the world's storage of emptied inventories.
  * - `lists.ts`: the access lists, held in memory and saved whole over their files.
  * - `log.ts`: one server's console output, kept and followed.
  * - `names.ts`: who a name is, as vanilla 26.x decides it.
- * - `player-commands.ts`: what a player page's trips, items, effects, levels and clears answer.
+ * - `player-commands.ts`: what a player page's trips, items, effects and levels answer.
  * - `plugins.ts`: the moderation plugins' commands, LibertyBans' and LuckPerms'.
  * - `properties.ts`: `server.properties`, written as the server starts and its whitelist line.
  */
@@ -72,6 +73,7 @@ import {
   placeCarried,
   placeStopCheaters,
 } from './fake-minecraft/image.ts'
+import { FakeInventories, type FakeItem } from './fake-minecraft/inventories.ts'
 import { AccessLists } from './fake-minecraft/lists.ts'
 import { ServerLog } from './fake-minecraft/log.ts'
 import { checksAccounts, dashed, NameCache, offlineUuid } from './fake-minecraft/names.ts'
@@ -112,6 +114,8 @@ interface Server {
   ground: Map<string, FakeGround>
   /** How many times `spreadplayers` was asked around each point (`<dimension> <x> <z>`). */
   spreads: Map<string, number>
+  /** What each player carries, and the world's storage of emptied inventories. */
+  inventories: FakeInventories
   log: ServerLog
 }
 
@@ -121,6 +125,7 @@ export class FakeMinecraft implements FakeWorkload, ServerConsole, ReadinessProb
   readonly #keyOf: (handle: RuntimeHandle) => string
   #breaks: (env: Readonly<Record<string, string>>) => string | null = () => null
   #refused: RegExp | null = null
+  #unanswered: RegExp | null = null
   #slowed: { pattern: RegExp; ms: number } | null = null
   #stalls: (env: Readonly<Record<string, string>>) => boolean = () => false
   /** How long a world takes to open after the server starts; at once by default. */
@@ -346,6 +351,11 @@ export class FakeMinecraft implements FakeWorkload, ServerConsole, ReadinessProb
     this.#require(key).ground.set(`${at.dimension} ${at.x} ${at.z}`, top)
   }
 
+  /** What each player carries, and the world's storage of emptied inventories. */
+  inventories(key: string): FakeInventories {
+    return this.#require(key).inventories
+  }
+
   /** Where a player on is now. */
   placeOf(key: string, uuid: string): FakePlace | undefined {
     return this.#require(key).places.get(uuid)
@@ -405,9 +415,10 @@ export class FakeMinecraft implements FakeWorkload, ServerConsole, ReadinessProb
     return [...this.#require(key).heard]
   }
 
-  /** Commands matching `pattern` fail, as on a server that can't carry them out, until null. */
-  refuseCommands(pattern: RegExp | null): void {
-    this.#refused = pattern
+  /** Commands matching `pattern` fail until null; with `ranFirst`, they run and the answer is lost. */
+  refuseCommands(pattern: RegExp | null, how: { ranFirst?: boolean } = {}): void {
+    this.#refused = how.ranFirst ? null : pattern
+    this.#unanswered = how.ranFirst ? pattern : null
   }
 
   /** Commands matching `pattern` take `ms` to answer, as on a busy server, until null. */
@@ -425,6 +436,7 @@ export class FakeMinecraft implements FakeWorkload, ServerConsole, ReadinessProb
   #server(machine: FakeMachine): Server {
     let server = this.#servers.get(machine.key)
     if (server === undefined) {
+      const online = new Map<string, string>()
       server = {
         key: machine.key,
         host: machine.host,
@@ -433,7 +445,7 @@ export class FakeMinecraft implements FakeWorkload, ServerConsole, ReadinessProb
         password: '',
         running: false,
         ready: false,
-        online: new Map(),
+        online,
         kicks: new Map(),
         lists: new AccessLists(),
         names: new NameCache(this.#profiles),
@@ -446,6 +458,7 @@ export class FakeMinecraft implements FakeWorkload, ServerConsole, ReadinessProb
         deaths: new Map(),
         ground: new Map(),
         spreads: new Map(),
+        inventories: new FakeInventories(online),
         log: new ServerLog(),
       }
       this.#servers.set(machine.key, server)
@@ -501,6 +514,7 @@ export class FakeMinecraft implements FakeWorkload, ServerConsole, ReadinessProb
       server.env.TYPE === 'PAPER' ? named.toLowerCase().replace(/^minecraft:/, '') : named.toLowerCase()
     const answer = await this.#answer(server, verb, rest, source)
     server.log.say(`[Server thread/INFO]: [${source}: ${answer}]`)
+    if (this.#unanswered?.test(input.trim())) throw new Error(`No answer to ${input.trim()}`)
     return answer
   }
 
@@ -539,7 +553,7 @@ export class FakeMinecraft implements FakeWorkload, ServerConsole, ReadinessProb
       case 'data':
         return this.#data(server, args)
       case 'execute':
-        return args[0] === 'as' ? this.#testFooting(server, args) : this.#executeIn(server, args)
+        return this.#executeCommand(server, args)
       case 'tick':
         return tick(args)
       case 'save-all':
@@ -567,7 +581,7 @@ export class FakeMinecraft implements FakeWorkload, ServerConsole, ReadinessProb
 
   /** The commands a player's page sends, then the plugins'. */
   #other(server: Server, verb: string, args: string[]): Promise<string> {
-    const answer = playerCommand(server, verb, args)
+    const answer = server.inventories.command(verb, args) ?? playerCommand(server, verb, args)
     return answer === null ? plugin(server.dir, verb, args) : Promise.resolve(answer)
   }
 
@@ -600,7 +614,8 @@ export class FakeMinecraft implements FakeWorkload, ServerConsole, ReadinessProb
   /** `data get entity <name> <field>`, for the fields a player page reads. */
   #data(server: Server, args: string[]): string {
     const [get, entity, name = '', field = ''] = args
-    if (get !== 'get' || entity !== 'entity') return 'Unknown or incomplete command, see below for error'
+    if (get !== 'get') return server.inventories.command('data', args) ?? 'Unknown or incomplete command'
+    if (entity !== 'entity') return 'Unknown or incomplete command, see below for error'
     const uuid = this.#onlineNamed(server, name)
     if (uuid === null) return 'No entity was found'
     const place = server.places.get(uuid) ?? { dimension: 'minecraft:overworld', x: 0, y: 64, z: 0 }
@@ -612,14 +627,21 @@ export class FakeMinecraft implements FakeWorkload, ServerConsole, ReadinessProb
       LastDeathLocation: death
         ? `{pos: [I; ${death.x}, ${death.y}, ${death.z}], dimension: "${death.dimension}"}`
         : null,
-      Inventory: '[]',
+      Inventory: server.inventories.field(uuid, 'Inventory'),
       EnderItems: '[]',
-      equipment: null,
+      equipment: server.inventories.field(uuid, 'equipment'),
     }
     const value = data[field]
     return value === undefined || value === null
       ? `Found no elements matching ${field}`
       : `${name} has the following entity data: ${value}`
+  }
+
+  /** `execute at` drops a placeholder item by a player; `as` tests their footing; `in`, the rest. */
+  #executeCommand(server: Server, args: string[]): string | Promise<string> {
+    if (args[0] === 'at')
+      return server.inventories.command('execute', args) ?? 'Unknown or incomplete command'
+    return args[0] === 'as' ? this.#testFooting(server, args) : this.#executeIn(server, args)
   }
 
   /** `execute in <dimension> run tp|spreadplayers …`, moving one player on, or `run gamerule …` there. */

@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import { LOCK_NOT_AVAILABLE } from '@blockly/db'
+import { createDb, LOCK_NOT_AVAILABLE, type Queryable } from '@blockly/db'
 import type pg from 'pg'
 import { LockBusy, type Locks } from '../../app/ports/locks.ts'
 
@@ -17,7 +17,7 @@ export class PgAdvisoryLocks implements Locks {
     this.#pool = pool
   }
 
-  async hold<T>(key: string, waitMs: number, work: () => Promise<T>): Promise<T> {
+  async hold<T>(key: string, waitMs: number, work: (held: Queryable) => Promise<T>): Promise<T> {
     const client = await this.#pool.connect()
     let broken: Error | undefined
     try {
@@ -30,7 +30,7 @@ export class PgAdvisoryLocks implements Locks {
         throw error
       }
       try {
-        return await work()
+        return await work(createDb(client))
       } finally {
         await client
           .query('SELECT pg_advisory_unlock(hashtextextended($1, 0))', [key])

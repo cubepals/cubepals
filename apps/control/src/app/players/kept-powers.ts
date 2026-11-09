@@ -15,8 +15,18 @@ import type { WaitingKind } from './persistence.ts'
 /** The most different items that wait for one player: an inventory's worth. */
 const MOST_ITEMS = 36
 
-/** Done in this order as they join: an emptied inventory first, so the items given after stay. */
-const IN_ORDER: readonly WaitingKind[] = ['clear_inventory', 'place', 'game_mode', 'give', 'levels']
+/**
+ * Done in this order as they join: an emptied inventory first, so the items given after stay,
+ * and a kept one put back after it.
+ */
+const IN_ORDER: readonly WaitingKind[] = [
+  'clear_inventory',
+  'put_back',
+  'place',
+  'game_mode',
+  'give',
+  'levels',
+]
 
 const There = z.object({
   dimension: z.string(),
@@ -67,7 +77,8 @@ export function joined(kind: WaitingKind, waiting: string | null, asked: string)
 
 /**
  * The powers that do it as they join, in order; null for a trip back or to the spawn and a game
- * mode, which `reading.ts` does. Empty where the row can't be read, so it is dropped.
+ * mode, which `reading.ts` does, and a kept inventory put back (`kept-inventories.ts`). Empty
+ * where the row can't be read, so it is dropped.
  */
 export function keptPowers(kind: WaitingKind, what: string): PlayerPower[] | null {
   switch (kind) {
@@ -77,6 +88,7 @@ export function keptPowers(kind: WaitingKind, what: string): PlayerPower[] | nul
       return there === null ? [] : [{ kind: 'teleport', ...there } as PlayerPower]
     }
     case 'game_mode':
+    case 'put_back':
       return null
     case 'give':
       return itemsOf(what).map(({ item, count }) => ({ kind: 'give', item, count }))
@@ -135,6 +147,8 @@ export function waitingView(kind: WaitingKind, what: string, askedAt: Date): Wai
       return { kind, levels: Number(what), askedAt: at }
     case 'clear_inventory':
       return { kind, askedAt: at }
+    case 'put_back':
+      return { kind, kept: what, askedAt: at }
   }
 }
 

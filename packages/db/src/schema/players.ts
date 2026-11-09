@@ -8,8 +8,8 @@
  * join, and when they came by while it rested and couldn't get in.
  */
 import { WAITING_KINDS } from '@blockly/contracts'
-import { jsonb, pgEnum, pgTable, primaryKey, text, uuid } from 'drizzle-orm/pg-core'
-import type { PlayerSnapshotJson } from '../json.ts'
+import { index, jsonb, pgEnum, pgTable, primaryKey, text, uuid } from 'drizzle-orm/pg-core'
+import type { ItemStackJson, PlayerSnapshotJson } from '../json.ts'
 import { ts } from './columns.ts'
 import { minecraftServers } from './servers.ts'
 
@@ -53,6 +53,31 @@ export const playerActionsWaiting = pgTable(
     askedAt: ts('asked_at').notNull(),
   },
   (t) => [primaryKey({ columns: [t.serverId, t.playerUuid, t.kind] })],
+)
+
+/**
+ * What a player carried when the owner emptied their inventory: the items are kept whole in the
+ * world's own storage under `id` (`minecraft/kept-inventory.ts`); this row is what the page lists
+ * and which copies the world still holds. The newest few per player; gone once put back.
+ */
+export const playerInventoriesKept = pgTable(
+  'player_inventories_kept',
+  {
+    serverId: uuid('server_id')
+      .notNull()
+      .references(() => minecraftServers.id),
+    id: text('id').notNull(),
+    playerUuid: uuid('player_uuid').notNull(),
+    keptAt: ts('kept_at').notNull(),
+    requestedBy: text('requested_by').notNull(),
+    items: jsonb('items').$type<ItemStackJson[]>().notNull(),
+    /** Set while it is being put back, so two asks don't hand it out twice. */
+    puttingBackSince: ts('putting_back_since'),
+  },
+  (t) => [
+    primaryKey({ columns: [t.serverId, t.id] }),
+    index('player_inventories_kept_player').on(t.serverId, t.playerUuid),
+  ],
 )
 
 /**

@@ -12,7 +12,8 @@
  * to the same policy and the same per-minute count, and every ask is audited like an access change.
  */
 import type { PlayerChangeView, PlayerPower, PlayerView } from '@blockly/contracts'
-import { type Db, type PlayerSnapshotJson, schema, type Tx } from '@blockly/db'
+import { SECOND_MS } from '@blockly/contracts/durations'
+import { type Db, type PlayerSnapshotJson, type Queryable, schema, type Tx } from '@blockly/db'
 import type { MinecraftServer } from '../../domain/server/server.ts'
 import { normalizeUuid } from '../../minecraft/console.ts'
 import { powerSteps } from '../../minecraft/player-powers.ts'
@@ -23,12 +24,14 @@ import { AppError, NotFound } from '../errors.ts'
 import type { AccessPolicy } from '../policy/access-policy.ts'
 import type { EventBus } from '../ports/events.ts'
 import type { FileFormats } from '../ports/formats.ts'
+import { LockBusy, type Locks } from '../ports/locks.ts'
 import type { ServerConsole } from '../ports/minecraft.ts'
 import type { RuntimeHandle } from '../ports/runtime.ts'
 import type { Runtimes } from '../runtimes/router.ts'
 import { findServer, loadRuntime, lockServer } from '../servers/persistence.ts'
 import type { RuntimeSpecs } from '../servers/specs.ts'
 import { presenceFor } from '../servers/usage.ts'
+import { KeptInventories, type PutBackOutcome } from './kept-inventories.ts'
 import {
   inJoinOrder,
   itemsOfPowers,
@@ -39,8 +42,10 @@ import {
   waitingView,
 } from './kept-powers.ts'
 import {
+  deliveriesKey,
   dropWaiting,
   holdDeliveries,
+  listKept,
   listWaiting,
   loadSnapshot,
   playedHere,
@@ -51,6 +56,9 @@ import {
   type WaitingKind,
 } from './persistence.ts'
 import { type ActionOutcome, type PlayerAction, PlayerReading } from './reading.ts'
+
+/** How long a delivery waits for another of the same server's to finish before leaving it to that one. */
+const DELIVERY_WAIT_MS = 30 * SECOND_MS
 
 /** Who asks for what waits, once the player arrives. */
 const ON_JOIN = 'system:access'
@@ -68,6 +76,8 @@ export class PlayerService {
   readonly #reading: PlayerReading
   readonly #events: EventBus
   readonly #providers: readonly string[]
+  readonly #kept: KeptInventories
+  readonly #locks: Locks
 
   constructor(deps: {
     db: Db
@@ -77,12 +87,15 @@ export class PlayerService {
     console: ServerConsole
     specs: RuntimeSpecs
     formats: FileFormats
+    locks: Locks
   }) {
     this.#db = deps.db
     this.#policy = deps.policy
     this.#reading = new PlayerReading(deps)
     this.#events = deps.events
     this.#providers = deps.runtime.providers
+    this.#locks = deps.locks
+    this.#kept = new KeptInventories({ reading: this.#reading })
   }
 
   /**
@@ -99,12 +112,18 @@ export class PlayerService {
     const waiting = (await listWaiting(this.#db, server.id, [uuid]))
       .map((w) => waitingView(w.kind, w.what, w.askedAt))
       .filter((w) => w !== null)
+    const kept = (await listKept(this.#db, server.id, uuid)).map((k) => ({
+      id: k.id,
+      keptAt: k.keptAt.toISOString(),
+      items: k.items,
+    }))
     const base = {
       uuid,
       name: onNow?.name ?? who.name,
       online: onNow !== undefined,
       lastSeenAt: who.lastSeenAt,
       waiting,
+      kept,
     }
 
     const handle = running ? (await loadRuntime(this.#db, server.id, this.#providers)).handle : null
@@ -218,7 +237,10 @@ export class PlayerService {
     if (power.kind === 'to_player' && (to === undefined || to.uuid === player.uuid))
       throw new AppError('invalid_choice', 'Pick someone else who is playing now.')
 
-    const outcome = await this.#reading.steps(serverId, handle, powerSteps(player.name, power, to?.name))
+    const outcome =
+      power.kind === 'clear_inventory'
+        ? await this.#kept.clear(this.#db, serverId, handle, player, requestedBy(actor))
+        : await this.#reading.steps(serverId, handle, powerSteps(player.name, power, to?.name))
     if (outcome === 'done') {
       // A trip or an emptying done now is the one that waited; items and levels waiting still add.
       if (kept?.kind === 'place' || kept?.kind === 'clear_inventory')
@@ -233,6 +255,48 @@ export class PlayerService {
     if (outcome === 'failed')
       throw new AppError('server_not_running', 'The server didn’t answer. Try again in a moment.')
     throw new AppError('command_refused', refusal(power, outcome.refused))
+  }
+
+  /**
+   * What their inventory held when it was emptied, back at their feet: at once for someone on, or
+   * when they next join. Audited like the emptying.
+   */
+  async putBack(
+    actor: Actor,
+    serverId: string,
+    playerUuid: string,
+    keptId: string,
+  ): Promise<PlayerChangeView> {
+    const uuid = normalizeUuid(playerUuid)
+    const { server, name } = await this.#db.transaction(async (tx) => {
+      const server = await this.#allowed(tx, actor, serverId)
+      const who = await this.#who(tx, server.id, uuid)
+      if (!(await listKept(tx, server.id, uuid)).some((k) => k.id === keptId))
+        throw new AppError('invalid_choice', 'That was put back already.')
+      await audit(
+        tx,
+        requestedBy(actor),
+        server.id,
+        { uuid, name: who.name },
+        { change: 'asked', power: 'put_back', kept: keptId },
+      )
+      return { server, name: who.name }
+    })
+    const keep = { kind: 'put_back' as const, what: keptId }
+    const running = server.lifecycle.status === 'running'
+    const player = running
+      ? ((await presenceFor(this.#db, [server.id])).get(server.id) ?? []).find((p) => p.uuid === uuid)
+      : undefined
+    const { handle } =
+      player === undefined ? { handle: null } : await loadRuntime(this.#db, server.id, this.#providers)
+    if (player === undefined || handle === null) return this.#keep(actor, server.id, { uuid, name }, keep)
+    const outcome = await this.#kept.putBack(this.#db, server.id, handle, player, keptId)
+    if (outcome === 'done') {
+      await dropWaiting(this.#db, server.id, uuid, 'put_back')
+      return { done: 'now' }
+    }
+    if (outcome === 'not_on') return this.#keep(actor, server.id, player, keep)
+    throw putBackRefusal(outcome)
   }
 
   /** Takes back what waits for them to join. */
@@ -269,10 +333,15 @@ export class PlayerService {
     handle: RuntimeHandle,
     players: readonly { uuid: string; name: string }[],
   ) {
-    const delivered = await this.#db.transaction(async (tx) => {
-      await holdDeliveries(tx, server.id)
-      return this.#deliverAll(tx, server.id, handle, players)
-    })
+    const delivered = await this.#locks
+      .hold(deliveriesKey(server.id), DELIVERY_WAIT_MS, (held) =>
+        this.#deliverAll(held, server.id, handle, players),
+      )
+      .catch((error: unknown) => {
+        // Another delivery for this server is still at it: it delivers these, or the next reading does.
+        if (error instanceof LockBusy) return 0
+        throw error
+      })
     if (delivered > 0)
       await this.#db.transaction((tx) =>
         this.#events.publish(tx, {
@@ -285,12 +354,13 @@ export class PlayerService {
   }
 
   /**
-   * `deliverWaiting`'s work, all of it through `tx`, which holds the hold: a delivery takes no other
-   * connection while it keeps one, so a busy pool can't leave it waiting on itself. How many asks
-   * were done or dropped.
+   * `deliverWaiting`'s work, all of it through `held`, the connection that holds the lock: a delivery
+   * takes no other connection while it keeps one, so a busy pool can't leave it waiting on itself;
+   * and each write is saved as it is made, so what a delivery recorded before a change in the game
+   * (a kept inventory, before the emptying) outlives a restart. How many asks were done or dropped.
    */
   async #deliverAll(
-    tx: Tx,
+    tx: Queryable,
     serverId: string,
     handle: RuntimeHandle,
     players: readonly { uuid: string; name: string }[],
@@ -302,7 +372,7 @@ export class PlayerService {
     for (const action of waiting) {
       if (held.has(action.playerUuid)) continue
       const name = here.get(action.playerUuid) ?? action.playerName
-      const result = await this.#deliver(serverId, handle, name, action)
+      const result = await this.#deliver(tx, serverId, handle, name, action)
       if (result === 'later' || result.stopped) held.add(action.playerUuid)
       if (result === 'later') continue
       await this.#settle(tx, serverId, { uuid: action.playerUuid, name }, action, result)
@@ -330,13 +400,29 @@ export class PlayerService {
    * server took none of it.
    */
   async #deliver(
+    tx: Queryable,
     serverId: string,
     handle: RuntimeHandle,
     name: string,
     action: WaitingAction,
   ): Promise<Delivery | 'later'> {
+    if (action.kind === 'put_back') {
+      const outcome = await this.#kept.putBack(
+        tx,
+        serverId,
+        handle,
+        { uuid: action.playerUuid, name },
+        action.what,
+      )
+      if (outcome !== 'done' && outcome !== 'gone') return 'later'
+      return {
+        handled: action.what,
+        stopped: false,
+        said: { change: outcome === 'done' ? 'done_on_join' : 'dropped_on_join' },
+      }
+    }
     const powers = keptPowers(action.kind, action.what)
-    if (powers !== null) return this.#deliverPowers(serverId, handle, name, action, powers)
+    if (powers !== null) return this.#deliverPowers(tx, serverId, handle, name, action, powers)
     const outcome = await this.#reading.perform(serverId, handle, name, {
       kind: action.kind,
       what: action.what,
@@ -355,6 +441,7 @@ export class PlayerService {
 
   /** Each power in turn, until the server stops taking them; one the game refused is let go. */
   async #deliverPowers(
+    tx: Queryable,
     serverId: string,
     handle: RuntimeHandle,
     name: string,
@@ -363,8 +450,12 @@ export class PlayerService {
   ): Promise<Delivery | 'later'> {
     const refused: string[] = []
     let taken = 0
+    const player = { uuid: action.playerUuid, name }
     for (const power of powers) {
-      const outcome = await this.#reading.steps(serverId, handle, powerSteps(name, power))
+      const outcome =
+        power.kind === 'clear_inventory'
+          ? await this.#kept.clear(tx, serverId, handle, player, action.requestedBy)
+          : await this.#reading.steps(serverId, handle, powerSteps(name, power))
       if (outcome === 'not_on' || outcome === 'failed') break
       if (typeof outcome === 'object') refused.push(outcome.refused)
       taken++
@@ -386,7 +477,7 @@ export class PlayerService {
    * one that fails leaves the others settled.
    */
   async #settle(
-    tx: Tx,
+    tx: Queryable,
     serverId: string,
     player: { uuid: string; name: string },
     action: WaitingAction,
@@ -416,7 +507,7 @@ export class PlayerService {
   ): Promise<PlayerChangeView> {
     await this.#db.transaction(async (tx) => {
       // Between deliveries, never during one: what this adds to is what waits once it has settled.
-      await holdDeliveries(tx, serverId)
+      await holdDeliveries(tx, deliveriesKey(serverId))
       const before = (await listWaiting(tx, serverId, [player.uuid])).find((w) => w.kind === kept.kind)
       const what = joined(kept.kind, before?.what ?? null, kept.what)
       if (what === null)
@@ -519,6 +610,17 @@ function refusal(power: PlayerPower, answer: string): string {
   if (power.kind === 'teleport' && answer.startsWith('Could not spread'))
     return 'There is nowhere to stand there. Give a height to go anyway.'
   return `Minecraft said: ${answer}`
+}
+
+/** Why a put back didn't happen, in the owner's words. */
+function putBackRefusal(outcome: Exclude<PutBackOutcome, 'done' | 'not_on'>): AppError {
+  if (outcome === 'gone')
+    return new AppError(
+      'invalid_choice',
+      'This world no longer holds those items: they were put back already, or a backup from before was restored.',
+    )
+  if (outcome === 'busy') return new AppError('invalid_choice', 'They are being put back already.')
+  return new AppError('server_not_running', 'The server didn’t answer. Try again in a moment.')
 }
 
 /** Done at once, saying so where it went other than asked. */

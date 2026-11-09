@@ -8,6 +8,7 @@
  * and the console commands that move them or change their game mode. What the commands and files
  * say is `minecraft/players.ts`'s; what is kept and who may ask is the service's.
  */
+import { keptAnswer } from '../../minecraft/kept-inventory.ts'
 import { powerAnswer } from '../../minecraft/player-powers.ts'
 import {
   accepted,
@@ -154,6 +155,24 @@ export class PlayerReading {
       if (outcome !== 'done') return outcome
     }
     return 'done'
+  }
+
+  /**
+   * One step of keeping or putting back an inventory (`minecraft/kept-inventory.ts`), in the
+   * first of its ways the server knows; `failed` where it gave no answer or knows none of them.
+   */
+  async keptStep(
+    serverId: string,
+    handle: RuntimeHandle,
+    ways: readonly string[],
+  ): Promise<'done' | 'not_on' | 'gone' | 'failed'> {
+    for (const command of ways) {
+      const answer = await this.#ask(serverId, handle, command)
+      if (answer === null) return 'failed'
+      const meant = keptAnswer(answer)
+      if (meant !== 'unknown') return meant
+    }
+    return 'failed'
   }
 
   /** One step: the first of its ways the server knows; `failed` where it knows none of them. */

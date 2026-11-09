@@ -55,6 +55,7 @@ import {
   PlayerPowerInput,
   PowerInput,
   PunishInput,
+  PutBackInput,
   RecordSourceInput,
   RelocateInput,
   ReportListingInput,
@@ -599,6 +600,12 @@ const players = router({
     .input(PlayerPowerInput)
     .mutation(({ ctx, input }) =>
       ctx.services.players.act(ctx.actor, input.serverId, input.playerUuid, input.power),
+    ),
+  /** What their inventory held when it was emptied, back at their feet. */
+  putBack: authedProcedure
+    .input(PutBackInput)
+    .mutation(({ ctx, input }) =>
+      ctx.services.players.putBack(ctx.actor, input.serverId, input.playerUuid, input.kept),
     ),
   /** How each item in an inventory is drawn, from the release's own art. */
   icons: authedProcedure

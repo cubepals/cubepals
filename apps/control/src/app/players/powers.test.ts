@@ -192,6 +192,8 @@ describe.skipIf(!hasDatabase)('kept powers across a retry or a sleep', () => {
     await h.app.players.act(owner, id, kai.uuid, { kind: 'clear_inventory' })
     await h.app.players.act(owner, id, kai.uuid, { kind: 'give', item: 'diamond', count: 2 })
 
+    // They carry something, so an emptying that didn't run has left it there.
+    h.minecraft.inventories(id).carry(kai.uuid, { inventory: [{ id: 'minecraft:bread', count: 1, slot: 0 }] })
     h.minecraft.refuseCommands(/^(minecraft:)?clear /)
     h.minecraft.join(id, kai)
     await h.app.schedules.presenceSync()
