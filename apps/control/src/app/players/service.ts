@@ -12,7 +12,8 @@
  * to the same policy and the same per-minute count, and every ask is audited like an access change.
  */
 import type { PlayerChangeView, PlayerPower, PlayerView } from '@blockly/contracts'
-import { type Db, type PlayerSnapshotJson, schema, type Tx } from '@blockly/db'
+import { SECOND_MS } from '@blockly/contracts/durations'
+import { type Db, type PlayerSnapshotJson, type Queryable, schema, type Tx } from '@blockly/db'
 import type { MinecraftServer } from '../../domain/server/server.ts'
 import { normalizeUuid } from '../../minecraft/console.ts'
 import { powerSteps } from '../../minecraft/player-powers.ts'
@@ -23,6 +24,7 @@ import { AppError, NotFound } from '../errors.ts'
 import type { AccessPolicy } from '../policy/access-policy.ts'
 import type { EventBus } from '../ports/events.ts'
 import type { FileFormats } from '../ports/formats.ts'
+import { LockBusy, type Locks } from '../ports/locks.ts'
 import type { ServerConsole } from '../ports/minecraft.ts'
 import type { RuntimeHandle } from '../ports/runtime.ts'
 import type { Runtimes } from '../runtimes/router.ts'
@@ -40,6 +42,7 @@ import {
   waitingView,
 } from './kept-powers.ts'
 import {
+  deliveriesKey,
   dropWaiting,
   holdDeliveries,
   listKept,
@@ -53,6 +56,9 @@ import {
   type WaitingKind,
 } from './persistence.ts'
 import { type ActionOutcome, type PlayerAction, PlayerReading } from './reading.ts'
+
+/** How long a delivery waits for another of the same server's to finish before leaving it to that one. */
+const DELIVERY_WAIT_MS = 30 * SECOND_MS
 
 /** Who asks for what waits, once the player arrives. */
 const ON_JOIN = 'system:access'
@@ -71,6 +77,7 @@ export class PlayerService {
   readonly #events: EventBus
   readonly #providers: readonly string[]
   readonly #kept: KeptInventories
+  readonly #locks: Locks
 
   constructor(deps: {
     db: Db
@@ -80,12 +87,14 @@ export class PlayerService {
     console: ServerConsole
     specs: RuntimeSpecs
     formats: FileFormats
+    locks: Locks
   }) {
     this.#db = deps.db
     this.#policy = deps.policy
     this.#reading = new PlayerReading(deps)
     this.#events = deps.events
     this.#providers = deps.runtime.providers
+    this.#locks = deps.locks
     this.#kept = new KeptInventories({ reading: this.#reading })
   }
 
@@ -324,10 +333,15 @@ export class PlayerService {
     handle: RuntimeHandle,
     players: readonly { uuid: string; name: string }[],
   ) {
-    const delivered = await this.#db.transaction(async (tx) => {
-      await holdDeliveries(tx, server.id)
-      return this.#deliverAll(tx, server.id, handle, players)
-    })
+    const delivered = await this.#locks
+      .hold(deliveriesKey(server.id), DELIVERY_WAIT_MS, (held) =>
+        this.#deliverAll(held, server.id, handle, players),
+      )
+      .catch((error: unknown) => {
+        // Another delivery for this server is still at it: it delivers these, or the next reading does.
+        if (error instanceof LockBusy) return 0
+        throw error
+      })
     if (delivered > 0)
       await this.#db.transaction((tx) =>
         this.#events.publish(tx, {
@@ -340,12 +354,13 @@ export class PlayerService {
   }
 
   /**
-   * `deliverWaiting`'s work, all of it through `tx`, which holds the hold: a delivery takes no other
-   * connection while it keeps one, so a busy pool can't leave it waiting on itself. How many asks
-   * were done or dropped.
+   * `deliverWaiting`'s work, all of it through `held`, the connection that holds the lock: a delivery
+   * takes no other connection while it keeps one, so a busy pool can't leave it waiting on itself;
+   * and each write is saved as it is made, so what a delivery recorded before a change in the game
+   * (a kept inventory, before the emptying) outlives a restart. How many asks were done or dropped.
    */
   async #deliverAll(
-    tx: Tx,
+    tx: Queryable,
     serverId: string,
     handle: RuntimeHandle,
     players: readonly { uuid: string; name: string }[],
@@ -385,7 +400,7 @@ export class PlayerService {
    * server took none of it.
    */
   async #deliver(
-    tx: Tx,
+    tx: Queryable,
     serverId: string,
     handle: RuntimeHandle,
     name: string,
@@ -426,7 +441,7 @@ export class PlayerService {
 
   /** Each power in turn, until the server stops taking them; one the game refused is let go. */
   async #deliverPowers(
-    tx: Tx,
+    tx: Queryable,
     serverId: string,
     handle: RuntimeHandle,
     name: string,
@@ -462,7 +477,7 @@ export class PlayerService {
    * one that fails leaves the others settled.
    */
   async #settle(
-    tx: Tx,
+    tx: Queryable,
     serverId: string,
     player: { uuid: string; name: string },
     action: WaitingAction,
@@ -492,7 +507,7 @@ export class PlayerService {
   ): Promise<PlayerChangeView> {
     await this.#db.transaction(async (tx) => {
       // Between deliveries, never during one: what this adds to is what waits once it has settled.
-      await holdDeliveries(tx, serverId)
+      await holdDeliveries(tx, deliveriesKey(serverId))
       const before = (await listWaiting(tx, serverId, [player.uuid])).find((w) => w.kind === kept.kind)
       const what = joined(kept.kind, before?.what ?? null, kept.what)
       if (what === null)

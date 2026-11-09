@@ -9,6 +9,8 @@
  */
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { randomUUID } from 'node:crypto'
+import { schema } from '@blockly/db'
+import { eq } from 'drizzle-orm'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
 
 let h: Harness
@@ -118,4 +120,43 @@ describe.skipIf(!hasDatabase)('an emptied inventory, kept', () => {
     // Still carrying them: no second copy to hand out.
     expect((await h.app.players.view(owner, id, kai.uuid)).kept.map((k) => k.id)).toEqual([kept?.id ?? ''])
   }, 30_000)
+
+  test('a queued emptying lists its copy before the game empties them', async () => {
+    const { owner, id, kai } = await carrying()
+    h.minecraft.leave(id, kai.uuid)
+    await h.app.schedules.presenceSync()
+    await h.app.players.act(owner, id, kai.uuid, { kind: 'clear_inventory' })
+
+    h.minecraft.join(id, kai)
+    h.minecraft.slowCommands({ pattern: /^clear /, ms: 500 })
+    const delivering = h.app.schedules.presenceSync()
+    // While the game is still emptying them, the copy is already listed, from another connection.
+    await waitFor(() => h.minecraft.heard(id).includes('clear Kai'))
+    const rows = await h.db
+      .select({ id: schema.playerInventoriesKept.id })
+      .from(schema.playerInventoriesKept)
+      .where(eq(schema.playerInventoriesKept.playerUuid, kai.uuid))
+    expect(rows).toHaveLength(1)
+    await delivering
+    h.minecraft.slowCommands(null)
+  }, 30_000)
+
+  test('one being put back outlasts the newest three', async () => {
+    const { owner, id, kai } = await carrying()
+    await h.app.players.act(owner, id, kai.uuid, { kind: 'clear_inventory' })
+    const [oldest] = (await h.app.players.view(owner, id, kai.uuid)).kept
+    await h.db
+      .update(schema.playerInventoriesKept)
+      .set({ puttingBackSince: new Date() })
+      .where(eq(schema.playerInventoriesKept.id, oldest?.id ?? ''))
+    for (let i = 0; i < 3; i++) {
+      h.minecraft.inventories(id).carry(kai.uuid, { inventory: [{ ...TORCHES, slot: 0 }] })
+      await h.app.players.act(owner, id, kai.uuid, { kind: 'clear_inventory' })
+    }
+    expect((await h.app.players.view(owner, id, kai.uuid)).kept.map((k) => k.id)).toContain(oldest?.id ?? '')
+  }, 30_000)
 })
+
+async function waitFor(done: () => boolean): Promise<void> {
+  for (let i = 0; i < 200 && !done(); i++) await new Promise((r) => setTimeout(r, 10))
+}

@@ -72,13 +72,17 @@ export async function listWaiting(
     .where(and(eq(waiting.serverId, serverId), inArray(waiting.playerUuid, [...players])))
 }
 
+/** The lock a server's deliveries take turns on (`ports/locks.ts`), and every ask with them. */
+export function deliveriesKey(serverId: string): string {
+  return `blockly:player-waits:${serverId}`
+}
+
 /**
- * One delivery of a server's waiting asks at a time, held to the end of `tx`: a presence reading
- * and an owner's ask that both deliver read the same rows, and each must find them as the other
- * left them, or an item is given twice.
+ * Takes the deliveries' lock until `tx` ends, as `PgAdvisoryLocks` takes it for a delivery: an ask
+ * adds to what waits only between deliveries, so a delivery and an ask never read the same rows.
  */
-export async function holdDeliveries(tx: Tx, serverId: string): Promise<void> {
-  await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`blockly:player-waits:${serverId}`}))`)
+export async function holdDeliveries(tx: Tx, key: string): Promise<void> {
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${key}, 0))`)
 }
 
 /** What is written replaces what waited of its kind; how two asks meet is `kept-powers.ts`'s. */
@@ -154,6 +158,29 @@ export async function addKept(q: Queryable, serverId: string, row: KeptInventory
 
 export async function dropKept(q: Queryable, serverId: string, id: string): Promise<void> {
   await q.delete(kept).where(and(eq(kept.serverId, serverId), eq(kept.id, id)))
+}
+
+/**
+ * Drops one past the newest few, unless it is being put back (claimed since `stale`): true where
+ * it was dropped, so the world may forget it too.
+ */
+export async function dropIdleKept(
+  q: Queryable,
+  serverId: string,
+  id: string,
+  stale: Date,
+): Promise<boolean> {
+  const dropped = await q
+    .delete(kept)
+    .where(
+      and(
+        eq(kept.serverId, serverId),
+        eq(kept.id, id),
+        or(isNull(kept.puttingBackSince), lt(kept.puttingBackSince, stale)),
+      ),
+    )
+    .returning({ id: kept.id })
+  return dropped.length > 0
 }
 
 /**

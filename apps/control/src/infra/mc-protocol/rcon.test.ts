@@ -4,6 +4,7 @@
 
 import { afterEach, describe, expect, test } from 'bun:test'
 import { connect, createServer, type Server, type Socket } from 'node:net'
+import type { Queryable } from '@blockly/db'
 import type { Locks } from '../../app/ports/locks.ts'
 import { ConsoleUnavailable } from '../../app/ports/minecraft.ts'
 import { RconConsole } from './rcon.ts'
@@ -12,8 +13,10 @@ import { RconConsole } from './rcon.ts'
 class LocalLocks implements Locks {
   readonly #tails = new Map<string, Promise<unknown>>()
 
-  hold<T>(key: string, _waitMs: number, work: () => Promise<T>): Promise<T> {
-    const turn = (this.#tails.get(key) ?? Promise.resolve()).then(work, work)
+  /** No connection holds these, and the console's work never reads one. */
+  hold<T>(key: string, _waitMs: number, work: (held: Queryable) => Promise<T>): Promise<T> {
+    const run = () => work(undefined as unknown as Queryable)
+    const turn = (this.#tails.get(key) ?? Promise.resolve()).then(run, run)
     this.#tails.set(
       key,
       turn.catch(() => undefined),

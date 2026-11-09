@@ -51,7 +51,8 @@ export function createPool(connectionString: string, max = 10, application?: str
   return pool
 }
 
-export function createDb(pool: pg.Pool): Db {
+/** A pool's, or one connection's taken from it, which runs every statement on that connection. */
+export function createDb(pool: pg.Pool | pg.PoolClient): Db {
   return drizzle(pool, { schema })
 }
 

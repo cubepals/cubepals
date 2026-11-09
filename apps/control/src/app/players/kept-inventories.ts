@@ -23,7 +23,7 @@ import {
 } from '../../minecraft/kept-inventory.ts'
 import { powerSteps } from '../../minecraft/player-powers.ts'
 import type { RuntimeHandle } from '../ports/runtime.ts'
-import { addKept, claimKept, dropKept, listKept, releaseKept } from './persistence.ts'
+import { addKept, claimKept, dropIdleKept, dropKept, listKept, releaseKept } from './persistence.ts'
 import type { PlayerReading } from './reading.ts'
 
 /** How many emptied inventories are kept for each player, newest first. */
@@ -201,13 +201,15 @@ export class KeptInventories {
     return (await this.#reading.keptStep(serverId, handle, forget)) === 'done' ? 'done' : 'failed'
   }
 
-  /** The newest few for this player; the world forgets the rest. */
+  /**
+   * The newest few for this player; the world forgets the rest, but never one being put back,
+   * which goes once it is all back.
+   */
   async #trim(q: Queryable, serverId: string, handle: RuntimeHandle, playerUuid: string): Promise<void> {
     const older = (await listKept(q, serverId, playerUuid)).slice(KEPT_PER_PLAYER)
-    for (const old of older) {
-      await dropKept(q, serverId, old.id)
-      await this.#forget(serverId, handle, old.id)
-    }
+    const stale = new Date(Date.now() - PUTTING_BACK_STALE_MS)
+    for (const old of older)
+      if (await dropIdleKept(q, serverId, old.id, stale)) await this.#forget(serverId, handle, old.id)
   }
 
   /** Best effort: a copy the world keeps that nothing lists is only a little storage. */
