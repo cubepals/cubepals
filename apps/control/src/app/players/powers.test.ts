@@ -201,10 +201,18 @@ describe.skipIf(!hasDatabase)('kept powers across a retry or a sleep', () => {
       'give',
     ])
 
+    // Asked for now, while the emptying still waits: it waits behind it.
+    expect(await h.app.players.act(owner, id, kai.uuid, { kind: 'give', item: 'diamond', count: 1 })).toEqual(
+      {
+        done: 'when_they_join',
+      },
+    )
+    expect(h.minecraft.heard(id)).not.toContain('give Kai minecraft:diamond 3')
+
     h.minecraft.refuseCommands(null)
     await h.app.schedules.presenceSync()
     const heard = h.minecraft.heard(id)
-    expect(heard.lastIndexOf('clear Kai')).toBeLessThan(heard.lastIndexOf('give Kai minecraft:diamond 2'))
+    expect(heard.lastIndexOf('clear Kai')).toBeLessThan(heard.lastIndexOf('give Kai minecraft:diamond 3'))
     expect((await h.app.players.view(owner, id, kai.uuid)).waiting).toEqual([])
   }, 30_000)
 

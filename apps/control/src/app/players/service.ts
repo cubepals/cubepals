@@ -186,8 +186,16 @@ export class PlayerService {
     const player = here.find((p) => p.uuid === uuid)
     const { handle } =
       player === undefined ? { handle: null } : await loadRuntime(this.#db, server.id, this.#providers)
-    if (player !== undefined && handle !== null)
+    if (player !== undefined && handle !== null) {
+      // What already waits for them goes first, in its order; items wait behind an emptying that
+      // still has to happen, so it can't take them.
+      await this.deliverWaiting(server, handle, [player])
+      const clearing = (await listWaiting(this.#db, server.id, [uuid])).some(
+        (w) => w.kind === 'clear_inventory',
+      )
+      if (clearing && kept?.kind === 'give') return this.#keep(actor, server.id, player, kept)
       return this.#actNow(actor, server.id, handle, { player, here }, power)
+    }
     if (kept !== null) return this.#keep(actor, server.id, { uuid, name: player?.name ?? name }, kept)
     if (!running) throw new AppError('server_not_running', 'Start the server to do this.')
     throw new AppError('invalid_choice', `${name} isn’t playing just now.`)
