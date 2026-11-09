@@ -271,7 +271,7 @@ export class PlayerService {
   ) {
     const delivered = await this.#db.transaction(async (tx) => {
       await holdDeliveries(tx, server.id)
-      return this.#deliverAll(server.id, handle, players)
+      return this.#deliverAll(tx, server.id, handle, players)
     })
     if (delivered > 0)
       await this.#db.transaction((tx) =>
@@ -284,14 +284,19 @@ export class PlayerService {
       )
   }
 
-  /** `deliverWaiting`'s work, under its hold: how many asks were done or dropped. */
+  /**
+   * `deliverWaiting`'s work, all of it through `tx`, which holds the hold: a delivery takes no other
+   * connection while it keeps one, so a busy pool can't leave it waiting on itself. How many asks
+   * were done or dropped.
+   */
   async #deliverAll(
+    tx: Tx,
     serverId: string,
     handle: RuntimeHandle,
     players: readonly { uuid: string; name: string }[],
   ): Promise<number> {
     const here = new Map(players.map((p) => [p.uuid, p.name]))
-    const waiting = inJoinOrder(await listWaiting(this.#db, serverId, [...here.keys()]))
+    const waiting = inJoinOrder(await listWaiting(tx, serverId, [...here.keys()]))
     const held = new Set<string>()
     let delivered = 0
     for (const action of waiting) {
@@ -300,7 +305,7 @@ export class PlayerService {
       const result = await this.#deliver(serverId, handle, name, action)
       if (result === 'later' || result.stopped) held.add(action.playerUuid)
       if (result === 'later') continue
-      await this.#settle(serverId, { uuid: action.playerUuid, name }, action, result)
+      await this.#settle(tx, serverId, { uuid: action.playerUuid, name }, action, result)
       delivered++
     }
     return delivered
@@ -376,17 +381,18 @@ export class PlayerService {
   }
 
   /**
-   * Takes what was handled off what waits now, under the server's lock that every ask takes: an ask
-   * added while it was being done stays, and nothing handled is done twice.
+   * Takes what was handled off what waits now, under the delivery's hold that every ask also takes:
+   * an ask added before it stays, and nothing handled is done twice. In a savepoint of its own, so
+   * one that fails leaves the others settled.
    */
   async #settle(
+    tx: Tx,
     serverId: string,
     player: { uuid: string; name: string },
     action: WaitingAction,
     result: Delivery,
   ): Promise<void> {
-    await this.#db.transaction(async (tx) => {
-      await lockServer(tx, serverId)
+    await tx.transaction(async (tx) => {
       const now = (await listWaiting(tx, serverId, [player.uuid])).find((w) => w.kind === action.kind)
       if (now === undefined) return
       const rest = remaining(action.kind, now.what, result.handled)
@@ -409,7 +415,8 @@ export class PlayerService {
     kept: { kind: WaitingKind; what: string },
   ): Promise<PlayerChangeView> {
     await this.#db.transaction(async (tx) => {
-      await lockServer(tx, serverId)
+      // Between deliveries, never during one: what this adds to is what waits once it has settled.
+      await holdDeliveries(tx, serverId)
       const before = (await listWaiting(tx, serverId, [player.uuid])).find((w) => w.kind === kept.kind)
       const what = joined(kept.kind, before?.what ?? null, kept.what)
       if (what === null)
