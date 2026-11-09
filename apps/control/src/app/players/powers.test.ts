@@ -183,6 +183,29 @@ describe.skipIf(!hasDatabase)('powers for someone away', () => {
     )
   }, 30_000)
 
+  test('items wait while an emptying waits for a retry, so the emptying still comes first', async () => {
+    const { owner, id, kai } = await withPlayers()
+    h.minecraft.leave(id, kai.uuid)
+    await h.app.schedules.presenceSync()
+    await h.app.players.act(owner, id, kai.uuid, { kind: 'clear_inventory' })
+    await h.app.players.act(owner, id, kai.uuid, { kind: 'give', item: 'diamond', count: 2 })
+
+    h.minecraft.refuseCommands(/^(minecraft:)?clear /)
+    h.minecraft.join(id, kai)
+    await h.app.schedules.presenceSync()
+    expect(h.minecraft.heard(id)).not.toContain('give Kai minecraft:diamond 2')
+    expect((await h.app.players.view(owner, id, kai.uuid)).waiting.map((w) => w.kind).sort()).toEqual([
+      'clear_inventory',
+      'give',
+    ])
+
+    h.minecraft.refuseCommands(null)
+    await h.app.schedules.presenceSync()
+    const heard = h.minecraft.heard(id)
+    expect(heard.lastIndexOf('clear Kai')).toBeLessThan(heard.lastIndexOf('give Kai minecraft:diamond 2'))
+    expect((await h.app.players.view(owner, id, kai.uuid)).waiting).toEqual([])
+  }, 30_000)
+
   test('kept while the server sleeps', async () => {
     const { owner, id, kai } = await withPlayers()
     h.minecraft.leave(id, kai.uuid)
