@@ -182,7 +182,9 @@ describe.skipIf(!hasDatabase)('powers for someone away', () => {
       ]),
     )
   }, 30_000)
+})
 
+describe.skipIf(!hasDatabase)('kept powers across a retry or a sleep', () => {
   test('items wait while an emptying waits for a retry, so the emptying still comes first', async () => {
     const { owner, id, kai } = await withPlayers()
     h.minecraft.leave(id, kai.uuid)
