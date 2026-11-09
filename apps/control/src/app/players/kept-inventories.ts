@@ -66,26 +66,40 @@ export class KeptInventories {
     if (id !== null) {
       const kept = await this.#keep(serverId, handle, player.name, id)
       if (kept !== 'done') return kept
+      // Listed before the emptying, so a reply lost on the way never leaves the copy unlisted.
+      await addKept(q, serverId, { id, playerUuid: player.uuid, keptAt: new Date(), requestedBy, items })
     }
     const cleared = await this.#reading.steps(
       serverId,
       handle,
       powerSteps(player.name, { kind: 'clear_inventory' }),
     )
-    if (cleared !== 'done') {
-      if (id !== null) await this.#forget(serverId, handle, id)
-      return cleared === 'not_on' ? 'not_on' : 'failed'
+    const outcome = cleared === 'failed' ? await this.#whetherEmptied(serverId, handle, player.name) : cleared
+    if (outcome === 'done') {
+      if (id !== null) await this.#trim(q, serverId, handle, player.uuid)
+      return 'done'
     }
-    if (id === null) return 'done'
-    await addKept(q, serverId, {
-      id,
-      playerUuid: player.uuid,
-      keptAt: new Date(),
-      requestedBy,
-      items,
-    })
-    await this.#trim(q, serverId, handle, player.uuid)
-    return 'done'
+    // Not emptied, for certain: the copy would hand out a second set. Unknown: it stays, since a
+    // second set can be cleared again and a lost one can't be had back.
+    if (id !== null && outcome !== 'unknown') {
+      await dropKept(q, serverId, id)
+      await this.#forget(serverId, handle, id)
+    }
+    return outcome === 'not_on' ? 'not_on' : 'failed'
+  }
+
+  /**
+   * After `clear` gave no answer: whether it emptied them all the same, read from what they carry
+   * now. `unknown` where that can't be read either.
+   */
+  async #whetherEmptied(
+    serverId: string,
+    handle: RuntimeHandle,
+    name: string,
+  ): Promise<'done' | 'kept' | 'unknown'> {
+    const facts = await this.#reading.live(serverId, handle, name).catch(() => null)
+    if (facts === null) return 'unknown'
+    return carried(facts.inventory).length === 0 ? 'done' : 'kept'
   }
 
   /** Puts the one kept as `id` back at `player`'s feet, every item of it, then forgets it. */

@@ -11,8 +11,9 @@
  *
  * An item entity can't be summoned empty and filled after: the game drops it as it is made, and
  * still says the fill worked. So each item is a placeholder no one can pick up, then filled from a
- * template (`next`) of the item, its owner and no pickup delay. Seen on a 26.1 server with a player
- * on: every item came back whole. Which clears are kept, and who may ask, is `app/players/`'s.
+ * template (`next`) of the item, its owner and no pickup delay. The placeholder names its count
+ * both ways, `count` since 1.20.5 and `Count` before, so every release reads it as an item. Seen
+ * on 26.1 and 1.20.1 servers with a player on: every item came back whole. Which clears are kept, and who may ask, is `app/players/`'s.
  */
 import { type Step, vanilla } from './player-powers.ts'
 import { safeName } from './players.ts'
@@ -63,7 +64,7 @@ export function putBackItem(
   return {
     copy: vanilla(`data modify storage ${KEPT} ${id}.next.Item set from storage ${KEPT} ${id}.${path}`),
     drop: vanilla(
-      `execute at ${safeName(name)} run summon minecraft:item ~ ~ ~ {Item:{id:"minecraft:barrier",count:1},Tags:["${tag(id)}"],PickupDelay:32767s}`,
+      `execute at ${safeName(name)} run summon minecraft:item ~ ~ ~ {Item:{id:"minecraft:barrier",count:1,Count:1b},Tags:["${tag(id)}"],PickupDelay:32767s}`,
     ),
     fill: vanilla(
       `data modify entity @e[type=minecraft:item,tag=${tag(id)},limit=1] {} merge from storage ${KEPT} ${id}.next`,

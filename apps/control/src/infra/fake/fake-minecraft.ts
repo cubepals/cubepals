@@ -125,6 +125,7 @@ export class FakeMinecraft implements FakeWorkload, ServerConsole, ReadinessProb
   readonly #keyOf: (handle: RuntimeHandle) => string
   #breaks: (env: Readonly<Record<string, string>>) => string | null = () => null
   #refused: RegExp | null = null
+  #unanswered: RegExp | null = null
   #slowed: { pattern: RegExp; ms: number } | null = null
   #stalls: (env: Readonly<Record<string, string>>) => boolean = () => false
   /** How long a world takes to open after the server starts; at once by default. */
@@ -414,9 +415,10 @@ export class FakeMinecraft implements FakeWorkload, ServerConsole, ReadinessProb
     return [...this.#require(key).heard]
   }
 
-  /** Commands matching `pattern` fail, as on a server that can't carry them out, until null. */
-  refuseCommands(pattern: RegExp | null): void {
-    this.#refused = pattern
+  /** Commands matching `pattern` fail until null; with `ranFirst`, they run and the answer is lost. */
+  refuseCommands(pattern: RegExp | null, how: { ranFirst?: boolean } = {}): void {
+    this.#refused = how.ranFirst ? null : pattern
+    this.#unanswered = how.ranFirst ? pattern : null
   }
 
   /** Commands matching `pattern` take `ms` to answer, as on a busy server, until null. */
@@ -512,6 +514,7 @@ export class FakeMinecraft implements FakeWorkload, ServerConsole, ReadinessProb
       server.env.TYPE === 'PAPER' ? named.toLowerCase().replace(/^minecraft:/, '') : named.toLowerCase()
     const answer = await this.#answer(server, verb, rest, source)
     server.log.say(`[Server thread/INFO]: [${source}: ${answer}]`)
+    if (this.#unanswered?.test(input.trim())) throw new Error(`No answer to ${input.trim()}`)
     return answer
   }
 

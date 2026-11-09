@@ -99,4 +99,23 @@ describe.skipIf(!hasDatabase)('an emptied inventory, kept', () => {
     expect(after.waiting).toEqual([])
     expect(after.kept.map((k) => k.id)).not.toContain(newest)
   }, 30_000)
+
+  test('kept when the emptying ran but its answer was lost, and dropped when it didn’t run', async () => {
+    const { owner, id, kai } = await carrying()
+    h.minecraft.refuseCommands(/^clear /, { ranFirst: true })
+    expect(await h.app.players.act(owner, id, kai.uuid, { kind: 'clear_inventory' })).toEqual({ done: 'now' })
+    h.minecraft.refuseCommands(null)
+    expect(h.minecraft.inventories(id).carried(kai.uuid).inventory).toEqual([])
+    const [kept] = (await h.app.players.view(owner, id, kai.uuid)).kept
+    expect(kept?.items.map((i) => i.id)).toEqual([SWORD.id, TORCHES.id, HELMET.id])
+
+    h.minecraft.inventories(id).carry(kai.uuid, { inventory: [{ ...TORCHES, slot: 0 }] })
+    h.minecraft.refuseCommands(/^(minecraft:)?clear /)
+    await expect(h.app.players.act(owner, id, kai.uuid, { kind: 'clear_inventory' })).rejects.toThrow(
+      'The server didn’t answer',
+    )
+    h.minecraft.refuseCommands(null)
+    // Still carrying them: no second copy to hand out.
+    expect((await h.app.players.view(owner, id, kai.uuid)).kept.map((k) => k.id)).toEqual([kept?.id ?? ''])
+  }, 30_000)
 })

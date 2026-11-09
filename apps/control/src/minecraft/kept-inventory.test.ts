@@ -3,8 +3,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * The commands that keep an inventory and put it back, as they were run on a 26.1 server with a
- * player on, where every item came back whole: a sword with its name and enchantment, a shulker
+ * The commands that keep an inventory and put it back, as they were run on 26.1 and 1.20.1 servers
+ * with a player on, where every item came back whole: a sword with its name and enchantment, a shulker
  * box with what it held, a helmet and a shield. And what the game's answers to them mean.
  */
 import { expect, test } from 'bun:test'
@@ -30,7 +30,7 @@ test('puts each item back through a placeholder filled whole, and only then forg
   const { copy, drop, fill, forget } = putBackItem('Kai', ID, 'Inventory[0]')
   expect([copy, drop, fill, forget].map(short)).toEqual([
     `data modify storage blockly:kept ${ID}.next.Item set from storage blockly:kept ${ID}.Inventory[0]`,
-    `execute at Kai run summon minecraft:item ~ ~ ~ {Item:{id:"minecraft:barrier",count:1},Tags:["blockly.kept.${ID}"],PickupDelay:32767s}`,
+    `execute at Kai run summon minecraft:item ~ ~ ~ {Item:{id:"minecraft:barrier",count:1,Count:1b},Tags:["blockly.kept.${ID}"],PickupDelay:32767s}`,
     `data modify entity @e[type=minecraft:item,tag=blockly.kept.${ID},limit=1] {} merge from storage blockly:kept ${ID}.next`,
     `data remove storage blockly:kept ${ID}.Inventory[0]`,
   ])
