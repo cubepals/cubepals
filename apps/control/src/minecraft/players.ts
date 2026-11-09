@@ -148,7 +148,7 @@ export function worldSpawn(level: unknown): Place | null {
 
 // ─── Commands ─────────────────────────────────────────────────────────────────────────────
 
-function safeName(name: string): string {
+export function safeName(name: string): string {
   if (!PLAYER_NAME.test(name)) throw new Error(`Not a player name: ${name}`)
   return name
 }

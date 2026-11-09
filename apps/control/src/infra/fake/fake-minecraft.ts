@@ -36,6 +36,7 @@
  * - `lists.ts`: the access lists, held in memory and saved whole over their files.
  * - `log.ts`: one server's console output, kept and followed.
  * - `names.ts`: who a name is, as vanilla 26.x decides it.
+ * - `player-commands.ts`: what a player page's trips, items, effects, levels and clears answer.
  * - `plugins.ts`: the moderation plugins' commands, LibertyBans' and LuckPerms'.
  * - `properties.ts`: `server.properties`, written as the server starts and its whitelist line.
  */
@@ -74,6 +75,7 @@ import {
 import { AccessLists } from './fake-minecraft/lists.ts'
 import { ServerLog } from './fake-minecraft/log.ts'
 import { checksAccounts, dashed, NameCache, offlineUuid } from './fake-minecraft/names.ts'
+import { playerCommand } from './fake-minecraft/player-commands.ts'
 import { plugin } from './fake-minecraft/plugins.ts'
 import { whitelistOn, writeProperties } from './fake-minecraft/properties.ts'
 import type { FakeMachine, FakeWorkload } from './fake-runtime.ts'
@@ -552,8 +554,14 @@ export class FakeMinecraft implements FakeWorkload, ServerConsole, ReadinessProb
         return ''
       }
       default:
-        return plugin(server.dir, verb, args)
+        return this.#other(server, verb, args)
     }
+  }
+
+  /** The commands a player's page sends, then the plugins'. */
+  #other(server: Server, verb: string, args: string[]): Promise<string> {
+    const answer = playerCommand(server, verb, args)
+    return answer === null ? plugin(server.dir, verb, args) : Promise.resolve(answer)
   }
 
   #difficulty(server: Server, difficulty: string): string {

@@ -10,10 +10,11 @@
  * arrive. Nobody's files are ever written. Who may ask is who may change access: the owner, held
  * to the same policy and the same per-minute count, and every ask is audited like an access change.
  */
-import type { PlayerChangeView, PlayerView } from '@blockly/contracts'
+import type { PlayerChangeView, PlayerPower, PlayerView } from '@blockly/contracts'
 import { type Db, type PlayerSnapshotJson, schema, type Tx } from '@blockly/db'
 import type { MinecraftServer } from '../../domain/server/server.ts'
 import { normalizeUuid } from '../../minecraft/console.ts'
+import { powerSteps } from '../../minecraft/player-powers.ts'
 import type { PlayerFacts, PlayerStats } from '../../minecraft/players.ts'
 import { readAccess } from '../access/persistence.ts'
 import { type Actor, authorize, requestedBy } from '../actor.ts'
@@ -136,6 +137,48 @@ export class PlayerService {
     mode: PlayerAction['what'],
   ): Promise<PlayerChangeView> {
     return this.#change(actor, serverId, playerUuid, { kind: 'game_mode', what: mode } as PlayerAction)
+  }
+
+  /**
+   * Does what the owner would otherwise type into the console, to a player who is on: nothing
+   * waits for someone away, since an item or a kick means nothing once the moment has passed.
+   */
+  async act(
+    actor: Actor,
+    serverId: string,
+    playerUuid: string,
+    power: PlayerPower,
+  ): Promise<PlayerChangeView> {
+    const uuid = normalizeUuid(playerUuid)
+    const server = await this.#db.transaction(async (tx) => {
+      const server = await this.#allowed(tx, actor, serverId)
+      const who = await this.#who(tx, server.id, uuid)
+      await audit(
+        tx,
+        requestedBy(actor),
+        server.id,
+        { uuid, name: who.name },
+        { change: 'asked', ...said(power) },
+      )
+      return server
+    })
+    if (server.lifecycle.status !== 'running')
+      throw new AppError('server_not_running', 'Start the server to do this.')
+    const here = (await presenceFor(this.#db, [server.id])).get(server.id) ?? []
+    const player = here.find((p) => p.uuid === uuid)
+    if (player === undefined) throw new AppError('invalid_choice', 'They aren’t playing just now.')
+    const to = power.kind === 'to_player' ? here.find((p) => p.uuid === normalizeUuid(power.to)) : undefined
+    if (power.kind === 'to_player' && (to === undefined || to.uuid === uuid))
+      throw new AppError('invalid_choice', 'Pick someone else who is playing now.')
+    const { handle } = await loadRuntime(this.#db, server.id, this.#providers)
+    if (handle === null) throw new AppError('server_not_running', 'Start the server to do this.')
+
+    const outcome = await this.#reading.steps(server.id, handle, powerSteps(player.name, power, to?.name))
+    if (outcome === 'done') return { done: 'now' }
+    if (outcome === 'not_on') throw new AppError('invalid_choice', `${player.name} isn’t playing just now.`)
+    if (outcome === 'failed')
+      throw new AppError('server_not_running', 'The server didn’t answer. Try again in a moment.')
+    throw new AppError('command_refused', refusal(power, outcome.refused))
   }
 
   /** Takes back what waits for them to join. */
@@ -287,6 +330,24 @@ export class PlayerService {
     if (listed === undefined) throw new NotFound('Player')
     return { name: listed.player.name, lastSeenAt: null }
   }
+}
+
+/** What was asked, for the audit: every value as text. */
+function said(power: PlayerPower): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(power).map(([key, value]) => [key === 'kind' ? 'power' : key, String(value)]),
+  )
+}
+
+/** Why the game wouldn't, in the owner's words where Blockly knows them, and its own otherwise. */
+function refusal(power: PlayerPower, answer: string): string {
+  if (power.kind === 'give' && answer.startsWith('Unknown item'))
+    return `Minecraft has no item called “${power.item}” in this version.`
+  if (power.kind === 'give' && answer.startsWith("Can't give more than"))
+    return 'That is more of it than Minecraft hands over at once. Try fewer.'
+  if (power.kind === 'teleport' && answer.startsWith('Could not spread'))
+    return 'There is nowhere to stand there. Give a height to go anyway.'
+  return `Minecraft said: ${answer}`
 }
 
 /** Done at once, saying so where it went other than asked. */

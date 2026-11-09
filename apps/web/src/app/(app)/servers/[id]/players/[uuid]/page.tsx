@@ -7,7 +7,8 @@
 /**
  * One player's page, opened from the Players tab: who they are and when they were here, where they
  * died and a way back there, where they are and a way to the spawn, their own game mode, what they
- * carry (`inventory.tsx`), whether they can join, run commands, are banned or help moderate
+ * carry (`inventory.tsx`), buttons for what an owner would otherwise type into the console for them
+ * (`powers.tsx`), whether they can join, run commands, are banned or help moderate
  * (`switches.tsx`), and their warnings, mutes and bans (`moderation.tsx`).
  * A change for someone who is away waits for them to join, and the page says so, with a way to
  * take it back. While the server sleeps, it shows what was kept as it went to sleep.
@@ -41,6 +42,7 @@ import {
 import { useServer } from '../../use-server'
 import { Inventory } from './inventory'
 import { PlayerModeration } from './moderation'
+import { PlayerPowers } from './powers'
 import { PlayerRemovals } from './removals'
 import { AccessSwitches } from './switches'
 
@@ -100,6 +102,13 @@ export default function PlayerPage() {
             <Inventory inventory={p.inventory} gameVersion={server.data.gameVersion} name={p.name} />
           )}
         </>
+      )}
+      {running && (
+        <PlayerPowers
+          serverId={server.id}
+          player={p}
+          others={(server.data.players?.people ?? []).filter((o) => o.uuid !== p.uuid)}
+        />
       )}
       <AccessSwitches serverId={server.id} player={p} running={running} />
       <PlayerModeration serverId={server.id} player={p} running={running} />

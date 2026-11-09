@@ -52,6 +52,7 @@ import {
   PackVersionsInput,
   PlanVersionInput,
   PlayerInput,
+  PlayerPowerInput,
   PowerInput,
   PunishInput,
   RecordSourceInput,
@@ -592,6 +593,12 @@ const players = router({
     .input(GameModeInput)
     .mutation(({ ctx, input }) =>
       ctx.services.players.setGameMode(ctx.actor, input.serverId, input.playerUuid, input.mode),
+    ),
+  /** What the owner would otherwise type into the console for them: a trip, an item, a kick… */
+  act: authedProcedure
+    .input(PlayerPowerInput)
+    .mutation(({ ctx, input }) =>
+      ctx.services.players.act(ctx.actor, input.serverId, input.playerUuid, input.power),
     ),
   /** How each item in an inventory is drawn, from the release's own art. */
   icons: authedProcedure
