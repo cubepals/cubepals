@@ -56,7 +56,16 @@ describe('powerSteps', () => {
     expect(powerSteps('Kai', { kind: 'kick', reason: '' })[0]?.[1]).toBe('kick Kai')
   })
 
+  test('a Bedrock player by the name Floodgate gives them', () => {
+    expect(powerSteps('.Pixel_Pal', { kind: 'heal' })[0]?.[1]).toBe(
+      'effect give .Pixel_Pal minecraft:instant_health 1 5 true',
+    )
+    expect(powerSteps('Kai', { kind: 'to_player', to: 'x' }, '.Pixel_Pal')[0]?.[1]).toBe('tp Kai .Pixel_Pal')
+  })
+
   test('only a player’s name reaches a command', () => {
+    expect(() => powerSteps('..Kai', { kind: 'heal' })).toThrow()
+    expect(() => powerSteps('.Seventeen_chars_', { kind: 'heal' })).toThrow()
     expect(() => powerSteps('Kai @a', { kind: 'heal' })).toThrow()
     expect(() => powerSteps('Kai', { kind: 'to_player', to: 'x' }, '@a')).toThrow()
   })
