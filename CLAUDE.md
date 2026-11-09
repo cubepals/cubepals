@@ -1,4 +1,4 @@
-<!-- The rules live in AGENTS.md, which every agent and person reads; Claude Code reads it through this import. The sections below are the full form of two of them. -->
+<!-- The rules live in AGENTS.md, which every agent and person reads; Claude Code reads it through this import. The sections below are the full form of three of them. -->
 @AGENTS.md
 
 ## Business internals stay private
@@ -13,6 +13,17 @@ The repository is public, and so are its commits, pull requests and issues. Busi
 - anything about a maintainer personally: their other work, their accounts, and the tools and connectors a session happens to have.
 
 They live in the private records repository or in private configuration. Code keeps the mechanism and reads such numbers from private configuration, an env var or a Fly secret (`FREE_LINK_TUNING`, `ABUSE_LIMITS`), with a harmless default for development and tests. Public prices are what the pricing page shows.
+
+## The same thing works the same way
+
+A player meets one product, not one per pull request. Before deciding how something behaves, find where Blockly already handles the same situation, read that code, and do it that way.
+
+- **Look first.** The situations that come up most, and how Blockly handles each today:
+  - **Someone or something isn't there right now:** the player is away, or the server is asleep. The player page keeps the ask for their next join, says so, and lets it be taken back (`app/players/`). Access changes wait for the server's next start.
+  - **Something can't be undone:** a copy is kept first, with a way back. Examples are the safety backups before a change, the inventory kept before a clear, and the trash before a delete.
+  - **How it reads on the page:** the same words, the same waiting line with Cancel, the same confirmation before what is destructive.
+- **Apply it; don't invent another.** A new control doesn't get its own rule for when it works, its own kind of undo or its own wording when one already exists. It isn't hidden, or limited to "while they play", when the controls beside it wait instead. Limit it only where it means nothing later, and say why on the page.
+- **Where the existing way doesn't fit,** say why in the pull request. Then either change it everywhere it applies, or leave it alone. Two ways of doing the same thing is a bug.
 
 ## The website's runtime moves only when proven
 
