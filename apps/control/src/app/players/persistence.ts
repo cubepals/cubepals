@@ -8,8 +8,8 @@
  * `servers/usage.ts`'s; this only reads it.
  */
 import type { WAITING_KINDS } from '@blockly/contracts'
-import { type PlayerSnapshotJson, type Queryable, schema } from '@blockly/db'
-import { and, eq, inArray } from 'drizzle-orm'
+import { type PlayerSnapshotJson, type Queryable, schema, type Tx } from '@blockly/db'
+import { and, eq, inArray, sql } from 'drizzle-orm'
 
 const snapshots = schema.serverPlayerSnapshots
 const waiting = schema.playerActionsWaiting
@@ -69,6 +69,15 @@ export async function listWaiting(
     })
     .from(waiting)
     .where(and(eq(waiting.serverId, serverId), inArray(waiting.playerUuid, [...players])))
+}
+
+/**
+ * One delivery of a server's waiting asks at a time, held to the end of `tx`: a presence reading
+ * and an owner's ask that both deliver read the same rows, and each must find them as the other
+ * left them, or an item is given twice.
+ */
+export async function holdDeliveries(tx: Tx, serverId: string): Promise<void> {
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`blockly:player-waits:${serverId}`}))`)
 }
 
 /** What is written replaces what waited of its kind; how two asks meet is `kept-powers.ts`'s. */

@@ -121,6 +121,7 @@ export class FakeMinecraft implements FakeWorkload, ServerConsole, ReadinessProb
   readonly #keyOf: (handle: RuntimeHandle) => string
   #breaks: (env: Readonly<Record<string, string>>) => string | null = () => null
   #refused: RegExp | null = null
+  #slowed: { pattern: RegExp; ms: number } | null = null
   #stalls: (env: Readonly<Record<string, string>>) => boolean = () => false
   /** How long a world takes to open after the server starts; at once by default. */
   #bootMs = 0
@@ -409,6 +410,11 @@ export class FakeMinecraft implements FakeWorkload, ServerConsole, ReadinessProb
     this.#refused = pattern
   }
 
+  /** Commands matching `pattern` take `ms` to answer, as on a busy server, until null. */
+  slowCommands(slowed: { pattern: RegExp; ms: number } | null): void {
+    this.#slowed = slowed
+  }
+
   /** The world never finishes loading: the process runs, pings are refused. */
   hang(key: string): void {
     this.#require(key).ready = false
@@ -488,6 +494,7 @@ export class FakeMinecraft implements FakeWorkload, ServerConsole, ReadinessProb
   async #execute(server: Server, input: string, source: 'Rcon' | 'Server'): Promise<string> {
     if (this.#refused?.test(input.trim())) throw new Error(`The server did not run ${input.trim()}`)
     server.heard.push(input.trim())
+    if (this.#slowed?.pattern.test(input.trim())) await new Promise((r) => setTimeout(r, this.#slowed?.ms))
     const [named = '', ...rest] = input.trim().replace(/^\//, '').split(/\s+/)
     // Paper knows the game's own commands by their full name too; vanilla doesn't.
     const verb =

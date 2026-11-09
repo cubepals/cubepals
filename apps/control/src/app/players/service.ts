@@ -40,6 +40,7 @@ import {
 } from './kept-powers.ts'
 import {
   dropWaiting,
+  holdDeliveries,
   listWaiting,
   loadSnapshot,
   playedHere,
@@ -268,19 +269,10 @@ export class PlayerService {
     handle: RuntimeHandle,
     players: readonly { uuid: string; name: string }[],
   ) {
-    const here = new Map(players.map((p) => [p.uuid, p.name]))
-    const waiting = inJoinOrder(await listWaiting(this.#db, server.id, [...here.keys()]))
-    const held = new Set<string>()
-    let delivered = 0
-    for (const action of waiting) {
-      if (held.has(action.playerUuid)) continue
-      const name = here.get(action.playerUuid) ?? action.playerName
-      const result = await this.#deliver(server.id, handle, name, action)
-      if (result === 'later' || result.stopped) held.add(action.playerUuid)
-      if (result === 'later') continue
-      await this.#settle(server.id, { uuid: action.playerUuid, name }, action, result)
-      delivered++
-    }
+    const delivered = await this.#db.transaction(async (tx) => {
+      await holdDeliveries(tx, server.id)
+      return this.#deliverAll(server.id, handle, players)
+    })
     if (delivered > 0)
       await this.#db.transaction((tx) =>
         this.#events.publish(tx, {
@@ -290,6 +282,28 @@ export class PlayerService {
           online: players.length,
         }),
       )
+  }
+
+  /** `deliverWaiting`'s work, under its hold: how many asks were done or dropped. */
+  async #deliverAll(
+    serverId: string,
+    handle: RuntimeHandle,
+    players: readonly { uuid: string; name: string }[],
+  ): Promise<number> {
+    const here = new Map(players.map((p) => [p.uuid, p.name]))
+    const waiting = inJoinOrder(await listWaiting(this.#db, serverId, [...here.keys()]))
+    const held = new Set<string>()
+    let delivered = 0
+    for (const action of waiting) {
+      if (held.has(action.playerUuid)) continue
+      const name = here.get(action.playerUuid) ?? action.playerName
+      const result = await this.#deliver(serverId, handle, name, action)
+      if (result === 'later' || result.stopped) held.add(action.playerUuid)
+      if (result === 'later') continue
+      await this.#settle(serverId, { uuid: action.playerUuid, name }, action, result)
+      delivered++
+    }
+    return delivered
   }
 
   /**

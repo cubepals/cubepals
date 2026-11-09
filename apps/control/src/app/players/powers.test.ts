@@ -216,6 +216,28 @@ describe.skipIf(!hasDatabase)('kept powers across a retry or a sleep', () => {
     expect((await h.app.players.view(owner, id, kai.uuid)).waiting).toEqual([])
   }, 30_000)
 
+  test('given once when a reading and an ask deliver at the same time', async () => {
+    const { owner, id, kai } = await withPlayers()
+    h.minecraft.leave(id, kai.uuid)
+    await h.app.schedules.presenceSync()
+    await h.app.players.act(owner, id, kai.uuid, { kind: 'give', item: 'diamond', count: 5 })
+
+    h.minecraft.join(id, kai)
+    // Seen on, but not yet delivered to: both asks find the diamonds waiting, and the first give is
+    // slow, so the second delivery starts while the first is still giving.
+    h.minecraft.refuseCommands(/^(minecraft:)?give /)
+    await h.app.schedules.presenceSync()
+    h.minecraft.refuseCommands(null)
+    h.minecraft.slowCommands({ pattern: /^(minecraft:)?give /, ms: 300 })
+    await Promise.all([
+      h.app.players.act(owner, id, kai.uuid, { kind: 'levels', levels: 1 }),
+      h.app.players.act(owner, id, kai.uuid, { kind: 'levels', levels: 2 }),
+      h.app.schedules.presenceSync(),
+    ])
+    h.minecraft.slowCommands(null)
+    expect(h.minecraft.heard(id).filter((c) => c === 'give Kai minecraft:diamond 5')).toHaveLength(1)
+  }, 30_000)
+
   test('kept while the server sleeps', async () => {
     const { owner, id, kai } = await withPlayers()
     h.minecraft.leave(id, kai.uuid)
