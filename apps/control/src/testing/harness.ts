@@ -120,6 +120,8 @@ export interface HarnessOptions {
   operationDeadlineSeconds?: number
   /** The most servers the provider holds, by its own limit; none by default. */
   serverCeiling?: number
+  /** How many connections the control plane's pool may hold, as DATABASE_POOL_MAX sets it. */
+  poolMax?: number
   /** The runtime keyring; one key, version 1, by default. */
   runtimeSecrets?: SecretKeyring
   /** What the provider charges; nothing by default. */
@@ -245,7 +247,7 @@ export async function startHarness(options: HarnessOptions = {}): Promise<Harnes
   const url = new URL(base)
   url.pathname = `/${name}`
 
-  const pool = createPool(url.toString())
+  const pool = createPool(url.toString(), options.poolMax)
   const db = createDb(pool)
   await migrated(db, options.controls)
   const heard = listening(url.toString())

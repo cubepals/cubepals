@@ -4,10 +4,11 @@
 
 /**
  * One player's page (§15.1): where they are and where they died, their game mode, what they
- * carry and a few stats, and the three things the owner can do for them there — back to where
- * they died, to the spawn, another game mode. A player who is away gets them when they next join:
- * the ask waits here, can be taken back, and is delivered by the presence reading that sees them
- * arrive. Nobody's files are ever written. Who may ask is who may change access: the owner, held
+ * carry and a few stats, and what the owner can do for them there — back to where they died, to
+ * the spawn, another game mode, and the buttons for what they would otherwise type into the
+ * console. A player who is away gets a trip, a game mode, items, levels or an emptied inventory
+ * when they next join: the ask waits here (`kept-powers.ts` says how), can be taken back, and is
+ * delivered by the presence reading that sees them arrive. Nobody's files are ever written. Who may ask is who may change access: the owner, held
  * to the same policy and the same per-minute count, and every ask is audited like an access change.
  */
 import type { PlayerChangeView, PlayerPower, PlayerView } from '@blockly/contracts'
@@ -29,18 +30,37 @@ import { findServer, loadRuntime, lockServer } from '../servers/persistence.ts'
 import type { RuntimeSpecs } from '../servers/specs.ts'
 import { presenceFor } from '../servers/usage.ts'
 import {
+  inJoinOrder,
+  itemsOfPowers,
+  joined,
+  keptOf,
+  keptPowers,
+  remaining,
+  waitingView,
+} from './kept-powers.ts'
+import {
   dropWaiting,
+  holdDeliveries,
   listWaiting,
   loadSnapshot,
   playedHere,
   putWaiting,
   replaceSnapshots,
+  updateWaiting,
+  type WaitingAction,
   type WaitingKind,
 } from './persistence.ts'
 import { type ActionOutcome, type PlayerAction, PlayerReading } from './reading.ts'
 
 /** Who asks for what waits, once the player arrives. */
 const ON_JOIN = 'system:access'
+
+/** One waiting ask done as they joined: what of it, whether all of it, and what the audit says. */
+interface Delivery {
+  handled: string
+  stopped: boolean
+  said: Record<string, string>
+}
 
 export class PlayerService {
   readonly #db: Db
@@ -76,11 +96,9 @@ export class PlayerService {
     const running = server.lifecycle.status === 'running'
     const here = running ? ((await presenceFor(this.#db, [server.id])).get(server.id) ?? []) : []
     const onNow = here.find((p) => p.uuid === uuid)
-    const waiting = (await listWaiting(this.#db, server.id, [uuid])).map((w) => ({
-      kind: w.kind,
-      what: w.what as PlayerView['waiting'][number]['what'],
-      askedAt: w.askedAt.toISOString(),
-    }))
+    const waiting = (await listWaiting(this.#db, server.id, [uuid]))
+      .map((w) => waitingView(w.kind, w.what, w.askedAt))
+      .filter((w) => w !== null)
     const base = {
       uuid,
       name: onNow?.name ?? who.name,
@@ -140,8 +158,9 @@ export class PlayerService {
   }
 
   /**
-   * Does what the owner would otherwise type into the console, to a player who is on: nothing
-   * waits for someone away, since an item or a kick means nothing once the moment has passed.
+   * Does what the owner would otherwise type into the console, at once to a player who is on. For
+   * someone away, a trip, items, levels and an emptied inventory wait for their next join; a heal,
+   * a kick or a trip to someone on now mean nothing once the moment has passed, so they don't.
    */
   async act(
     actor: Actor,
@@ -150,7 +169,7 @@ export class PlayerService {
     power: PlayerPower,
   ): Promise<PlayerChangeView> {
     const uuid = normalizeUuid(playerUuid)
-    const server = await this.#db.transaction(async (tx) => {
+    const { server, name } = await this.#db.transaction(async (tx) => {
       const server = await this.#allowed(tx, actor, serverId)
       const who = await this.#who(tx, server.id, uuid)
       await audit(
@@ -160,22 +179,57 @@ export class PlayerService {
         { uuid, name: who.name },
         { change: 'asked', ...said(power) },
       )
-      return server
+      return { server, name: who.name }
     })
-    if (server.lifecycle.status !== 'running')
-      throw new AppError('server_not_running', 'Start the server to do this.')
-    const here = (await presenceFor(this.#db, [server.id])).get(server.id) ?? []
+    const kept = keptOf(power)
+    const running = server.lifecycle.status === 'running'
+    const here = running ? ((await presenceFor(this.#db, [server.id])).get(server.id) ?? []) : []
     const player = here.find((p) => p.uuid === uuid)
-    if (player === undefined) throw new AppError('invalid_choice', 'They aren’t playing just now.')
-    const to = power.kind === 'to_player' ? here.find((p) => p.uuid === normalizeUuid(power.to)) : undefined
-    if (power.kind === 'to_player' && (to === undefined || to.uuid === uuid))
-      throw new AppError('invalid_choice', 'Pick someone else who is playing now.')
-    const { handle } = await loadRuntime(this.#db, server.id, this.#providers)
-    if (handle === null) throw new AppError('server_not_running', 'Start the server to do this.')
+    const { handle } =
+      player === undefined ? { handle: null } : await loadRuntime(this.#db, server.id, this.#providers)
+    if (player !== undefined && handle !== null) {
+      // What already waits for them goes first, in its order; items wait behind an emptying that
+      // still has to happen, so it can't take them.
+      await this.deliverWaiting(server, handle, [player])
+      const clearing = (await listWaiting(this.#db, server.id, [uuid])).some(
+        (w) => w.kind === 'clear_inventory',
+      )
+      if (clearing && kept?.kind === 'give') return this.#keep(actor, server.id, player, kept)
+      return this.#actNow(actor, server.id, handle, { player, here }, power)
+    }
+    if (kept !== null) return this.#keep(actor, server.id, { uuid, name: player?.name ?? name }, kept)
+    if (!running) throw new AppError('server_not_running', 'Start the server to do this.')
+    throw new AppError('invalid_choice', `${name} isn’t playing just now.`)
+  }
 
-    const outcome = await this.#reading.steps(server.id, handle, powerSteps(player.name, power, to?.name))
-    if (outcome === 'done') return { done: 'now' }
-    if (outcome === 'not_on') throw new AppError('invalid_choice', `${player.name} isn’t playing just now.`)
+  /** `act` for a player the server has on now; `here` is everyone on, for a trip to one of them. */
+  async #actNow(
+    actor: Actor,
+    serverId: string,
+    handle: RuntimeHandle,
+    {
+      player,
+      here,
+    }: { player: { uuid: string; name: string }; here: readonly { uuid: string; name: string }[] },
+    power: PlayerPower,
+  ): Promise<PlayerChangeView> {
+    const kept = keptOf(power)
+    const to = power.kind === 'to_player' ? here.find((p) => p.uuid === normalizeUuid(power.to)) : undefined
+    if (power.kind === 'to_player' && (to === undefined || to.uuid === player.uuid))
+      throw new AppError('invalid_choice', 'Pick someone else who is playing now.')
+
+    const outcome = await this.#reading.steps(serverId, handle, powerSteps(player.name, power, to?.name))
+    if (outcome === 'done') {
+      // A trip or an emptying done now is the one that waited; items and levels waiting still add.
+      if (kept?.kind === 'place' || kept?.kind === 'clear_inventory')
+        await dropWaiting(this.#db, serverId, player.uuid, kept.kind)
+      return { done: 'now' }
+    }
+    if (outcome === 'not_on') {
+      // They left just as it was asked: it waits for them, where it can.
+      if (kept !== null) return this.#keep(actor, serverId, player, kept)
+      throw new AppError('invalid_choice', `${player.name} isn’t playing just now.`)
+    }
     if (outcome === 'failed')
       throw new AppError('server_not_running', 'The server didn’t answer. Try again in a moment.')
     throw new AppError('command_refused', refusal(power, outcome.refused))
@@ -203,44 +257,22 @@ export class PlayerService {
   }
 
   /**
-   * What waits for players a presence reading has just seen on: each done now, then gone. One the
-   * server didn't take stays for the next reading; one with nowhere to go (they never died here)
-   * is dropped. Best effort, and never holds up the reading.
+   * What waits for players a presence reading has just seen on: each done now, then gone, an
+   * emptied inventory before any items. One the server didn't take stays for the next reading, and
+   * the rest of that player's wait with it, so the order holds across retries; items it gave only
+   * some of leave the rest waiting. One with nowhere to go (they never died here), or that the game
+   * refused (an item this version doesn't have), is dropped and audited. Best effort, and never
+   * holds up the reading.
    */
   async deliverWaiting(
     server: MinecraftServer,
     handle: RuntimeHandle,
     players: readonly { uuid: string; name: string }[],
   ) {
-    const here = new Map(players.map((p) => [p.uuid, p.name]))
-    const waiting = await listWaiting(this.#db, server.id, [...here.keys()])
-    let delivered = 0
-    for (const action of waiting) {
-      const name = here.get(action.playerUuid) ?? action.playerName
-      const outcome = await this.#reading.perform(server.id, handle, name, {
-        kind: action.kind,
-        what: action.what,
-      } as PlayerAction)
-      if (outcome === 'not_on' || outcome === 'failed') continue
-      await this.#db.transaction(async (tx) => {
-        if ((await dropWaiting(tx, server.id, action.playerUuid, action.kind)) === null) return
-        await audit(
-          tx,
-          ON_JOIN,
-          server.id,
-          { uuid: action.playerUuid, name },
-          {
-            change: outcome === 'nowhere' ? 'dropped_on_join' : 'done_on_join',
-            kind: action.kind,
-            what: action.what,
-            askedBy: action.requestedBy,
-            ...(outcome === 'at_spawn' ? { instead: 'spawn' } : {}),
-            ...(typeof outcome === 'object' ? { at: placed(outcome.near) } : {}),
-          },
-        )
-      })
-      delivered++
-    }
+    const delivered = await this.#db.transaction(async (tx) => {
+      await holdDeliveries(tx, server.id)
+      return this.#deliverAll(tx, server.id, handle, players)
+    })
     if (delivered > 0)
       await this.#db.transaction((tx) =>
         this.#events.publish(tx, {
@@ -250,6 +282,33 @@ export class PlayerService {
           online: players.length,
         }),
       )
+  }
+
+  /**
+   * `deliverWaiting`'s work, all of it through `tx`, which holds the hold: a delivery takes no other
+   * connection while it keeps one, so a busy pool can't leave it waiting on itself. How many asks
+   * were done or dropped.
+   */
+  async #deliverAll(
+    tx: Tx,
+    serverId: string,
+    handle: RuntimeHandle,
+    players: readonly { uuid: string; name: string }[],
+  ): Promise<number> {
+    const here = new Map(players.map((p) => [p.uuid, p.name]))
+    const waiting = inJoinOrder(await listWaiting(tx, serverId, [...here.keys()]))
+    const held = new Set<string>()
+    let delivered = 0
+    for (const action of waiting) {
+      if (held.has(action.playerUuid)) continue
+      const name = here.get(action.playerUuid) ?? action.playerName
+      const result = await this.#deliver(serverId, handle, name, action)
+      if (result === 'later' || result.stopped) held.add(action.playerUuid)
+      if (result === 'later') continue
+      await this.#settle(tx, serverId, { uuid: action.playerUuid, name }, action, result)
+      delivered++
+    }
+    return delivered
   }
 
   /**
@@ -263,6 +322,118 @@ export class PlayerService {
     for (const [uuid, read] of files.players)
       if (read.facts !== null) kept.set(uuid, factsView(read.facts, read.stats))
     await replaceSnapshots(this.#db, server.id, now, kept)
+  }
+
+  /**
+   * One waiting ask, done for someone just seen on: what of it was `handled` (done, or refused by
+   * the game), whether it `stopped` before the end, and what the audit says; `later` where the
+   * server took none of it.
+   */
+  async #deliver(
+    serverId: string,
+    handle: RuntimeHandle,
+    name: string,
+    action: WaitingAction,
+  ): Promise<Delivery | 'later'> {
+    const powers = keptPowers(action.kind, action.what)
+    if (powers !== null) return this.#deliverPowers(serverId, handle, name, action, powers)
+    const outcome = await this.#reading.perform(serverId, handle, name, {
+      kind: action.kind,
+      what: action.what,
+    } as PlayerAction)
+    if (outcome === 'not_on' || outcome === 'failed') return 'later'
+    return {
+      handled: action.what,
+      stopped: false,
+      said: {
+        change: outcome === 'nowhere' ? 'dropped_on_join' : 'done_on_join',
+        ...(outcome === 'at_spawn' ? { instead: 'spawn' } : {}),
+        ...(typeof outcome === 'object' ? { at: placed(outcome.near) } : {}),
+      },
+    }
+  }
+
+  /** Each power in turn, until the server stops taking them; one the game refused is let go. */
+  async #deliverPowers(
+    serverId: string,
+    handle: RuntimeHandle,
+    name: string,
+    action: WaitingAction,
+    powers: readonly PlayerPower[],
+  ): Promise<Delivery | 'later'> {
+    const refused: string[] = []
+    let taken = 0
+    for (const power of powers) {
+      const outcome = await this.#reading.steps(serverId, handle, powerSteps(name, power))
+      if (outcome === 'not_on' || outcome === 'failed') break
+      if (typeof outcome === 'object') refused.push(outcome.refused)
+      taken++
+    }
+    if (taken === 0 && powers.length > 0) return 'later'
+    return {
+      handled: action.kind === 'give' ? itemsOfPowers(powers.slice(0, taken)) : action.what,
+      stopped: taken < powers.length,
+      said: {
+        change: refused.length === taken ? 'dropped_on_join' : 'done_on_join',
+        ...(refused.length > 0 ? { refused: refused.join(' / ') } : {}),
+      },
+    }
+  }
+
+  /**
+   * Takes what was handled off what waits now, under the delivery's hold that every ask also takes:
+   * an ask added before it stays, and nothing handled is done twice. In a savepoint of its own, so
+   * one that fails leaves the others settled.
+   */
+  async #settle(
+    tx: Tx,
+    serverId: string,
+    player: { uuid: string; name: string },
+    action: WaitingAction,
+    result: Delivery,
+  ): Promise<void> {
+    await tx.transaction(async (tx) => {
+      const now = (await listWaiting(tx, serverId, [player.uuid])).find((w) => w.kind === action.kind)
+      if (now === undefined) return
+      const rest = remaining(action.kind, now.what, result.handled)
+      if (rest === null) await dropWaiting(tx, serverId, player.uuid, action.kind)
+      else await updateWaiting(tx, serverId, player.uuid, action.kind, rest)
+      await audit(tx, ON_JOIN, serverId, player, {
+        ...result.said,
+        kind: action.kind,
+        what: result.handled,
+        askedBy: action.requestedBy,
+      })
+    })
+  }
+
+  /** Kept for their next join, with what already waits of the same kind (`kept-powers.ts`). */
+  async #keep(
+    actor: Actor,
+    serverId: string,
+    player: { uuid: string; name: string },
+    kept: { kind: WaitingKind; what: string },
+  ): Promise<PlayerChangeView> {
+    await this.#db.transaction(async (tx) => {
+      // Between deliveries, never during one: what this adds to is what waits once it has settled.
+      await holdDeliveries(tx, serverId)
+      const before = (await listWaiting(tx, serverId, [player.uuid])).find((w) => w.kind === kept.kind)
+      const what = joined(kept.kind, before?.what ?? null, kept.what)
+      if (what === null)
+        throw new AppError(
+          'invalid_choice',
+          'With what already waits for them, that is more than Minecraft hands over at once. Cancel what waits, or ask for less.',
+        )
+      await putWaiting(tx, serverId, {
+        playerUuid: player.uuid,
+        playerName: player.name,
+        kind: kept.kind,
+        what,
+        requestedBy: requestedBy(actor),
+        askedAt: new Date(),
+      })
+    })
+    return { done: 'when_they_join' }
   }
 
   async #change(

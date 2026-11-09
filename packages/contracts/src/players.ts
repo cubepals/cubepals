@@ -15,8 +15,12 @@ export type GameMode = (typeof GAME_MODES)[number]
 
 export const TeleportInput = PlayerInput.extend({ to: z.enum(['death', 'spawn']) })
 export const GameModeInput = PlayerInput.extend({ mode: z.enum(GAME_MODES) })
-/** What waits for a player: a trip somewhere, or a game mode. One of each at most. */
-export const WaitingInput = PlayerInput.extend({ kind: z.enum(['place', 'game_mode']) })
+/**
+ * What can wait for a player: a trip somewhere, a game mode, items, levels, or an emptied
+ * inventory. One of each at most; items and levels asked again add up.
+ */
+export const WAITING_KINDS = ['place', 'game_mode', 'give', 'levels', 'clear_inventory'] as const
+export const WaitingInput = PlayerInput.extend({ kind: z.enum(WAITING_KINDS) })
 /** The worlds every release has, by the game's own names for them. */
 export const DIMENSIONS = ['minecraft:overworld', 'minecraft:the_nether', 'minecraft:the_end'] as const
 /** How far out the game lets anyone stand: its world border's widest (minecraft.wiki, World border). */
@@ -30,11 +34,14 @@ const HEIGHT = 4064
 const ITEM_ID = /^([a-z0-9_.-]+:)?[a-z0-9_./-]+$/
 /** The most one give hands over: the game refuses more than a hundred stacks of anything. */
 export const MOST_GIVEN = 6400
+/** The most levels one ask gives, and the most that wait for one player. */
+export const MOST_LEVELS = 1000
 
 /**
- * What the owner can do to a player who is on, from their page: a trip to a place (on the ground
- * there when no height is given) or to another player, an item, their health and hunger back,
- * levels, a kick, or an empty inventory.
+ * What the owner can do to a player from their page: a trip to a place (on the ground there when
+ * no height is given) or to another player, an item, their health and hunger back, levels, a
+ * kick, or an empty inventory. A trip to a place, items, levels and an emptied inventory wait for
+ * someone away; the rest only mean something while they are on.
  */
 export const PlayerPower = z.discriminatedUnion('kind', [
   z.object({
@@ -51,7 +58,7 @@ export const PlayerPower = z.discriminatedUnion('kind', [
     count: z.number().int().min(1).max(MOST_GIVEN),
   }),
   z.object({ kind: z.literal('heal') }),
-  z.object({ kind: z.literal('levels'), levels: z.number().int().min(1).max(1000) }),
+  z.object({ kind: z.literal('levels'), levels: z.number().int().min(1).max(MOST_LEVELS) }),
   z.object({ kind: z.literal('kick'), reason: z.string().max(200) }),
   z.object({ kind: z.literal('clear_inventory') }),
 ])
@@ -92,13 +99,19 @@ export interface InventoryView {
   enderChest: SlotView[]
 }
 
-/** Something asked for while the player was away, done when they next join. */
-export interface WaitingView {
-  kind: 'place' | 'game_mode'
-  /** `death` and `spawn` for a place; a mode's name for a game mode. */
-  what: 'death' | 'spawn' | GameMode
-  askedAt: string
-}
+/**
+ * Something asked for while the player was away, done when they next join: back where they died,
+ * to the spawn or to coordinates (`there`); a game mode; the items and levels waiting, all of
+ * them; or an emptied inventory, which is done before any items, so they keep those.
+ */
+export type WaitingView = { askedAt: string } & (
+  | { kind: 'place'; what: 'death' | 'spawn' }
+  | { kind: 'place'; what: 'there'; there: { dimension: string; x: number; y: number | null; z: number } }
+  | { kind: 'game_mode'; what: GameMode }
+  | { kind: 'give'; items: { item: string; count: number }[] }
+  | { kind: 'levels'; levels: number }
+  | { kind: 'clear_inventory' }
+)
 
 export interface PlayerView {
   uuid: string

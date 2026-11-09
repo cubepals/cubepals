@@ -7,13 +7,14 @@
  * server went to sleep, and what waits for them to join. Who has played, and when, is
  * `servers/usage.ts`'s; this only reads it.
  */
-import { type PlayerSnapshotJson, type Queryable, schema } from '@blockly/db'
-import { and, eq, inArray } from 'drizzle-orm'
+import type { WAITING_KINDS } from '@blockly/contracts'
+import { type PlayerSnapshotJson, type Queryable, schema, type Tx } from '@blockly/db'
+import { and, eq, inArray, sql } from 'drizzle-orm'
 
 const snapshots = schema.serverPlayerSnapshots
 const waiting = schema.playerActionsWaiting
 
-export type WaitingKind = 'place' | 'game_mode'
+export type WaitingKind = (typeof WAITING_KINDS)[number]
 
 export interface WaitingAction {
   playerUuid: string
@@ -70,7 +71,16 @@ export async function listWaiting(
     .where(and(eq(waiting.serverId, serverId), inArray(waiting.playerUuid, [...players])))
 }
 
-/** The newest ask wins: a second trip replaces the first, and a second mode the first. */
+/**
+ * One delivery of a server's waiting asks at a time, held to the end of `tx`: a presence reading
+ * and an owner's ask that both deliver read the same rows, and each must find them as the other
+ * left them, or an item is given twice.
+ */
+export async function holdDeliveries(tx: Tx, serverId: string): Promise<void> {
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`blockly:player-waits:${serverId}`}))`)
+}
+
+/** What is written replaces what waited of its kind; how two asks meet is `kept-powers.ts`'s. */
 export async function putWaiting(q: Queryable, serverId: string, action: WaitingAction): Promise<void> {
   await q
     .insert(waiting)
@@ -98,6 +108,20 @@ export async function dropWaiting(
     .where(and(eq(waiting.serverId, serverId), eq(waiting.playerUuid, playerUuid), eq(waiting.kind, kind)))
     .returning({ what: waiting.what })
   return row ?? null
+}
+
+/** What still waits of a kind, once part of it was done. */
+export async function updateWaiting(
+  q: Queryable,
+  serverId: string,
+  playerUuid: string,
+  kind: WaitingKind,
+  what: string,
+): Promise<void> {
+  await q
+    .update(waiting)
+    .set({ what })
+    .where(and(eq(waiting.serverId, serverId), eq(waiting.playerUuid, playerUuid), eq(waiting.kind, kind)))
 }
 
 /** Someone who has played here: their newest name and when they were last on. */

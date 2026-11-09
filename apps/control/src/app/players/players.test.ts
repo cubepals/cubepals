@@ -127,13 +127,16 @@ describe.skipIf(!hasDatabase)('a player on, and one away', () => {
     expect(await h.app.players.setGameMode(owner, id, kai.uuid, 'survival')).toEqual({
       done: 'when_they_join',
     })
-    expect((await h.app.players.view(owner, id, kai.uuid)).waiting.map((w) => w.what).sort()).toEqual([
-      'death',
-      'survival',
-    ])
+    expect(
+      (await h.app.players.view(owner, id, kai.uuid)).waiting
+        .map((w) => ('what' in w ? w.what : w.kind))
+        .sort(),
+    ).toEqual(['death', 'survival'])
     // Taken back: the mode no longer waits; the trip still does.
     await h.app.players.cancel(owner, id, kai.uuid, 'game_mode')
-    expect((await h.app.players.view(owner, id, kai.uuid)).waiting.map((w) => w.what)).toEqual(['death'])
+    expect(
+      (await h.app.players.view(owner, id, kai.uuid)).waiting.map((w) => ('what' in w ? w.what : w.kind)),
+    ).toEqual(['death'])
 
     // They join, and they died somewhere since: the trip goes where they died last.
     h.minecraft.join(id, kai)

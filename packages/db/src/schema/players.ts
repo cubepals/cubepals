@@ -7,6 +7,7 @@
  * server last went to sleep, what the owner asked for while they were away, waiting for them to
  * join, and when they came by while it rested and couldn't get in.
  */
+import { WAITING_KINDS } from '@blockly/contracts'
 import { jsonb, pgEnum, pgTable, primaryKey, text, uuid } from 'drizzle-orm/pg-core'
 import type { PlayerSnapshotJson } from '../json.ts'
 import { ts } from './columns.ts'
@@ -29,8 +30,8 @@ export const serverPlayerSnapshots = pgTable(
   (t) => [primaryKey({ columns: [t.serverId, t.playerUuid] })],
 )
 
-/** A trip somewhere, or a game mode: a player has at most one of each waiting. */
-export const playerActionKind = pgEnum('player_action_kind', ['place', 'game_mode'])
+/** A trip somewhere, a game mode, items, levels or an emptied inventory: at most one of each waits. */
+export const playerActionKind = pgEnum('player_action_kind', WAITING_KINDS)
 
 /** Asked for while the player was away; done through the console when they next join, then gone. */
 export const playerActionsWaiting = pgTable(
@@ -41,7 +42,10 @@ export const playerActionsWaiting = pgTable(
       .references(() => minecraftServers.id),
     playerUuid: uuid('player_uuid').notNull(),
     kind: playerActionKind('kind').notNull(),
-    /** `death` or `spawn` for a place; the mode for a game mode. */
+    /**
+     * `death` or `spawn` for a place, or its coordinates as JSON; the mode for a game mode; the
+     * items as JSON; the levels as a number; `all` for an emptied inventory.
+     */
     what: text('what').notNull(),
     /** Their name when it was asked, for the audit and the page until the server names them again. */
     playerName: text('player_name').notNull(),
