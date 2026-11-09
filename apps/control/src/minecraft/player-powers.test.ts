@@ -2,9 +2,22 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-/** The commands behind a player page's buttons, and what the game's answers to them mean. */
+/**
+ * The commands behind a player page's buttons, and what the game's answers to them mean. The
+ * answers are the game's own lines, from 26.3's language file, filled in as its console fills
+ * them (`infra/fake/fake-minecraft/lang-26.3.json`, which the fake server answers with too).
+ */
 import { describe, expect, test } from 'bun:test'
+import lang from '../infra/fake/fake-minecraft/lang-26.3.json' with { type: 'json' }
 import { powerAnswer, powerSteps } from './player-powers.ts'
+
+type Key = keyof typeof lang.lines
+
+/** A line of the game's, its `%s` filled in order. */
+const said = (key: Key, ...values: string[]) => {
+  let i = 0
+  return lang.lines[key].replace(/%s/g, () => values[i++] ?? '')
+}
 
 describe('powerSteps', () => {
   test('each command by its full name first, then the short one vanilla knows', () => {
@@ -49,14 +62,35 @@ describe('powerSteps', () => {
   })
 })
 
-describe('powerAnswer', () => {
-  test('reads the game’s own words', () => {
-    expect(powerAnswer('Gave 3 [Diamond] to Kai')).toBe('done')
-    expect(powerAnswer('No items were found on player Kai.')).toBe('done')
-    expect(powerAnswer('Unknown or incomplete command, see below for error')).toBe('unknown')
-    expect(powerAnswer('No player was found')).toBe('not_on')
-    expect(powerAnswer("Unknown item 'minecraft:nope'")).toBe('refused')
-    expect(powerAnswer("Can't give more than 6400 of [Diamond]")).toBe('refused')
-    expect(powerAnswer('Could not spread 1 entity around 0, 0')).toBe('refused')
+describe('powerAnswer, on the game’s own lines', () => {
+  test('done', () => {
+    for (const answer of [
+      said('commands.give.success.single', '3', '[Diamond]', 'Kai'),
+      said('commands.teleport.success.entity.single', 'Kai', 'Ana'),
+      said('commands.teleport.success.location.single', 'Kai', '10.500000', '70.000000', '-3.500000'),
+      said('commands.spreadplayers.success.entities', '1', '10.5', '-3.5', '0.00'),
+      said('commands.effect.give.success.single', 'Instant Health', 'Kai'),
+      said('commands.experience.add.levels.success.single', '5', 'Kai'),
+      said('commands.clear.success.single', '12', 'Kai'),
+      // Nothing to clear is an inventory already empty.
+      said('clear.failed.single', 'Kai'),
+      said('commands.kick.success', 'Kai', lang.lines['multiplayer.disconnect.kicked']),
+      // Something stronger already on them heals or feeds them all the same.
+      said('commands.effect.give.failed'),
+    ])
+      expect(powerAnswer(answer)).toBe('done')
+  })
+
+  test('the next way, the player gone, and the game’s refusals', () => {
+    expect(powerAnswer(said('command.unknown.command'))).toBe('unknown')
+    expect(powerAnswer(said('argument.entity.notfound.player'))).toBe('not_on')
+    expect(powerAnswer(said('argument.entity.notfound.entity'))).toBe('not_on')
+    for (const answer of [
+      said('argument.item.id.invalid', 'minecraft:nope'),
+      said('commands.give.failed.toomanyitems', '6400', '[Diamond]'),
+      said('commands.spreadplayers.failed.entities', '1', '0', '0', '0.00'),
+      said('command.unknown.argument'),
+    ])
+      expect(powerAnswer(answer)).toBe('refused')
   })
 })

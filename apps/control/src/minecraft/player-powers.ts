@@ -81,8 +81,10 @@ function itemId(item: string): string {
  * What the game's answer to one way of saying a step means: `unknown` where the server doesn't
  * know the command by that name and the next way is worth a try, `not_on` where the player isn't
  * there, `refused` where the game wouldn't (an item it doesn't know, more than it gives at once,
- * nowhere to stand), and `done` otherwise. Its words are its `en_us.json`'s, which a server's
- * console always speaks.
+ * nowhere to stand), and `done` otherwise: an effect turned down for something stronger already on
+ * them has healed or fed them all the same, and nothing to clear is an inventory already empty.
+ * Its words are its `en_us.json`'s, which a server's console always speaks; the tests read them
+ * from 26.3's (`infra/fake/fake-minecraft/lang-26.3.json`).
  */
 export function powerAnswer(answer: string): 'done' | 'unknown' | 'not_on' | 'refused' {
   const said = answer.trim()
