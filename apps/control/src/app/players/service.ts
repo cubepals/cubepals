@@ -29,15 +29,23 @@ import type { Runtimes } from '../runtimes/router.ts'
 import { findServer, loadRuntime, lockServer } from '../servers/persistence.ts'
 import type { RuntimeSpecs } from '../servers/specs.ts'
 import { presenceFor } from '../servers/usage.ts'
-import { inJoinOrder, itemsLeft, joined, keptOf, keptPowers, waitingView } from './kept-powers.ts'
+import {
+  inJoinOrder,
+  itemsOfPowers,
+  joined,
+  keptOf,
+  keptPowers,
+  remaining,
+  waitingView,
+} from './kept-powers.ts'
 import {
   dropWaiting,
   listWaiting,
   loadSnapshot,
-  narrowWaiting,
   playedHere,
   putWaiting,
   replaceSnapshots,
+  updateWaiting,
   type WaitingAction,
   type WaitingKind,
 } from './persistence.ts'
@@ -45,6 +53,13 @@ import { type ActionOutcome, type PlayerAction, PlayerReading } from './reading.
 
 /** Who asks for what waits, once the player arrives. */
 const ON_JOIN = 'system:access'
+
+/** One waiting ask done as they joined: what of it, whether all of it, and what the audit says. */
+interface Delivery {
+  handled: string
+  stopped: boolean
+  said: Record<string, string>
+}
 
 export class PlayerService {
   readonly #db: Db
@@ -234,10 +249,11 @@ export class PlayerService {
 
   /**
    * What waits for players a presence reading has just seen on: each done now, then gone, an
-   * emptied inventory before any items. One the server didn't take stays for the next reading,
-   * and items it took only some of leave the rest waiting; one with nowhere to go (they never died
-   * here), or that the game refused (an item this version doesn't have), is dropped and audited.
-   * Best effort, and never holds up the reading.
+   * emptied inventory before any items. One the server didn't take stays for the next reading, and
+   * the rest of that player's wait with it, so the order holds across retries; items it gave only
+   * some of leave the rest waiting. One with nowhere to go (they never died here), or that the game
+   * refused (an item this version doesn't have), is dropped and audited. Best effort, and never
+   * holds up the reading.
    */
   async deliverWaiting(
     server: MinecraftServer,
@@ -246,25 +262,15 @@ export class PlayerService {
   ) {
     const here = new Map(players.map((p) => [p.uuid, p.name]))
     const waiting = inJoinOrder(await listWaiting(this.#db, server.id, [...here.keys()]))
+    const held = new Set<string>()
     let delivered = 0
     for (const action of waiting) {
+      if (held.has(action.playerUuid)) continue
       const name = here.get(action.playerUuid) ?? action.playerName
       const result = await this.#deliver(server.id, handle, name, action)
+      if (result === 'later' || result.stopped) held.add(action.playerUuid)
       if (result === 'later') continue
-      if ('left' in result) {
-        await narrowWaiting(this.#db, server.id, action.playerUuid, action.kind, action.what, result.left)
-        continue
-      }
-      await this.#db.transaction(async (tx) => {
-        if ((await dropWaiting(tx, server.id, action.playerUuid, action.kind, action.what)) === null) return
-        await audit(
-          tx,
-          ON_JOIN,
-          server.id,
-          { uuid: action.playerUuid, name },
-          { ...result, kind: action.kind, what: action.what, askedBy: action.requestedBy },
-        )
-      })
+      await this.#settle(server.id, { uuid: action.playerUuid, name }, action, result)
       delivered++
     }
     if (delivered > 0)
@@ -292,47 +298,85 @@ export class PlayerService {
   }
 
   /**
-   * One waiting ask, done for someone just seen on: what the audit says of it; `later` where the
-   * server didn't take it; what is `left` where it gave only some of the items.
+   * One waiting ask, done for someone just seen on: what of it was `handled` (done, or refused by
+   * the game), whether it `stopped` before the end, and what the audit says; `later` where the
+   * server took none of it.
    */
   async #deliver(
     serverId: string,
     handle: RuntimeHandle,
     name: string,
     action: WaitingAction,
-  ): Promise<Record<string, string> | 'later' | { left: string }> {
+  ): Promise<Delivery | 'later'> {
     const powers = keptPowers(action.kind, action.what)
-    if (powers !== null) return this.#deliverPowers(serverId, handle, name, powers)
+    if (powers !== null) return this.#deliverPowers(serverId, handle, name, action, powers)
     const outcome = await this.#reading.perform(serverId, handle, name, {
       kind: action.kind,
       what: action.what,
     } as PlayerAction)
     if (outcome === 'not_on' || outcome === 'failed') return 'later'
     return {
-      change: outcome === 'nowhere' ? 'dropped_on_join' : 'done_on_join',
-      ...(outcome === 'at_spawn' ? { instead: 'spawn' } : {}),
-      ...(typeof outcome === 'object' ? { at: placed(outcome.near) } : {}),
+      handled: action.what,
+      stopped: false,
+      said: {
+        change: outcome === 'nowhere' ? 'dropped_on_join' : 'done_on_join',
+        ...(outcome === 'at_spawn' ? { instead: 'spawn' } : {}),
+        ...(typeof outcome === 'object' ? { at: placed(outcome.near) } : {}),
+      },
     }
   }
 
-  /** Each power in turn; one the game refused is let go, the rest still done. */
+  /** Each power in turn, until the server stops taking them; one the game refused is let go. */
   async #deliverPowers(
     serverId: string,
     handle: RuntimeHandle,
     name: string,
+    action: WaitingAction,
     powers: readonly PlayerPower[],
-  ): Promise<Record<string, string> | 'later' | { left: string }> {
+  ): Promise<Delivery | 'later'> {
     const refused: string[] = []
-    for (const [i, power] of powers.entries()) {
+    let taken = 0
+    for (const power of powers) {
       const outcome = await this.#reading.steps(serverId, handle, powerSteps(name, power))
-      if (outcome === 'not_on' || outcome === 'failed')
-        return i === 0 ? 'later' : { left: itemsLeft(powers.slice(i)) }
+      if (outcome === 'not_on' || outcome === 'failed') break
       if (typeof outcome === 'object') refused.push(outcome.refused)
+      taken++
     }
+    if (taken === 0 && powers.length > 0) return 'later'
     return {
-      change: refused.length === powers.length ? 'dropped_on_join' : 'done_on_join',
-      ...(refused.length > 0 ? { refused: refused.join(' / ') } : {}),
+      handled: action.kind === 'give' ? itemsOfPowers(powers.slice(0, taken)) : action.what,
+      stopped: taken < powers.length,
+      said: {
+        change: refused.length === taken ? 'dropped_on_join' : 'done_on_join',
+        ...(refused.length > 0 ? { refused: refused.join(' / ') } : {}),
+      },
     }
+  }
+
+  /**
+   * Takes what was handled off what waits now, under the server's lock that every ask takes: an ask
+   * added while it was being done stays, and nothing handled is done twice.
+   */
+  async #settle(
+    serverId: string,
+    player: { uuid: string; name: string },
+    action: WaitingAction,
+    result: Delivery,
+  ): Promise<void> {
+    await this.#db.transaction(async (tx) => {
+      await lockServer(tx, serverId)
+      const now = (await listWaiting(tx, serverId, [player.uuid])).find((w) => w.kind === action.kind)
+      if (now === undefined) return
+      const rest = remaining(action.kind, now.what, result.handled)
+      if (rest === null) await dropWaiting(tx, serverId, player.uuid, action.kind)
+      else await updateWaiting(tx, serverId, player.uuid, action.kind, rest)
+      await audit(tx, ON_JOIN, serverId, player, {
+        ...result.said,
+        kind: action.kind,
+        what: result.handled,
+        askedBy: action.requestedBy,
+      })
+    })
   }
 
   /** Kept for their next join, with what already waits of the same kind (`kept-powers.ts`). */

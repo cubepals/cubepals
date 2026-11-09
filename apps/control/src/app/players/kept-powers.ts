@@ -89,11 +89,28 @@ export function keptPowers(kind: WaitingKind, what: string): PlayerPower[] | nul
   }
 }
 
-/** What is left of waiting items once the first of them were given. */
-export function itemsLeft(powers: readonly PlayerPower[]): string {
+/** The items of these powers, as they wait. */
+export function itemsOfPowers(powers: readonly PlayerPower[]): string {
   return JSON.stringify(
     powers.flatMap((power) => (power.kind === 'give' ? [{ item: power.item, count: power.count }] : [])),
   )
+}
+
+/**
+ * What still waits once `handled` was done, from what waits `now`, which may have grown since it
+ * was read: items and levels less what was given; a trip, a mode or an emptying gone, unless
+ * another was asked for meanwhile. Null where nothing is left.
+ */
+export function remaining(kind: WaitingKind, now: string, handled: string): string | null {
+  if (kind === 'levels') {
+    const left = Number(now) - Number(handled)
+    return left > 0 ? String(left) : null
+  }
+  if (kind !== 'give') return now === handled ? null : now
+  const left = new Map(itemsOf(now).map(({ item, count }) => [item, count]))
+  for (const { item, count } of itemsOf(handled)) left.set(item, (left.get(item) ?? 0) - count)
+  const items = [...left].filter(([, count]) => count > 0).map(([item, count]) => ({ item, count }))
+  return items.length === 0 ? null : JSON.stringify(items)
 }
 
 /** In the order they are done as the player joins. */

@@ -87,51 +87,32 @@ export async function putWaiting(q: Queryable, serverId: string, action: Waiting
     })
 }
 
-/**
- * Takes it away, and says what it was; null where nothing of that kind waited, or, given `was`,
- * where what waits has changed since it was read (more items asked for meanwhile).
- */
+/** Takes it away, and says what it was; null where nothing of that kind waited. */
 export async function dropWaiting(
   q: Queryable,
   serverId: string,
   playerUuid: string,
   kind: WaitingKind,
-  was?: string,
 ): Promise<{ what: string } | null> {
   const [row] = await q
     .delete(waiting)
-    .where(
-      and(
-        eq(waiting.serverId, serverId),
-        eq(waiting.playerUuid, playerUuid),
-        eq(waiting.kind, kind),
-        was === undefined ? undefined : eq(waiting.what, was),
-      ),
-    )
+    .where(and(eq(waiting.serverId, serverId), eq(waiting.playerUuid, playerUuid), eq(waiting.kind, kind)))
     .returning({ what: waiting.what })
   return row ?? null
 }
 
-/** What waits becomes `now`, where it is still `was`: part of it done, the rest still waiting. */
-export async function narrowWaiting(
+/** What still waits of a kind, once part of it was done. */
+export async function updateWaiting(
   q: Queryable,
   serverId: string,
   playerUuid: string,
   kind: WaitingKind,
-  was: string,
-  now: string,
+  what: string,
 ): Promise<void> {
   await q
     .update(waiting)
-    .set({ what: now })
-    .where(
-      and(
-        eq(waiting.serverId, serverId),
-        eq(waiting.playerUuid, playerUuid),
-        eq(waiting.kind, kind),
-        eq(waiting.what, was),
-      ),
-    )
+    .set({ what })
+    .where(and(eq(waiting.serverId, serverId), eq(waiting.playerUuid, playerUuid), eq(waiting.kind, kind)))
 }
 
 /** Someone who has played here: their newest name and when they were last on. */

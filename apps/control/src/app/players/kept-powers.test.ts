@@ -2,9 +2,13 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
+/**
+ * What waits for a player who is away: which asks can, how two of them add up, the order they are
+ * done in as the player joins, and what is left once part of it was done.
+ */
 import { describe, expect, test } from 'bun:test'
 import { MOST_GIVEN, MOST_LEVELS } from '@blockly/contracts'
-import { inJoinOrder, joined, keptOf, keptPowers, waitingView } from './kept-powers.ts'
+import { inJoinOrder, joined, keptOf, keptPowers, remaining, waitingView } from './kept-powers.ts'
 
 describe('what waits for a player away', () => {
   test('a heal, a kick and a trip to someone on don’t wait', () => {
@@ -46,5 +50,22 @@ describe('what waits for a player away', () => {
     expect(keptPowers('give', 'nonsense')).toEqual([])
     expect(waitingView('place', 'nonsense', new Date())).toBeNull()
     expect(keptPowers('place', 'spawn')).toBeNull()
+  })
+
+  test('what was given comes off what waits now, and an ask added meanwhile stays', () => {
+    const now = JSON.stringify([
+      { item: 'minecraft:diamond', count: 7 },
+      { item: 'minecraft:torch', count: 4 },
+    ])
+    const given = JSON.stringify([{ item: 'minecraft:diamond', count: 5 }])
+    expect(JSON.parse(remaining('give', now, given) ?? '')).toEqual([
+      { item: 'minecraft:diamond', count: 2 },
+      { item: 'minecraft:torch', count: 4 },
+    ])
+    expect(remaining('give', given, given)).toBeNull()
+    expect(remaining('levels', '8', '5')).toBe('3')
+    expect(remaining('levels', '5', '5')).toBeNull()
+    expect(remaining('clear_inventory', 'all', 'all')).toBeNull()
+    expect(remaining('place', 'spawn', 'death')).toBe('spawn')
   })
 })
