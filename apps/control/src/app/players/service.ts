@@ -29,6 +29,7 @@ import type { Runtimes } from '../runtimes/router.ts'
 import { findServer, loadRuntime, lockServer } from '../servers/persistence.ts'
 import type { RuntimeSpecs } from '../servers/specs.ts'
 import { presenceFor } from '../servers/usage.ts'
+import { KeptInventories, type PutBackOutcome } from './kept-inventories.ts'
 import {
   inJoinOrder,
   itemsOfPowers,
@@ -41,6 +42,7 @@ import {
 import {
   dropWaiting,
   holdDeliveries,
+  listKept,
   listWaiting,
   loadSnapshot,
   playedHere,
@@ -68,6 +70,7 @@ export class PlayerService {
   readonly #reading: PlayerReading
   readonly #events: EventBus
   readonly #providers: readonly string[]
+  readonly #kept: KeptInventories
 
   constructor(deps: {
     db: Db
@@ -83,6 +86,7 @@ export class PlayerService {
     this.#reading = new PlayerReading(deps)
     this.#events = deps.events
     this.#providers = deps.runtime.providers
+    this.#kept = new KeptInventories({ reading: this.#reading })
   }
 
   /**
@@ -99,12 +103,18 @@ export class PlayerService {
     const waiting = (await listWaiting(this.#db, server.id, [uuid]))
       .map((w) => waitingView(w.kind, w.what, w.askedAt))
       .filter((w) => w !== null)
+    const kept = (await listKept(this.#db, server.id, uuid)).map((k) => ({
+      id: k.id,
+      keptAt: k.keptAt.toISOString(),
+      items: k.items,
+    }))
     const base = {
       uuid,
       name: onNow?.name ?? who.name,
       online: onNow !== undefined,
       lastSeenAt: who.lastSeenAt,
       waiting,
+      kept,
     }
 
     const handle = running ? (await loadRuntime(this.#db, server.id, this.#providers)).handle : null
@@ -218,7 +228,10 @@ export class PlayerService {
     if (power.kind === 'to_player' && (to === undefined || to.uuid === player.uuid))
       throw new AppError('invalid_choice', 'Pick someone else who is playing now.')
 
-    const outcome = await this.#reading.steps(serverId, handle, powerSteps(player.name, power, to?.name))
+    const outcome =
+      power.kind === 'clear_inventory'
+        ? await this.#kept.clear(this.#db, serverId, handle, player, requestedBy(actor))
+        : await this.#reading.steps(serverId, handle, powerSteps(player.name, power, to?.name))
     if (outcome === 'done') {
       // A trip or an emptying done now is the one that waited; items and levels waiting still add.
       if (kept?.kind === 'place' || kept?.kind === 'clear_inventory')
@@ -233,6 +246,48 @@ export class PlayerService {
     if (outcome === 'failed')
       throw new AppError('server_not_running', 'The server didn’t answer. Try again in a moment.')
     throw new AppError('command_refused', refusal(power, outcome.refused))
+  }
+
+  /**
+   * What their inventory held when it was emptied, back at their feet: at once for someone on, or
+   * when they next join. Audited like the emptying.
+   */
+  async putBack(
+    actor: Actor,
+    serverId: string,
+    playerUuid: string,
+    keptId: string,
+  ): Promise<PlayerChangeView> {
+    const uuid = normalizeUuid(playerUuid)
+    const { server, name } = await this.#db.transaction(async (tx) => {
+      const server = await this.#allowed(tx, actor, serverId)
+      const who = await this.#who(tx, server.id, uuid)
+      if (!(await listKept(tx, server.id, uuid)).some((k) => k.id === keptId))
+        throw new AppError('invalid_choice', 'That was put back already.')
+      await audit(
+        tx,
+        requestedBy(actor),
+        server.id,
+        { uuid, name: who.name },
+        { change: 'asked', power: 'put_back', kept: keptId },
+      )
+      return { server, name: who.name }
+    })
+    const keep = { kind: 'put_back' as const, what: keptId }
+    const running = server.lifecycle.status === 'running'
+    const player = running
+      ? ((await presenceFor(this.#db, [server.id])).get(server.id) ?? []).find((p) => p.uuid === uuid)
+      : undefined
+    const { handle } =
+      player === undefined ? { handle: null } : await loadRuntime(this.#db, server.id, this.#providers)
+    if (player === undefined || handle === null) return this.#keep(actor, server.id, { uuid, name }, keep)
+    const outcome = await this.#kept.putBack(this.#db, server.id, handle, player, keptId)
+    if (outcome === 'done') {
+      await dropWaiting(this.#db, server.id, uuid, 'put_back')
+      return { done: 'now' }
+    }
+    if (outcome === 'not_on') return this.#keep(actor, server.id, player, keep)
+    throw putBackRefusal(outcome)
   }
 
   /** Takes back what waits for them to join. */
@@ -302,7 +357,7 @@ export class PlayerService {
     for (const action of waiting) {
       if (held.has(action.playerUuid)) continue
       const name = here.get(action.playerUuid) ?? action.playerName
-      const result = await this.#deliver(serverId, handle, name, action)
+      const result = await this.#deliver(tx, serverId, handle, name, action)
       if (result === 'later' || result.stopped) held.add(action.playerUuid)
       if (result === 'later') continue
       await this.#settle(tx, serverId, { uuid: action.playerUuid, name }, action, result)
@@ -330,13 +385,29 @@ export class PlayerService {
    * server took none of it.
    */
   async #deliver(
+    tx: Tx,
     serverId: string,
     handle: RuntimeHandle,
     name: string,
     action: WaitingAction,
   ): Promise<Delivery | 'later'> {
+    if (action.kind === 'put_back') {
+      const outcome = await this.#kept.putBack(
+        tx,
+        serverId,
+        handle,
+        { uuid: action.playerUuid, name },
+        action.what,
+      )
+      if (outcome !== 'done' && outcome !== 'gone') return 'later'
+      return {
+        handled: action.what,
+        stopped: false,
+        said: { change: outcome === 'done' ? 'done_on_join' : 'dropped_on_join' },
+      }
+    }
     const powers = keptPowers(action.kind, action.what)
-    if (powers !== null) return this.#deliverPowers(serverId, handle, name, action, powers)
+    if (powers !== null) return this.#deliverPowers(tx, serverId, handle, name, action, powers)
     const outcome = await this.#reading.perform(serverId, handle, name, {
       kind: action.kind,
       what: action.what,
@@ -355,6 +426,7 @@ export class PlayerService {
 
   /** Each power in turn, until the server stops taking them; one the game refused is let go. */
   async #deliverPowers(
+    tx: Tx,
     serverId: string,
     handle: RuntimeHandle,
     name: string,
@@ -363,8 +435,12 @@ export class PlayerService {
   ): Promise<Delivery | 'later'> {
     const refused: string[] = []
     let taken = 0
+    const player = { uuid: action.playerUuid, name }
     for (const power of powers) {
-      const outcome = await this.#reading.steps(serverId, handle, powerSteps(name, power))
+      const outcome =
+        power.kind === 'clear_inventory'
+          ? await this.#kept.clear(tx, serverId, handle, player, action.requestedBy)
+          : await this.#reading.steps(serverId, handle, powerSteps(name, power))
       if (outcome === 'not_on' || outcome === 'failed') break
       if (typeof outcome === 'object') refused.push(outcome.refused)
       taken++
@@ -519,6 +595,17 @@ function refusal(power: PlayerPower, answer: string): string {
   if (power.kind === 'teleport' && answer.startsWith('Could not spread'))
     return 'There is nowhere to stand there. Give a height to go anyway.'
   return `Minecraft said: ${answer}`
+}
+
+/** Why a put back didn't happen, in the owner's words. */
+function putBackRefusal(outcome: Exclude<PutBackOutcome, 'done' | 'not_on'>): AppError {
+  if (outcome === 'gone')
+    return new AppError(
+      'invalid_choice',
+      'This world no longer holds those items: they were put back already, or a backup from before was restored.',
+    )
+  if (outcome === 'busy') return new AppError('invalid_choice', 'They are being put back already.')
+  return new AppError('server_not_running', 'The server didn’t answer. Try again in a moment.')
 }
 
 /** Done at once, saying so where it went other than asked. */

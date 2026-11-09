@@ -4,10 +4,11 @@
 
 /**
  * Answers the commands a player's page sends for the owner (a trip to another player, an item, an
- * effect, levels, an emptied inventory) in vanilla's own words: 26.3's language file, as the tests
+ * effect, levels) in vanilla's own words: 26.3's language file, as the tests
  * of what they mean read it (`lang-26.3.json`, beside it). It moves a player where a
  * trip says. It keeps nothing else: what was sent is in the server's `heard`. Kicks
- * are `access-commands.ts`'s; trips to a place, `fake-minecraft.ts`'s.
+ * are `access-commands.ts`'s; trips to a place, `fake-minecraft.ts`'s; what players carry and an
+ * emptied inventory, `inventories.ts`'s.
  */
 
 import lang from './lang-26.3.json' with { type: 'json' }
@@ -65,9 +66,6 @@ const COMMANDS: Record<string, Command> = {
     return named(server, who) === null
       ? NO_PLAYER
       : said('commands.experience.add.levels.success.single', levels, who)
-  },
-  clear(server, [who = '']) {
-    return named(server, who) === null ? NO_PLAYER : said('clear.failed.single', who)
   },
 }
 

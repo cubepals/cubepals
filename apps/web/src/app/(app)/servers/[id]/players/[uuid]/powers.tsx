@@ -7,10 +7,10 @@
 /**
  * What an owner would otherwise type into the console for one player, as buttons on their page: a
  * trip to coordinates or to someone else playing, an item, health and hunger back, levels, a kick,
- * and an emptied inventory, which asks first. Each is done at once while the player is on. For
- * someone away, or a server asleep, a trip, items, levels and an emptying wait for their next
- * join, and the page says what waits (`waiting.tsx`); a heal, a kick and a trip to someone else
- * show only while they play. The commands are the control plane's to build
+ * and an emptied inventory, which asks first and is kept to put back (`kept-inventories.tsx`).
+ * Each is done at once while the player is on. For someone away, or a server asleep, a trip,
+ * items, levels and an emptying wait for their next join, and the page says what waits
+ * (`waiting.tsx`); a heal, a kick and a trip to someone else show only while they play. The commands are the control plane's to build
  * (`minecraft/player-powers.ts`), never typed here.
  */
 import {
@@ -26,6 +26,7 @@ import { useState } from 'react'
 import { messageOf, useTRPC } from '../../../../../../lib/api'
 import { said, useOutcome } from '../../../../../../lib/outcome'
 import { Button, FormSection, Modal, Note, Select, SuggestField, TextField } from '../../../../../../ui'
+import { KeptInventories } from './kept-inventories'
 import { useRefresh, Waiting, waitingOf } from './waiting'
 
 type Dimension = (typeof DIMENSIONS)[number]
@@ -108,6 +109,7 @@ export function PlayerPowers({
           <ClearInventory serverId={serverId} player={player} />
         </div>
         <Kept serverId={serverId} player={player} kind="clear_inventory" />
+        <KeptInventories serverId={serverId} player={player} />
         <Levels serverId={serverId} player={player} />
         <Kept serverId={serverId} player={player} kind="levels" />
         {on && <Kick serverId={serverId} player={player} />}
@@ -429,8 +431,9 @@ function ClearInventory(props: PowerProps) {
         }
       >
         <p className="type-body-sm">
-          Everything {name} carries and wears is gone for good. Their ender chest stays as it is. If they’re
-          away, it happens as they next join, and you can cancel it until then.
+          Everything {name} carries and wears is taken away. Cubepals keeps it first, so you can put it back
+          at their feet later. Their ender chest stays as it is. If they’re away, it happens as they next
+          join, and you can cancel it until then.
         </p>
       </Modal>
     </div>

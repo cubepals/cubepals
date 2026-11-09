@@ -8,11 +8,12 @@
  * `servers/usage.ts`'s; this only reads it.
  */
 import type { WAITING_KINDS } from '@blockly/contracts'
-import { type PlayerSnapshotJson, type Queryable, schema, type Tx } from '@blockly/db'
-import { and, eq, inArray, sql } from 'drizzle-orm'
+import { type ItemStackJson, type PlayerSnapshotJson, type Queryable, schema, type Tx } from '@blockly/db'
+import { and, desc, eq, inArray, isNull, lt, or, sql } from 'drizzle-orm'
 
 const snapshots = schema.serverPlayerSnapshots
 const waiting = schema.playerActionsWaiting
+const kept = schema.playerInventoriesKept
 
 export type WaitingKind = (typeof WAITING_KINDS)[number]
 
@@ -124,6 +125,76 @@ export async function updateWaiting(
     .where(and(eq(waiting.serverId, serverId), eq(waiting.playerUuid, playerUuid), eq(waiting.kind, kind)))
 }
 
+export interface KeptInventory {
+  id: string
+  playerUuid: string
+  keptAt: Date
+  requestedBy: string
+  items: ItemStackJson[]
+}
+
+/** One player's kept inventories, newest first. */
+export async function listKept(q: Queryable, serverId: string, playerUuid: string): Promise<KeptInventory[]> {
+  return q
+    .select({
+      id: kept.id,
+      playerUuid: kept.playerUuid,
+      keptAt: kept.keptAt,
+      requestedBy: kept.requestedBy,
+      items: kept.items,
+    })
+    .from(kept)
+    .where(and(eq(kept.serverId, serverId), eq(kept.playerUuid, playerUuid)))
+    .orderBy(desc(kept.keptAt))
+}
+
+export async function addKept(q: Queryable, serverId: string, row: KeptInventory): Promise<void> {
+  await q.insert(kept).values({ serverId, ...row })
+}
+
+export async function dropKept(q: Queryable, serverId: string, id: string): Promise<void> {
+  await q.delete(kept).where(and(eq(kept.serverId, serverId), eq(kept.id, id)))
+}
+
+/**
+ * Takes one to put back, where no one else is putting it back, or whoever was gave up before
+ * `stale`: the row, or null where it isn't there or is taken.
+ */
+export async function claimKept(
+  q: Queryable,
+  serverId: string,
+  id: string,
+  now: Date,
+  stale: Date,
+): Promise<KeptInventory | null> {
+  const [row] = await q
+    .update(kept)
+    .set({ puttingBackSince: now })
+    .where(
+      and(
+        eq(kept.serverId, serverId),
+        eq(kept.id, id),
+        or(isNull(kept.puttingBackSince), lt(kept.puttingBackSince, stale)),
+      ),
+    )
+    .returning({
+      id: kept.id,
+      playerUuid: kept.playerUuid,
+      keptAt: kept.keptAt,
+      requestedBy: kept.requestedBy,
+      items: kept.items,
+    })
+  return row ?? null
+}
+
+/** Let go of one that was being put back and isn't all back, for the next ask. */
+export async function releaseKept(q: Queryable, serverId: string, id: string): Promise<void> {
+  await q
+    .update(kept)
+    .set({ puttingBackSince: null })
+    .where(and(eq(kept.serverId, serverId), eq(kept.id, id)))
+}
+
 /** Someone who has played here: their newest name and when they were last on. */
 export async function playedHere(
   q: Queryable,
@@ -142,5 +213,6 @@ export async function playedHere(
 export async function forgetPlayers(q: Queryable, serverId: string): Promise<void> {
   await q.delete(snapshots).where(eq(snapshots.serverId, serverId))
   await q.delete(waiting).where(eq(waiting.serverId, serverId))
+  await q.delete(kept).where(eq(kept.serverId, serverId))
   await q.delete(schema.serverTurnedAway).where(eq(schema.serverTurnedAway.serverId, serverId))
 }

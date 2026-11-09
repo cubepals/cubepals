@@ -36,4 +36,26 @@ describe.skipIf(!hasDatabase)('with one connection', () => {
     await h.app.players.act(owner, id, kai.uuid, { kind: 'levels', levels: 1 })
     expect(h.minecraft.heard(id)).toContain('experience add Kai 1 levels')
   }, 30_000)
+
+  test('an emptied inventory is put back as they join', async () => {
+    const owner = await h.user()
+    const { id } = await h.create(owner)
+    await h.until(id, 'running')
+    await h.settled(id)
+    const kai = { uuid: randomUUID(), name: 'Kai' }
+    h.minecraft.join(id, kai)
+    await h.app.schedules.presenceSync()
+    h.minecraft.inventories(id).carry(kai.uuid, { inventory: [{ id: 'minecraft:torch', count: 8, slot: 0 }] })
+    await h.app.players.act(owner, id, kai.uuid, { kind: 'clear_inventory' })
+    const [kept] = (await h.app.players.view(owner, id, kai.uuid)).kept
+
+    h.minecraft.leave(id, kai.uuid)
+    await h.app.schedules.presenceSync()
+    await h.app.players.putBack(owner, id, kai.uuid, kept?.id ?? '')
+    h.minecraft.join(id, kai)
+    await h.app.schedules.presenceSync()
+    expect(h.minecraft.inventories(id).carried(kai.uuid).inventory).toEqual([
+      { id: 'minecraft:torch', count: 8, slot: 0 },
+    ])
+  }, 30_000)
 })

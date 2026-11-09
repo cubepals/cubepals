@@ -19,6 +19,12 @@
     "commands.clear.success.single": "Removed %s item(s) from player %s",
     "clear.failed.single": "No items were found on player %s",
     "commands.kick.success": "Kicked %s: %s",
-    "multiplayer.disconnect.kicked": "Kicked by an operator"
+    "multiplayer.disconnect.kicked": "Kicked by an operator",
+    "commands.data.storage.modified": "Modified storage %s",
+    "commands.data.entity.modified": "Modified entity data of %s",
+    "arguments.nbtpath.nothing_found": "Found no elements matching %s",
+    "commands.data.merge.failed": "Nothing changed. The specified properties already have these values",
+    "commands.kill.success.single": "Killed %s",
+    "commands.summon.success": "Summoned new %s"
   }
 }

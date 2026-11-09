@@ -16,10 +16,10 @@ export type GameMode = (typeof GAME_MODES)[number]
 export const TeleportInput = PlayerInput.extend({ to: z.enum(['death', 'spawn']) })
 export const GameModeInput = PlayerInput.extend({ mode: z.enum(GAME_MODES) })
 /**
- * What can wait for a player: a trip somewhere, a game mode, items, levels, or an emptied
- * inventory. One of each at most; items and levels asked again add up.
+ * What can wait for a player: a trip somewhere, a game mode, items, levels, an emptied inventory,
+ * or a kept one put back. One of each at most; items and levels asked again add up.
  */
-export const WAITING_KINDS = ['place', 'game_mode', 'give', 'levels', 'clear_inventory'] as const
+export const WAITING_KINDS = ['place', 'game_mode', 'give', 'levels', 'clear_inventory', 'put_back'] as const
 export const WaitingInput = PlayerInput.extend({ kind: z.enum(WAITING_KINDS) })
 /** The worlds every release has, by the game's own names for them. */
 export const DIMENSIONS = ['minecraft:overworld', 'minecraft:the_nether', 'minecraft:the_end'] as const
@@ -64,6 +64,9 @@ export const PlayerPower = z.discriminatedUnion('kind', [
 ])
 export type PlayerPower = z.infer<typeof PlayerPower>
 export const PlayerPowerInput = PlayerInput.extend({ power: PlayerPower })
+/** A kept inventory's id, as `KeptInventoryView` gives it. */
+export const KEPT_ID = /^k[0-9a-f]{12}$/
+export const PutBackInput = PlayerInput.extend({ kept: z.string().regex(KEPT_ID) })
 
 export const ItemIconsInput = z.object({
   gameVersion: z.string().max(40),
@@ -111,7 +114,18 @@ export type WaitingView = { askedAt: string } & (
   | { kind: 'give'; items: { item: string; count: number }[] }
   | { kind: 'levels'; levels: number }
   | { kind: 'clear_inventory' }
+  | { kind: 'put_back'; kept: string }
 )
+
+/**
+ * What a player carried when their inventory was emptied, kept so it can be put back: the newest
+ * few, newest first. The items are as the page shows them; the world keeps them whole.
+ */
+export interface KeptInventoryView {
+  id: string
+  keptAt: string
+  items: ItemStackView[]
+}
 
 export interface PlayerView {
   uuid: string
@@ -131,6 +145,7 @@ export interface PlayerView {
   inventory: InventoryView | null
   stats: { playMinutes: number | null; deaths: number | null } | null
   waiting: WaitingView[]
+  kept: KeptInventoryView[]
 }
 
 /** Whether a change happened now, or waits for the player to join. */

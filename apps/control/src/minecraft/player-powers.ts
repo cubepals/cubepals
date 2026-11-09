@@ -26,9 +26,9 @@ export type PlayerPower =
  * server's plugins may answer to the short one (EssentialsX's `give` and `tp` take other
  * arguments), then the short one vanilla knows. Whichever the server knows is enough.
  */
-type Step = readonly string[]
+export type Step = readonly string[]
 
-const vanilla = (command: string): Step => [`minecraft:${command}`, command]
+export const vanilla = (command: string): Step => [`minecraft:${command}`, command]
 
 /**
  * The steps that do `power` to the player called `name`, in order; `to` names the player a trip to
