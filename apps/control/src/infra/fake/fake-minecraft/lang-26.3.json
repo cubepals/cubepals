@@ -1,0 +1,24 @@
+{
+  "version": "26.3",
+  "from": "assets/minecraft/lang/en_us.json in server-26.3.jar (sha1 33680f5f2ac32864d6d7cf5e56a705fdb3e05f4c)",
+  "lines": {
+    "command.unknown.command": "Unknown or incomplete command. See below for error",
+    "command.unknown.argument": "Incorrect argument for command",
+    "argument.entity.notfound.entity": "No entity was found",
+    "argument.entity.notfound.player": "No player was found",
+    "argument.item.id.invalid": "Unknown item '%s'",
+    "commands.give.success.single": "Gave %s %s to %s",
+    "commands.give.failed.toomanyitems": "Can't give more than %s of %s",
+    "commands.teleport.success.entity.single": "Teleported %s to %s",
+    "commands.teleport.success.location.single": "Teleported %s to %s, %s, %s",
+    "commands.spreadplayers.success.entities": "Spread %s entity/entities around %s, %s with an average distance of %s block(s) apart",
+    "commands.spreadplayers.failed.entities": "Could not spread %s entity/entities around %s, %s (too many entities for space - try using spread of at most %s)",
+    "commands.effect.give.success.single": "Applied effect %s to %s",
+    "commands.effect.give.failed": "Unable to apply this effect (target is either immune to effects, or has something stronger)",
+    "commands.experience.add.levels.success.single": "Gave %s experience levels to %s",
+    "commands.clear.success.single": "Removed %s item(s) from player %s",
+    "clear.failed.single": "No items were found on player %s",
+    "commands.kick.success": "Kicked %s: %s",
+    "multiplayer.disconnect.kicked": "Kicked by an operator"
+  }
+}

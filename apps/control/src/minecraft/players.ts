@@ -41,8 +41,12 @@ export interface PlayerStats {
   deaths: number | null
 }
 
-/** Names a server gives players, and the only ones Blockly puts into a command. */
-const PLAYER_NAME = /^[A-Za-z0-9_]{1,16}$/
+/**
+ * Names a server gives players, and the only ones Blockly puts into a command: a Java name, or a
+ * Bedrock player's as Floodgate gives it, with its dot (`.Pixel_Pal`), at most 16 in all. The game
+ * reads a dot in a name it is given unquoted.
+ */
+const PLAYER_NAME = /^(?=.{1,16}$)\.?[A-Za-z0-9_]+$/
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 /** The fields the page shows, in the order `parseLivePlayer` reads their answers. */
@@ -148,7 +152,7 @@ export function worldSpawn(level: unknown): Place | null {
 
 // ─── Commands ─────────────────────────────────────────────────────────────────────────────
 
-function safeName(name: string): string {
+export function safeName(name: string): string {
   if (!PLAYER_NAME.test(name)) throw new Error(`Not a player name: ${name}`)
   return name
 }

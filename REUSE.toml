@@ -101,6 +101,13 @@ precedence = "closest"
 SPDX-FileCopyrightText = "2015 PrismarineJS"
 SPDX-License-Identifier = "MIT"
 
+# Minecraft's own words for its console's answers, copied from a release's language file for tests.
+[[annotations]]
+path = "apps/control/src/infra/fake/fake-minecraft/lang-*.json"
+precedence = "closest"
+SPDX-FileCopyrightText = "Mojang AB"
+SPDX-License-Identifier = "LicenseRef-Upstream-Terms"
+
 # Hangar's answers, recorded for tests: the projects' text is their authors'.
 [[annotations]]
 path = "apps/control/src/infra/hangar/fixtures/**"

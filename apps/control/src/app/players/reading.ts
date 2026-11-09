@@ -8,6 +8,7 @@
  * and the console commands that move them or change their game mode. What the commands and files
  * say is `minecraft/players.ts`'s; what is kept and who may ask is the service's.
  */
+import { powerAnswer } from '../../minecraft/player-powers.ts'
 import {
   accepted,
   type GameMode,
@@ -52,6 +53,9 @@ export type ActionOutcome =
   | 'not_on'
   | 'nowhere'
   | 'failed'
+
+/** How a run of console steps went; `refused` with the game's words. */
+export type StepOutcome = 'done' | 'not_on' | 'failed' | { refused: string }
 
 /** How many times a trip back looks further out after the game stood them on a hazard. */
 const FURTHER_TRIES = 4
@@ -134,6 +138,34 @@ export class PlayerReading {
     const spawn = await this.#toSpawn(serverId, handle, name)
     if (spawn === 'done') return 'at_spawn'
     return spawn === 'nowhere' ? 'failed' : spawn
+  }
+
+  /**
+   * Each step in turn, each in the first of its ways the server knows; stops at the first that
+   * isn't done. `refused` comes with the game's words, for whoever asked.
+   */
+  async steps(
+    serverId: string,
+    handle: RuntimeHandle,
+    steps: readonly (readonly string[])[],
+  ): Promise<StepOutcome> {
+    for (const ways of steps) {
+      const outcome = await this.#step(serverId, handle, ways)
+      if (outcome !== 'done') return outcome
+    }
+    return 'done'
+  }
+
+  /** One step: the first of its ways the server knows; `failed` where it knows none of them. */
+  async #step(serverId: string, handle: RuntimeHandle, ways: readonly string[]): Promise<StepOutcome> {
+    for (const command of ways) {
+      const answer = await this.#ask(serverId, handle, command)
+      if (answer === null) return 'failed'
+      const meant = powerAnswer(answer)
+      if (meant === 'refused') return { refused: answer.trim() }
+      if (meant !== 'unknown') return meant
+    }
+    return 'failed'
   }
 
   async #toSpawn(serverId: string, handle: RuntimeHandle, name: string): Promise<ActionOutcome> {

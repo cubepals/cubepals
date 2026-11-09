@@ -17,6 +17,47 @@ export const TeleportInput = PlayerInput.extend({ to: z.enum(['death', 'spawn'])
 export const GameModeInput = PlayerInput.extend({ mode: z.enum(GAME_MODES) })
 /** What waits for a player: a trip somewhere, or a game mode. One of each at most. */
 export const WaitingInput = PlayerInput.extend({ kind: z.enum(['place', 'game_mode']) })
+/** The worlds every release has, by the game's own names for them. */
+export const DIMENSIONS = ['minecraft:overworld', 'minecraft:the_nether', 'minecraft:the_end'] as const
+/** How far out the game lets anyone stand: its world border's widest (minecraft.wiki, World border). */
+const WORLD_EDGE = 29_999_984
+/** Heights a trip can name: well past any world's floor and ceiling, which datapacks can move. */
+const HEIGHT = 4064
+/**
+ * An item as `give` names it: `diamond` or `minecraft:diamond`, a mod's `create:wrench`. Nothing
+ * else, so no components or tags reach the command.
+ */
+const ITEM_ID = /^([a-z0-9_.-]+:)?[a-z0-9_./-]+$/
+/** The most one give hands over: the game refuses more than a hundred stacks of anything. */
+export const MOST_GIVEN = 6400
+
+/**
+ * What the owner can do to a player who is on, from their page: a trip to a place (on the ground
+ * there when no height is given) or to another player, an item, their health and hunger back,
+ * levels, a kick, or an empty inventory.
+ */
+export const PlayerPower = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('teleport'),
+    dimension: z.enum(DIMENSIONS),
+    x: z.number().int().min(-WORLD_EDGE).max(WORLD_EDGE),
+    y: z.number().int().min(-HEIGHT).max(HEIGHT).nullable(),
+    z: z.number().int().min(-WORLD_EDGE).max(WORLD_EDGE),
+  }),
+  z.object({ kind: z.literal('to_player'), to: z.guid() }),
+  z.object({
+    kind: z.literal('give'),
+    item: z.string().max(100).regex(ITEM_ID),
+    count: z.number().int().min(1).max(MOST_GIVEN),
+  }),
+  z.object({ kind: z.literal('heal') }),
+  z.object({ kind: z.literal('levels'), levels: z.number().int().min(1).max(1000) }),
+  z.object({ kind: z.literal('kick'), reason: z.string().max(200) }),
+  z.object({ kind: z.literal('clear_inventory') }),
+])
+export type PlayerPower = z.infer<typeof PlayerPower>
+export const PlayerPowerInput = PlayerInput.extend({ power: PlayerPower })
+
 export const ItemIconsInput = z.object({
   gameVersion: z.string().max(40),
   ids: z.array(z.string().max(100)).max(80),
