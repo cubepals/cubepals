@@ -6,16 +6,14 @@
  * A Cloudflare zone's DNS records in memory, answering the requests Cloudflare's own SDK sends
  * (`infra/cloudflare/dns-records.ts`) as Cloudflare's v4 API does: records listed a page at a time
  * and filtered by type, name and comment, made, overwritten and deleted. Every record is held as
- * the SDK's own type says one comes back. A name in `refusing` is refused as the API refuses a
- * record, with its error envelope. Nothing else of the API is here.
+ * the SDK's own type says one comes back. A name in `refusing` is refused with a bare 400, and an
+ * unknown record or method with a bare 404 or 405: the status alone, which the SDK turns into its
+ * own errors. No error code or message of the API's is written here. Nothing else of the API is.
  */
 import { randomUUID } from 'node:crypto'
 import type Cloudflare from 'cloudflare'
 
 type ARecord = Cloudflare.DNS.RecordResponse.ARecord
-
-/** The API's own refusal of a record it won't make: an error in its envelope, with a 400. */
-const REFUSED = { code: 81057, message: 'Record already exists.' }
 
 export class CloudflareZone {
   readonly records = new Map<string, ARecord>()
@@ -60,14 +58,13 @@ export class CloudflareZone {
     const body = typeof init?.body === 'string' ? (JSON.parse(init.body) as Partial<ARecord>) : {}
     if (path === base && method === 'POST') return this.#write(body, null)
     const id = path.startsWith(`${base}/`) ? path.slice(base.length + 1) : null
-    if (id === null || !this.records.has(id))
-      return answer(404, null, [{ code: 81044, message: 'Record not found.' }])
+    if (id === null || !this.records.has(id)) return refused(404)
     if (method === 'PUT') return this.#write(body, id)
     if (method === 'DELETE') {
       this.records.delete(id)
       return answer(200, { id })
     }
-    return answer(405, null, [{ code: 10000, message: `${method} isn't answered here` }])
+    return refused(405)
   }
 
   #list(query: URLSearchParams): Response {
@@ -83,7 +80,7 @@ export class CloudflareZone {
     const page = Number(query.get('page') ?? 1)
     const perPage = Number(query.get('per_page') ?? this.#perPage)
     const result = matching.slice((page - 1) * perPage, page * perPage)
-    return answer(200, result, [], {
+    return answer(200, result, {
       page,
       per_page: perPage,
       count: result.length,
@@ -93,7 +90,7 @@ export class CloudflareZone {
   }
 
   #write(body: Partial<ARecord>, id: string | null): Response {
-    if (body.name !== undefined && this.refusing.has(body.name)) return answer(400, null, [REFUSED])
+    if (body.name !== undefined && this.refusing.has(body.name)) return refused(400)
     const now = new Date().toISOString()
     const before = id === null ? undefined : this.records.get(id)
     const record: ARecord = {
@@ -114,13 +111,15 @@ export class CloudflareZone {
   }
 }
 
-/** Cloudflare's v4 envelope around a result, or around the errors that refused one. */
-function answer(
-  status: number,
-  result: unknown,
-  errors: { code: number; message: string }[] = [],
-  resultInfo?: Record<string, number>,
-): Response {
-  const body = { success: errors.length === 0, errors, messages: [], result, result_info: resultInfo }
-  return Response.json(body, { status })
+/** Cloudflare's v4 envelope around a result. */
+function answer(status: number, result: unknown, resultInfo?: Record<string, number>): Response {
+  return Response.json(
+    { success: true, errors: [], messages: [], result, result_info: resultInfo },
+    { status },
+  )
+}
+
+/** A refusal by its status alone: what it means is the SDK's to say. */
+function refused(status: number): Response {
+  return new Response(null, { status })
 }

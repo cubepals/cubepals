@@ -49,7 +49,7 @@ describe('the play names’ own records in a Cloudflare zone', () => {
     expect(zone.records.get(unmarked.id)).toEqual(unmarked)
   })
 
-  test('a record the zone refuses is the API’s own error', async () => {
+  test('a record the zone answers 400 to is the SDK’s own error', async () => {
     const zone = new CloudflareZone('zone-123')
     zone.refusing.add('taken.play.cubepals.com')
     const refusal = await kept(zone)
