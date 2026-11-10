@@ -158,8 +158,9 @@ restart.
 
 | Variable | Local | Staging | Production | Set by | Notes |
 |---|---|---|---|---|---|
-| `PLAY_DOMAIN` | `play.localhost` | `play.staging.cubepals.com` | `play.cubepals.com` | tf | Players join `<slug>.<PLAY_DOMAIN>`; wildcard A/AAAA records point at the edge. No platform host may sit under it |
+| `PLAY_DOMAIN` | `play.localhost` | `play.staging.cubepals.com` | `play.cubepals.com` | tf | Players join `<slug>.<PLAY_DOMAIN>`; wildcard A/AAAA records point at the edge (the A records at `PLAY_IPV4` when set). No platform host may sit under it |
 | `PLAY_DOMAIN_ALIASES` | empty | empty | empty | tf | Old play domains, still routed while players move (§11) |
+| `PLAY_IPV4` | — | empty | empty | tf | The IPv4 the play names' A records hold, for an address allocated outside Terraform. Empty, they hold the edge's anycast IPv4, which reaches the nearest edge. Set, every IPv4 join enters Fly where that address is announced, such as one region's (`fly ips allocate-v4 --app <edge app> --region <region>`; `fly ips release <address> --app <edge app>` once the setting is empty again and applied); servers placed in another region are still reached through it. Terraform's alone: the control plane isn't given it. AAAA records keep the edge's own IPv6 |
 | `PLAY_PORT` | `25565` | `25565` | `25565` | tf | |
 | `REGIONS` | `eu:Europe,us:North America` | `eu:Europe,us:North America` | same | tf | The regions people choose from, `key:Label`; exactly one on Docker, which runs everything on one machine, except in local development |
 | `RUNTIME_REGION_MAP` | `eu:local,us:local` | `eu:fra,us:iad` | same | tf | Each region's placement on the default runtime; every region needs one. The default's own `<NAME>_REGION_MAP` (`FLY_REGION_MAP`) stands in for it. No other runtime reads it: each needs its own `<NAME>_REGION_MAP` (`FLEET_REGION_MAP`, `BOAT_REGION_MAP`), and places only the regions that names; the start is refused without one ([runtimes.md](runtimes.md)) |
