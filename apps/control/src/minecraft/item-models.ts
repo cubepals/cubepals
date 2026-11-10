@@ -10,9 +10,11 @@
  * own, read from its client jar (`app/items/`); nothing of Mojang's is in Blockly.
  *
  * Deliberately simple: a model whose shape isn't a whole cube (stairs, fences, torches as blocks)
- * is drawn flat from one of its textures, and one drawn by code (shields, chests, heads) has no
- * picture at all, and the page writes its name instead.
+ * is drawn flat from one of its textures. One the game draws in code (shields, chests, heads) is
+ * cut from its entity texture instead (`entity-items.ts`).
  */
+
+import { type CutIcon, entityIconOf } from './entity-items.ts'
 
 /** A texture under `textures/`, without `.png`: `block/oak_log`, `item/diamond_sword`. */
 interface Paint {
@@ -24,6 +26,7 @@ interface Paint {
 export type ItemIcon =
   | { kind: 'flat'; layers: Paint[] }
   | { kind: 'block'; top: Paint; left: Paint; right: Paint }
+  | CutIcon
   | null
 
 /** What the resolver may read: a JSON file under `assets/minecraft/`, and whether a texture is there. */
@@ -41,6 +44,8 @@ export function iconOf(id: string, files: ModelFiles): ItemIcon {
   const match = /^minecraft:([a-z0-9_]+)$/.exec(id)
   if (match === null) return null
   const path = match[1] ?? ''
+  const drawn = entityIconOf(path, files.hasTexture)
+  if (drawn !== undefined) return drawn
   const chosen = chooseModel(files.json(`items/${path}.json`))
   if (chosen === 'special') return null
   const model = chosen?.model ?? `item/${path}`
@@ -131,7 +136,7 @@ function oneFace(textures: Record<string, string>, paint: Painter): ItemIcon {
 
 /**
  * The model an item definition draws in an inventory, and its tints: through selections and
- * conditions to their fallback (or first case); `special` for one the game's code draws, and
+ * conditions to the case for an inventory, else their fallback (or first case); `special` for one the game's code draws, and
  * null where there is no definition, as before 1.21.4.
  */
 function chooseModel(definition: unknown): { model: string; tints: (number | null)[] } | null | 'special' {
@@ -140,10 +145,20 @@ function chooseModel(definition: unknown): { model: string; tints: (number | nul
     if (typeof node.model === 'string') return { model: node.model, tints: tintsOf(node.tints) }
     // Drawn by the game's code (a shield, a chest, a head): nothing a texture alone shows.
     if (node.type === 'minecraft:special') return 'special'
-    const cases = Array.isArray(node.cases) ? node.cases : Array.isArray(node.entries) ? node.entries : []
-    node = node.fallback ?? node.on_false ?? (isData(cases[0]) ? cases[0].model : undefined)
+    node = nextOf(node)
   }
   return null
+}
+
+/**
+ * Where a selection or condition leads in an inventory: the case for one (`gui`), as a trident is
+ * flat there and drawn in a hand; else its fallback, or its first case.
+ */
+function nextOf(node: Data): unknown {
+  const cases = Array.isArray(node.cases) ? node.cases : Array.isArray(node.entries) ? node.entries : []
+  const inGui = cases.find((c: unknown) => isData(c) && Array.isArray(c.when) && c.when.includes('gui'))
+  if (isData(inGui)) return inGui.model
+  return node.fallback ?? node.on_false ?? (isData(cases[0]) ? cases[0].model : undefined)
 }
 
 function tintsOf(tints: unknown): (number | null)[] {

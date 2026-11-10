@@ -159,7 +159,8 @@ export interface PlayerChangeView {
 }
 
 /**
- * How the browser draws one item: flat layers, or a block's three visible faces. Each texture is
+ * How the browser draws one item: flat layers, or a block's three visible faces, each whole
+ * textures or cut from an entity's (`ItemCutView`). Each texture is
  * named as the release names it (`block/oak_log`), and served at
  * `/api/public/items/<release>/<texture>.png`; `tint` is an RGB colour for what the game tints.
  * Null where there is nothing to draw, and the page shows the item's name.
@@ -172,4 +173,21 @@ export type ItemIconView =
       left: { texture: string; tint: number | null }
       right: { texture: string; tint: number | null }
     }
+  | { kind: 'cut'; cuts: ItemCutView[] }
+  | { kind: 'cut_block'; top: ItemCutView[]; left: ItemCutView[]; right: ItemCutView[] }
   | null
+
+/**
+ * A rectangle of a texture drawn onto part of a picture, for what the game draws from an entity's
+ * texture (a chest, a bed, a head): `from` in the texture's pixels, of a texture `size` across;
+ * `to` in sixteenths of the face.
+ */
+export interface ItemCutView {
+  texture: string
+  size: [number, number]
+  from: [number, number, number, number]
+  to: [number, number, number, number]
+  tint: number | null
+  /** Turned clockwise in its place, in degrees. */
+  turn: 0 | 90 | 180 | 270
+}

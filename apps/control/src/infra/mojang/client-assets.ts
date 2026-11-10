@@ -6,7 +6,8 @@
  * A release's item art, the way BlueMap gets it: from the release's own client jar, found through
  * Mojang's version manifest and checked against the SHA-1 the manifest gives, so Blockly never
  * bundles a texture. Only what draws items is kept (item definitions, models, item and block
- * textures: about 2 MB of a 40 MB jar), in one zip per release on this machine's disk, and in
+ * textures, and the entity textures the game skins chests, beds, heads and the like with: a few MB
+ * of a 40 MB jar), in one zip per release on this machine's disk, and in
  * memory once read. Browsers could fetch the jar themselves (every endpoint allows any origin,
  * checked 2026-10-07), but each would then download all 40 MB to check it, and tell Mojang who
  * looked at whose server.
@@ -21,7 +22,13 @@ const MANIFEST = 'https://piston-meta.mojang.com/mc/game/version_manifest_v2.jso
 /** A client jar is about 40 MB; anything far larger isn't one. */
 const MAX_JAR_BYTES = 200 * 1024 * 1024
 const KEPT =
-  /^assets\/minecraft\/(items\/[a-z0-9_]+\.json|models\/(item|block)\/[a-z0-9_/]+\.json|textures\/(item|block)\/[a-z0-9_/]+\.png)$/
+  /^assets\/minecraft\/(items\/[a-z0-9_]+\.json|models\/(item|block)\/[a-z0-9_/]+\.json|textures\/(item|block)\/[a-z0-9_/]+\.png|textures\/entity\/((banner|bed|chest|conduit|copper_golem|creeper|decorated_pot|enderdragon|piglin|player\/wide|shield|shulker|skeleton|zombie)\/[a-z0-9_]+|banner_base|shield_base_nopattern)\.png)$/
+/**
+ * What a kept file holds, in its name: one kept before the entity textures were wanted lacks them,
+ * so it is fetched again rather than read.
+ */
+const KEPT_AS = 'entities'
+
 const PREFIX = 'assets/minecraft/'
 
 export class MojangClientAssets implements ClientAssets {
@@ -50,7 +57,7 @@ export class MojangClientAssets implements ClientAssets {
   }
 
   async #load(gameVersion: string): Promise<ClientFiles> {
-    const path = join(this.#root, `${gameVersion}.zip`)
+    const path = join(this.#root, `${gameVersion}.${KEPT_AS}.zip`)
     const kept = await readFile(path).catch(() => null)
     const zip = kept ?? (await this.#fetchKept(gameVersion, path))
     const files = new Map(Object.entries(unzipSync(new Uint8Array(zip))))

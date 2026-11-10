@@ -160,6 +160,38 @@ describe('how an item is drawn', () => {
   })
 })
 
+describe('what an inventory shows', () => {
+  test('a select’s case for an inventory, though its fallback is drawn in a hand', () => {
+    const icon = iconOf(
+      'minecraft:trident',
+      files({
+        'items/trident.json': {
+          model: {
+            type: 'minecraft:select',
+            cases: [
+              {
+                when: ['gui', 'ground'],
+                model: { type: 'minecraft:model', model: 'minecraft:item/trident' },
+              },
+            ],
+            fallback: { type: 'minecraft:special', base: 'minecraft:item/trident_in_hand' },
+          },
+        },
+        'models/item/trident.json': { parent: 'item/generated', textures: { layer0: 'item/sword' } },
+      }),
+    )
+    expect(icon).toEqual({ kind: 'flat', layers: [{ texture: 'item/sword', tint: null }] })
+  })
+
+  test('a chest from its entity texture, not the planks its model names for particles', () => {
+    const icon = iconOf('minecraft:chest', {
+      json: (path) => (path === 'models/item/chest.json' ? { textures: { particle: 'block/planks' } } : null),
+      hasTexture: (texture) => texture === 'entity/chest/normal' || texture === 'block/planks',
+    })
+    expect(icon?.kind).toBe('cut_block')
+  })
+})
+
 describe('every item a release has', () => {
   test('26.x: each definition in items/, and nothing else', () => {
     const paths = [

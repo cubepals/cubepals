@@ -21,6 +21,9 @@ const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 1, 2, 3])
 const JAR = zipSync({
   'assets/minecraft/textures/item/made_up_sword.png': PNG,
   'assets/minecraft/textures/block/made_up_stone.png': PNG,
+  'assets/minecraft/textures/entity/chest/normal.png': PNG,
+  'assets/minecraft/textures/entity/banner_base.png': PNG,
+  'assets/minecraft/textures/entity/pig/pig.png': PNG,
   'assets/minecraft/models/item/made_up_sword.json': strToU8('{"parent":"item/handheld"}'),
   'assets/minecraft/items/made_up_sword.json': strToU8('{"model":{"type":"minecraft:model"}}'),
   'assets/minecraft/sounds/ambient.ogg': new Uint8Array(64),
@@ -70,6 +73,10 @@ describe('a release’s item art, from its client jar', () => {
     expect(files.read('textures/item/missing.png')).toBeNull()
     expect(files.paths()).toContain('items/made_up_sword.json')
     expect(files.paths()).not.toContain('sounds/ambient.ogg')
+    // The entity textures code-drawn items are cut from, and no other.
+    expect(files.read('textures/entity/chest/normal.png')).toEqual(PNG)
+    expect(files.read('textures/entity/banner_base.png')).toEqual(PNG)
+    expect(files.read('textures/entity/pig/pig.png')).toBeNull()
   })
 
   test('a jar that isn’t the one the manifest describes is refused, and nothing of it is kept', async () => {
