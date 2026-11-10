@@ -14,7 +14,7 @@
  * cut from its entity texture instead (`entity-items.ts`).
  */
 
-import { type CutIcon, entityIconOf } from './entity-items.ts'
+import { type BedTop, type CutIcon, entityIconOf, lyingBed } from './entity-items.ts'
 
 /** A texture under `textures/`, without `.png`: `block/oak_log`, `item/diamond_sword`. */
 interface Paint {
@@ -45,8 +45,12 @@ export function iconOf(id: string, files: ModelFiles): ItemIcon {
   if (match === null) return null
   const path = match[1] ?? ''
   const drawn = entityIconOf(path, files.hasTexture)
-  if (drawn !== undefined) return drawn
-  const chosen = chooseModel(files.json(`items/${path}.json`))
+  if (drawn) return drawn
+  const definition = files.json(`items/${path}.json`)
+  // Drawn from entity textures before 26.2, a bed is block models after: those, where they are.
+  const composed = composedBed(definition, files)
+  if (composed !== undefined || drawn === null) return composed ?? null
+  const chosen = chooseModel(definition)
   if (chosen === 'special') return null
   const model = chosen?.model ?? `item/${path}`
   const tints = chosen === null ? oldTints(path) : chosen.tints
@@ -113,6 +117,44 @@ function refsOf(refs: readonly unknown[]): string[] {
     const match = typeof ref === 'string' ? /^(?:minecraft:)?item\/([a-z0-9_]+)$/.exec(ref) : null
     return match?.[1] ? [match[1]] : []
   })
+}
+
+/**
+ * From 26.2 a bed's definition puts its two block models side by side (`minecraft:composite`):
+ * drawn from the top face of each, lying across as before. Undefined for any other definition.
+ */
+function composedBed(definition: unknown, files: ModelFiles): ItemIcon | undefined {
+  const node = isData(definition) ? definition.model : undefined
+  if (!isData(node) || node.type !== 'minecraft:composite' || !Array.isArray(node.models)) return undefined
+  const names = node.models.flatMap((m: unknown) =>
+    isData(m) && typeof m.model === 'string' ? [m.model.replace(/^minecraft:/, '')] : [],
+  )
+  const head = names.find((name) => name.endsWith('_bed_head'))
+  const foot = names.find((name) => name.endsWith('_bed_foot'))
+  if (head === undefined || foot === undefined) return undefined
+  const [top, bottom] = [topOf(head, files), topOf(foot, files)]
+  return top === null || bottom === null ? null : lyingBed(top, bottom)
+}
+
+/** A block model's first top face: its texture, and the part of it the face shows. */
+function topOf(model: string, files: ModelFiles): BedTop | null {
+  const resolved = resolveModel(model, files)
+  const up = resolved?.elements?.flatMap((e) =>
+    isData(e) && isData(e.faces) && isData(e.faces.up) ? [e.faces.up] : [],
+  )[0]
+  const texture = textureOf(
+    typeof up?.texture === 'string' ? up.texture : undefined,
+    resolved?.textures ?? {},
+  )
+  if (texture === null || !files.hasTexture(texture)) return null
+  const uv = Array.isArray(up?.uv) && up.uv.length === 4 ? (up.uv as number[]) : [0, 0, 16, 16]
+  const [x1 = 0, y1 = 0, x2 = 16, y2 = 16] = uv
+  // A model's UV is in sixteenths of its texture, whatever its size; a reversed one is mirrored.
+  return {
+    texture,
+    size: [16, 16],
+    from: [Math.min(x1, x2), Math.min(y1, y2), Math.abs(x2 - x1), Math.abs(y2 - y1)],
+  }
 }
 
 type Painter = (ref: string | undefined, tintIndex: unknown) => Paint | null
