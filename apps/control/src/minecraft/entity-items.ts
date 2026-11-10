@@ -82,14 +82,26 @@ function found(icon: CutIcon, hasTexture: (texture: string) => boolean): CutIcon
   const where = new Map<string, string | null>()
   for (const { texture } of cutsOf(icon)) {
     if (where.has(texture)) continue
-    const higher = texture.replace(/^entity\/[a-z_]+\//, 'entity/')
-    where.set(texture, hasTexture(texture) ? texture : hasTexture(higher) ? higher : null)
+    where.set(texture, placesOf(texture).find(hasTexture) ?? null)
   }
   if ([...where.values()].includes(null)) return null
   const moved = (cuts: Cut[]) => cuts.map((c) => ({ ...c, texture: where.get(c.texture) ?? c.texture }))
   return icon.kind === 'cut'
     ? { kind: 'cut', cuts: moved(icon.cuts) }
     : { kind: 'cut_block', top: moved(icon.top), left: moved(icon.left), right: moved(icon.right) }
+}
+
+/**
+ * Where a release may keep a texture: as named; a folder higher, as 1.20.1 keeps a banner's; or
+ * with its stage first, as 1.21.10 names a copper golem's (`exposed_copper_golem`).
+ */
+function placesOf(texture: string): string[] {
+  const staged = /^entity\/copper_golem\/copper_golem_([a-z]+)$/.exec(texture)
+  return [
+    texture,
+    texture.replace(/^entity\/[a-z_]+\//, 'entity/'),
+    ...(staged === null ? [] : [`entity/copper_golem/${staged[1]}_copper_golem`]),
+  ]
 }
 
 function cutsOf(icon: CutIcon): Cut[] {
@@ -190,12 +202,29 @@ function shulkerBox(color: string | undefined): CutIcon {
 /** Seen from above, lying across: the pillow end on the left, then the foot. */
 function bed(color: string): CutIcon {
   const texture = `entity/bed/${color}`
-  const size: [number, number] = [64, 64]
+  return lyingBed(
+    { texture, size: [64, 64], from: [6, 6, 16, 16] },
+    { texture, size: [64, 64], from: [6, 28, 16, 16] },
+  )
+}
+
+/** The top of one half of a bed, in a texture. */
+export interface BedTop {
+  texture: string
+  size: [number, number]
+  from: Rect
+}
+
+/**
+ * A bed from the tops of its two halves, lying across as the beds before 26.2 are drawn: from
+ * 26.2 a bed is two block models, and their tops are what this is given (`item-models.ts`).
+ */
+export function lyingBed(head: BedTop, foot: BedTop): CutIcon {
   return {
     kind: 'cut',
     cuts: [
-      cut(texture, size, [6, 6, 16, 16], [0, 4, 8, 8], null, 270),
-      cut(texture, size, [6, 28, 16, 16], [8, 4, 8, 8], null, 270),
+      cut(head.texture, head.size, head.from, [0, 4, 8, 8], null, 270),
+      cut(foot.texture, foot.size, foot.from, [8, 4, 8, 8], null, 270),
     ],
   }
 }

@@ -76,6 +76,14 @@ describe('an item the game draws in code', () => {
     ])
   })
 
+  test('1.21.10 names a copper golem’s stage first', () => {
+    expect(
+      texturesOf(
+        entityIconOf('waxed_oxidized_copper_golem_statue', has('entity/copper_golem/oxidized_copper_golem')),
+      ),
+    ).toEqual(['entity/copper_golem/oxidized_copper_golem'])
+  })
+
   test('nothing where the texture is missing; any other item isn’t one of these', () => {
     expect(entityIconOf('chest', has())).toBeNull()
     expect(entityIconOf('decorated_pot', has('entity/decorated_pot/decorated_pot_side'))).toBeNull()

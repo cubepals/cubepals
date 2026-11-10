@@ -192,6 +192,45 @@ describe('what an inventory shows', () => {
   })
 })
 
+describe('a bed from 26.2', () => {
+  const bed = (head: Record<string, unknown>) =>
+    iconOf('minecraft:red_bed', {
+      json: (path) =>
+        ({
+          'items/red_bed.json': {
+            model: {
+              type: 'minecraft:composite',
+              models: [
+                { type: 'minecraft:model', model: 'minecraft:block/red_bed_head' },
+                { type: 'minecraft:model', model: 'minecraft:block/red_bed_foot' },
+              ],
+            },
+          },
+          'models/block/red_bed_head.json': head,
+          'models/block/red_bed_foot.json': {
+            textures: { up: 'block/foot_up' },
+            elements: [{ faces: { up: { uv: [16, 0, 0, 16], texture: '#up' } } }],
+          },
+        })[path] ?? null,
+      hasTexture: (texture) => texture === 'block/head_up' || texture === 'block/foot_up',
+    })
+
+  test('two block models, drawn from their tops lying across, as the older beds', () => {
+    const icon = bed({ textures: { up: 'block/head_up' }, elements: [{ faces: { up: { texture: '#up' } } }] })
+    expect(icon?.kind === 'cut' && icon.cuts.map((c) => [c.texture, c.from, c.turn])).toEqual([
+      ['block/head_up', [0, 0, 16, 16], 270],
+      // A reversed UV is the same part of the texture.
+      ['block/foot_up', [0, 0, 16, 16], 270],
+    ])
+  })
+
+  test('nothing where a half’s texture is missing', () => {
+    expect(
+      bed({ textures: { up: 'block/gone' }, elements: [{ faces: { up: { texture: '#up' } } }] }),
+    ).toBeNull()
+  })
+})
+
 describe('every item a release has', () => {
   test('26.x: each definition in items/, and nothing else', () => {
     const paths = [
