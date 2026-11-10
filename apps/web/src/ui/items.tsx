@@ -78,6 +78,18 @@ function ItemTooltip({ stack }: { stack: ItemStackView }) {
   )
 }
 
+/**
+ * An item's picture alone, small, as a list of items or a field shows it beside the item's id:
+ * drawn as its inventory slot draws it, and an empty square where there is none.
+ */
+export function ItemIcon({ icon, gameVersion }: { icon: ItemIconView | undefined; gameVersion: string }) {
+  return (
+    <span className="bk-item-icon" aria-hidden>
+      {icon && <ItemPicture icon={icon} gameVersion={gameVersion} glint={false} />}
+    </span>
+  )
+}
+
 const url = (gameVersion: string, texture: string) => `/api/public/items/${gameVersion}/${texture}.png`
 
 function ItemPicture({

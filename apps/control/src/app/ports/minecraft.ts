@@ -94,6 +94,8 @@ export interface ClientAssets {
 export interface ClientFiles {
   /** A file's bytes by its path under `assets/minecraft/`; null where the jar had no such file. */
   read(path: string): Uint8Array | null
+  /** Every path it has, under `assets/minecraft/`. */
+  paths(): readonly string[]
 }
 
 /** The client jar Mojang served isn't the one its manifest describes, and nothing of it is used. */

@@ -68,6 +68,9 @@ export const PlayerPowerInput = PlayerInput.extend({ power: PlayerPower })
 export const KEPT_ID = /^k[0-9a-f]{12}$/
 export const PutBackInput = PlayerInput.extend({ kept: z.string().regex(KEPT_ID) })
 
+/** Every item a release has: `ItemIcons.items`. */
+export const ItemListInput = z.object({ gameVersion: z.string().max(40) })
+
 export const ItemIconsInput = z.object({
   gameVersion: z.string().max(40),
   ids: z.array(z.string().max(100)).max(80),

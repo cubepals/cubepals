@@ -6,8 +6,9 @@
 
 /**
  * What an owner would otherwise type into the console for one player, as buttons on their page: a
- * trip to coordinates or to someone else playing, an item, health and hunger back, levels, a kick,
- * and an emptied inventory, which asks first and is kept to put back (`kept-inventories.tsx`).
+ * trip to coordinates or to someone else playing, an item, picked from every item the release has
+ * (`item-field.tsx`), health and hunger back, levels, a kick, and an emptied inventory, which asks
+ * first and is kept to put back (`kept-inventories.tsx`).
  * Each is done at once while the player is on. For someone away, or a server asleep, a trip,
  * items, levels and an emptying wait for their next join, and the page says what waits
  * (`waiting.tsx`); a heal, a kick and a trip to someone else show only while they play. The
@@ -27,7 +28,8 @@ import Link from 'next/link'
 import { useState } from 'react'
 import { messageOf, useTRPC } from '../../../../../../lib/api'
 import { said, useOutcome } from '../../../../../../lib/outcome'
-import { Button, FormSection, Modal, Note, Select, SuggestField, TextField } from '../../../../../../ui'
+import { Button, FormSection, Modal, Note, Select, TextField } from '../../../../../../ui'
+import { ItemField } from './item-field'
 import { KeptInventories } from './kept-inventories'
 import { useRefresh, Waiting, waitingOf } from './waiting'
 
@@ -38,25 +40,6 @@ const WORLDS: Array<{ value: Dimension; label: string }> = [
   { value: 'minecraft:the_nether', label: 'Nether' },
   { value: 'minecraft:the_end', label: 'End' },
 ]
-
-/** What owners hand out most, offered as the item field is opened; any other id can be typed. */
-const COMMON_ITEMS = [
-  'diamond',
-  'netherite_ingot',
-  'iron_ingot',
-  'gold_ingot',
-  'emerald',
-  'cooked_beef',
-  'golden_apple',
-  'ender_pearl',
-  'torch',
-  'oak_log',
-  'elytra',
-  'firework_rocket',
-  'totem_of_undying',
-  'diamond_pickaxe',
-  'diamond_sword',
-].map((value) => ({ value }))
 
 /** A whole number from a field, or null where it holds none. */
 function whole(text: string): number | null {
@@ -71,10 +54,13 @@ export function PlayerPowers({
   running,
   others,
   tellPlayers,
+  gameVersion,
 }: {
   serverId: string
   player: PlayerView
   running: boolean
+  /** The server's release, whose items the item field offers. */
+  gameVersion: string
   /** Whether the player is told in chat what was done to them, as this server's Settings say. */
   tellPlayers: boolean
   /** Everyone else playing now, for a trip to one of them. */
@@ -100,7 +86,7 @@ export function PlayerPowers({
           on ? `Straight into ${name}’s inventory.` : `Into ${name}’s inventory as they next join.`
         }
       >
-        <GiveItem serverId={serverId} player={player} />
+        <GiveItem serverId={serverId} player={player} gameVersion={gameVersion} />
         <Kept serverId={serverId} player={player} kind="give" />
       </FormSection>
       <FormSection
@@ -286,7 +272,7 @@ function ToPlayer({ others, ...props }: PowerProps & { others: readonly { name: 
   )
 }
 
-function GiveItem(props: PowerProps) {
+function GiveItem({ gameVersion, ...props }: PowerProps & { gameVersion: string }) {
   const power = usePower(props)
   const [item, setItem] = useState('')
   const [count, setCount] = useState('1')
@@ -303,16 +289,7 @@ function GiveItem(props: PowerProps) {
       }}
     >
       <div className="bk-row" style={{ gap: 'var(--space-8)', flexWrap: 'wrap', alignItems: 'flex-start' }}>
-        <SuggestField
-          label="Item"
-          mono
-          placeholder="diamond"
-          help="Its id, as the game names it. A mod’s starts with the mod’s name: create:wrench."
-          value={item}
-          suggestions={COMMON_ITEMS}
-          onPick={setItem}
-          onChange={(e) => setItem(e.target.value)}
-        />
+        <ItemField gameVersion={gameVersion} value={item} onChange={setItem} />
         <TextField
           label="How many"
           inputMode="numeric"

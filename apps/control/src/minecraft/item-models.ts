@@ -59,6 +59,57 @@ export function iconOf(id: string, files: ModelFiles): ItemIcon {
   return cubeOf(wholeCube(resolved.elements), paint) ?? oneFace(resolved.textures, paint)
 }
 
+/**
+ * Every item a release has, by its path (`diamond_sword`). From 1.21.4 each has its definition in
+ * `items/`. Before, each has a model in `models/item/`, beside models only drawn in its place (a
+ * bow being drawn, a clock's faces) and templates other items are made from, which are left out.
+ */
+export function itemsOf(paths: readonly string[], files: Pick<ModelFiles, 'json'>): string[] {
+  const defined = namedIn(paths, 'items/').filter((path) => path !== 'air')
+  if (defined.length > 0) return defined
+  const models = new Map(
+    namedIn(paths, 'models/item/').map((path) => [path, files.json(`models/item/${path}.json`)]),
+  )
+  // A clock's overrides name the clock itself among its faces: it is still an item.
+  const swapped = new Set(
+    [...models].flatMap(([path, model]) => refsOf(overridesOf(model)).filter((ref) => ref !== path)),
+  )
+  // A bow being drawn is made from the bow, which stays; a spawn egg from a template, which goes.
+  const templates = new Set(
+    [...models].flatMap(([path, model]) =>
+      swapped.has(path) || !isData(model) ? [] : refsOf([model.parent]),
+    ),
+  )
+  // What the game's code draws in a hand in its place (a trident, a spyglass) is no item of its own.
+  return [...models.keys()].filter(
+    (path) => !swapped.has(path) && !templates.has(path) && !path.endsWith('_in_hand') && path !== 'air',
+  )
+}
+
+function namedIn(paths: readonly string[], dir: string): string[] {
+  return paths
+    .flatMap((path) => {
+      const name =
+        path.startsWith(dir) && path.endsWith('.json') ? path.slice(dir.length, -'.json'.length) : ''
+      return /^[a-z0-9_]+$/.test(name) ? [name] : []
+    })
+    .sort()
+}
+
+/** The models an item's overrides draw in its place. */
+function overridesOf(model: unknown): unknown[] {
+  if (!isData(model) || !Array.isArray(model.overrides)) return []
+  return model.overrides.map((o: unknown) => (isData(o) ? o.model : null))
+}
+
+/** The item models among `refs`, by path: `item/bow_pulling_0` is `bow_pulling_0`. */
+function refsOf(refs: readonly unknown[]): string[] {
+  return refs.flatMap((ref) => {
+    const match = typeof ref === 'string' ? /^(?:minecraft:)?item\/([a-z0-9_]+)$/.exec(ref) : null
+    return match?.[1] ? [match[1]] : []
+  })
+}
+
 type Painter = (ref: string | undefined, tintIndex: unknown) => Paint | null
 
 function cubeOf(faces: Record<string, Face> | null, paint: Painter): ItemIcon {

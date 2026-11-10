@@ -37,6 +37,7 @@ import {
   FreshStartInput,
   GameModeInput,
   ItemIconsInput,
+  ItemListInput,
   JoinWaitlistInput,
   LetInFromUploadInput,
   LiftInput,
@@ -611,6 +612,10 @@ const players = router({
   icons: authedProcedure
     .input(ItemIconsInput)
     .query(({ ctx, input }) => ctx.services.items.icons(input.gameVersion, input.ids)),
+  /** Every item the release has, for the field that gives one. */
+  items: authedProcedure
+    .input(ItemListInput)
+    .query(({ ctx, input }) => ctx.services.items.items(input.gameVersion)),
   cancel: authedProcedure
     .input(WaitingInput)
     .mutation(({ ctx, input }) =>
