@@ -53,7 +53,7 @@ yet and keeps the rest. Above each empty value it says where to get it. The same
 
 | Value | Where to get it | Where it goes |
 |---|---|---|
-| `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_ZONE_ID` | Cloudflare → cubepals.com → Overview, right column | Terraform: the bucket, the records, and the realtime role's DNS-01 zone |
+| `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_ZONE_ID` | Cloudflare → cubepals.com → Overview, right column | Terraform: the bucket, the records, and the zone of the realtime role's DNS-01 answers and the play names' own records |
 | `CLOUDFLARE_API_TOKEN` | Cloudflare → My Profile → API Tokens → Create Token → Custom: Zone · DNS · Edit and Zone · Workers Routes · Edit on cubepals.com; Account · Workers R2 Storage · Edit and Account · Workers Scripts · Edit | Terraform's Cloudflare provider only |
 | `CLOUDFLARE_WORKERS_API_TOKEN` | The same page, another custom token: Account · Workers Scripts · Edit and Account · Workers R2 Storage · Edit | The website's deploys and rollbacks (wrangler) only |
 | `TF_STATE_ACCESS_KEY_ID`, `TF_STATE_SECRET_ACCESS_KEY` | Cloudflare → R2 → Manage API tokens → Create Account API token: Object Read & Write, `blockly-terraform-state` only | Terraform's state backend only |
@@ -61,7 +61,7 @@ yet and keeps the rest. Above each empty value it says where to get it. The same
 | `DATABASE_URL`, `DATABASE_DIRECT_URL` | Supabase → cubepals prod → Connect → Session pooler (port 5432), as the role `blockly` on the database `blockly`: the same URL for both, since session mode carries `LISTEN`, migrations and `pg_dump` | Control plane |
 | `AUTH_GOOGLE_CLIENT_ID`, `AUTH_GOOGLE_CLIENT_SECRET` | Google Auth Platform → Clients → Create client → Web application. Origin `https://cubepals.com`; redirect `https://cubepals.com/api/auth/callback/google` | Control plane |
 | `SMTP_URL` | The mail provider, as `smtps://user:password@host:465` | Control plane |
-| `CLOUDFLARE_DNS_API_TOKEN` | Cloudflare → My Profile → API Tokens → Create Token → "Edit zone DNS" template, zone cubepals.com | Realtime role: it proves `rt.cubepals.com` to Let's Encrypt |
+| `CLOUDFLARE_DNS_API_TOKEN` | Cloudflare → My Profile → API Tokens → Create Token → "Edit zone DNS" template, zone cubepals.com | Realtime role: it proves `rt.cubepals.com` to Let's Encrypt. Worker: it keeps the play names' own records (`PLAY_IPV4_BY_REGION`) |
 | `ARCHIVE_S3_ACCESS_KEY_ID`, `ARCHIVE_S3_SECRET_ACCESS_KEY` | **After the first apply** makes the bucket: Cloudflare → R2 → Manage API tokens → Create Account API token: Object Read & Write, the archive bucket only | Control plane: backups, downloads, rested worlds |
 | `DUMP_S3_ACCESS_KEY_ID`, `DUMP_S3_SECRET_ACCESS_KEY` | **After the first apply**, the same way: Object Read & Write, `blockly-prod-database-dumps` only | The Database dump workflow only, as secrets of the repository's `production` environment |
 | `ADMIN_EMAILS` | Your own address; sign in with it and you are an admin | Control plane |

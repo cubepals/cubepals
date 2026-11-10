@@ -21,6 +21,7 @@
     "PLAY_DOMAIN": "play.cubepals.com",
     "PLAY_DOMAIN_ALIASES": "",
     "PLAY_IPV4": "",
+    "PLAY_IPV4_BY_REGION": "",
     "PLAY_PORT": "25565",
     "REGIONS": "eu:Europe,us:North America",
     "RUNTIME_PROVIDER": "fly",

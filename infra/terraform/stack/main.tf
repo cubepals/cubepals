@@ -26,7 +26,7 @@ variable "fly_org" { type = string }
 variable "fly_machine_limit" { type = number }
 
 variable "edge_regions" {
-  description = "The Fly regions the edge runs a machine in (scripts/production-edge.ts puts them there). The play names point at its anycast addresses, which reach the nearest, unless PLAY_IPV4 names another IPv4, such as one Fly announces from a single region."
+  description = "The Fly regions the edge runs a machine in (scripts/production-edge.ts puts them there). The play names point at its anycast addresses, which reach the nearest, unless PLAY_IPV4 names another IPv4, such as one Fly announces from a single region. A server in a region PLAY_IPV4_BY_REGION gives an address of its own is entered there instead: the control plane keeps an A record for each of its names."
   type        = list(string)
   default     = ["fra"]
   validation {
@@ -133,7 +133,8 @@ locals {
   play_domains  = compact(concat([var.settings["PLAY_DOMAIN"]], split(",", lookup(var.settings, "PLAY_DOMAIN_ALIASES", ""))))
   # The IPv4 the play names' A records hold: the edge's own anycast address unless PLAY_IPV4 names
   # one allocated outside Terraform (`fly ips allocate-v4 --region`), since the provider's fly_ip
-  # takes no region. Terraform's alone, so the control plane isn't given it.
+  # takes no region. Terraform's alone, so the control plane isn't given it. A server in a region
+  # PLAY_IPV4_BY_REGION names has A records of its own, which the control plane keeps.
   play_ipv4      = coalesce(lookup(var.settings, "PLAY_IPV4", ""), module.edge.ipv4)
   terraform_only = ["PLAY_IPV4"]
   given          = nonsensitive(toset(keys(var.secrets)))
@@ -149,7 +150,8 @@ locals {
     # The control plane holds maxServers to what the org's machines allow (§19.12).
     FLY_MACHINE_LIMIT     = tostring(module.org.machine_limit)
     FLY_PLATFORM_MACHINES = tostring(module.org.platform_machines)
-    # The realtime role's DNS-01 challenges go in the zone the stack writes records to.
+    # The realtime role's DNS-01 challenges and the play names' own records (PLAY_IPV4_BY_REGION)
+    # go in the zone the stack writes records to.
     CLOUDFLARE_ZONE_ID = var.cloudflare_zone_id
   }) : name => value if value != "" && !contains(local.terraform_only, name) }
 }

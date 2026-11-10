@@ -151,6 +151,11 @@ function schedules(
       says: (n) => `closed ${n} power intervals left open`,
     },
     { job: 'provider-tags', run: () => app.fleet.tag(), says: (n) => `tagged ${n} servers at the provider` },
+    {
+      job: 'play-records',
+      run: () => app.edge.playRecords.keep(),
+      says: (n) => `wrote or removed ${n} play names' own records`,
+    },
     // The day's figure goes to the log every pass, tripped or not.
     {
       job: 'spend-watchdog',

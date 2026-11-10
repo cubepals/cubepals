@@ -10,6 +10,7 @@ import type { GeyserMc } from './ports/geysermc.ts'
 import type { Insight } from './ports/insight.ts'
 import type { MalwareLists } from './ports/malware.ts'
 import type { ArchiveStore, BillingProvider } from './ports/optional.ts'
+import type { PlayRecords } from './ports/play-records.ts'
 
 /**
  * What this deployment can do. Whether a port instance exists *is* the capability, so no flag
@@ -30,6 +31,15 @@ export interface DeploymentCapabilities {
    * Floodgate comes from and gamertags are found. Absent, no server is given Floodgate.
    */
   readonly bedrock?: { readonly floodgateKey: string; readonly geyser: GeyserMc } | null
+  /**
+   * The play names' own A records, for servers in a region the edge has an address of its own in
+   * (PLAY_IPV4_BY_REGION): where they are kept, and each such region's address. Absent keeps none,
+   * and every play name is reached through the wildcard (`edge/play-records.ts`).
+   */
+  readonly playRecords?: {
+    readonly records: PlayRecords
+    readonly regionIpv4: Readonly<Record<string, string>>
+  } | null
 }
 
 export type DeploymentCapability = keyof DeploymentCapabilities

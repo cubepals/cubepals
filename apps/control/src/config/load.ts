@@ -287,6 +287,15 @@ function jsonSetting(env: NodeJS.ProcessEnv, name: 'OFFICIAL_SERVER_FILES' | 'ST
   return { json, production: environmentOf(env.DEPLOYMENT_ID) === 'production' }
 }
 
+/**
+ * The zone the play names' own A records are kept in, with the token that may edit its DNS: the
+ * same two the realtime role's DNS-01 answers use. Null unless both are set.
+ */
+const playRecordsZone = (env: NodeJS.ProcessEnv) =>
+  env.CLOUDFLARE_DNS_API_TOKEN && env.CLOUDFLARE_ZONE_ID
+    ? { apiToken: env.CLOUDFLARE_DNS_API_TOKEN, zoneId: env.CLOUDFLARE_ZONE_ID }
+    : null
+
 /** What new servers leave to the ones people have, and how long creates may wait (`DEFAULT_ROOM`). */
 function roomFrom(env: NodeJS.ProcessEnv) {
   return {
@@ -345,6 +354,8 @@ export function configFromEnv(env: NodeJS.ProcessEnv): unknown {
       domain: env.PLAY_DOMAIN,
       aliases: list(env.PLAY_DOMAIN_ALIASES),
       port: Number(env.PLAY_PORT ?? GAME_PORT),
+      regionIpv4: record(env.PLAY_IPV4_BY_REGION),
+      records: playRecordsZone(env),
     },
     regions: pairs(env.REGIONS),
     auth: {
