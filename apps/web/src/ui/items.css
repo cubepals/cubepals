@@ -90,6 +90,19 @@
   width: 80%;
   height: 80%;
 }
+/* An item's picture beside words: the slot's drawing, without the slot. The cube sizes from it. */
+.bk-item-icon {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  container-type: inline-size;
+}
+.bk-item-icon > .bk-item {
+  width: 100%;
+  height: 100%;
+}
 .bk-paint {
   position: absolute;
   inset: 0;

@@ -54,7 +54,8 @@ export class MojangClientAssets implements ClientAssets {
     const kept = await readFile(path).catch(() => null)
     const zip = kept ?? (await this.#fetchKept(gameVersion, path))
     const files = new Map(Object.entries(unzipSync(new Uint8Array(zip))))
-    return { read: (name) => files.get(name) ?? null }
+    const paths = [...files.keys()]
+    return { read: (name) => files.get(name) ?? null, paths: () => paths }
   }
 
   /** Downloads the jar, checks it, and keeps what draws items; the jar itself is let go. */

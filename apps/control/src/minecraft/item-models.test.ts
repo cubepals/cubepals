@@ -8,7 +8,7 @@
  * `items/<id>.json`, with its tints, through selections and conditions.
  */
 import { describe, expect, test } from 'bun:test'
-import { iconOf, type ModelFiles } from './item-models.ts'
+import { iconOf, itemsOf, type ModelFiles } from './item-models.ts'
 
 const textures = new Set([
   'item/sword',
@@ -157,5 +157,49 @@ describe('how an item is drawn', () => {
     ).toBeNull()
     expect(iconOf('minecraft:unknown', files({}))).toBeNull()
     expect(iconOf('create:wrench', files({}))).toBeNull()
+  })
+})
+
+describe('every item a release has', () => {
+  test('26.x: each definition in items/, and nothing else', () => {
+    const paths = [
+      'items/stone.json',
+      'items/diamond_sword.json',
+      'models/item/generated.json',
+      'models/item/diamond_sword.json',
+      'textures/item/diamond_sword.png',
+    ]
+    expect(itemsOf(paths, files({}))).toEqual(['diamond_sword', 'stone'])
+  })
+
+  test('1.20.1: each item model, but not one only other models are drawn from', () => {
+    const json = {
+      'models/item/generated.json': { parent: 'builtin/generated' },
+      'models/item/template_spawn_egg.json': { parent: 'builtin/entity' },
+      'models/item/pig_spawn_egg.json': { parent: 'minecraft:item/template_spawn_egg' },
+      'models/item/bow.json': {
+        parent: 'item/generated',
+        overrides: [{ predicate: { pulling: 1 }, model: 'item/bow_pulling_0' }],
+      },
+      'models/item/bow_pulling_0.json': { parent: 'item/bow' },
+      'models/item/oak_log.json': { parent: 'minecraft:block/oak_log' },
+      'models/item/clock.json': {
+        parent: 'item/generated',
+        overrides: [
+          { predicate: { time: 0 }, model: 'item/clock' },
+          { predicate: { time: 0.5 }, model: 'item/clock_01' },
+        ],
+      },
+      'models/item/clock_01.json': { parent: 'item/generated' },
+      'models/item/trident.json': { parent: 'builtin/entity' },
+      'models/item/trident_in_hand.json': { parent: 'builtin/entity' },
+    }
+    expect(itemsOf(Object.keys(json), files(json))).toEqual([
+      'bow',
+      'clock',
+      'oak_log',
+      'pig_spawn_egg',
+      'trident',
+    ])
   })
 })

@@ -68,6 +68,8 @@ describe('a release’s item art, from its client jar', () => {
     expect(files.read('items/made_up_sword.json')).not.toBeNull()
     expect(files.read('sounds/ambient.ogg')).toBeNull()
     expect(files.read('textures/item/missing.png')).toBeNull()
+    expect(files.paths()).toContain('items/made_up_sword.json')
+    expect(files.paths()).not.toContain('sounds/ambient.ogg')
   })
 
   test('a jar that isn’t the one the manifest describes is refused, and nothing of it is kept', async () => {

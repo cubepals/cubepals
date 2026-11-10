@@ -4,13 +4,13 @@
 
 /**
  * The pictures in a player's inventory: for each item, how the browser draws it from its release's
- * own textures, and those textures. The art is the release's, read from its client jar through
+ * own textures, and those textures; and every item a release has, for a field that gives one. The art is the release's, read from its client jar through
  * `ClientAssets`; how a model becomes a picture is `minecraft/item-models.ts`'s. Only releases
  * Blockly offers are asked for, so nobody can make it fetch whatever Mojang lists. Where the art
  * can't be had, every item comes back without a picture and the page writes its name.
  */
 import type { ItemIconView } from '@blockly/contracts'
-import { iconOf } from '../../minecraft/item-models.ts'
+import { iconOf, itemsOf } from '../../minecraft/item-models.ts'
 import { offeredVersions } from '../../minecraft/versions.ts'
 import type { ClientAssets, ClientFiles } from '../ports/minecraft.ts'
 
@@ -24,6 +24,8 @@ const KEPT = 20_000
 export class ItemIcons {
   readonly #assets: ClientAssets
   readonly #icons = new Map<string, ItemIconView>()
+  /** Every item of each release asked for: only offered releases, so a few at most. */
+  readonly #items = new Map<string, readonly string[]>()
 
   constructor(deps: { assets: ClientAssets }) {
     this.#assets = deps.assets
@@ -50,6 +52,19 @@ export class ItemIcons {
       icons[id] = icon ?? null
     }
     return icons
+  }
+
+  /** Every item the release has, by id (`minecraft:diamond`); none where its art can't be had. */
+  async items(gameVersion: string): Promise<readonly string[]> {
+    const kept = this.#items.get(gameVersion)
+    if (kept !== undefined) return kept
+    const files = await this.#files(gameVersion)
+    if (files === null) return []
+    const items = itemsOf(files.paths(), { json: (path) => parseJson(files.read(path)) }).map(
+      (path) => `minecraft:${path}`,
+    )
+    this.#items.set(gameVersion, items)
+    return items
   }
 
   /** One texture's PNG, by the name an icon gives it (`block/oak_log`). */

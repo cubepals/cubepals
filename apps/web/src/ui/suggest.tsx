@@ -22,16 +22,21 @@ import {
   type FocusEvent,
   type KeyboardEvent,
   type MouseEvent,
+  type ReactNode,
   useId,
   useRef,
   useState,
 } from 'react'
 import { TextField, type TextFieldProps } from './fields'
 
-/** Something a field can offer, with a few words beside it where they help ("Playing now"). */
+/**
+ * Something a field can offer, with a few words beside it where they help ("Playing now"), and a
+ * picture before it where the thing has one (an item).
+ */
 interface Suggestion {
   value: string
   note?: string
+  icon?: ReactNode
 }
 
 export interface SuggestFieldProps extends TextFieldProps {
@@ -47,7 +52,8 @@ const LIST_MAX_HEIGHT = 320
 
 /**
  * A text field that offers what it knows: all of it while the field is empty, then whatever
- * holds what is typed, capitals aside. Up and Down move through the list, Enter puts the one
+ * holds what is typed, capitals aside, and a space as good as an underscore ("golden apple" finds
+ * `golden_apple`). Up and Down move through the list, Enter puts the one
  * reached in the field, Escape puts the list away, and a click does what Enter does. Enter with
  * nothing reached still sends the form. With nothing to offer, it is a plain text field.
  *
@@ -60,8 +66,8 @@ export function SuggestField({ suggestions, onPick, ...field }: SuggestFieldProp
   const [active, setActive] = useState<number | null>(null)
   const items = useRef<Array<HTMLElement | null>>([])
   const ids = useId()
-  const typed = field.value.trim().toLowerCase()
-  const shown = suggestions.filter((suggestion) => suggestion.value.toLowerCase().includes(typed))
+  const typed = looseOf(field.value)
+  const shown = suggestions.filter((suggestion) => looseOf(suggestion.value).includes(typed))
   const offering = suggestions.length > 0
   const visible = open && shown.length > 0
 
@@ -180,6 +186,7 @@ export function SuggestField({ suggestions, onPick, ...field }: SuggestFieldProp
                   onClick: () => pick(suggestion.value),
                 })}
               >
+                {suggestion.icon}
                 <span className="bk-suggest__value">{suggestion.value}</span>
                 {suggestion.note && <span className="bk-suggest__note">{suggestion.note}</span>}
               </div>
@@ -189,4 +196,9 @@ export function SuggestField({ suggestions, onPick, ...field }: SuggestFieldProp
       )}
     </>
   )
+}
+
+/** What is typed, and what is offered, as they are matched. */
+function looseOf(text: string): string {
+  return text.trim().toLowerCase().replaceAll('_', ' ')
 }
