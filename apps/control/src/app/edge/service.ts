@@ -53,6 +53,24 @@ import { EDGE_SAID_EVERY_MS, forgetQuietEdges, markListed, sawEdge, seen } from 
 import { restingFor, trialPlayed, turnedAway } from './turned-away.ts'
 
 /**
+ * Every address the server at `slug` is routed at: its own, and the kept addresses that point at
+ * it, which say whose they are. A kept address is never given to a server; one that had it
+ * before is not routed at it. The play names' own records follow the same (`play-records.ts`).
+ */
+export function routedAddresses(
+  addressing: PlayAddressing,
+  slug: string,
+): { address: PlayAddress; alias: { aliasOf?: string } }[] {
+  const own = keptFor(slug) === null ? addressing.all(slug) : []
+  return [
+    ...own.map((address) => ({ address, alias: {} })),
+    ...keptAt(slug).flatMap((kept) =>
+      addressing.all(kept).map((address) => ({ address, alias: { aliasOf: slug } })),
+    ),
+  ]
+}
+
+/**
  * The application side of the edge protocol. It resolves hostnames and destinations; the edge
  * only forwards, and never learns what a slug or a play domain is.
  */
@@ -207,7 +225,7 @@ export class EdgeService {
       const way = wayOf(server.status, binding?.memoryKept === true && !booting.has(server.id))
       const destination = back ? NOWHERE : this.#destinationOf(server.status, state, binding?.handle)
       if (destination === null) continue
-      for (const { address, alias } of this.#addressesOf(server.slug)) {
+      for (const { address, alias } of routedAddresses(this.#addressing, server.slug)) {
         routes.push({
           hostname: address.hostname,
           ...alias,
@@ -230,21 +248,6 @@ export class EdgeService {
         live.filter((s) => s.status === 'running' && bindings.get(s.id)?.handle).map((s) => s.id),
       )
     return { routes: { routes, releases: [...RELEASES] }, from: print.from, unrouted: print.unrouted }
-  }
-
-  /**
-   * Every address the server at `slug` is routed at: its own, and the kept addresses that point at
-   * it, which say whose they are. A kept address is never given to a server; one that had it
-   * before is not routed at it.
-   */
-  #addressesOf(slug: string): { address: PlayAddress; alias: { aliasOf?: string } }[] {
-    const own = keptFor(slug) === null ? this.#addressing.all(slug) : []
-    return [
-      ...own.map((address) => ({ address, alias: {} })),
-      ...keptAt(slug).flatMap((kept) =>
-        this.#addressing.all(kept).map((address) => ({ address, alias: { aliasOf: slug } })),
-      ),
-    ]
   }
 
   /**

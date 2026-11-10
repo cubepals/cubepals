@@ -9,7 +9,10 @@
  * (infra/terraform/stack). On the anycast ones Fly's proxy hands a player to the nearest machine,
  * and that machine dials the server's Flycast address from there: a North American player on a
  * server in iad stays in North America with an edge in iad, rather than crossing to fra and back.
- * On a single region's address every IPv4 join enters Fly in that region, wherever the server is.
+ * On a single region's address every IPv4 join enters Fly in that region, unless the server is in
+ * a region `PLAY_IPV4_BY_REGION` gives an address of its own, announced from an edge region: the
+ * control plane keeps an A record at that address for each of the server's names
+ * (apps/control/src/app/edge/play-records.ts), and its joins enter Fly there.
  * Every edge pulls the same routes, and the control plane waits on each of them before a server
  * reads as running (apps/control/src/app/edge/routed.ts).
  *

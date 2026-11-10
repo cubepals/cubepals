@@ -4,7 +4,8 @@
 
 # DNS for an environment (§11 hostname audit): the web hosts, wildcard A/AAAA records for the play
 # domain and each alias to the edge with the challenge record for their certificate, and the
-# realtime hostname's A record, with no AAAA (§19.6).
+# realtime hostname's A record, with no AAAA (§19.6). A server's own A records, for a region with an
+# address of its own (PLAY_IPV4_BY_REGION), are the control plane's, never written here.
 # Every record but the web hosts' is DNS-only: Cloudflare's proxy carries neither Minecraft's TCP
 # nor WebTransport's UDP. The web hosts are proxied once web_proxied says so, which hands them to
 # the Worker's routes (modules/web).

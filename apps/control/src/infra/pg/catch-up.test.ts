@@ -98,6 +98,7 @@ describe.skipIf(!hasDatabase)('a worker that starts after being stopped for hour
         'creates-room',
         'usage-close',
         'provider-tags',
+        'play-records',
         'runtime-upkeep',
         'insight-send',
       ] as const

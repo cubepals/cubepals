@@ -62,7 +62,7 @@ const PRODUCTS = {
 describe('configuration', () => {
   test('a local environment parses with defaults', () => {
     const config = loadConfig(env)
-    expect(config.play).toEqual({ domain: 'play.localhost', aliases: [], port: 25565 })
+    expect(config.play).toMatchObject({ domain: 'play.localhost', aliases: [], port: 25565 })
     expect(config.archive).toBeNull()
     expect(config.runtimes.map((r) => r.provider)).toEqual(['docker'])
     expect(config.defaultRuntime).toBe('docker')
@@ -636,5 +636,39 @@ describe('Polar products', () => {
       'core',
       'plus',
     ])
+  })
+})
+
+describe('the play names’ own records', () => {
+  test('none are kept without a zone and an address, as locally', () => {
+    expect(loadConfig(env).play).toMatchObject({ regionIpv4: {}, records: null })
+  })
+
+  test('a region with an address of its own keeps its servers’ play names there, in the zone', () => {
+    const zone = {
+      CLOUDFLARE_DNS_API_TOKEN: 'a-cloudflare-token-with-dns-edit',
+      CLOUDFLARE_ZONE_ID: 'zone-123',
+    }
+    const regions = { REGIONS: 'eu:Europe,us:North America', RUNTIME_REGION_MAP: 'eu:local,us:local' }
+    const split = { ...env, ...regions, ...zone, PLAY_IPV4_BY_REGION: 'us:203.0.113.9' }
+    expect(loadConfig(split).play).toMatchObject({
+      regionIpv4: { us: '203.0.113.9' },
+      records: { apiToken: zone.CLOUDFLARE_DNS_API_TOKEN, zoneId: 'zone-123' },
+    })
+    // The zone alone keeps nothing new; it is where records once kept are removed from.
+    expect(loadConfig({ ...env, ...zone }).play).toMatchObject({
+      regionIpv4: {},
+      records: { zoneId: 'zone-123' },
+    })
+    // Staging has the zone and no token: no records, and nothing refused.
+    expect(loadConfig({ ...env, CLOUDFLARE_ZONE_ID: 'zone-123' }).play.records).toBeNull()
+    expect(() => loadConfig({ ...split, PLAY_IPV4_BY_REGION: 'asia:203.0.113.9' })).toThrow(
+      /PLAY_IPV4_BY_REGION names region "asia", which REGIONS doesn't list/,
+    )
+    for (const wrong of ['us:2001:db8::1', 'us:203.0.113', 'us:256.1.1.1', 'us:01.2.3.4', 'us'])
+      expect(() => loadConfig({ ...split, PLAY_IPV4_BY_REGION: wrong })).toThrow(/expected an IPv4 address/)
+    expect(() => loadConfig({ ...env, ...regions, PLAY_IPV4_BY_REGION: 'us:203.0.113.9' })).toThrow(
+      /Set CLOUDFLARE_DNS_API_TOKEN and CLOUDFLARE_ZONE_ID/,
+    )
   })
 })

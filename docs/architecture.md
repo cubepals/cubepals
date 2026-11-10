@@ -1067,6 +1067,11 @@ Outcomes are written down in `job_health`, the successes of a minute together:
 - `provider-tags`: every 10 minutes. Each server's owner, name and plan are written where its
   provider lists its compute, only where they differ, so an operator reading the provider's
   console sees whose machine each is.
+- `play-records`: every minute. A server in a region with an address of its own
+  (`PLAY_IPV4_BY_REGION`) gets an A record at that address for each name the edge routes to it,
+  on every play domain, so its players enter Fly in its region rather than the wildcard's. Only
+  records the deployment marked as its own are changed, a hundred at most a pass; until one is
+  made, the wildcard reaches the server (`app/edge/play-records.ts`, docs/configuration.md).
 - `runtime-upkeep`: every minute. What a runtime keeps tidy behind its port; only the fleet has
   any (docs/fleet.md).
 

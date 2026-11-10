@@ -66,6 +66,9 @@ export const CRON: Record<ScheduledJob | WorkerHeartbeat, string> = {
   'usage-close': '*/10 * * * *',
   // Whose each server is and what it's called, at the provider: a rename shows there within minutes.
   'provider-tags': '*/10 * * * *',
+  // A server's own play records, made or moved within a minute of what changed them; until then
+  // the wildcard reaches it (`app/edge/play-records.ts`).
+  'play-records': '* * * * *',
   // A server asleep whose wake would boot, refreshed first so the player's resumes: a few a pass.
   'stale-sleep': '*/10 * * * *',
   // What a runtime keeps tidy behind its port (the fleet's uploads, copies and health records).

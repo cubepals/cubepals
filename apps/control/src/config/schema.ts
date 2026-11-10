@@ -363,6 +363,17 @@ export const DeploymentConfig = z.object({
     domain: Hostname,
     aliases: z.array(Hostname),
     port: z.number().int().min(1).max(65535),
+    /**
+     * PLAY_IPV4_BY_REGION: the IPv4 a region's servers are entered through, by region key, for an
+     * address the edge has in that region alone. A server in a region it names gets A records of
+     * its own (`app/edge/play-records.ts`); any other is reached through the wildcard.
+     */
+    regionIpv4: z.record(z.string(), z.ipv4('expected an IPv4 address')),
+    /**
+     * Where those records are kept: the zone and a token that may edit its DNS
+     * (CLOUDFLARE_ZONE_ID, CLOUDFLARE_DNS_API_TOKEN). Null without both, and none are kept.
+     */
+    records: z.object({ apiToken: Secret, zoneId: z.string().min(1) }).nullable(),
   }),
   regions: z.array(z.object({ key: z.string().min(1), label: z.string().min(1) })).min(1),
   auth: z.object({
@@ -559,6 +570,22 @@ function trustedOriginProblems(patterns: readonly string[]): string[] {
   })
 }
 
+/** PLAY_IPV4_BY_REGION names regions people choose from, and has a zone to keep the records in. */
+function playRecordProblems(config: DeploymentConfig): string[] {
+  const named = Object.keys(config.play.regionIpv4)
+  const keys = config.regions.map((region) => region.key)
+  const problems = named
+    .filter((key) => !keys.includes(key))
+    .map(
+      (key) => `PLAY_IPV4_BY_REGION names region "${key}", which REGIONS doesn't list (${keys.join(', ')}).`,
+    )
+  if (named.length > 0 && config.play.records === null)
+    problems.push(
+      'PLAY_IPV4_BY_REGION keeps A records in the zone. Set CLOUDFLARE_DNS_API_TOKEN and CLOUDFLARE_ZONE_ID.',
+    )
+  return problems
+}
+
 /** Consistency checks a schema cannot express. Each returns a sentence naming the fix. */
 export function inconsistencies(config: DeploymentConfig): string[] {
   const problems: string[] = []
@@ -597,6 +624,7 @@ export function inconsistencies(config: DeploymentConfig): string[] {
       problems.push(
         `${runtime.provider} runs beside the default runtime, ${config.defaultRuntime}, and places only the regions its own map names. Set ${runtime.provider.toUpperCase()}_REGION_MAP.`,
       )
+  problems.push(...playRecordProblems(config))
   const web = new URL(config.web.canonicalOrigin)
   if (web.protocol !== 'https:' && !isLocal(web.hostname))
     problems.push(`The web origin ${web.origin} must use https outside local development.`)

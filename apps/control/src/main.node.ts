@@ -43,7 +43,6 @@ import { ConfiguredPlayAddressing, ConfiguredRegionCatalog } from './config/play
 import type { DeploymentConfig, RuntimeConfig } from './config/schema.ts'
 import { entitlementsFor, longestSnapshotNeedDays, PAID_PLANS } from './domain/account/entitlements.ts'
 import { AcmeIssuer } from './infra/acme/acme-issuer.ts'
-import { CloudflareDns01 } from './infra/acme/cloudflare-dns01.ts'
 import { assertIpv4Only } from './infra/acme/ipv4-only.ts'
 import { type AuthOptions, betterAuthenticator } from './infra/auth/better-auth.ts'
 import { emailKey } from './infra/auth/email-signals.ts'
@@ -51,6 +50,7 @@ import { BoatConsole, BoatLogSource, BoatProbe } from './infra/boat/boat-minecra
 import { BoatRuntime } from './infra/boat/boat-runtime.ts'
 import { boatClient } from './infra/boat/client.ts'
 import { BoatStarts } from './infra/boat/starts.ts'
+import { CloudflareDns01, playRecordsFor } from './infra/cloudflare/dns-records.ts'
 import { CurseForgeLinks } from './infra/curseforge/curseforge-links.ts'
 import { DockerLogSource } from './infra/docker/docker-logs.ts'
 import { DockerRuntime } from './infra/docker/docker-runtime.ts'
@@ -570,7 +570,6 @@ async function serveFleet(
   }
 }
 
-/** Optional capabilities: absent adapters are the capability being off (§15.4). */
 /** Modrinth, and Hangar's Paper plugins beside it by the ids that name them (`catalog/routed.ts`). */
 function catalogs(userAgent: string): RoutedCatalog {
   const hangar = new HangarCatalog(hangarClient(userAgent), (url) =>
@@ -585,6 +584,7 @@ function capabilitiesFor(config: DeploymentConfig, db: Db): DeploymentCapabiliti
     insight: insightFor(config),
     malware: new PublishedMalwareLists(),
     bedrock: bedrockCapability(config.floodgateKey),
+    playRecords: playRecordsFor(config.play, config.deploymentId),
     archives: config.archive === null ? null : new S3ArchiveStore(config.archive),
     billing:
       billing?.provider === 'polar'

@@ -51,6 +51,7 @@ const JOBS: ScheduledJob[] = [
   'creates-room',
   'usage-close',
   'provider-tags',
+  'play-records',
   'runtime-upkeep',
   'insight-send',
 ]

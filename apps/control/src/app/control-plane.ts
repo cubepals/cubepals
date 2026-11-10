@@ -23,6 +23,7 @@ import type { OwnPack } from './curation/own.ts'
 import type { CuratedPack } from './curation/packs.ts'
 import { PackCuration } from './curation/service.ts'
 import { DiagnosticsService } from './diagnostics/service.ts'
+import { PlayRecordKeeper } from './edge/play-records.ts'
 import { EdgeService } from './edge/service.ts'
 import { GuestbookService } from './guestbook/service.ts'
 import { InsightService } from './insight/service.ts'
@@ -393,7 +394,7 @@ export function composeControlPlane(ports: ControlPlanePorts, settings: ControlP
     economics: new RuntimeEconomics({ db, runtimes: runtime }),
     /** Start it before the edge's wakes are served. */
     waiter,
-    edge,
+    edge: Object.assign(edge, { playRecords: new PlayRecordKeeper(ports) }),
     joins: new JoinService({ ...ports, ...settings }),
     stopCheaters: new StopCheatersService({ db, policy, transitions, events }),
     feed: new ConsoleFeed(db, ports.logs, runtime.providers, ports.limits),
