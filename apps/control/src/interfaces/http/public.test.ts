@@ -214,3 +214,30 @@ describe('public reads', () => {
     expect(asked).toEqual(Array(5).fill('198.51.100.4'))
   })
 })
+
+describe('item textures', () => {
+  const asked: string[] = []
+  const app = createPublicApp({
+    sharing: {} as SharingQueries,
+    faces: {} as PlayerFaces,
+    items: {
+      texture: async (version: string, texture: string) => {
+        asked.push(`${version} ${texture}`)
+        return texture === 'entity/chest/normal' ? new Uint8Array([1, 2, 3]) : null
+      },
+    } as unknown as ItemIcons,
+    icons: {} as ServerIcons,
+    platform: () => ({ unsoldPlans: [] }),
+    addresses: { proxySecret: null, hostHeader: null },
+    offers: async () => [],
+  })
+
+  test('one in a folder of a folder, as entity textures are, and none that isn’t there', async () => {
+    const response = await app.request('/api/public/items/26.1/entity/chest/normal.png')
+    expect(response.status).toBe(200)
+    expect(response.headers.get('content-type')).toBe('image/png')
+    expect(new Uint8Array(await response.arrayBuffer())).toEqual(new Uint8Array([1, 2, 3]))
+    expect((await app.request('/api/public/items/26.1/block/stone.png')).status).toBe(404)
+    expect(asked).toEqual(['26.1 entity/chest/normal', '26.1 block/stone'])
+  })
+})

@@ -111,6 +111,28 @@
   background-repeat: no-repeat;
   image-rendering: pixelated;
 }
+/* One rectangle of a texture on a face: the place shows only its part of the texture. */
+.bk-cut {
+  position: absolute;
+  overflow: hidden;
+}
+.bk-cut__turn {
+  position: absolute;
+  overflow: hidden;
+}
+.bk-cut__image {
+  position: absolute;
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+  image-rendering: pixelated;
+}
+.bk-cut__tint {
+  position: absolute;
+  inset: 0;
+  mix-blend-mode: multiply;
+  mask-size: 100% 100%;
+  -webkit-mask-size: 100% 100%;
+}
 .bk-paint__tint {
   position: absolute;
   inset: 0;

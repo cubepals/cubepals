@@ -67,9 +67,9 @@ export class ItemIcons {
     return items
   }
 
-  /** One texture's PNG, by the name an icon gives it (`block/oak_log`). */
+  /** One texture's PNG, by the name an icon gives it (`block/oak_log`, `entity/chest/normal`). */
   async texture(gameVersion: string, texture: string): Promise<Uint8Array | null> {
-    if (!/^(block|item)\/[a-z0-9_/]+$/.test(texture)) return null
+    if (!/^(block|item|entity)\/[a-z0-9_/]+$/.test(texture)) return null
     return (await this.#files(gameVersion))?.read(`textures/${texture}.png`) ?? null
   }
 

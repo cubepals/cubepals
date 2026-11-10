@@ -8,7 +8,7 @@
  * Items as an inventory shows them, drawn in the browser from the textures of the server's own
  * release, which the control plane fetched from Mojang and serves: never shipped with Cubepals.
  */
-import type { ItemIconView, ItemStackView } from '@blockly/contracts'
+import type { ItemCutView, ItemIconView, ItemStackView } from '@blockly/contracts'
 import type { CSSProperties, ReactNode } from 'react'
 import { Tip } from './tip'
 
@@ -101,6 +101,22 @@ function ItemPicture({
   gameVersion: string
   glint: boolean
 }) {
+  if (icon.kind === 'cut')
+    return (
+      <span className="bk-item" aria-hidden>
+        <Cuts cuts={icon.cuts} gameVersion={gameVersion} />
+      </span>
+    )
+  if (icon.kind === 'cut_block')
+    return (
+      <span className="bk-item bk-item--block" aria-hidden>
+        <span className="bk-cube">
+          <Cuts className="bk-cube__top" cuts={icon.top} gameVersion={gameVersion} />
+          <Cuts className="bk-cube__left" cuts={icon.left} gameVersion={gameVersion} />
+          <Cuts className="bk-cube__right" cuts={icon.right} gameVersion={gameVersion} />
+        </span>
+      </span>
+    )
   if (icon.kind === 'flat')
     return (
       <span className={['bk-item', glint && 'bk-item--glint'].filter(Boolean).join(' ')} aria-hidden>
@@ -139,6 +155,72 @@ function Paint({ src, tint, className }: { src: string; tint: number | null; cla
           }}
         />
       )}
+    </span>
+  )
+}
+
+/**
+ * A face made of rectangles cut from textures, as the game skins a chest or a head: each placed
+ * where it goes on the face, showing only its part of the texture, which is laid out so that part
+ * fills the place.
+ */
+function Cuts({
+  cuts,
+  gameVersion,
+  className,
+}: {
+  cuts: ItemCutView[]
+  gameVersion: string
+  className?: string
+}) {
+  const share = (n: number, of: number) => `${(n / of) * 100}%`
+  return (
+    <span className={['bk-paint', className].filter(Boolean).join(' ')}>
+      {cuts.map(({ texture, size, from, to, tint, turn }, i) => {
+        const src = url(gameVersion, texture)
+        const image: CSSProperties = {
+          left: share(-from[0], from[2]),
+          top: share(-from[1], from[3]),
+          width: share(size[0], from[2]),
+          height: share(size[1], from[3]),
+          backgroundImage: `url(${src})`,
+        }
+        const place: CSSProperties = {
+          left: share(to[0], 16),
+          top: share(to[1], 16),
+          width: share(to[2], 16),
+          height: share(to[3], 16),
+        }
+        // Turned a quarter, the texture is laid out across a box as tall as the place is wide.
+        const across = turn === 90 || turn === 270
+        const [w, h] = [to[2], to[3]]
+        const turned: CSSProperties = {
+          left: share(across ? (w - h) / 2 : 0, w),
+          top: share(across ? (h - w) / 2 : 0, h),
+          width: share(across ? h : w, w),
+          height: share(across ? w : h, h),
+          transform: turn === 0 ? undefined : `rotate(${turn}deg)`,
+        }
+        return (
+          // biome-ignore lint/suspicious/noArrayIndexKey: a face's cuts never move
+          <span key={i} className="bk-cut" style={place}>
+            <span className="bk-cut__turn" style={turned}>
+              <span className="bk-cut__image" style={image}>
+                {tint !== null && (
+                  <span
+                    className="bk-cut__tint"
+                    style={{
+                      backgroundColor: `#${tint.toString(16).padStart(6, '0')}`,
+                      maskImage: `url(${src})`,
+                      WebkitMaskImage: `url(${src})`,
+                    }}
+                  />
+                )}
+              </span>
+            </span>
+          </span>
+        )
+      })}
     </span>
   )
 }

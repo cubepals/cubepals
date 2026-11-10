@@ -158,12 +158,12 @@ export function createPublicApp(deps: {
   )
 
   /**
-   * A texture an item in someone's inventory is drawn with (`block/oak_log`), from the release's
+   * A texture an item in someone's inventory is drawn with (`block/oak_log`, `entity/bed/red`), from the release's
    * own client jar: kept for a day, since a release's art never changes. Nothing in it says whose.
    */
-  app.get('/api/public/items/:version/:folder/:name', async (c) => {
-    const name = (c.req.param('name') ?? '').replace(/\.png$/, '')
-    const png = await deps.items.texture(c.req.param('version') ?? '', `${c.req.param('folder')}/${name}`)
+  app.get('/api/public/items/:version/:texture{.+\\.png}', async (c) => {
+    const texture = (c.req.param('texture') ?? '').replace(/\.png$/, '')
+    const png = await deps.items.texture(c.req.param('version') ?? '', texture)
     if (png === null) return c.json({ error: 'not_found' }, 404)
     c.header('Cache-Control', `public, max-age=${DAY_S}`)
     c.header('Content-Type', 'image/png')
