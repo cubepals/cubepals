@@ -92,6 +92,20 @@ describe.skipIf(!hasDatabase)('telling a player what was done to them', () => {
     )
   }, 30_000)
 
+  test('told of the items given as they join, not of one the game refused', async () => {
+    const { owner, id, kai } = await kaiOn()
+    h.minecraft.leave(id, kai.uuid)
+    await h.app.schedules.presenceSync()
+    await h.app.players.act(owner, id, kai.uuid, { kind: 'give', item: 'diamond', count: 2 })
+    // A mod's item the fake doesn't have, as a server without that mod refuses it.
+    await h.app.players.act(owner, id, kai.uuid, { kind: 'give', item: 'create:wrench', count: 1 })
+    h.minecraft.join(id, kai)
+    await h.app.schedules.presenceSync()
+    expect(toKai(h.minecraft.said(id))).toEqual([
+      'to Kai: [Cubepals] While you were away, the server’s owner gave you 2 diamond.',
+    ])
+  }, 30_000)
+
   test('nothing said on a server whose owner turned it off', async () => {
     const { owner, id, kai } = await kaiOn()
     expect((await h.app.queries.get(owner, id)).tellPlayers).toBe(true)

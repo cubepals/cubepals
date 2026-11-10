@@ -69,6 +69,8 @@ interface Delivery {
   handled: string
   stopped: boolean
   said: Record<string, string>
+  /** Of the items handled, the ones the game gave: what the player is told of, not the refused. */
+  given?: string
 }
 
 export class PlayerService {
@@ -459,6 +461,7 @@ export class PlayerService {
     powers: readonly PlayerPower[],
   ): Promise<Delivery | 'later'> {
     const refused: string[] = []
+    const given: PlayerPower[] = []
     let taken = 0
     const player = { uuid: action.playerUuid, name }
     for (const power of powers) {
@@ -468,11 +471,13 @@ export class PlayerService {
           : await this.#reading.steps(serverId, handle, powerSteps(name, power))
       if (outcome === 'not_on' || outcome === 'failed') break
       if (typeof outcome === 'object') refused.push(outcome.refused)
+      else given.push(power)
       taken++
     }
     if (taken === 0 && powers.length > 0) return 'later'
     return {
       handled: action.kind === 'give' ? itemsOfPowers(powers.slice(0, taken)) : action.what,
+      ...(action.kind === 'give' ? { given: itemsOfPowers(given) } : {}),
       stopped: taken < powers.length,
       said: {
         change: refused.length === taken ? 'dropped_on_join' : 'done_on_join',
@@ -647,7 +652,8 @@ function toldOfChange(action: PlayerAction, outcome: ActionOutcome): string | nu
 /** What a player just joined is told of one ask done for them; null where they were told nothing. */
 function toldOfDelivery(action: WaitingAction, result: Delivery): string | null {
   if (result.said.change !== 'done_on_join') return null
-  return toldOnJoin({ kind: action.kind, what: result.said.instead === 'spawn' ? 'spawn' : result.handled })
+  const what = result.said.instead === 'spawn' ? 'spawn' : (result.given ?? result.handled)
+  return toldOnJoin({ kind: action.kind, what })
 }
 
 /** Why a put back didn't happen, in the owner's words. */
