@@ -109,6 +109,8 @@ export const minecraftServers = pgTable(
     memoryTier: text('memory_tier').notNull(),
     /** This server's idle kick: null uses the plan default; zero never kicks. */
     afkKickMinutes: integer('afk_kick_minutes'),
+    /** Whether a player is told in chat when the owner acts on them from their page: a trip, an item. */
+    tellPlayers: boolean('tell_players').notNull().default(true),
     status: serverStatus('status').notNull(),
     stopReason: stopReason('stop_reason'),
     failure: jsonb('failure').$type<FailureJson>(),

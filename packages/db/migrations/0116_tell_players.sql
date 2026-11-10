@@ -1,0 +1,1 @@
+ALTER TABLE "minecraft_servers" ADD COLUMN "tell_players" boolean DEFAULT true NOT NULL;

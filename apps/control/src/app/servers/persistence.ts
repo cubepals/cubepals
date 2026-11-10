@@ -39,6 +39,7 @@ function toServer(row: ServerRow): MinecraftServer {
     regionKey: row.regionKey,
     memoryTier: row.memoryTier,
     afkKickMinutes: row.afkKickMinutes,
+    tellPlayers: row.tellPlayers,
     lifecycle: {
       status: row.status,
       stopReason: row.stopReason,

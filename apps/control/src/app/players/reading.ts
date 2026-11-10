@@ -175,6 +175,11 @@ export class PlayerReading {
     return 'failed'
   }
 
+  /** Says `command` to the console for what it does, not for an answer; throws where it gave none. */
+  async say(serverId: string, handle: RuntimeHandle, command: string): Promise<void> {
+    if ((await this.#ask(serverId, handle, command)) === null) throw new Error(`No answer to ${command}`)
+  }
+
   /** One step: the first of its ways the server knows; `failed` where it knows none of them. */
   async #step(serverId: string, handle: RuntimeHandle, ways: readonly string[]): Promise<StepOutcome> {
     for (const command of ways) {

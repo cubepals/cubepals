@@ -72,6 +72,7 @@ import { markNotLoaded } from './servers/persistence.ts'
 import { ServerQueries } from './servers/queries.ts'
 import { MinecraftServerService } from './servers/service.ts'
 import { RuntimeSpecs } from './servers/specs.ts'
+import { TellPlayers } from './servers/tell-players.ts'
 import { ServerTransitions } from './servers/transitions.ts'
 import { ServerWaiter } from './servers/waiter.ts'
 import { SetupService } from './setups/service.ts'
@@ -334,7 +335,7 @@ export function composeControlPlane(ports: ControlPlanePorts, settings: ControlP
     policy,
     transitions,
     specs,
-    servers: Object.assign(servers, { afkKick: new AfkKick(db, events) }),
+    servers: Object.assign(servers, serverChoices(db, events)),
     notices,
     accounts: Object.assign(accounts, { notices: new AccountNotices({ db, accounts }) }),
     accountQueries: new AccountQueries({ db, policy }),
@@ -441,3 +442,8 @@ function withHealthRecords<Parts extends object>(
 }
 
 export type ControlPlane = ReturnType<typeof composeControlPlane>
+
+/** A server's own choices about its players, beside its service: its idle kick, and telling players. */
+function serverChoices(db: Db, events: EventBus) {
+  return { afkKick: new AfkKick(db, events), tellPlayers: new TellPlayers(db, events) }
+}

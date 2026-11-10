@@ -26,6 +26,7 @@ function fixture(status: 'running' | 'stopped', trigger: 'sleep' | 'manual') {
     regionKey: 'local',
     memoryTier: '3g',
     afkKickMinutes: null,
+    tellPlayers: true,
     lifecycle: { status, failure: null, stopReason: status === 'stopped' ? 'idle' : null },
     desiredRevisionId: 'revision',
     activeWorldId: 'world',

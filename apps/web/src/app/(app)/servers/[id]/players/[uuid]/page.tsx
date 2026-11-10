@@ -108,6 +108,7 @@ export default function PlayerPage() {
         serverId={server.id}
         player={p}
         running={running}
+        tellPlayers={server.data.tellPlayers}
         others={(server.data.players?.people ?? []).filter((o) => o.uuid !== p.uuid)}
       />
       <AccessSwitches serverId={server.id} player={p} running={running} />

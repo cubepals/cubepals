@@ -48,6 +48,7 @@ import type { AfkKick } from '../../app/servers/afk-kick.ts'
 import type { OwnerNotices } from '../../app/servers/owner-notices.ts'
 import type { ServerQueries } from '../../app/servers/queries.ts'
 import type { MinecraftServerService } from '../../app/servers/service.ts'
+import type { TellPlayers } from '../../app/servers/tell-players.ts'
 import type { SharingQueries } from '../../app/sharing/queries.ts'
 import type { SharingService } from '../../app/sharing/service.ts'
 import type { StopCheatersService } from '../../app/stop-cheaters/service.ts'
@@ -56,7 +57,7 @@ import type { WorldService } from '../../app/worlds/service.ts'
 
 /** What procedures may call. Each procedure calls exactly one of these methods. */
 export interface Services {
-  servers: MinecraftServerService & { afkKick: AfkKick }
+  servers: MinecraftServerService & { afkKick: AfkKick; tellPlayers: TellPlayers }
   /** A new address goes through here, so its owner hears when someone else gave it. */
   notices: OwnerNotices
   accounts: AccountService
