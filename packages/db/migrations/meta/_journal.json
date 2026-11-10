@@ -813,6 +813,13 @@
       "when": 1794234383679,
       "tag": "0115_kept_inventories",
       "breakpoints": true
+    },
+    {
+      "idx": 116,
+      "version": "7",
+      "when": 1794309562295,
+      "tag": "0116_tell_players",
+      "breakpoints": true
     }
   ]
 }

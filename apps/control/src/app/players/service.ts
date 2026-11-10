@@ -15,9 +15,9 @@ import type { PlayerChangeView, PlayerPower, PlayerView } from '@blockly/contrac
 import { SECOND_MS } from '@blockly/contracts/durations'
 import { type Db, type PlayerSnapshotJson, type Queryable, schema, type Tx } from '@blockly/db'
 import type { MinecraftServer } from '../../domain/server/server.ts'
-import { normalizeUuid } from '../../minecraft/console.ts'
+import { normalizeUuid, tell } from '../../minecraft/console.ts'
 import { powerSteps } from '../../minecraft/player-powers.ts'
-import type { PlayerFacts, PlayerStats } from '../../minecraft/players.ts'
+import { type PlayerFacts, type PlayerStats, safeName } from '../../minecraft/players.ts'
 import { readAccess } from '../access/persistence.ts'
 import { type Actor, authorize, requestedBy } from '../actor.ts'
 import { AppError, NotFound } from '../errors.ts'
@@ -56,6 +56,7 @@ import {
   type WaitingKind,
 } from './persistence.ts'
 import { type ActionOutcome, type PlayerAction, PlayerReading } from './reading.ts'
+import { TOLD_OF_PUT_BACK, toldOfPower, toldOfTrip, toldOnJoin } from './telling.ts'
 
 /** How long a delivery waits for another of the same server's to finish before leaving it to that one. */
 const DELIVERY_WAIT_MS = 30 * SECOND_MS
@@ -68,6 +69,8 @@ interface Delivery {
   handled: string
   stopped: boolean
   said: Record<string, string>
+  /** Of the items handled, the ones the game gave: what the player is told of, not the refused. */
+  given?: string
 }
 
 export class PlayerService {
@@ -214,7 +217,7 @@ export class PlayerService {
         (w) => w.kind === 'clear_inventory',
       )
       if (clearing && kept?.kind === 'give') return this.#keep(actor, server.id, player, kept)
-      return this.#actNow(actor, server.id, handle, { player, here }, power)
+      return this.#actNow(actor, server.id, handle, { player, here, tell: server.tellPlayers }, power)
     }
     if (kept !== null) return this.#keep(actor, server.id, { uuid, name: player?.name ?? name }, kept)
     if (!running) throw new AppError('server_not_running', 'Start the server to do this.')
@@ -229,7 +232,12 @@ export class PlayerService {
     {
       player,
       here,
-    }: { player: { uuid: string; name: string }; here: readonly { uuid: string; name: string }[] },
+      tell,
+    }: {
+      player: { uuid: string; name: string }
+      here: readonly { uuid: string; name: string }[]
+      tell: boolean
+    },
     power: PlayerPower,
   ): Promise<PlayerChangeView> {
     const kept = keptOf(power)
@@ -245,6 +253,7 @@ export class PlayerService {
       // A trip or an emptying done now is the one that waited; items and levels waiting still add.
       if (kept?.kind === 'place' || kept?.kind === 'clear_inventory')
         await dropWaiting(this.#db, serverId, player.uuid, kept.kind)
+      await this.#tellPlayer(serverId, handle, player.name, tell, toldOfPower(power, to?.name))
       return { done: 'now' }
     }
     if (outcome === 'not_on') {
@@ -293,6 +302,7 @@ export class PlayerService {
     const outcome = await this.#kept.putBack(this.#db, server.id, handle, player, keptId)
     if (outcome === 'done') {
       await dropWaiting(this.#db, server.id, uuid, 'put_back')
+      await this.#tellPlayer(server.id, handle, player.name, server.tellPlayers, TOLD_OF_PUT_BACK)
       return { done: 'now' }
     }
     if (outcome === 'not_on') return this.#keep(actor, server.id, player, keep)
@@ -335,7 +345,7 @@ export class PlayerService {
   ) {
     const delivered = await this.#locks
       .hold(deliveriesKey(server.id), DELIVERY_WAIT_MS, (held) =>
-        this.#deliverAll(held, server.id, handle, players),
+        this.#deliverAll(held, server.id, handle, players, server.tellPlayers),
       )
       .catch((error: unknown) => {
         // Another delivery for this server is still at it: it delivers these, or the next reading does.
@@ -364,6 +374,7 @@ export class PlayerService {
     serverId: string,
     handle: RuntimeHandle,
     players: readonly { uuid: string; name: string }[],
+    tell: boolean,
   ): Promise<number> {
     const here = new Map(players.map((p) => [p.uuid, p.name]))
     const waiting = inJoinOrder(await listWaiting(tx, serverId, [...here.keys()]))
@@ -376,6 +387,7 @@ export class PlayerService {
       if (result === 'later' || result.stopped) held.add(action.playerUuid)
       if (result === 'later') continue
       await this.#settle(tx, serverId, { uuid: action.playerUuid, name }, action, result)
+      await this.#tellPlayer(serverId, handle, name, tell, toldOfDelivery(action, result))
       delivered++
     }
     return delivered
@@ -449,6 +461,7 @@ export class PlayerService {
     powers: readonly PlayerPower[],
   ): Promise<Delivery | 'later'> {
     const refused: string[] = []
+    const given: PlayerPower[] = []
     let taken = 0
     const player = { uuid: action.playerUuid, name }
     for (const power of powers) {
@@ -458,11 +471,13 @@ export class PlayerService {
           : await this.#reading.steps(serverId, handle, powerSteps(name, power))
       if (outcome === 'not_on' || outcome === 'failed') break
       if (typeof outcome === 'object') refused.push(outcome.refused)
+      else given.push(power)
       taken++
     }
     if (taken === 0 && powers.length > 0) return 'later'
     return {
       handled: action.kind === 'give' ? itemsOfPowers(powers.slice(0, taken)) : action.what,
+      ...(action.kind === 'give' ? { given: itemsOfPowers(given) } : {}),
       stopped: taken < powers.length,
       said: {
         change: refused.length === taken ? 'dropped_on_join' : 'done_on_join',
@@ -527,6 +542,25 @@ export class PlayerService {
     return { done: 'when_they_join' }
   }
 
+  /** A trip or a mode done now: it replaces what waited for the same, and the player is told. */
+  async #changedNow(
+    server: MinecraftServer,
+    handle: RuntimeHandle,
+    player: { uuid: string; name: string },
+    action: PlayerAction,
+    outcome: Exclude<ActionOutcome, 'not_on' | 'nowhere' | 'failed'>,
+  ): Promise<PlayerChangeView> {
+    await dropWaiting(this.#db, server.id, player.uuid, action.kind)
+    await this.#tellPlayer(server.id, handle, player.name, server.tellPlayers, toldOfChange(action, outcome))
+    return doneNow(outcome, player.name)
+  }
+
+  /** Tells the player in chat what was done to them; best effort, so the action stands without it. */
+  async #tellPlayer(serverId: string, handle: RuntimeHandle, name: string, on: boolean, told: string | null) {
+    if (!on || told === null) return
+    await this.#reading.say(serverId, handle, tell(safeName(name), told)).catch(() => undefined)
+  }
+
   async #change(
     actor: Actor,
     serverId: string,
@@ -556,11 +590,8 @@ export class PlayerService {
             ? `${here.name} hasn’t died on this server yet.`
             : 'This world has no spawn yet.',
         )
-      if (outcome === 'done' || outcome === 'at_spawn' || typeof outcome === 'object') {
-        // What was done now replaces what waited for the same.
-        await dropWaiting(this.#db, server.id, uuid, action.kind)
-        return doneNow(outcome, here.name)
-      }
+      if (outcome === 'done' || outcome === 'at_spawn' || typeof outcome === 'object')
+        return this.#changedNow(server, handle, { uuid, name: here.name }, action, outcome)
     }
     // Away, or the server didn't take it just then: it waits for them, and the page says so.
     await putWaiting(this.#db, server.id, {
@@ -610,6 +641,19 @@ function refusal(power: PlayerPower, answer: string): string {
   if (power.kind === 'teleport' && answer.startsWith('Could not spread'))
     return 'There is nowhere to stand there. Give a height to go anyway.'
   return `Minecraft said: ${answer}`
+}
+
+/** What a player is told of a trip done now (one that ended at the spawn says so); nothing of a mode. */
+function toldOfChange(action: PlayerAction, outcome: ActionOutcome): string | null {
+  if (action.kind !== 'place') return null
+  return toldOfTrip(outcome === 'at_spawn' ? 'spawn' : action.what)
+}
+
+/** What a player just joined is told of one ask done for them; null where they were told nothing. */
+function toldOfDelivery(action: WaitingAction, result: Delivery): string | null {
+  if (result.said.change !== 'done_on_join') return null
+  const what = result.said.instead === 'spawn' ? 'spawn' : (result.given ?? result.handled)
+  return toldOnJoin({ kind: action.kind, what })
 }
 
 /** Why a put back didn't happen, in the owner's words. */

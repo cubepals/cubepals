@@ -10,8 +10,9 @@
  * and an emptied inventory, which asks first and is kept to put back (`kept-inventories.tsx`).
  * Each is done at once while the player is on. For someone away, or a server asleep, a trip,
  * items, levels and an emptying wait for their next join, and the page says what waits
- * (`waiting.tsx`); a heal, a kick and a trip to someone else show only while they play. The commands are the control plane's to build
- * (`minecraft/player-powers.ts`), never typed here.
+ * (`waiting.tsx`); a heal, a kick and a trip to someone else show only while they play. The
+ * player is told in chat what was done, unless the server's Settings turn that off. The commands
+ * are the control plane's to build (`minecraft/player-powers.ts`), never typed here.
  */
 import {
   type DIMENSIONS,
@@ -22,6 +23,7 @@ import {
   shownName,
 } from '@blockly/contracts'
 import { useMutation } from '@tanstack/react-query'
+import Link from 'next/link'
 import { useState } from 'react'
 import { messageOf, useTRPC } from '../../../../../../lib/api'
 import { said, useOutcome } from '../../../../../../lib/outcome'
@@ -68,10 +70,13 @@ export function PlayerPowers({
   player,
   running,
   others,
+  tellPlayers,
 }: {
   serverId: string
   player: PlayerView
   running: boolean
+  /** Whether the player is told in chat what was done to them, as this server's Settings say. */
+  tellPlayers: boolean
   /** Everyone else playing now, for a trip to one of them. */
   others: readonly { name: string; uuid: string }[]
 }) {
@@ -114,6 +119,12 @@ export function PlayerPowers({
         <Kept serverId={serverId} player={player} kind="levels" />
         {on && <Kick serverId={serverId} player={player} />}
       </FormSection>
+      <p className="bk-field__help">
+        {tellPlayers
+          ? `${name} sees a line in chat each time, or as they join for what waited for them. `
+          : `${name} isn’t told in chat. `}
+        <Link href={`/servers/${serverId}/settings`}>Change this in Settings</Link>
+      </p>
     </>
   )
 }

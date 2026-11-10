@@ -32,6 +32,8 @@ export interface MinecraftServer {
   memoryTier: MemoryTier
   /** Idle kick for this server: null uses the plan default, zero never kicks. */
   afkKickMinutes: number | null
+  /** Whether a player is told in chat when the owner acts on them from their page. */
+  tellPlayers: boolean
   lifecycle: Lifecycle
   desiredRevisionId: string
   activeWorldId: string

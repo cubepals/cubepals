@@ -16,15 +16,24 @@ export const LIST_UUIDS = 'list uuids'
  * version Blockly runs reads, the ones that read text as SNBT included.
  */
 export function announce(message: string): string {
-  const text = oneLine(message)
-  const line = {
-    text: '',
-    extra: [
-      { text: '[Cubepals] ', color: 'aqua' },
-      { text, color: 'yellow' },
-    ],
-  }
-  return `tellraw @a ${JSON.stringify(line)}`
+  return `tellraw @a ${JSON.stringify(fromCubepals(message))}`
+}
+
+/** One line from Cubepals, as chat shows it: the name in aqua, the words in yellow. */
+const fromCubepals = (message: string) => ({
+  text: '',
+  extra: [
+    { text: '[Cubepals] ', color: 'aqua' },
+    { text: oneLine(message), color: 'yellow' },
+  ],
+})
+
+/**
+ * A line one player alone sees in chat, from Cubepals, as `announce` says one to everyone; `name`
+ * has been checked as a player's name (`players.ts`'s `safeName`).
+ */
+export function tell(name: string, message: string): string {
+  return `tellraw ${name} ${JSON.stringify(fromCubepals(message))}`
 }
 
 /**

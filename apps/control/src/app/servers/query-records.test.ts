@@ -292,6 +292,7 @@ function runningView(
     createdAt: server.createdAt.toISOString(),
     version: current.version,
     afkKickMinutes: null,
+    tellPlayers: true,
     settings: {
       pvp: true,
       motd: '"Birch Meadow", a server created by Cubepals',

@@ -360,6 +360,9 @@ export const SetAfkKickInput = z.object({
   minutes: z.union([z.literal(0), z.number().int().min(5).max(120)]).nullable(),
 })
 
+/** Whether this server tells a player in chat when its owner acts on them from their page. */
+export const SetTellPlayersInput = z.object({ serverId: ServerId, tell: z.boolean() })
+
 export const ChangeSettingsInput = z.object({ ...change, settings: ServerSettingsInput })
 export const ChangeAuthenticationInput = z.object({ ...change, onlineMode: z.boolean() })
 
@@ -574,6 +577,8 @@ export interface ServerView {
   version: number
   /** Idle kick for this server: null uses the plan default, zero never kicks. */
   afkKickMinutes: number | null
+  /** Whether a player is told in chat when the owner acts on them from their page; on until turned off. */
+  tellPlayers: boolean
   settings: ServerSettingsView
   /** Bedrock players: on or off on Paper or plain Minecraft, no pack; null on others; false if none. */
   bedrock: BedrockView | null | false

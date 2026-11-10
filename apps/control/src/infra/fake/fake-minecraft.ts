@@ -569,9 +569,10 @@ export class FakeMinecraft implements FakeWorkload, ServerConsole, ReadinessProb
         return ''
       }
       case 'tellraw': {
-        // As a player reads it: each part's text, in order. The server logs nothing of it.
+        // As a player reads it, after `to <name>: ` for one: each part's text. The server logs nothing.
         const line = JSON.parse(args.slice(1).join(' ')) as { text?: string; extra?: { text?: string }[] }
-        server.said.push([line, ...(line.extra ?? [])].map((part) => part.text ?? '').join(''))
+        const to = args[0] === '@a' ? '' : `to ${args[0]}: `
+        server.said.push(to + [line, ...(line.extra ?? [])].map((part) => part.text ?? '').join(''))
         return ''
       }
       default:
