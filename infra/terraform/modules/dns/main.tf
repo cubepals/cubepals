@@ -31,7 +31,10 @@ variable "play_challenges" {
   type        = map(object({ name = string, target = string }))
 }
 
-variable "edge_ipv4" { type = string }
+variable "edge_ipv4" {
+  description = "The IPv4 the play names' A records hold: the edge's anycast address, or the one PLAY_IPV4 names."
+  type        = string
+}
 variable "edge_ipv6" { type = string }
 
 variable "realtime_hostname" { type = string }

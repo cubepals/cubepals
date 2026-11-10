@@ -4,16 +4,19 @@
 
 /**
  * Where the edge runs: one machine in each region `edge_regions` lists (config.auto.tfvars.json),
- * fra alone when it lists none. The edge's addresses are anycast, so Fly's proxy hands a player to
- * the nearest of them, and that machine dials the server's Flycast address from there: a North
- * American player on a server in iad stays in North America with an edge in iad, rather than
- * crossing to fra and back. Every edge pulls the same routes, and the control plane waits on each
- * of them before a server reads as running (apps/control/src/app/edge/routed.ts).
+ * fra alone when it lists none. The play names point at the edge's anycast addresses unless the
+ * environment's `PLAY_IPV4` names another IPv4, such as one Fly announces from a single region
+ * (infra/terraform/stack). On the anycast ones Fly's proxy hands a player to the nearest machine,
+ * and that machine dials the server's Flycast address from there: a North American player on a
+ * server in iad stays in North America with an edge in iad, rather than crossing to fra and back.
+ * On a single region's address every IPv4 join enters Fly in that region, wherever the server is.
+ * Every edge pulls the same routes, and the control plane waits on each of them before a server
+ * reads as running (apps/control/src/app/edge/routed.ts).
  *
  * A deploy restarts the edge one region at a time, every machine it has: each region's players
  * are waited on (up to `EDGE_DRAIN_LIMIT_MS`; those still connected then are cut, and counted),
  * its machines are deployed, and the next region waits until they are well, hold the newest routes
- * and, where Bedrock is taken, have Geyser bound. While a region restarts, Fly's anycast sends its
+ * and, where Bedrock is taken, have Geyser bound. While a region restarts, Fly's proxy sends its
  * joins to the others; a few are lost as its machine stops (23 of 336 from one probe on staging).
  * The flyctl calls are production-edge-deploy.ts's; this file decides.
  *

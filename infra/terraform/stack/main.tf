@@ -26,7 +26,7 @@ variable "fly_org" { type = string }
 variable "fly_machine_limit" { type = number }
 
 variable "edge_regions" {
-  description = "The Fly regions the edge runs a machine in (scripts/production-edge.ts puts them there). Its addresses are anycast, so a player reaches the nearest."
+  description = "The Fly regions the edge runs a machine in (scripts/production-edge.ts puts them there). The play names point at its anycast addresses, which reach the nearest, unless PLAY_IPV4 names another IPv4, such as one Fly announces from a single region."
   type        = list(string)
   default     = ["fra"]
   validation {
@@ -38,6 +38,10 @@ variable "edge_regions" {
 variable "settings" {
   description = "Non-secret DeploymentConfig values decided in the repository, by variable name."
   type        = map(string)
+  validation {
+    condition     = lookup(var.settings, "PLAY_IPV4", "") == "" || (can(regex("^(0|[1-9][0-9]{0,2})(\\.(0|[1-9][0-9]{0,2})){3}$", lookup(var.settings, "PLAY_IPV4", ""))) && can(cidrhost("${lookup(var.settings, "PLAY_IPV4", "")}/32", 0)))
+    error_message = "PLAY_IPV4 is empty or an IPv4 address."
+  }
 }
 
 variable "operator_settings" {
@@ -127,9 +131,14 @@ locals {
   realtime_host = var.settings["REALTIME_TLS_HOSTNAME"]
   web_host      = trimprefix(var.settings["WEB_CANONICAL_ORIGIN"], "https://")
   play_domains  = compact(concat([var.settings["PLAY_DOMAIN"]], split(",", lookup(var.settings, "PLAY_DOMAIN_ALIASES", ""))))
-  given         = nonsensitive(toset(keys(var.secrets)))
-  missing       = setsubtract(toset(var.secret_names), local.given)
-  unknown       = setsubtract(local.given, toset(concat(var.secret_names, var.optional_secret_names)))
+  # The IPv4 the play names' A records hold: the edge's own anycast address unless PLAY_IPV4 names
+  # one allocated outside Terraform (`fly ips allocate-v4 --region`), since the provider's fly_ip
+  # takes no region. Terraform's alone, so the control plane isn't given it.
+  play_ipv4      = coalesce(lookup(var.settings, "PLAY_IPV4", ""), module.edge.ipv4)
+  terraform_only = ["PLAY_IPV4"]
+  given          = nonsensitive(toset(keys(var.secrets)))
+  missing        = setsubtract(toset(var.secret_names), local.given)
+  unknown        = setsubtract(local.given, toset(concat(var.secret_names, var.optional_secret_names)))
   # Billing is on with Polar's two secrets and its products, and off with none of them.
   billing_parts = [contains(local.given, "POLAR_ACCESS_TOKEN"), contains(local.given, "POLAR_WEBHOOK_SECRET"), lookup(var.operator_settings, "POLAR_PRODUCTS", "") != ""]
   # An empty setting is left unset, which the control plane reads the same way: Fly keeps no
@@ -142,7 +151,7 @@ locals {
     FLY_PLATFORM_MACHINES = tostring(module.org.platform_machines)
     # The realtime role's DNS-01 challenges go in the zone the stack writes records to.
     CLOUDFLARE_ZONE_ID = var.cloudflare_zone_id
-  }) : name => value if value != "" }
+  }) : name => value if value != "" && !contains(local.terraform_only, name) }
 }
 
 resource "terraform_data" "secrets_complete" {
@@ -199,7 +208,7 @@ module "dns" {
   zone_id             = var.cloudflare_zone_id
   play_domains        = local.play_domains
   play_challenges     = module.edge.play_challenges
-  edge_ipv4           = module.edge.ipv4
+  edge_ipv4           = local.play_ipv4
   edge_ipv6           = module.edge.ipv6
   realtime_hostname   = local.realtime_host
   realtime_ipv4       = module.control.realtime_ipv4
@@ -265,8 +274,9 @@ output "apps" {
   value = module.org.apps
 }
 
+# The edge's own addresses, and the IPv4 the play names hold, which differs when PLAY_IPV4 is set.
 output "edge_addresses" {
-  value = { ipv4 = module.edge.ipv4, ipv6 = module.edge.ipv6 }
+  value = { ipv4 = module.edge.ipv4, ipv6 = module.edge.ipv6, play_ipv4 = local.play_ipv4 }
 }
 
 output "realtime_ipv4" {
