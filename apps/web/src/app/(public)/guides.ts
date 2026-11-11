@@ -53,27 +53,28 @@ export const GUIDES: readonly Guide[] = [
   },
   {
     slug: 'play-minecraft-java-with-friends',
-    title: 'How to play Minecraft: Java Edition with friends',
+    title: 'How to play Minecraft Java with friends: 3 ways',
     description:
-      'The ways to play Minecraft: Java Edition with friends, on the same Wi-Fi or far apart, and which one lets them play when you’re not on.',
+      'Open to LAN on the same Wi-Fi, a hosting mod while you play, or a server friends can join when you’re offline. Which one fits your group.',
     published: '2026-10-10',
     modified: '2026-10-28',
     approved: true,
   },
   {
     slug: 'minecraft-server-cost',
-    title: 'How much does a Minecraft server cost?',
+    title: 'Minecraft server cost: do you have to pay?',
+    heading: 'How much does a Minecraft server cost?',
     description:
-      'What a Minecraft server for friends costs, and why you shouldn’t pay for hours nobody plays. Cubepals starts with a free trial.',
+      'Running a Minecraft server yourself is free. A hosted one costs money: Cubepals starts with a free trial, no card, then a plan for hours of play.',
     published: '2026-10-10',
     modified: '2026-10-10',
     approved: true,
   },
   {
     slug: 'minecraft-server-that-sleeps',
-    title: 'A Minecraft server that starts when someone joins',
+    title: 'Auto-start a Minecraft server when someone joins',
     description:
-      'How to make a Minecraft server start when someone joins: the free self-host tools, and Cubepals, where every server wakes on a join. Java Edition.',
+      'Make a Minecraft server sleep when empty and start on the first join: free tools like lazymc on your own PC, or Cubepals, where every server does it.',
     published: '2026-10-10',
     modified: '2026-10-15',
     approved: true,
@@ -98,9 +99,9 @@ export const GUIDES: readonly Guide[] = [
   },
   {
     slug: 'play-a-modpack-with-friends',
-    title: 'How to play a modpack with your friends',
+    title: 'How to play a Minecraft modpack with friends',
     description:
-      'Play a Minecraft modpack with your friends without installing a server: pick a pack from Modrinth and Cubepals installs all of it. With Plus.',
+      'Pick a Modrinth modpack and Cubepals installs all of it on a server: mods, settings and all. Friends install the same pack and join. With Plus.',
     published: '2026-10-10',
     modified: '2026-10-11',
     approved: true,
@@ -116,18 +117,18 @@ export const GUIDES: readonly Guide[] = [
   },
   {
     slug: 'minecraft-server-uk-europe',
-    title: 'A Minecraft server for friends in the UK and Europe',
+    title: 'UK and EU Minecraft server, hosted in Frankfurt',
     description:
-      'Cubepals runs servers in Frankfurt for friends in the UK, Ireland, the Netherlands, the Nordics and the rest of Europe, and in Virginia for the US.',
+      'No UK region: friends in the UK, Ireland and the rest of Europe play on Cubepals servers in Frankfurt, picked from where you are. Virginia for the US.',
     published: '2026-10-10',
     modified: '2026-10-11',
     approved: true,
   },
   {
     slug: 'lifesteal-manhunt-skyblock-with-friends',
-    title: 'How to play Lifesteal, Manhunt and Skyblock with friends',
+    title: 'Play Lifesteal, Manhunt or Skyblock with friends',
     description:
-      'What Lifesteal, Manhunt and Skyblock are, and how to start a server for each one with your friends, who join with plain Minecraft. For Java Edition.',
+      'Start a Lifesteal, Manhunt or Skyblock server by picking the mode and naming it. Friends join with plain Minecraft, nothing to install. For Java Edition.',
     published: '2026-10-10',
     modified: '2026-10-11',
     approved: true,
@@ -144,10 +145,10 @@ export const GUIDES: readonly Guide[] = [
   },
   {
     slug: 'aternos-alternative',
-    title: 'An Aternos alternative for friends on Java',
+    title: 'Aternos alternative that starts when friends join',
     heading: 'Cubepals and Aternos compared',
     description:
-      'How Cubepals and Aternos differ for a group of friends on Minecraft: how a server starts, what’s free, and where Aternos is the better choice.',
+      'Cubepals and Aternos for friends on Minecraft: a server that wakes when a friend joins, a free trial with no card, and where Aternos is the better pick.',
     published: '2026-10-23',
     modified: '2026-10-23',
     approved: true,

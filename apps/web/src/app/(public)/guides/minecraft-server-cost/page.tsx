@@ -55,8 +55,15 @@ export default async function Guide() {
   return (
     <GuideArticle slug={SLUG}>
       <p className="type-body">
-        What a Minecraft server for a group of friends costs comes down to how much you play, how many of you
-        there are, and whether you want mods. This guide is for Minecraft: Java Edition.
+        You don’t have to pay to play on a server with friends. Running one on your own computer is free, and
+        Cubepals starts with{' '}
+        {free ? `a free trial of ${hoursSaid(free)}, with no card` : 'a free trial, with no card'}. A server
+        that’s there when you aren’t costs money after that
+        {paid
+          ? `: ${paid.name} is ${priceOf(paid.monthlyPriceCents)} with ${paid.includedHours} hours of play`
+          : ''}
+        . What you pay comes down to how much you play, how many of you there are, and whether you want mods.
+        This guide is for Minecraft: Java Edition.
       </p>
 
       <Part id="paying-for" title="What you’re paying for">
