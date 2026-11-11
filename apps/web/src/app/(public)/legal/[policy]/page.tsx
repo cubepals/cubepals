@@ -12,6 +12,7 @@ import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import styles from '../../../../legal/legal.module.css'
 import { hrefOf, POLICIES, policyAt } from '../../../../legal/policies'
+import { numbered } from '../../../../legal/policy'
 import { Blocks, plain, Sentence } from '../../../../legal/prose'
 import { pageMetadata } from '../../../../lib/site'
 
@@ -38,6 +39,7 @@ const dated = new Date(`${TERMS_VERSION}T00:00:00Z`).toLocaleDateString('en-GB',
 export default async function PolicyPage({ params }: Params) {
   const policy = policyAt((await params).policy)
   if (policy === undefined) notFound()
+  const ids = policy.sections.map((section) => section.id)
   return (
     <div className={styles.layout}>
       <article className={styles.document}>
@@ -52,26 +54,26 @@ export default async function PolicyPage({ params }: Params) {
           <ul className="type-body">
             {policy.summary.map((line) => (
               <li key={line}>
-                <Sentence text={line} />
+                <Sentence text={line} ids={ids} />
               </li>
             ))}
           </ul>
         </section>
-        {policy.sections.map((section) => (
+        {policy.sections.map((section, at) => (
           <section key={section.id} id={section.id} className={`type-body ${styles.section}`}>
             <h2 className="type-heading-md">
-              <Sentence text={section.heading} />
+              <Sentence text={numbered(section.heading, at)} />
             </h2>
-            <Blocks blocks={section.blocks} />
+            <Blocks blocks={section.blocks} ids={ids} />
           </section>
         ))}
       </article>
       <nav className={styles.contents} aria-label="Contents">
         <p className="type-heading-xs">Contents</p>
         <ol className="type-body-sm">
-          {policy.sections.map((section) => (
+          {policy.sections.map((section, at) => (
             <li key={section.id}>
-              <a href={`#${section.id}`}>{plain(section.heading)}</a>
+              <a href={`#${section.id}`}>{plain(numbered(section.heading, at))}</a>
             </li>
           ))}
         </ol>

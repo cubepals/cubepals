@@ -5,7 +5,8 @@
 /**
  * What a policy is made of, for the pages that show one. A policy is sections of blocks; a block
  * is a paragraph, a list, numbered steps or a small table, and each sentence in one may use the
- * markup `inline.ts` reads. Not for the words themselves: each policy is its own file.
+ * markup `inline.ts` reads. A section's number is its place in the policy, never typed. Not for
+ * the words themselves: each policy is its own file.
  */
 export type Block =
   | string
@@ -16,6 +17,7 @@ export type Block =
 interface Section {
   /** The anchor the section is linked by: `/legal/terms#plans`. */
   id: string
+  /** Its heading without a number: the page puts the number in front (`numbered`). */
   heading: string
   blocks: readonly Block[]
 }
@@ -30,3 +32,6 @@ export interface Policy {
   summary: readonly string[]
   sections: readonly Section[]
 }
+
+/** A section's heading as the page shows it, numbered by its place (from 0) in its policy. */
+export const numbered = (heading: string, at: number): string => `${at + 1}. ${heading}`

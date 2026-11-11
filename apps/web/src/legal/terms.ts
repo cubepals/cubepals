@@ -36,7 +36,7 @@ export const TERMS: Policy = {
   sections: [
     {
       id: 'who',
-      heading: '1. Who we are',
+      heading: 'Who we are',
       blocks: [
         '{brand} is a Minecraft: Java Edition server host. You create a server, pick what to play, share its address, and your friends join. {brand} is run by {name}, based in {country} (“we”, “us”), not by a company. We have no office or company in the UK or the EU. We take notices by email, at {legal}.',
         'You can reach us at {support}. Write to {legal} for legal notices and to {privacy} about your personal data.',
@@ -45,16 +45,16 @@ export const TERMS: Policy = {
     },
     {
       id: 'service',
-      heading: '2. The service',
+      heading: 'The service',
       blocks: [
         'With {brand} you can run Minecraft: Java Edition servers. Each server gets an address like yourserver.{playDomain} that your friends type into Minecraft. A server starts when someone joins and sleeps when nobody is playing.',
-        'We pick most things for you: where a server runs, how big it is, and how it is set up. You can change many of these later. We may change how the service works behind the scenes, as long as what you pay for stays the same or gets better. If we ever remove something you pay for, section 13 says what happens.',
+        'We pick most things for you: where a server runs, how big it is, and how it is set up. You can change many of these later. We may change how the service works behind the scenes, as long as what you pay for stays the same or gets better. If we ever remove something you pay for, {§suspension} says what happens.',
         'We run the service with reasonable care and skill, but it is not guaranteed to be available at every moment. Servers depend on hosting providers, on Mojang’s services and on the internet, and sometimes we need to stop things for maintenance. We don’t promise any particular uptime.',
       ],
     },
     {
       id: 'accounts',
-      heading: '3. Your account, and the 18+ rule',
+      heading: 'Your account, and the 18+ rule',
       blocks: [
         '**You must be 18 or over to create or use a {brand} account.** By creating one, you confirm that you are. We record which version of these Terms you agreed to, and when.',
         'People who only join someone’s server to play don’t need a {brand} account. The account holder who runs a server is responsible for who they invite to it.',
@@ -66,7 +66,7 @@ export const TERMS: Policy = {
     },
     {
       id: 'plans',
-      heading: '4. Plans and hours',
+      heading: 'Plans and hours',
       blocks: [
         `**Free** costs nothing. It includes ${FREE.totalHours} hours of play once, not every month, with no daily limit, on ${FREE.maxServers} server, plain Minecraft (vanilla or Paper without plugins), and the limits shown on the [Pricing](/pricing) page.`,
         `**${PLUS.name}** costs ${dollars(PLUS.priceCents)} a month, VAT included where it applies. It includes ${PLUS.hours} hours of play each month on up to ${PLUS.maxServers} servers, mods, plugins and modpacks, and the other things the [Pricing](/pricing) page lists. It renews every month until you cancel.`,
@@ -80,27 +80,27 @@ export const TERMS: Policy = {
     },
     {
       id: 'payment',
-      heading: '5. Paying, and who takes the payment',
+      heading: 'Paying, and who takes the payment',
       blocks: [
         'Payments are handled by Polar (polar.sh), which acts as our reseller and merchant of record. That means Polar sells you the plan on our behalf, charges your card, works out and pays the VAT or sales tax, and sends your receipts. Polar’s buyer terms apply to the payment itself. We never see or store your card details.',
         'Before your plan starts, the checkout page asks you to agree to these Terms and to ask for your plan to start straight away. We record that you did.',
-        `If a renewal payment fails, you keep ${PLUS.name} for ${PAST_DUE_GRACE_DAYS} days while you update your card under Manage billing on your account page. After that your account moves to Free (section 6 says what that means for your servers). If that payment included extra hours and is still unpaid, your servers can’t start until it is paid; you can still download your worlds.`,
+        `If a renewal payment fails, you keep ${PLUS.name} for ${PAST_DUE_GRACE_DAYS} days while you update your card under Manage billing on your account page. After that your account moves to Free ({§idle} says what that means for your servers). If that payment included extra hours and is still unpaid, your servers can’t start until it is paid; you can still download your worlds.`,
         `You can also chip in to a friend’s server from its page or an invitation, from ${dollars(CHIP_IN_CENTS.min)}. It is a single payment to us, not a subscription and not a payment to the server’s owner. What you pay becomes hours of play on that server at ${dollars(EXTRA_HOUR_CENTS)} an hour, played once its owner has used their hours for that month, carried ones included, before any extra hours they would pay for. The owner sees your name and the hours you chipped in.`,
         '[Refunds and cancellation](/legal/refunds) explains how to cancel, refunds in the first 14 days, stopping a year early, chip-ins, and when we give other refunds.',
       ],
     },
     {
       id: 'idle',
-      heading: '6. Sleep, idle time and when a plan ends',
+      heading: 'Sleep, idle time and when a plan ends',
       blocks: [
         `To keep your hours for real play, a server stops a set time after the last player leaves: ${FREE.sleepsAfterMinutes} minutes on Free and ${PLUS.sleepsAfterMinutes} on ${PLUS.name}. Before it stops, it saves the world and then shuts Minecraft down. A player who stands still for ${AFK_KICK_MINUTES} minutes is removed from the game, so one idle player doesn’t keep a server awake. On ${PLUS.name} the account holder can change that.`,
         'Saving before a stop is something we always try to do, but it can’t be guaranteed in every case. For example, if a server crashes, if the machine it runs on fails, or if Minecraft doesn’t answer, it may stop without saving, and whatever was played since its last save can be lost.',
-        `When ${PLUS.name} ends (because you cancelled, a payment failed and wasn’t fixed, or a year you paid for ran out), your account moves to Free. Nothing is deleted at that moment. Servers that need ${PLUS.name} (mods, plugins, modpacks, larger sizes, or more servers than Free allows) stop and wait, whole, until you have ${PLUS.name} again or you change them to fit Free. From then on Free’s rules apply to your worlds, including the one-year rule in section 7.`,
+        `When ${PLUS.name} ends (because you cancelled, a payment failed and wasn’t fixed, or a year you paid for ran out), your account moves to Free. Nothing is deleted at that moment. Servers that need ${PLUS.name} (mods, plugins, modpacks, larger sizes, or more servers than Free allows) stop and wait, whole, until you have ${PLUS.name} again or you change them to fit Free. From then on Free’s rules apply to your worlds, including the one-year rule in {§worlds}.`,
       ],
     },
     {
       id: 'worlds',
-      heading: '7. What happens to worlds over time',
+      heading: 'What happens to worlds over time',
       blocks: [
         {
           list: [
@@ -116,16 +116,16 @@ export const TERMS: Policy = {
     },
     {
       id: 'backups',
-      heading: '8. Backups (and what we can’t promise)',
+      heading: 'Backups (and what we can’t promise)',
       blocks: [
         `Each time a server goes to sleep after people played on it, we take a backup of it as they left it; a server that plays on without sleeping is backed up about once a day. We take another before changes like a version change, a restore or a move. Free keeps the latest ${FREE.backupsKept} backups taken after play, ${PLUS.name} the latest ${PLUS.backupsKept}, and ${PLUS.name} also keeps a weekly download. A backup is a copy of the server at one moment, so restoring one loses whatever was played after it.`,
         '**Backups are there to help, not a guarantee.** We use reasonable care to keep your worlds safe, but storage and hosting can fail, and a backup can be missing or damaged. If a world matters to you, download a copy regularly and keep it somewhere of your own.',
-        'If we lose or damage your world because we didn’t use reasonable care and skill, we will restore the most recent good backup we have, and you keep your legal rights described in section 14.',
+        'If we lose or damage your world because we didn’t use reasonable care and skill, we will restore the most recent good backup we have, and you keep your legal rights described in {§liability}.',
       ],
     },
     {
       id: 'acceptable-use',
-      heading: '9. Using {brand} fairly',
+      heading: 'Using {brand} fairly',
       blocks: [
         'You agree to follow our [Acceptable Use Policy](/legal/acceptable-use). In short: only run Minecraft on {brand}, don’t break the law, don’t attack anyone or anything, don’t try to get around your plan’s limits, and keep anything you list publicly suitable for everyone.',
         'You are responsible for your servers and what happens on them, including what you upload, the mods and plugins you install, and the people you let in.',
@@ -133,7 +133,7 @@ export const TERMS: Policy = {
     },
     {
       id: 'minecraft',
-      heading: '10. Minecraft, Mojang and Microsoft',
+      heading: 'Minecraft, Mojang and Microsoft',
       blocks: [
         '**{brand} is not an official Minecraft service. It is not approved by or associated with Mojang or Microsoft.** “Minecraft” is a trademark of Mojang. We use it only to say what {brand} runs.',
         'Every server runs Minecraft’s server software under [Mojang’s End User License Agreement](https://www.minecraft.net/eula) (EULA). We download that software from Mojang for each server. By creating a server, you accept the EULA for it, and you agree to follow it and [Mojang’s Usage Guidelines](https://www.minecraft.net/usage-guidelines). Among other things these mean:',
@@ -149,7 +149,7 @@ export const TERMS: Policy = {
     },
     {
       id: 'content',
-      heading: '11. Your content, mods and other people’s work',
+      heading: 'Your content, mods and other people’s work',
       blocks: [
         'Your worlds, builds, server names, descriptions, icons and uploads belong to you (or to whoever made them). You give us permission to store, copy, run, back up and display them only as needed to run {brand} for you: for example to host your world, take backups, and show your listing to others if you publish it. That permission ends when the content is deleted from {brand}, except for backups and copies that are deleted on their normal schedule.',
         'Mods, plugins and modpacks belong to their authors and are used under their own licences. When you install one, {brand} downloads it for your server from where its author published it (such as Modrinth). We don’t own them, we don’t check every licence for you, and we don’t promise that any mod works, keeps working, or stays available. If you upload files yourself, you must have the right to use them.',
@@ -158,7 +158,7 @@ export const TERMS: Policy = {
     },
     {
       id: 'listings',
-      heading: '12. Public listings and moderation',
+      heading: 'Public listings and moderation',
       blocks: [
         'Servers are private until you choose to publish one. A published server gets a public page and may appear in the server directory. Its page shows its name, description, icon, version and mods, how many players are on, and, if it checks accounts, the Minecraft names of the players on right now. People signed in to {brand} can star a server and leave a short note on it.',
         'A server with Stop cheaters on can remove a player automatically when its cheat check sees moves or data the game can’t make. Where the server’s owner uses the moderation tools, it can also ban that player from the server for a while if it keeps happening. The owner can lift the ban.',
@@ -167,7 +167,7 @@ export const TERMS: Policy = {
     },
     {
       id: 'suspension',
-      heading: '13. Suspending or closing accounts',
+      heading: 'Suspending or closing accounts',
       blocks: [
         'You can stop using {brand} at any time. To close your account and delete your data, email {support} from the address on your account. Cancel any paid plan first (see [Refunds and cancellation](/legal/refunds)).',
         'We may limit, suspend or close an account, or stop a server, if we reasonably believe that:',
@@ -176,7 +176,7 @@ export const TERMS: Policy = {
             'it breaks these Terms or the Acceptable Use Policy in a serious way, or keeps breaking them after we have asked you to stop;',
             'it puts other players, the service or our providers at risk (for example an attack, malware or a server that harms our machines);',
             'we have to because of the law, a court, the police, or a valid notice from a rights holder;',
-            'the account holder is under 18 (section 3).',
+            'the account holder is under 18 ({§accounts}).',
           ],
         },
         'Where we can, we tell you first, say why, and give you a chance to fix it. In urgent cases we act first and explain afterwards. When we restrict something we will tell you which rule it was and how to ask us to look again.',
@@ -185,7 +185,7 @@ export const TERMS: Policy = {
     },
     {
       id: 'liability',
-      heading: '14. Our responsibility to you',
+      heading: 'Our responsibility to you',
       blocks: [
         '**Nothing in these Terms takes away rights you have by law.** If you are a consumer in the UK or the EU, you have legal rights in relation to services and digital services that are not provided as described or with reasonable care and skill: for example to have the problem put right, to a price reduction, or to end the contract. Your local consumer advice service can tell you more.',
         'If we break these Terms or are negligent, we are responsible for loss or damage you suffer that was a foreseeable result of that. Loss is foreseeable if it was obvious it would happen, or if we both knew it might happen when you agreed to these Terms. We are not responsible for loss that wasn’t foreseeable.',
@@ -196,7 +196,7 @@ export const TERMS: Policy = {
     },
     {
       id: 'changes',
-      heading: '15. Changes to these Terms',
+      heading: 'Changes to these Terms',
       blocks: [
         'We may change these Terms, for example when the service changes, when the law changes, or to make them clearer. The date at the top of each page says when it last changed.',
         'If a change matters to you, we will email you at least 30 days before it takes effect, unless the law or a security risk makes us change something sooner. If you don’t agree with the change, you can stop using {brand} and close your account before it takes effect, and if you pay for a plan, cancel it and get a refund for any time you paid for after the change. If you keep using {brand} after the change takes effect, the new Terms apply.',
@@ -204,7 +204,7 @@ export const TERMS: Policy = {
     },
     {
       id: 'law',
-      heading: '16. Law and disputes',
+      heading: 'Law and disputes',
       blocks: [
         'If you have a problem, please write to {support} first. Most things can be sorted out quickly.',
         'These Terms are governed by {law}. If you are a consumer, you also keep the protection of the mandatory laws of the country where you live, and you can bring a claim in the courts of that country.',

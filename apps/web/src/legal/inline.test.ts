@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { describe, expect, test } from 'bun:test'
-import { piecesOf, plainOf } from './inline.ts'
+import { piecesOf, plainOf, sectionCalled } from './inline.ts'
 
 describe('a policy sentence', () => {
   test('reads its links, emphasis and tokens, and leaves the rest as text', () => {
@@ -28,5 +28,16 @@ describe('a policy sentence', () => {
     expect(plainOf('{brand} by {name}: [Terms](/legal/terms)', (t) => `<${t}>`)).toBe(
       '<brand> by <name>: Terms',
     )
+  })
+
+  test('a {§id} is a reference to a section, said by its place in its policy', () => {
+    expect(piecesOf('As {§chip-in} says.')).toEqual([
+      { kind: 'text', text: 'As ' },
+      { kind: 'section', id: 'chip-in' },
+      { kind: 'text', text: ' says.' },
+    ])
+    expect(plainOf('See {§b}.', (t) => t, ['a', 'b'])).toBe('See section 2.')
+    expect(sectionCalled(['a', 'b', 'c'], 'a')).toBe('section 1')
+    expect(() => sectionCalled(['a', 'b'], 'c')).toThrow()
   })
 })
