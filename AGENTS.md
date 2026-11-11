@@ -113,13 +113,27 @@ What keeps an agent with that access from making work for the maintainer:
 - **Only what is true.** A pull request or commit says what changed and how it was checked. It never claims an approval, review or authorization nobody gave, and never says a check passed that didn't run.
 - **Stuck is a report, not a loop.** After three tries at the same failure, stop pushing: write down what fails, what was tried and what it looks like, and ask.
 
+## Money
+
+Code that charges, refunds, ends or cancels what a person paid for is held to more than the rest: `apps/control/src/app/billing/`, `apps/control/src/infra/polar/`, `apps/control/src/domain/account/`, the billing tables, and the pages that take a payment. Whoever changes it checks each rule below before opening the pull request and says in it which applied. A reviewer checks each again.
+
+- **Every charge is accounted for.** What ends, cancels or refunds a purchase finds every order that paid for it: the first, a change of plan or price charged at once, a renewal. Each is included or left out for a stated reason, on the page, in the amount and in what the operators are told. Nothing paid is ended without its refund being asked for. A new call to the provider says what a cancel does with what it charges (`billing/charges.test.ts` doesn't compile until it does).
+- **Decide on what is read under the lock.** A check made before a call to the provider, or before a lock is taken, is made again inside the transaction, on rows read there. What arrived in between, a refund or a second request, refuses or changes the answer.
+- **Nothing leaves before the commit unless its failure is handled.** A call to the provider made before the transaction that records it has its failure afterwards reported with the ids, and a retry that works and is tested. An email sent inside a transaction says in its comment that it is sent at least once, and why that is the safer side.
+- **One way to retry.** What couldn't be sent is marked in the database and sent by the billing pass (`standing-sweep`). The provider's delivery never fails because of an email.
+- **A pass isn't held by its head.** A periodic pass that takes the oldest rows can't be filled by rows that will never succeed: they are passed over, or said once.
+- **Once says what counts.** A rule that holds once per person, per order or per account says what counts toward it and what doesn't (a correction, a duplicate, something that never started), with a test for each.
+- **What stops is judged again.** Whatever stops something paid for names every account it moved, and their limits are judged at once, not at the next pass.
+- **One amount, said one way.** The page, the emails and what is kept say the same amount, in the order's currency, through the same function.
+- **Both sides of each line are tested,** and a spy shows that nothing pays money out. No new path pays money out unless the pull request's title says it does.
+
 ## Code Review Rules
 
 What a reviewer of a pull request here reports, Codex's GitHub review included, and what the second eye's Claude checks too (`.github/second-eye.md`). Only what was checked against the code and is wrong:
 
 - **Bugs:** wrong behaviour, broken edge cases, races, errors swallowed.
 - **Security:** access checks, secrets, injection, untrusted input.
-- **Data or money:** data lost or corrupted, migrations, billing, hours.
+- **Data or money:** data lost or corrupted, migrations, billing, hours. On a change to the code [Money](#money) names, each of its rules, one by one.
 - **This guide's rules:** the core rule, the name rules, the structure rules, and business internals put anywhere public.
 
 Never praise, a summary of the diff, style, or anything CI already reports.
