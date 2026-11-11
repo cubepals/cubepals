@@ -273,7 +273,9 @@ db('an upgrade paid inside the 14 days is cancelled and refunded with the first 
   const upgrade = await changed(owner, sub, 420)
 
   const also = [{ order: upgrade, title: 'the upgrade to Plus', paidCents: 420 }]
-  expect(await withdrawals().list(owner)).toMatchObject([{ order, paidCents: 1419, refundCents: 1419, also }])
+  expect(await withdrawals().list(owner)).toMatchObject([
+    { order, paidCents: 1419, refundCents: 1419, currency: 'usd', also },
+  ])
   // Past the line, the hours played are counted against the plan the subscription sells now.
   await played(owner, 35)
   const refund = 1419 - Math.floor((1419 * 35) / HOURS)

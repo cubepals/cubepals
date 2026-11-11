@@ -9,6 +9,7 @@
  * money is mail a person must see. Not here: when each is sent (`billing/purchase-confirmation.ts`,
  * `billing/withdrawals.ts`), or what the operator is told (`admins.ts`).
  */
+import { orderMoney } from '@blockly/contracts'
 import { ACCOUNT, type Email, esc, link, p, plain } from '../emails.ts'
 
 /** A day and a time, in UTC, as a receipt says it: "11 November 2026 at 14:05 UTC". */
@@ -25,11 +26,8 @@ export const whenSaid = (at: Date): string => `${WHEN.format(at).replace(', ', '
 
 const DAY = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'long', timeZone: 'UTC' })
 
-/** Money as the order states it: "$15.00", or "EUR 12.00" in another currency. */
-export function money(cents: number, currency: string): string {
-  const code = currency.toUpperCase()
-  return code === 'USD' ? `$${(cents / 100).toFixed(2)}` : `${code} ${(cents / 100).toFixed(2)}`
-}
+/** Money as the order states it, said as the account page says it (`orderMoney`). */
+export const money = orderMoney
 
 /** A letter's lines, then its links, in both parts. */
 function letter(subject: string, lines: string[], links: Array<{ label: string; url: string }>): Email {

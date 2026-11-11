@@ -12,7 +12,7 @@
  * be cancelled and what it gives back is the control plane's (`billing.cancellable`); it pays
  * nothing out.
  */
-import type { WithdrawalView } from '@blockly/contracts'
+import { orderMoney, type WithdrawalView } from '@blockly/contracts'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Check } from 'lucide-react'
 import Link from 'next/link'
@@ -22,8 +22,8 @@ import { OPERATOR } from '../../../legal/operator'
 import { messageOf, useTRPC } from '../../../lib/api'
 import { ActionButton, Button, FormRow, FormSection, ICON, Modal, Note } from '../../../ui'
 
-/** Money, as people write it: "$4.20". */
-const money = (cents: number) => `$${(cents / 100).toFixed(2)}`
+/** An amount of a purchase, in the currency its order charged, as its emails say it. */
+const money = (purchase: WithdrawalView, cents: number) => orderMoney(cents, purchase.currency)
 
 /** "11 Nov 2026". */
 const dayOf = (at: string) =>
@@ -71,13 +71,13 @@ function why(purchase: WithdrawalView): string {
 const includes = (purchase: WithdrawalView) =>
   purchase.also.length === 0
     ? ''
-    : ` That includes ${purchase.also.map((other) => `${other.title} (${money(other.paidCents)}, ${dayOf(other.boughtAt)})`).join(' and ')}.`
+    : ` That includes ${purchase.also.map((other) => `${other.title} (${money(purchase, other.paidCents)},${dayOf(other.boughtAt)})`).join(' and ')}.`
 
 /** What comes back, as the Refunds page's rule gives it now. */
 const comesBack = (purchase: WithdrawalView) =>
   purchase.refundCents === purchase.paidCents
-    ? `You get everything back: ${money(purchase.paidCents)}${why(purchase)}.${includes(purchase)}`
-    : `You get back ${money(purchase.refundCents)} of the ${money(purchase.paidCents)} you paid${why(purchase)}.${includes(purchase)}`
+    ? `You get everything back: ${money(purchase, purchase.paidCents)}${why(purchase)}.${includes(purchase)}`
+    : `You get back ${money(purchase, purchase.refundCents)} of the ${money(purchase, purchase.paidCents)} you paid${why(purchase)}.${includes(purchase)}`
 
 /** Nothing at all when nothing of the last 14 days can be cancelled, or was. */
 export function CancelPurchase({ email }: { email: string }) {
@@ -103,7 +103,7 @@ export function CancelPurchase({ email }: { email: string }) {
           description={
             purchase.requestedAt === null
               ? `Bought on ${dayOf(purchase.boughtAt)}. You can cancel it until ${dayOf(purchase.until)}. ${comesBack(purchase)}`
-              : `Cancelled on ${momentOf(purchase.requestedAt)}. Your refund of ${money(purchase.refundCents)} follows within 14 days, to the payment method you used. We emailed you a confirmation.`
+              : `Cancelled on ${momentOf(purchase.requestedAt)}. Your refund of ${money(purchase, purchase.refundCents)} follows within 14 days, to the payment method you used. We emailed you a confirmation.`
           }
           control={
             purchase.requestedAt === null ? (

@@ -316,6 +316,7 @@ function viewOf(
     until: purchase.until.toISOString(),
     paidCents: amount.paidCents,
     refundCents: amount.refundCents,
+    currency: purchase.currency,
     also: also.map((other) => ({
       order: other.order,
       title: alsoTitle(purchase, other),
