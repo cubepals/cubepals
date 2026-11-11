@@ -65,6 +65,7 @@ import {
 } from './production-edge.ts'
 import { buildEdgeImage, machinesOf, rollEdgeApp } from './production-edge-deploy.ts'
 import { missing, type Part, REQUIREMENTS, whyNot } from './production-guard.ts'
+import { besideTheWebsite } from './production-route.ts'
 import { bringUpToDate } from './production-tfvars.ts'
 import {
   backendConfig,
@@ -82,7 +83,7 @@ import {
   VALUES_FILE,
   valuesFile,
 } from './production-values.ts'
-import { appsFor, changedFor, type FlyApp, flyInputs, reachesWebsite, terraformIn } from './production-web.ts'
+import { appsFor, changedFor, type FlyApp, reachesWebsite, terraformIn } from './production-web.ts'
 import { deployChecked, productionSite, rollbackWebsite } from './production-website.ts'
 import { isNightly, nextVersion, repositoryTags } from './versions.ts'
 
@@ -500,14 +501,12 @@ async function web(): Promise<void> {
     say('Only main’s latest commit goes to production. Check out main and pull it.')
     process.exit(1)
   }
-  const changed = changedSinceLive()
   // What the website deploys into (its Worker, cache bucket and routes) is Terraform's.
-  const terraform = terraformIn(changed)
+  const { terraform, fly } = besideTheWebsite(changedSinceLive())
   if (terraform.length > 0) {
     say(`Since the last deploy, Terraform changed too (${terraform.slice(0, 3).join(', ')}): run apply.`)
     process.exit(1)
   }
-  const fly = flyInputs(changed)
   if (fly.length > 0) {
     say(
       `Since the last deploy, what the Fly apps are built from changed too (${fly.slice(0, 5).join(', ')}).`,

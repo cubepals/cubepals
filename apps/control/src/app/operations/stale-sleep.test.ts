@@ -5,7 +5,8 @@
 /**
  * A server asleep whose wake would boot: the wake says which part of its resume key changed, and
  * the `stale-sleep` pass refreshes it first, in the background, so the player's own wake resumes.
- * What it leaves alone, how often, and a join that arrives while it refreshes. Against the fake
+ * What it leaves alone, how often, a join that arrives while it refreshes, and memory kept so long
+ * the provider may have dropped it unseen. Against the fake
  * runtime with its sleeps switched on, as FLY_SUSPEND switches Fly's.
  */
 import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test'
@@ -16,7 +17,7 @@ import { and, desc, eq } from 'drizzle-orm'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
 import type { UserActor } from '../actor.ts'
 import { loadRevision } from '../servers/persistence.ts'
-import { AGAIN_MS } from './schedules/stale-sleep.ts'
+import { AGAIN_MS, KEPT_MS } from './schedules/stale-sleep.ts'
 import { IDLE_GRACE_MS, WAKE_PROBATION_MS } from './schedules.ts'
 
 const operations = schema.serverOperations
@@ -156,6 +157,52 @@ describe.skipIf(!hasDatabase)('stale-sleep', () => {
     expect(await pass({ now: new Date(Date.now() + AGAIN_MS + HOUR_MS) })).toBe(1)
     await h.until(id, 'running')
     await h.settled(id)
+  }, 90_000)
+
+  test('memory kept past a day isn’t counted on: dropped unseen, it is found before the player’s wake', async () => {
+    const { owner, id } = await running()
+    await asleep(owner, id)
+    const refreshed = async () => (await lastStart(id)).key.startsWith('start:refresh:')
+    // The provider drops what it kept, and goes on reading the machine asleep: nothing to read of it.
+    h.runtime.sleeps.drop(id)
+    expect(h.runtime.machine(id)?.state).toBe('suspended')
+    await pass({ limit: 50, now: new Date(Date.now() + KEPT_MS - HOUR_MS) })
+    expect(await refreshed()).toBe(false)
+    expect((await h.server(id)).lifecycle.status).toBe('stopped')
+
+    // A boot that takes longer than a resume is given to answer, as a real one does.
+    h.minecraft.bootTakes(11_000)
+    try {
+      expect(await pass({ limit: 50, now: new Date(Date.now() + KEPT_MS + HOUR_MS) })).toBeGreaterThan(0)
+      await h.until(id, 'running', 30_000)
+    } finally {
+      h.minecraft.bootTakes(0)
+    }
+    await h.settled(id)
+    expect(await refreshed()).toBe(true)
+    // The refresh is the start that found the memory gone, with nobody waiting for its boot.
+    expect((await lastStart(id)).steps).toEqual(expect.arrayContaining(['resuming', 'booting']))
+
+    await sleepsUnjoined(id)
+    expect(resumed(await wake(owner, id))).toBe(true)
+  }, 120_000)
+
+  test('memory still there after a day is resumed, kept again, and left for another day', async () => {
+    const { owner, id } = await running()
+    await asleep(owner, id)
+    expect(await pass({ limit: 50, now: new Date(Date.now() + KEPT_MS + HOUR_MS) })).toBeGreaterThan(0)
+    await h.until(id, 'running')
+    await h.settled(id)
+    const refresh = await lastStart(id)
+    expect(refresh.key).toStartWith('start:refresh:')
+    expect(resumed(refresh.steps)).toBe(true)
+
+    // Asleep again on memory just kept: nothing to refresh until that is a day old too.
+    await sleepsUnjoined(id)
+    const before = (await lastStart(id)).key
+    await pass({ limit: 50, now: new Date(Date.now() + AGAIN_MS + HOUR_MS) })
+    expect((await lastStart(id)).key).toBe(before)
+    expect(resumed(await wake(owner, id))).toBe(true)
   }, 90_000)
 
   test('a player who joins while it refreshes plays, and it stays up for them', async () => {
