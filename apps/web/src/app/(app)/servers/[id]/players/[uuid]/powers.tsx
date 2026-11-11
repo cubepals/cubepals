@@ -389,11 +389,7 @@ function ClearInventory(props: PowerProps) {
   return (
     <div className="bk-stack" style={{ gap: 'var(--space-8)' }}>
       {/* A button as the other powers' are; the red one is in the question it asks first. */}
-      <Button
-        {...power.words('Cleared')}
-        disabled={power.pending}
-        onClick={() => setAsking(true)}
-      >
+      <Button {...power.words('Cleared')} disabled={power.pending} onClick={() => setAsking(true)}>
         Clear inventory
       </Button>
       <Failed error={power.error} />
