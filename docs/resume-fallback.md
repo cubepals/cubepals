@@ -115,6 +115,12 @@ in a moment", and a plain message ends the hold.
 
 ## What is left open
 
+- Nothing reads whether a suspended machine still has its snapshot: Fly reports it `suspended`
+  either way, and the start that finds it gone launches the machine afresh. What bounds it is
+  time: `stale-sleep` refreshes a server whose memory has been kept for a day
+  ([waking.md](waking.md#a-sleep-over-hours-and-days)), so a snapshot dropped before that is
+  found with nobody waiting. One dropped since the last refresh is still the joining player's
+  boot (rung 2).
 - A wake whose log can't be read can't be told apart from a frozen one, so it is left to boot as
   before. A boot that is running but whose output takes more than 10 s to show up is killed and
   started once more. That is harmless, because nothing has loaded the world yet.
