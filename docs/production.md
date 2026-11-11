@@ -160,6 +160,10 @@ If `blockly-web` or `blockly-web-cache` was made by hand before Terraform made t
 
 ### A fix that can't wait for the nightly
 
+Most can wait twenty minutes: Deploy production's `ship now` ([Deploy from GitHub](#deploy-from-github))
+runs the nightly at once and deploys it when it passes, with staging and every check. For one that
+can't, or one main can't take yet:
+
 ```sh
 bun scripts/production.ts hotfix
 ```
@@ -212,8 +216,11 @@ Once production exists, it deploys from the **Deploy production** workflow
 (`.github/workflows/deploy-production.yml`) on GitHub's machine, so no deploy depends on one
 person's disk: Actions → Deploy production → Run workflow. `apply` deploys a nightly, the newest
 or the one named in `version`, exactly as `bun scripts/production.ts apply` does from a checkout;
-`rollback`, `rollback website` and `rollback fly` are the rollbacks of [Going back](#going-back).
-It ends by asking production for its pages. One runs at a time. It leaves the Database dump
+`ship now` is the hot path: it starts a nightly of main's newest commit, ticking the Nightly
+workflow's `production` box, and that nightly starts `apply` for its own tag once it passes on
+staging, so one click ships main in about twenty minutes. `rollback`, `rollback website` and
+`rollback fly` are the rollbacks of [Going back](#going-back). It ends by asking production for its
+pages. One deploy runs at a time. It leaves the Database dump
 workflow's secrets as they are (`--keep-dump-secrets`); a change to those values goes through
 `apply` from a checkout.
 
@@ -245,6 +252,7 @@ production deploys from this workflow.
 
 ```sh
 gh workflow run deploy-production.yml -f command=apply             # the newest nightly
+gh workflow run deploy-production.yml -f "command=ship now"        # a nightly of main now, then production
 gh workflow run deploy-production.yml -f command=apply -f version=v0.1.110-nightly.20261028.120
 gh workflow run deploy-production.yml -f command=rollback
 gh run watch
