@@ -67,7 +67,6 @@ function KeptOne({
       ) : (
         <div>
           <Button
-            variant="ghost"
             size="sm"
             {...said(outcome, { done: 'Put back', failed: 'Didn’t work' })}
             disabled={putBack.isPending}
