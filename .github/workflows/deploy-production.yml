@@ -43,16 +43,17 @@ jobs:
   # The hot path, by the road main's newest commit takes from what production runs
   # (scripts/production-route.ts, from main's guard):
   # - prose and tests alone deploy nothing, and the run says so;
-  # - the website alone waits until its commit is proved (CI passed and a preview answered, on it
-  #   or on a pull request head with its tree), then the deploy job below deploys the website alone;
-  # - everything else goes through staging now, rather than tonight: a nightly of main's newest
-  #   commit, which starts this workflow's `apply` when it passes.
+  # - the website alone, when its commit is proved (a pull request head with its tree passed CI and
+  #   its preview answered), goes to the deploy job below, which deploys the website alone;
+  # - everything else, and a website change that isn't proved, goes through staging now rather
+  #   than tonight: a nightly of main's newest commit, which starts this workflow's `apply` when it
+  #   passes.
   # It opens nothing of production's.
   ship-now:
     name: "Production: ship now"
     if: inputs.command == 'ship now'
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 10
     permissions:
       contents: read
       actions: write
@@ -60,7 +61,7 @@ jobs:
       statuses: read
       pull-requests: read
     outputs:
-      route: ${{ steps.route.outputs.route }}
+      route: ${{ steps.website.outputs.proved == 'true' && 'website' || steps.route.outputs.route }}
       commit: ${{ steps.route.outputs.commit }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -84,22 +85,22 @@ jobs:
           COMMIT: ${{ steps.route.outputs.commit }}
         run: |
           echo "Since what production runs, main changed only prose and tests: nothing to deploy for ${COMMIT:0:8}." | tee -a "$GITHUB_STEP_SUMMARY"
-      # Proved at once when the merged pull request was up to date with main; otherwise once main's
-      # CI and staging's website deploy have run on the commit, about fifteen minutes.
-      - name: The website's commit is proved
+      - name: Whether the website's commit is proved
+        id: website
         if: steps.route.outputs.route == 'website'
         env:
           GH_TOKEN: ${{ github.token }}
           COMMIT: ${{ steps.route.outputs.commit }}
         run: |
-          for _ in $(seq 1 70); do
-            bun "$RUNNER_TEMP/guard/scripts/production-guard.ts" proven "$COMMIT" && exit 0
-            sleep 30
-          done
-          echo "::error::${COMMIT:0:8} wasn't proved in 35 minutes: look at main's CI and Website on staging."
-          exit 1
+          if bun "$RUNNER_TEMP/guard/scripts/production-guard.ts" proven "$COMMIT"; then
+            echo "proved=true" >> "$GITHUB_OUTPUT"
+            echo "The website alone goes: ${COMMIT:0:8} is proved." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "proved=false" >> "$GITHUB_OUTPUT"
+            echo "${COMMIT:0:8} changes the website alone, but no pull request head with its tree is proved: it takes the nightly." >> "$GITHUB_STEP_SUMMARY"
+          fi
       - name: A nightly of main's newest commit, and production once it passes
-        if: steps.route.outputs.route != 'none' && steps.route.outputs.route != 'website'
+        if: steps.route.outputs.route != 'none' && steps.website.outputs.proved != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |

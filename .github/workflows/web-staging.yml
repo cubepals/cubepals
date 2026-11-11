@@ -49,8 +49,6 @@ jobs:
     timeout-minutes: 20
     permissions:
       contents: read
-      # Main's commit gets the same proof a preview does, once staging answers with it.
-      statuses: write
     # One deploy at a time, in the order the pushes came. A run waiting behind another starts when
     # it is its turn, finds a newer push and ends green; none is cancelled while it deploys.
     concurrency:
@@ -92,21 +90,6 @@ jobs:
       - name: Ask staging for its pages
         if: steps.newest.outputs.stale != 'true'
         run: bun scripts/site-check.ts https://staging.cubepals.com 180
-      # The proof Deploy production's website route reads (scripts/production-guard.ts), for main's
-      # commit itself: a squash merge whose pull request wasn't up to date has a tree no preview ran.
-      - name: Prove staging answers with this commit
-        if: steps.newest.outputs.stale != 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          if bun scripts/site-check.ts https://staging.cubepals.com 180 --proof; then
-            gh api --silent "repos/$GITHUB_REPOSITORY/statuses/$GITHUB_SHA" -f state=success \
-              -f "context=Website preview answers" \
-              -f "description=staging: /, /pricing, /sign-in, /browse and /_next/image answer 200" \
-              -f "target_url=https://staging.cubepals.com"
-          else
-            echo "::warning::Staging didn't answer 200 everywhere, so Deploy production's website route won't take this commit."
-          fi
 
   preview:
     name: Preview the website on staging
@@ -234,13 +217,15 @@ jobs:
           echo "::warning::The preview comment couldn't say how the preview went."
       # What Deploy production's website route takes as proof (scripts/production-guard.ts): the
       # commit's own version answers 200 on each page and on a picture through /_next/image, as
-      # CLAUDE.md asks of a preview. A preview that doesn't leaves the status unset, and that commit
-      # takes the full road. From the base branch's scripts, as the comment is.
+      # CLAUDE.md asks of a preview. Asked at the commit's address, which serves the version uploaded
+      # for it and nothing else, never at the pull request's or staging's, which a later deploy can
+      # move. A preview that doesn't answer leaves the status unset, and that commit takes the full
+      # road. From the base branch's scripts, as the comment is.
       - name: Prove the preview answers
-        if: ${{ !cancelled() && steps.upload.outputs.url != '' && steps.fresh.outputs.current == 'true' }}
+        if: ${{ !cancelled() && steps.upload.outputs.commit_url != '' && steps.fresh.outputs.current == 'true' }}
         env:
           GH_TOKEN: ${{ github.token }}
-          URL: ${{ steps.upload.outputs.commit_url || steps.upload.outputs.url }}
+          URL: ${{ steps.upload.outputs.commit_url }}
         run: |
           if bun .preview-tools/scripts/site-check.ts "$URL" 180 --proof; then
             gh api --silent "repos/$REPO/statuses/$SHA" -f state=success -f "context=Website preview answers" \

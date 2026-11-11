@@ -127,7 +127,10 @@ function refuse(lines: readonly string[]): never {
 
 const rev = (spec: string) => git(HERE, 'rev-parse', '--verify', '--quiet', spec).stdout.trim()
 
-/** The commit status web-staging.yml sets once a preview answers 200 on the pages and a picture. */
+/**
+ * The commit status web-staging.yml sets on a pull request's head once the version uploaded for that
+ * commit, at its own address, answers 200 on the pages and a picture.
+ */
 export const PREVIEW_PROOF = 'Website preview answers'
 
 /** GitHub's API through gh, as this run's token reads it; one answer a line. */
@@ -182,7 +185,7 @@ function website(version: string, main: string): string {
   if (proof === undefined)
     refuse([
       `Neither ${commit.slice(0, 8)} nor a pull request head with its tree has passed CI with its preview answering.`,
-      `Wait for main's CI and staging's website deploy on it (\`${PREVIEW_PROOF}\`), then run again.`,
+      `A website change that isn't proved takes the nightly: ship now chooses it (\`${PREVIEW_PROOF}\`).`,
     ])
   say(`Deploying the website from ${commit}, proved by CI and the preview on ${proof.slice(0, 8)}.`)
   return commit
