@@ -253,6 +253,19 @@ db('a year ends now, and the refund that follows moves its end no further', asyn
   ])
 })
 
+db('a year cancelled before it starts isn’t the once, paid back or not', async () => {
+  const owner = await w.h.user('Hal')
+  const first = await w.paidYear(owner, { created_at: new Date(Date.now() - 2 * DAY_MS).toISOString() })
+  const queued = await w.paidYear(owner, { created_at: new Date().toISOString() })
+  expect(await withdrawals().request(owner, queued)).toMatchObject({ rule: 'unstarted', refundCents: 15000 })
+  const held = w.orders.get(queued)
+  if (held === undefined) throw new Error('no order')
+  await w.post(orderEvent({ ...held, status: 'refunded', refunded_amount: 15000 }, 'order.refunded'))
+
+  expect(await withdrawals().request(owner, first)).toMatchObject({ rule: 'full', refundCents: 15000 })
+  expect(await kept(first)).toMatchObject([{ earlierFull: false }])
+})
+
 /** A gift of a month of Plus the buyer paid for today, kept as its paid order makes it; and its code. */
 async function giftBought(buyer: UserActor) {
   const order = `gift-${randomUUID()}`

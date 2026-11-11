@@ -200,9 +200,11 @@ export async function assess(q: Queryable, purchase: Purchase, now: Date): Promi
  * Whether the account had everything back on another purchase of time on a plan, which a person
  * has once: one cancelled here under the line (`rule: full`), or one the provider refunded in full,
  * as a refund through support arrives, its refund reaching what the order earned before tax (as
- * `monthsKept` counts it). A purchase refunded in part doesn't count, nor does a gift nobody
- * redeemed or a chip-in, which come back whole or by their unplayed share whatever came before,
- * nor a second subscription's charge given back (`stoppedAsSecond`), which no withdrawal is.
+ * `monthsKept` counts it). A purchase cancelled here counts by the rule its request kept, whatever
+ * is paid for it after: time that hadn't started comes back whole and isn't the once. A purchase
+ * refunded in part doesn't count, nor does a gift nobody redeemed or a chip-in, which come back
+ * whole or by their unplayed share whatever came before, nor a second subscription's charge given
+ * back (`stoppedAsSecond`), which no withdrawal is.
  */
 async function hadFullRefund(
   q: Queryable,
@@ -210,21 +212,16 @@ async function hadFullRefund(
   userId: string,
   purchase: Pick<Purchase, 'externalOrderId'>,
 ): Promise<boolean> {
-  const [asked] = await q
-    .select({ order: withdrawals.externalOrderId })
+  const asked = await q
+    .select({ order: withdrawals.externalOrderId, rule: withdrawals.rule })
     .from(withdrawals)
-    .where(
-      and(
-        eq(withdrawals.userId, userId),
-        eq(withdrawals.rule, 'full'),
-        ne(withdrawals.externalOrderId, purchase.externalOrderId),
-      ),
-    )
-    .limit(1)
-  if (asked !== undefined) return true
+    .where(and(eq(withdrawals.userId, userId), ne(withdrawals.externalOrderId, purchase.externalOrderId)))
+  if (asked.some((request) => request.rule === 'full')) return true
   const others = (await purchasesOf(q, provider, { userId })).filter(
     (other) =>
       other.externalOrderId !== purchase.externalOrderId &&
+      // Cancelled here: its request's rule, read above, says whether it was the once.
+      !asked.some((request) => request.order === other.externalOrderId) &&
       timeOnPlan(other) &&
       other.netCents > 0 &&
       other.refundedCents >= other.netCents,
