@@ -30,6 +30,14 @@ describe('a policy sentence', () => {
     )
   })
 
+  test('what stands out is read too: a token or a section inside ** ** is filled in', () => {
+    const say = (t: string) => `<${t}>`
+    expect(plainOf('**{brand} is not official.** Ask {support}.', say)).toBe(
+      '<brand> is not official. Ask <support>.',
+    )
+    expect(plainOf('**See {§b}.**', say, ['a', 'b'])).toBe('See section 2.')
+  })
+
   test('a {§id} is a reference to a section, said by its place in its policy', () => {
     expect(piecesOf('As {§chip-in} says.')).toEqual([
       { kind: 'text', text: 'As ' },

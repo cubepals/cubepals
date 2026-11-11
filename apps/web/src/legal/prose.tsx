@@ -87,7 +87,11 @@ function PieceOf({ piece, ids }: { piece: Piece; ids: readonly string[] }): Reac
     case 'text':
       return piece.text
     case 'strong':
-      return <strong>{piece.text}</strong>
+      return (
+        <strong>
+          <Sentence text={piece.text} ids={ids} />
+        </strong>
+      )
     case 'link':
       return piece.href.startsWith('/') ? (
         <Link href={piece.href}>{piece.text}</Link>
