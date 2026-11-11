@@ -333,3 +333,29 @@ test.skipIf(!hasDatabase)('a renewal refunded in full, tax on top, no longer cou
   await renewal(700)
   expect((await billingFacts(w.h.db, owner.userId)).paidRenewals).toBe(1)
 })
+
+// Last here: it ends a subscription at the provider, which the tests above count none of.
+test.skipIf(!hasDatabase)(
+  'a second subscription’s charge given back isn’t the full refund a person has once',
+  async () => {
+    const owner = await w.h.user('Quin')
+    const first = randomUUID()
+    const second = randomUUID()
+    const earlier = new Date(Date.now() - 10 * MINUTE_MS)
+    await paying(owner, [listed(first, earlier)])
+    const bought = await w.ordered(owner, first, { created_at: earlier.toISOString() })
+    const charged = await w.ordered(owner, second, { created_at: new Date().toISOString() })
+    await paying(owner, [listed(second, new Date()), listed(first, earlier)])
+    const duplicate = w.orders.get(charged)
+    if (duplicate === undefined) throw new Error('no order')
+    await w.post(
+      orderEvent(
+        { ...duplicate, status: 'refunded', refunded_amount: duplicate.net_amount },
+        'order.refunded',
+      ),
+    )
+
+    // Cancelling the purchase they kept, with nothing played, is still their first time.
+    expect(await w.h.app.billing.withdrawals.request(owner, bought)).toMatchObject({ rule: 'full' })
+  },
+)

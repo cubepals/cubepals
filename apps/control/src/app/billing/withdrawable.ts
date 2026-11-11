@@ -23,6 +23,7 @@ import { type WithdrawalRule, type Withdrawn, withdrawalAmount } from '../../dom
 import { meteredUnitsSince, pendingDraws } from './chip-in-meter.ts'
 import { WITHDRAWAL_MS } from './ending.ts'
 import { PAID_ORDER } from './persistence.ts'
+import { stoppedAsSecond } from './second-subscriptions.ts'
 
 const orders = schema.billingOrders
 const years = schema.planYears
@@ -200,7 +201,8 @@ export async function assess(q: Queryable, purchase: Purchase, now: Date): Promi
  * has once: one cancelled here under the line (`rule: full`), or one the provider refunded in full,
  * as a refund through support arrives, its refund reaching what the order earned before tax (as
  * `monthsKept` counts it). A purchase refunded in part doesn't count, nor does a gift nobody
- * redeemed or a chip-in, which come back whole or by their unplayed share whatever came before.
+ * redeemed or a chip-in, which come back whole or by their unplayed share whatever came before,
+ * nor a second subscription's charge given back (`stoppedAsSecond`), which no withdrawal is.
  */
 async function hadFullRefund(
   q: Queryable,
@@ -220,14 +222,19 @@ async function hadFullRefund(
     )
     .limit(1)
   if (asked !== undefined) return true
-  const others = await purchasesOf(q, provider, { userId })
-  return others.some(
+  const others = (await purchasesOf(q, provider, { userId })).filter(
     (other) =>
       other.externalOrderId !== purchase.externalOrderId &&
       timeOnPlan(other) &&
       other.netCents > 0 &&
       other.refundedCents >= other.netCents,
   )
+  for (const other of others) {
+    // A second subscription's charge given back is a correction, not a refund the person had.
+    const sub = other.kind === 'plan' ? other.externalSubscriptionId : null
+    if (sub === null || !(await stoppedAsSecond(q, userId, sub))) return true
+  }
+  return false
 }
 
 /** A purchase of time on a plan: a first month, a year, or a gift somebody redeemed. */
