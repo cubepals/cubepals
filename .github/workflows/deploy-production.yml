@@ -164,7 +164,11 @@ jobs:
           curl -fsSL -o "$RUNNER_TEMP/terraform.zip" https://releases.hashicorp.com/terraform/1.17.0/terraform_1.17.0_linux_amd64.zip
           echo "c168cab7c637a8769fdb90089ddd19de701bc6ff8aca64dc2e2185fe46f59f67  $RUNNER_TEMP/terraform.zip" | sha256sum -c -
           sudo unzip -oq "$RUNNER_TEMP/terraform.zip" terraform -d /usr/local/bin
-          sudo apt-get update -qq && sudo apt-get install -y -qq age
+          # age from its own release, checked as Terraform is: Ubuntu's mirror going away for a
+          # while must not stop a deploy.
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/age.tar.gz" https://github.com/FiloSottile/age/releases/download/v1.2.1/age-v1.2.1-linux-amd64.tar.gz
+          echo "7df45a6cc87d4da11cc03a539a7470c15b1041ab2b396af088fe9990f7c79d50  $RUNNER_TEMP/age.tar.gz" | sha256sum -c -
+          sudo tar -xzf "$RUNNER_TEMP/age.tar.gz" -C /usr/local/bin --strip-components=1 age/age
           terraform version && age --version
       - run: bun install --frozen-lockfile
       - name: Production's values, from the private records
