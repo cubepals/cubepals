@@ -6,8 +6,9 @@ name: Deploy production
 
 # Production deployed from GitHub's machine, so no deploy depends on one person's disk
 # (docs/production.md § Deploy from GitHub). `apply` takes a nightly that passed on staging through
-# `bun scripts/production.ts apply`; `ship now` starts a nightly of main's newest commit, which
-# starts `apply` for itself once it passes; the rollbacks put back what the last deploy changed. The
+# `bun scripts/production.ts apply`; `ship now` takes the road main's guard finds for main's newest
+# commit (§ Routes): nothing for prose and tests alone, otherwise a nightly of it, which starts
+# `apply` for itself once it passes; the rollbacks put back what the last deploy changed. The
 # values are production.env and config.auto.tfvars.json, taken from the encrypted bundle in the
 # private records repository with the age key this environment holds; nothing else of it is opened.
 #
@@ -39,17 +40,43 @@ permissions:
   contents: read
 
 jobs:
-  # The hot path: main's newest commit through staging now, rather than tonight, then here. It
-  # opens nothing of production's; the nightly starts this workflow's `apply` when it passes.
+  # The hot path, by the road main's newest commit takes from what production runs
+  # (scripts/production-route.ts, from main's guard). Prose and tests alone deploy nothing, and the
+  # run says so. Everything else goes through staging now, rather than tonight, then here: a
+  # nightly of main's newest commit, which starts this workflow's `apply` when it passes. It opens
+  # nothing of production's.
   ship-now:
     name: "Production: ship now"
     if: inputs.command == 'ship now'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
+      contents: read
       actions: write
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.3
+      - name: Main's guard, and the road main's newest commit takes
+        id: route
+        env:
+          WORKFLOW_SHA: ${{ github.workflow_sha }}
+        run: |
+          main=$(git rev-parse --verify 'refs/remotes/origin/main^{commit}')
+          git worktree add --quiet --detach "$RUNNER_TEMP/guard" "$main"
+          bun "$RUNNER_TEMP/guard/scripts/production-guard.ts" route
+      - name: Nothing to deploy
+        if: steps.route.outputs.route == 'none'
+        env:
+          COMMIT: ${{ steps.route.outputs.commit }}
+        run: |
+          echo "Since what production runs, main changed only prose and tests: nothing to deploy for ${COMMIT:0:8}." | tee -a "$GITHUB_STEP_SUMMARY"
       - name: A nightly of main's newest commit, and production once it passes
+        if: steps.route.outputs.route != 'none'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |

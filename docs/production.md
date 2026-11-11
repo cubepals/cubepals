@@ -216,9 +216,10 @@ Once production exists, it deploys from the **Deploy production** workflow
 (`.github/workflows/deploy-production.yml`) on GitHub's machine, so no deploy depends on one
 person's disk: Actions → Deploy production → Run workflow. `apply` deploys a nightly, the newest
 or the one named in `version`, exactly as `bun scripts/production.ts apply` does from a checkout;
-`ship now` is the hot path: it starts a nightly of main's newest commit, ticking the Nightly
-workflow's `production` box, and that nightly starts `apply` for its own tag once it passes on
-staging, so one click ships main in about twenty minutes. `rollback`, `rollback website` and
+`ship now` is the hot path: it takes the road main's newest commit needs ([Routes](#routes)), which
+for most changes is a nightly of main's newest commit, ticking the Nightly workflow's `production`
+box, that starts `apply` for its own tag once it passes on staging, so one click ships main in
+about twenty minutes. `rollback`, `rollback website` and
 `rollback fly` are the rollbacks of [Going back](#going-back). It ends by asking production for its
 pages. One deploy runs at a time. It leaves the Database dump
 workflow's secrets as they are (`--keep-dump-secrets`); a change to those values goes through
@@ -270,6 +271,36 @@ workflow's two secrets:
 | `DEPLOY_GITHUB_TOKEN` | A fine-grained token. On this repository: Contents and Workflows, read and write; Actions, read. On the private records: Contents, read |
 
 An agent runs it as well when a maintainer asks for a deploy ([AGENTS.md](../AGENTS.md#production)).
+
+### Routes
+
+`ship now` first asks main's guard which road main's newest commit takes
+(`bun scripts/production-guard.ts route`). The guard compares the commit with the `production`
+branch, which names what production runs, and gives each changed path an area by the first rule it
+matches in `scripts/production-route.ts`. Both sides of a rename count. The rules, in order:
+
+| Paths | Area |
+|---|---|
+| Tests (`*.test.ts`, `*.test.tsx`) | none |
+| `packages/` (migrations included), any `package.json`, `bun.lock`, `bunfig.toml` | full |
+| `infra/terraform/`, `.github/workflows/`, `scripts/`, `apps/web/wrangler.jsonc` | full |
+| What a Fly image is built from, as its Dockerfile copies it, with its Dockerfile and Fly config | control (control and realtime), edge, or full when it reaches both |
+| The rest of `apps/web/` | website |
+| Prose: `docs/`, `brand/`, `LICENSES/`, `*.md`, `REUSE.toml`, `CITATION.cff`, `.github/settings/` and the issue and pull request templates | none |
+| Anything else | full |
+
+A change whose paths are all `none` is the `none` route; one whose other paths share one area takes
+that area's route; any other change, or one the guard can't compare with production, is `full`.
+What isn't known to be narrow takes the whole road.
+
+| Route | What `ship now` does |
+|---|---|
+| `none` | Deploys nothing, and says so in the run's summary |
+| `full` | A nightly of main's newest commit, then `apply` for its tag: everything, as before |
+| `website`, `control`, `edge` | The same as `full` |
+
+The run's summary lists each area it found with its paths, so the reason for the road is on the
+run. The Nightly still runs every night on main, whatever road a change took.
 
 ## 4. Check it
 

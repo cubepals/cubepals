@@ -53,11 +53,23 @@ function repository() {
   const old = commit(dir, {
     [WORKFLOW]: 'old steps\n',
     'infra/terraform/stack/main.tf': 'locals {}\n',
+    // The guard runs with this as its HOME, where bun keeps its cache.
+    '.gitignore': '.bun/\n',
   })
   git(dir, 'tag', 'v0.1.1-nightly.20261101.1')
   mkdirSync(join(dir, 'scripts'))
-  for (const file of ['production-guard.ts', 'production-plan-review.ts', 'versions.ts'])
+  for (const file of [
+    'production-guard.ts',
+    'production-plan-review.ts',
+    'production-route.ts',
+    'production-web.ts',
+    'versions.ts',
+  ])
     copyFileSync(join(import.meta.dir, file), join(dir, 'scripts', file))
+  for (const file of ['apps/control/Dockerfile', 'apps/edge/Dockerfile']) {
+    mkdirSync(dirname(join(dir, file)), { recursive: true })
+    copyFileSync(join(import.meta.dir, '..', file), join(dir, file))
+  }
   const current = commit(dir, {
     'infra/terraform/stack/main.tf': readFileSync(
       join(import.meta.dir, '../infra/terraform/stack/main.tf'),
@@ -72,7 +84,8 @@ function repository() {
 
 /** Runs the guard's CLI from `dir`, as the workflow does; returns its exit code, output and GITHUB_OUTPUT. */
 function guard(dir: string, args: string[], env: Record<string, string> = {}) {
-  const output = join(dir, 'github-output')
+  // Inside .git, so that a test's next commit doesn't take it in.
+  const output = join(dir, '.git/github-output')
   writeFileSync(output, '')
   const run = Bun.spawnSync([process.execPath, join(dir, 'scripts/production-guard.ts'), ...args], {
     cwd: dir,
@@ -140,6 +153,52 @@ describe('run: what a run deploys', () => {
   test("a rollback runs main's own code", () => {
     const { dir, main } = repository()
     expect(guard(dir, ['run', 'rollback fly', ''], { WORKFLOW_SHA: main }).output).toBe(`commit=${main}\n`)
+  })
+})
+
+describe('route: the road main’s newest commit takes', () => {
+  /** Production as running `commit`, as the workflow's fetch names it. */
+  const live = (dir: string, commit: string) =>
+    git(dir, 'update-ref', 'refs/remotes/origin/production', commit)
+
+  test('an old run started again is refused here too', () => {
+    const { dir, old } = repository()
+    const { code, said } = guard(dir, ['route'], { WORKFLOW_SHA: old })
+    expect(code).toBe(1)
+    expect(said).toContain("isn't main's")
+  })
+
+  test('without what production runs to compare with, it is the whole road', () => {
+    const { dir, main } = repository()
+    const { code, said, output } = guard(dir, ['route'], { WORKFLOW_SHA: main })
+    expect(code).toBe(0)
+    expect(said).toContain('couldn’t be compared')
+    expect(output).toBe(`route=full\ncommit=${main}\n`)
+  })
+
+  test('a change of prose deploys nothing; one of the website and the control plane takes the whole road', () => {
+    const { dir } = repository()
+    const before = git(dir, 'rev-parse', 'HEAD')
+    live(dir, before)
+    const docs = commit(dir, { 'docs/x.md': 'words\n' })
+    expect(guard(dir, ['route'], { WORKFLOW_SHA: docs }).output).toBe(`route=none\ncommit=${docs}\n`)
+    const web = commit(dir, { 'apps/web/src/page.tsx': 'x\n' })
+    expect(guard(dir, ['route'], { WORKFLOW_SHA: web }).output).toBe(`route=website\ncommit=${web}\n`)
+    const both = commit(dir, { 'apps/control/src/main.node.ts': 'x\n' })
+    const { said, output } = guard(dir, ['route'], { WORKFLOW_SHA: both })
+    expect(output).toBe(`route=full\ncommit=${both}\n`)
+    expect(said).toContain('  website: apps/web/src/page.tsx')
+  })
+
+  test('a file moved out of a package counts as the package’s', () => {
+    const { dir } = repository()
+    commit(dir, { 'packages/contracts/src/a.ts': 'x\n' })
+    live(dir, git(dir, 'rev-parse', 'HEAD'))
+    mkdirSync(join(dir, 'docs'))
+    git(dir, 'mv', 'packages/contracts/src/a.ts', 'docs/a.md')
+    git(dir, 'commit', '-q', '-m', 'move')
+    const moved = git(dir, 'rev-parse', 'HEAD')
+    expect(guard(dir, ['route'], { WORKFLOW_SHA: moved }).output).toBe(`route=full\ncommit=${moved}\n`)
   })
 })
 
