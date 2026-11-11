@@ -118,8 +118,8 @@ No machine words above the turn. The lines follow the project's copy rules (say 
 claim that can't be shown, cut before adding).
 
 **Everything on it is true.** A demonstration simulates, and says so in the one line under it. The
-strings are the product's own. A number that belongs to a plan comes from the plan table through
-`/api/public/plans`; any other is a constant with the file it came from beside it. No
+strings are the product's own. A number that belongs to a plan comes from `pricedPlans` (`lib/plans.ts`):
+what a new subscriber is offered now, or the plan table's own where that can't be read; any other is a constant with the file it came from beside it. No
 timings as promises. No other company is named. What isn't live is marked as being built, and a
 drawing that could be taken for a count says it is a drawing.
 

@@ -54,6 +54,10 @@
         "!**/apps/web/src/lib/chosen-files.ts",
         "!**/apps/web/src/lib/chosen-files.test.ts"
       ]
+    },
+    {
+      "path": "./apps/web/plan-figures.grit",
+      "includes": ["**/apps/web/src/**", "!**/apps/web/src/lib/plans.ts", "!**/apps/web/src/**/*.test.ts"]
     }
   ],
   "overrides": [

@@ -6,19 +6,13 @@
  * The plan facts the policies state, as they stood on the policies' date (`TERMS_VERSION`). The
  * Terms are an agreement, so they say these in words that don't move with every reading of the
  * plan table; `scripts/legal-figures.test.ts` holds them to the table the control plane enforces,
- * so a plan that changes fails the test until the policies (and their date) change with it.
+ * so a plan that changes fails the test until the policies (and their date) change with it. Not a
+ * plan's price or its hours a month, which move with what a new subscriber is offered: the
+ * policies point to the Pricing and checkout pages for those, and state no such figure.
  */
 export interface PlanFigures {
   name: string
-  /** Price a month in US cents, VAT included where it applies. */
-  priceCents: number
-  /** Price of a year paid at once, which never renews on its own; null: not sold by the year. */
-  yearPriceCents: number | null
-  /** Hours of play included each month, or once (`per`); a large server spends two an hour, the largest four. */
-  hours: number
-  /** Whether the hours come every month, from the player's midnight on the 1st, or once, to play on any day. */
-  per: 'month' | 'once'
-  /** Hours of play included once, in all, to play on any day; null: none. */
+  /** Hours of play included once, in all, to play on any day; null: none. A large server spends two an hour, the largest four. */
   totalHours: number | null
   /** The most of a month's unused hours that carry into the next month, once; null: none carry. */
   carryHours: number | null
@@ -39,10 +33,6 @@ export interface PlanFigures {
 
 export const FREE: PlanFigures = {
   name: 'Free',
-  priceCents: 0,
-  yearPriceCents: null,
-  hours: 20,
-  per: 'once',
   totalHours: 20,
   carryHours: null,
   maxServers: 1,
@@ -56,10 +46,6 @@ export const FREE: PlanFigures = {
 
 export const PLUS: PlanFigures = {
   name: 'Plus',
-  priceCents: 2500,
-  yearPriceCents: 25000,
-  hours: 120,
-  per: 'month',
   totalHours: null,
   carryHours: 50,
   maxServers: 3,

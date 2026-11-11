@@ -4,7 +4,7 @@
 
 /**
  * The guide to how much a Minecraft server costs. Every price, hour and limit is
- * rendered from the plan table, and the play habits from the plan cards' own guidance, so nothing
+ * rendered from the plans as the pricing page states them (`guidePlans`), and the play habits from the plan cards' own guidance, so nothing
  * here can drift from what the pricing page says. The picture is from a local stack, and its alt
  * text names no number.
  */

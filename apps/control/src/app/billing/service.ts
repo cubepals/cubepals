@@ -8,6 +8,7 @@ import {
   type PublicOffer,
   sameSitePath,
   type UpgradeReason,
+  yearSold,
 } from '@blockly/contracts'
 import { type Db, schema } from '@blockly/db'
 import { eq } from 'drizzle-orm'
@@ -50,6 +51,7 @@ import { auditRenewal, ExtraUsage } from './extra-usage.ts'
 import { Gifts, giftsAfterPaidTime } from './gifts.ts'
 import { Overpayments } from './overpaid.ts'
 import { OwedPayments } from './owed-payments.ts'
+import { installOffers } from './paid-offered.ts'
 import {
   billingFacts,
   latestSubscription,
@@ -68,6 +70,7 @@ import {
   upgradeInPlace,
 } from './plan-moves.ts'
 import { refundSecondCharge, stopSecondSubscriptions } from './second-subscriptions.ts'
+import { shownOffersOf } from './shown-offers.ts'
 import {
   accountsWithYearsEnded,
   markReminded,
@@ -145,6 +148,27 @@ async function refreshAllowed(limits: Limits, userId: string): Promise<void> {
 }
 
 /**
+ * Refused where twelve months of the plan at what a new subscriber is offered now, as the pricing
+ * page shows it (`withOffers`), cost less than its year, so a link kept from before can't buy one.
+ * A year already held (`ahead`, started) renews as it is.
+ */
+async function requireYearNotDearer(
+  billing: BillingService,
+  planKey: string,
+  yearly: number,
+  ahead: readonly { planKey: string; startsAt: Date }[],
+  now: Date,
+): Promise<void> {
+  if (ahead.some((year) => year.planKey === planKey && year.startsAt <= now)) return
+  const month = (await shownOffersOf(billing).read()).find((offer) => offer.plan === planKey)
+  if (month !== undefined && !yearSold(yearly, month.priceCents))
+    throw new AppError(
+      'invalid_choice',
+      `A year of ${planName(planKey)} isn’t on sale while twelve months cost less. Choose a month instead.`,
+    )
+}
+
+/**
  * Paid plans: checkout and the customer portal through the billing provider, and the
  * provider's word on who pays for what, kept in `billing_subscriptions`. The plan in force follows
  * from it (`loadStanding`), and whatever a smaller plan no longer allows stops.
@@ -207,6 +231,7 @@ export class BillingService {
     this.#ending = new SubscriptionEnding(deps)
     this.#owed = new OwedPayments(deps)
     this.#holds = new EarlyHolds(deps)
+    installOffers(() => shownOffersOf(this).read())
     this.#webOrigin = deps.webOrigin
     // The page reads the provider's word when people come back, before the webhook arrives.
     this.#returnUrl = new URL('/account?from=billing', deps.webOrigin).toString()
@@ -321,17 +346,19 @@ export class BillingService {
 
   /**
    * A year of the plan is sold here and can be bought now: not while a year paid ahead still waits
-   * to start, so one is never bought twice by mistake.
+   * to start, so one is never bought twice by mistake, and not dearer than twelve months now.
    */
   async #mayBuyYear(userId: string, planKey: string): Promise<void> {
     const name = planName(planKey)
-    if (entitlementsFor(planKey).yearlyPriceCents === null)
-      throw new AppError('invalid_choice', `${name} isn’t sold by the year.`)
+    const yearly = entitlementsFor(planKey).yearlyPriceCents
+    if (yearly === null) throw new AppError('invalid_choice', `${name} isn’t sold by the year.`)
     const billing = requireCapability(this.#caps, 'billing')
     if (!(await this.#reach(() => billing.sellsYear(planKey))))
       throw new AppError('invalid_choice', `A year of ${name} can’t be bought here yet.`)
     const now = new Date()
-    const waiting = (await yearsAhead(this.#db, userId, now)).find((year) => year.startsAt > now)
+    const ahead = await yearsAhead(this.#db, userId, now)
+    await requireYearNotDearer(this, planKey, yearly, ahead, now)
+    const waiting = ahead.find((year) => year.startsAt > now)
     if (waiting !== undefined)
       throw new AppError(
         'invalid_choice',

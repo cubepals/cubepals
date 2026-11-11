@@ -7,7 +7,7 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { digits, pixel } from '../../../landing/fonts'
 import { bedrockLive } from '../../../lib/bedrock'
-import { offeredPlans, publicPlans } from '../../../lib/plans'
+import { pricedPlans } from '../../../lib/plans'
 import { canonicalOrigin, pageMetadata } from '../../../lib/site'
 import { appSchema, JsonLd } from '../../../lib/structured-data'
 import { cardsOf, plansSaid, priceOf } from '../../../ui'
@@ -17,11 +17,11 @@ import { PricingCard } from './get-plan'
 import { byKind, Questions, yearSaid } from './questions'
 
 /**
- * The title and description say the plans' own numbers, or nothing about them when the table can't
- * be read, and Core's Java and Bedrock friends where Bedrock is on.
+ * The title and description say what the cards say (`pricedPlans`), or nothing about the plans
+ * when they can't be read, and Core's Java and Bedrock friends where Bedrock is on.
  */
 export async function generateMetadata(): Promise<Metadata> {
-  const { free, core, plus } = byKind(await publicPlans())
+  const { free, core, plus } = byKind(await pricedPlans())
   const paid = [core, plus].filter((plan): plan is PublicPlan => plan !== undefined)
   return pageMetadata({
     title:
@@ -39,20 +39,18 @@ export async function generateMetadata(): Promise<Metadata> {
 /**
  * What Blockly costs, for anyone: the paid plans, the first of them starting with the free trial,
  * in the words people choose on, a quiet way to give Plus, and the few
- * questions they ask before paying. Every number comes from the plan table the control plane
- * enforces, so nothing here can promise what a server won't do.
+ * questions they ask before paying. Every number comes from the one reading of the plans its
+ * title read too (`pricedPlans`): what the control plane offers a new subscriber now.
  */
 export default async function PricingPage() {
-  // What people choose on says what a month charges now; the structured data, the plan table's own.
-  const table = await publicPlans()
-  const plans = await offeredPlans(table)
+  const plans = await pricedPlans()
   const { plus } = byKind(plans)
   const { trial, cards, starter } = cardsOf(plans)
   const bedrock = bedrockLive()
   const costGuide = publishedGuides().find((guide) => guide.slug === 'minecraft-server-cost')
   return (
     <>
-      <JsonLd schema={appSchema(table, canonicalOrigin())} />
+      <JsonLd schema={appSchema(plans, canonicalOrigin())} />
       <header className="bk-stack" style={{ gap: 'var(--space-8)' }}>
         <h1 className="type-display-md" style={{ color: 'var(--ink)' }}>
           {plansSaid(plans)}.
@@ -79,8 +77,8 @@ export default async function PricingPage() {
         usually in a couple of seconds; the first start, or one after a change, can take up to a minute.
       </p>
       <p className="type-body-sm" style={{ color: 'var(--ink-muted)' }}>
-        Prices are in US dollars and include VAT where it applies. Paid plans renew monthly until you cancel;
-        {yearSaid(plus, ` a year of ${plus?.name} is paid once and doesn’t renew on its own.`)} Cancelling
+        Prices are in US dollars and include VAT where it applies. Paid plans renew monthly until you cancel
+        {yearSaid(plus, `; a year of ${plus?.name} is paid once and doesn’t renew on its own`)}. Cancelling
         within 14 days of buying gets you a full refund if you’ve played less than 30 hours: see{' '}
         <Link href="/legal/refunds">Refunds and cancellation</Link>.
       </p>

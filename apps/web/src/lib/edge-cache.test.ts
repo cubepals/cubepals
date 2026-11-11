@@ -7,7 +7,7 @@ import { describe, expect, test } from 'bun:test'
 import { DAY_S, SECOND_MS } from '@blockly/contracts/durations'
 import { EDGE, type EdgeCache, FRESH_S, fromEdge } from './edge-cache'
 import { markingPartial, PARTIAL } from './partial-render'
-import { publicPlans } from './plans'
+import { pricedPlans } from './plans'
 
 const ORIGIN = 'https://cubepals.com'
 const DESKTOP =
@@ -184,7 +184,7 @@ describe('a page made without its plans', () => {
         cache,
         render: () =>
           markingPartial(async () => {
-            const plans = await publicPlans()
+            const plans = await pricedPlans()
             return new Response(`<html>${plans.length} plans</html>`, {
               headers: { 'content-type': 'text/html', 'cache-control': NEXT_PRIVATE },
             })
@@ -245,12 +245,35 @@ describe('a page made without its plans', () => {
     process.env.API_UPSTREAM = empty.url
     try {
       const marked = await markingPartial(async () => {
-        await publicPlans()
+        await pricedPlans()
         return new Response('<html></html>')
       })
       expect(marked.headers.has(PARTIAL)).toBe(true)
     } finally {
       empty.stop()
+      if (was === undefined) delete process.env.API_UPSTREAM
+      else process.env.API_UPSTREAM = was
+    }
+  })
+
+  test('a render whose offer couldn’t be read is marked, so its plan table’s prices aren’t kept', async () => {
+    const server = Bun.serve({
+      port: 0,
+      fetch: (request) =>
+        new URL(request.url).pathname === '/api/public/plans'
+          ? Response.json([{ key: 'free' }])
+          : new Response('down', { status: 503 }),
+    })
+    const was = process.env.API_UPSTREAM
+    process.env.API_UPSTREAM = `http://127.0.0.1:${server.port}`
+    try {
+      const marked = await markingPartial(async () => {
+        await pricedPlans()
+        return new Response('<html></html>')
+      })
+      expect(marked.headers.has(PARTIAL)).toBe(true)
+    } finally {
+      server.stop(true)
       if (was === undefined) delete process.env.API_UPSTREAM
       else process.env.API_UPSTREAM = was
     }
@@ -262,7 +285,7 @@ describe('a page made without its plans', () => {
     process.env.API_UPSTREAM = full.url
     try {
       const made = await markingPartial(async () => {
-        await publicPlans()
+        await pricedPlans()
         return new Response('<html></html>')
       })
       expect(made.headers.has(PARTIAL)).toBe(false)

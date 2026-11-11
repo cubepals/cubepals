@@ -26,10 +26,6 @@ import {
 } from './figures'
 import type { Policy } from './policy'
 
-/** What a year of Plus costs, and the twelfth of it each of its months is worth. */
-const YEAR = PLUS.yearPriceCents ?? 0
-const MONTH_OF_YEAR = YEAR / 12
-
 export const REFUNDS: Policy = {
   slug: 'refunds',
   title: 'Refunds and cancellation',
@@ -51,7 +47,7 @@ export const REFUNDS: Policy = {
       blocks: [
         `You can cancel ${PLUS.name} at any time, with no notice period. Go to your [account](/account), choose **Manage billing**, and cancel there. You can also email {support} from the address on your account and we’ll do it for you.`,
         `When you cancel, you keep ${PLUS.name} until the end of the month you have already paid for, and you won’t be charged again, except once at the end of it for any extra hours you allowed and played. You can change your mind and keep the subscription going any time before that date.`,
-        `A year of ${PLUS.name} (${dollars(YEAR)}) is paid once and doesn’t renew, so there is nothing to cancel: it ends on the day your [account](/account) shows, and we email you ${YEAR_REMINDER_DAYS[0]} and ${YEAR_REMINDER_DAYS[1]} days before. You can renew it from your account whenever you like, and the new year starts the day the old one ends. To stop a year early, see {§year}.`,
+        `A year of ${PLUS.name} is paid once and doesn’t renew, so there is nothing to cancel: it ends on the day your [account](/account) shows, and we email you ${YEAR_REMINDER_DAYS[0]} and ${YEAR_REMINDER_DAYS[1]} days before. You can renew it from your account whenever you like, and the new year starts the day the old one ends. To stop a year early, see {§year}.`,
         'Cancelling doesn’t delete your account or your worlds. To delete those as well, see our [Terms](/legal/terms#suspension).',
       ],
     },
@@ -63,10 +59,10 @@ export const REFUNDS: Policy = {
         {
           list: [
             `**Less than ${FULL_REFUND_UNDER_HOURS} hours played: a full refund.** You don’t have to give a reason.`,
-            `**${FULL_REFUND_UNDER_HOURS} hours or more: you pay for what you played.** We keep the share of the price for the hours you used, out of the hours your plan includes each month, and refund the rest. For example, on ${PLUS.name} with ${PLUS.hours} hours a month, if you played 60 hours, we keep 60/${PLUS.hours} of the price and refund ${PLUS.hours - 60}/${PLUS.hours}. Once you have played all of them, there is nothing left to refund.`,
+            `**${FULL_REFUND_UNDER_HOURS} hours or more: you pay for what you played.** We keep the share of the price for the hours you used, out of the hours your plan includes each month, and refund the rest. For example, if you played half of your month’s hours, we keep half of what you paid and refund the other half. Once you have played all of them, there is nothing left to refund.`,
           ],
         },
-        `**If you bought a year,** the same applies to its first month, a twelfth of what you paid (${dollars(MONTH_OF_YEAR)} of ${dollars(YEAR)}), and the other eleven months are refunded in full. For example, if you played 60 hours, we keep 60/${PLUS.hours} of ${dollars(MONTH_OF_YEAR)}, which is ${dollars((MONTH_OF_YEAR * 60) / PLUS.hours)}, and refund ${dollars(YEAR - (MONTH_OF_YEAR * 60) / PLUS.hours)}.`,
+        '**If you bought a year,** the same applies to its first month, a twelfth of what you paid, and the other eleven months are refunded in full. For example, if you played half of a month’s hours, we keep half of that twelfth and refund the rest.',
         `${PLUS.name} is a service. Before you pay, the checkout page asks you to agree that it starts straight away, inside those 14 days, so you can play at once, and that if you cancel you pay for the hours you played as this section says.`,
         `If you are a consumer in the UK, the EU, Norway or Iceland, the law gives you the right to cancel a contract made online within 14 days, paying only for what you have already had. This section is how we apply that right, and it never gives you less.`,
         `The 14 days start on the day you buy ${PLUS.name}. Monthly renewals after that are not new purchases, so they don’t start a new 14 days, but you can still cancel any time as {§cancel} says. Renewing a year is a new purchase, with 14 days of its own; one that hasn’t started yet is refunded in full.`,
@@ -97,7 +93,7 @@ export const REFUNDS: Policy = {
       heading: 'Stopping a year early',
       blocks: [
         `After the first 14 days, you can stop a year of ${PLUS.name} at any time: email {support} from the address on your account. You keep ${PLUS.name} until the end of the month of your year you are in, counted from the day the year started, and we refund each whole month after it, at a twelfth of what you paid for the year.`,
-        `For example, stop a ${dollars(YEAR)} year 4 months and 10 days after it started: you keep ${PLUS.name} until the end of its fifth month, and we refund the 7 months left, ${dollars(MONTH_OF_YEAR * 7)}.`,
+        `For example, stop a year 4 months and 10 days after it started: you keep ${PLUS.name} until the end of its fifth month, and we refund the 7 months left, seven twelfths of what you paid.`,
       ],
     },
     {
@@ -120,7 +116,7 @@ export const REFUNDS: Policy = {
       id: 'polar',
       heading: 'Who pays the refund',
       blocks: [
-        `Paid plans are sold through Polar (Polar Software, Inc.), which acts as our reseller and merchant of record. Your payment, receipts and any refund come from Polar, and your statement shows Polar. Prices are in US dollars and include VAT where it applies; ${PLUS.name} is ${dollars(PLUS.priceCents)} a month, or ${dollars(YEAR)} for a year. Refunds include the VAT you paid on the refunded amount.`,
+        `Paid plans are sold through Polar (Polar Software, Inc.), which acts as our reseller and merchant of record. Your payment, receipts and any refund come from Polar, and your statement shows Polar. Prices are in US dollars and include VAT where it applies, as the [Pricing](/pricing) page and the checkout page show them. Refunds include the VAT you paid on the refunded amount.`,
         'Polar’s own buyer terms apply to the payment. They don’t reduce the rights on this page, which we honour for {brand}.',
       ],
     },

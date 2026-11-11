@@ -4,7 +4,7 @@
 
 /**
  * The few questions people ask before paying, on the pricing page. Every number comes from the
- * plan table the control plane enforces. Not for the plans themselves, which are the cards above.
+ * plans the cards above are made from (`pricedPlans`). Not for the plans themselves: the cards.
  */
 import type { PublicPlan } from '@blockly/contracts'
 import { dollars, EXTRA_HOUR_CENTS } from '../../../legal/figures'

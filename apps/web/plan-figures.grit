@@ -1,0 +1,19 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
+// A Biome plugin (biome.json): no read of the plan table or the offer in the site but through
+// src/lib/plans.ts, whose `pricedPlans` is the one reading every public page states a plan's
+// price and hours from: what a new subscriber is offered now, or the plan table's own, all of it,
+// where the offer can't be read. A page that fetched the table itself would state its price beside
+// the cards' different one. Its tests are in src/lib/plan-figures-rule.test.ts.
+
+language js
+
+or {
+  JsStringLiteralExpression(),
+  JsTemplateExpression()
+} as $read where {
+  $read <: r"(?s).*/api/public/(?:plans|offer)\b.*",
+  register_diagnostic(span=$read, message="This reads the plan table or the offer itself, so its page can state a price the cards don't. Read the plans with pricedPlans from apps/web/src/lib/plans.ts.", severity="error")
+}

@@ -30,7 +30,7 @@ export default async function Landing({
 }) {
   const landed = await landingOf(searchParams)
   return (
-    <Frame plans={landed.table} film>
+    <Frame plans={landed.plans} film>
       <Layouts film={<FilmPage {...landed} />} page={<Phone {...landed} />} />
     </Frame>
   )

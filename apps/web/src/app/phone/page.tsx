@@ -21,7 +21,7 @@ export default async function PhoneLanding({
 }) {
   const landed = await landingOf(searchParams)
   return (
-    <Frame plans={landed.table}>
+    <Frame plans={landed.plans}>
       <Phone {...landed} />
     </Frame>
   )

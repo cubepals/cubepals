@@ -14,7 +14,7 @@
  * (`billing.offer`), the price the checkout then charges. Then the payment page, which is Polar's.
  */
 
-import type { AccountOverviewView, EntitlementsView, PlanOfferView } from '@blockly/contracts'
+import type { AccountOverviewView, EntitlementsView, PlanOfferView, PublicPlan } from '@blockly/contracts'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
@@ -85,7 +85,48 @@ function Checkout() {
         {billing?.available === false ? billing.message : `There is no ${name} plan to buy.`}
       </Note>
     )
-  return <Offer ask={ask} name={name} offered={offered} startsAt={startsAt(plan, ask.plan)} />
+  return (
+    <SoldNow
+      ask={ask}
+      name={name}
+      offered={offered}
+      now={listed.data?.find((p) => p.key === ask.plan)}
+      held={plan.year?.planKey === ask.plan}
+      startsAt={startsAt(plan, ask.plan)}
+    />
+  )
+}
+
+/**
+ * The plan as it is sold now (`now`, from `billing.plans`, as the pricing page sells it): a year
+ * only where twelve months at what a new subscriber is offered now don't cost less, said with the
+ * month instead where they do. A year already `held` renews as it is.
+ */
+function SoldNow({
+  ask,
+  name,
+  offered,
+  now,
+  held,
+  startsAt,
+}: {
+  ask: CheckoutAsk
+  name: string
+  offered: EntitlementsView
+  now: PublicPlan | undefined
+  held: boolean
+  startsAt: string | null
+}) {
+  const sold = now === undefined || held ? offered : { ...offered, yearlyPriceCents: now.yearlyPriceCents }
+  if (ask.term === 'year' && sold.yearlyPriceCents === null)
+    return (
+      <Note tone="info">
+        A year of {name} isn’t on sale while twelve months cost less.{' '}
+        <Link href={checkoutHref({ ...ask, term: 'month' })}>Get {name} by the month</Link>.
+      </Note>
+    )
+  const monthNow = now?.monthlyPriceCents ?? offered.monthlyPriceCents
+  return <Offer ask={ask} name={name} offered={sold} monthNow={monthNow} startsAt={startsAt} />
 }
 
 /**
@@ -102,11 +143,14 @@ function Offer({
   ask,
   name,
   offered,
+  monthNow,
   startsAt,
 }: {
   ask: CheckoutAsk
   name: string
   offered: EntitlementsView
+  /** What a month charges a new subscriber now, as the pricing page says it. */
+  monthNow: number
   startsAt: string | null
 }) {
   const trpc = useTRPC()
@@ -155,7 +199,7 @@ function Offer({
           Two boxes to tick, then you pay on Polar’s secure page and come straight back.
         </p>
       </header>
-      <Price ask={ask} name={name} offered={offered} month={month} startsAt={startsAt} />
+      <Price ask={ask} name={name} offered={offered} month={month} monthNow={monthNow} startsAt={startsAt} />
       <div className="bk-stack" style={{ gap: 'var(--space-16)' }}>
         <Checkbox checked={terms} onChange={setTerms} invalid={unticked && !terms}>
           I agree to the{' '}
@@ -208,6 +252,7 @@ function Price({
   name,
   offered,
   month,
+  monthNow,
   startsAt,
 }: {
   ask: CheckoutAsk
@@ -215,6 +260,8 @@ function Price({
   offered: EntitlementsView
   /** The month as the page holds it; null for a year. */
   month: PlanOfferView | null
+  /** What a month charges a new subscriber now, for the link from a year to it. */
+  monthNow: number
   startsAt: string | null
 }) {
   const yearly = ask.term === 'year' ? offered.yearlyPriceCents : null
@@ -264,7 +311,7 @@ function Price({
           <Link href={checkoutHref({ ...ask, term: yearly === null ? 'year' : 'month' })}>
             {yearly === null
               ? `Or pay ${dollars(offered.yearlyPriceCents)} for a year`
-              : `Or pay ${dollars(offered.monthlyPriceCents)} a month`}
+              : `Or pay ${dollars(monthNow)} a month`}
           </Link>
         </p>
       )}

@@ -13,7 +13,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 import type { ReactNode } from 'react'
 import { bedrockLive } from '../../../lib/bedrock'
-import { publicPlans } from '../../../lib/plans'
+import { pricedPlans } from '../../../lib/plans'
 import { currentSession } from '../../../lib/session'
 import { canonicalOrigin, pageMetadata, UNLISTED } from '../../../lib/site'
 import { guideSchema, JsonLd } from '../../../lib/structured-data'
@@ -30,10 +30,10 @@ export function guideMetadata(slug: string): Metadata {
   return listed(guide) ? own : { ...own, robots: UNLISTED }
 }
 
-/** The plans a guide's numbers come from, the same table the pricing page reads. */
+/** The plans a guide's numbers come from, as the pricing page states them (`pricedPlans`). */
 export async function guidePlans(): Promise<{ free?: PublicPlan; paid?: PublicPlan }> {
-  // Kept five minutes, as the landing page keeps it: the table seldom changes.
-  const plans = await publicPlans(300)
+  // The table kept five minutes, as the landing page keeps it: it seldom changes.
+  const plans = await pricedPlans(300)
   return {
     free: plans.find((plan) => plan.monthlyPriceCents === 0),
     // The plan the guides talk about is the one with mods, plugins and bigger groups.
