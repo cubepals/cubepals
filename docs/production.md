@@ -191,9 +191,12 @@ deploy's time and commit, so the Fly apps that deploy changed go back to the ima
 before it, and the apps it didn't change stay as they are; it says which. A second rollback
 goes back one deploy further. The `production` branch moves back to the commit that is live
 again. The website goes to the Worker version that was live before, at once and without a build
-(`wrangler rollback`; any of the last 100 versions), and takes the `production` branch back to that
-version's commit when it is older than the branch. A deploy whose website doesn't answer never
-moves the branch. So the branch never names code that isn't live, which [Routes](#routes) rely on. A rollback doesn't undo a migration or a
+(`wrangler rollback`; any of the last 100 versions). It then takes the `production` branch to the
+commit that version's commit and the branch's share: that commit itself when it is older, and the
+point they forked from when it is a hotfix branch's or the Fly apps went back elsewhere. A deploy
+whose website doesn't answer never moves the branch. So the branch never names code newer than
+what is live, which [Routes](#routes) rely on. A version older than the last ten wrangler names has no known commit: the branch then
+stays, the rollback says so, and the next deploy should be `apply`. A rollback doesn't undo a migration or a
 secret: fix forward, then deploy again. A release that sells Core has `core:<id>` in
 `POLAR_PRODUCTS`, which older code refuses as not a paid plan: remove `core:<id>` from
 `POLAR_PRODUCTS` before rolling back past the Core release, and put it back after going forward.

@@ -772,9 +772,11 @@ async function rollback(part: string | undefined, named: string[]): Promise<void
     part === 'website' ? { deployed: [], refused: false } : await rollbackFly(named as FlyApp[], env)
   const back = part === 'fly' ? null : rollbackWebsite(productionSite(values, environment()), say)
   if (back === undefined) say('The website has no earlier version to go back to.')
-  // The production branch names what is live, so a website older than it takes the branch back too.
-  else if (back?.commit && git('merge-base', back.commit, 'origin/production') === back.commit)
-    moveProductionTo(back.commit, env)
+  // The production branch names nothing newer than what is live: where the website and the branch
+  // now differ (older, a hotfix branch's, Fly apps gone back elsewhere), the commit both came from.
+  else if (back?.commit)
+    moveProductionTo(git('merge-base', back.commit, 'origin/production') || back.commit, env)
+  else if (back) say('The website’s commit is unknown, so the production branch stays: run apply next.')
   say(
     (await answers(apps, env))
       ? 'Rolled back, and production answers.'
