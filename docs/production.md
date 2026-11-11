@@ -120,8 +120,8 @@ bun scripts/production.ts apply
    bound before the next one goes. `EDGE_CORDON=1` also cordons the region first while another is
    ready, so no new join arrives while it drains; it is off because on staging a cordoned region
    made the other region fail joins.
-5. It pushes the commit as the `production` branch and deploys the website's build: live when it
-   returns.
+5. It deploys the website's build, live when it returns, and once the site answers pushes the
+   commit as the `production` branch.
 
 `apply` can be run again at any time: it changes only what differs. It's also how a value changes
 later: edit the file, run `apply`. Never run `terraform destroy` here.
@@ -133,7 +133,8 @@ bun scripts/production.ts web
 ```
 
 From a clean checkout of main's latest commit, once main's CI has passed on it, it builds and
-checks the website, pushes the commit as the `production` branch and deploys the build. It refuses
+checks the website, deploys the build and, once the site answers, pushes the commit as the
+`production` branch. It refuses
 when anything the Fly apps are built from changed since the last deploy (`apps/control`,
 `apps/edge`, `packages`, `infra/fly`, the lockfile), or Terraform did: that goes through `apply`,
 after a nightly.
@@ -190,7 +191,9 @@ deploy's time and commit, so the Fly apps that deploy changed go back to the ima
 before it, and the apps it didn't change stay as they are; it says which. A second rollback
 goes back one deploy further. The `production` branch moves back to the commit that is live
 again. The website goes to the Worker version that was live before, at once and without a build
-(`wrangler rollback`; any of the last 100 versions). A rollback doesn't undo a migration or a
+(`wrangler rollback`; any of the last 100 versions), and takes the `production` branch back to that
+version's commit when it is older than the branch. A deploy whose website doesn't answer never
+moves the branch. So the branch never names code that isn't live, which [Routes](#routes) rely on. A rollback doesn't undo a migration or a
 secret: fix forward, then deploy again. A release that sells Core has `core:<id>` in
 `POLAR_PRODUCTS`, which older code refuses as not a paid plan: remove `core:<id>` from
 `POLAR_PRODUCTS` before rolling back past the Core release, and put it back after going forward.

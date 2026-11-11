@@ -14,7 +14,13 @@
  * they don't answer, rolls itself back (deployChecked).
  */
 import { ask, describe, PRODUCTION_OTHERS, SITE_PAGES, waitFor, websiteTargets } from './lib/site-pages.ts'
-import { deployWorker, liveVersions, rollbackWorker, type WorkerSite } from './lib/web-worker.ts'
+import {
+  deployWorker,
+  type LiveVersion,
+  liveVersions,
+  rollbackWorker,
+  type WorkerSite,
+} from './lib/web-worker.ts'
 import type { Environment } from './production-values.ts'
 
 /** Production's website, from production.env's values and the environment's settings. */
@@ -43,12 +49,11 @@ export function productionSite(values: Record<string, string>, environment: Envi
   }
 }
 
-/** cubepals.com back on the version that was live before this one; false when there is none. */
-export function rollbackWebsite(site: WorkerSite, say: (line: string) => void): boolean {
+/** cubepals.com back on the version that was live before this one, which it returns; none when there is none. */
+export function rollbackWebsite(site: WorkerSite, say: (line: string) => void): LiveVersion | undefined {
   const [, previous] = liveVersions(site)
-  if (previous === undefined) return false
-  rollbackWorker(site, previous, say)
-  return true
+  if (previous !== undefined) rollbackWorker(site, previous, say)
+  return previous
 }
 
 /** The site's address, as signInGuard asks it too. */
