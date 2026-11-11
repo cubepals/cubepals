@@ -41,6 +41,28 @@ Only these, and only what you checked against the code and believe is wrong:
 Never: praise, a summary of the diff, style nits, or anything CI already reports (lint, types,
 formatting, failing tests).
 
+## Money
+
+When the pull request changes code that charges, refunds, ends or cancels what a person paid for
+(the paths `AGENTS.md` names under "Money"), go through that section's rules one at a time against
+the diff, and report each one the change breaks as a finding. For each rule, trace it rather than
+read for it:
+
+- list every order that can pay for the thing being ended, cancelled or refunded, and find where
+  the change includes each or says why not;
+- for every check, find whether it is made again inside the transaction, on rows read under a lock;
+- for every call to the provider, an email or anything else that leaves the database, find what
+  happens when the step after it fails, and whether a retry is tested;
+- for every periodic pass, find a row that can never succeed and follow what it does to the rows
+  behind it;
+- for every "once", find what counts toward it and what a correction, a duplicate or something
+  that never started does to it;
+- find every amount a person is shown or sent, and whether each comes from the same function and
+  the order's currency.
+
+A rule that doesn't apply needs no mention. One you couldn't check is a finding of its own, saying
+what you couldn't trace.
+
 ## A re-review
 
 When `.second-eye/previous.json` exists, this is a later pass on the same pull request. Settle
