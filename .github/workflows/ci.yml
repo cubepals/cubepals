@@ -32,6 +32,7 @@ jobs:
       # The queue tests everything: what a merge changes is what the commits ahead of it changed too.
       code: ${{ github.event_name == 'merge_group' && 'true' || steps.filter.outputs.code }}
       reporter: ${{ github.event_name == 'merge_group' && 'true' || steps.reporter.outputs.reporter }}
+      tests: ${{ steps.groups.outputs.tests }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -66,6 +67,54 @@ jobs:
             reporter:
               - 'apps/reporter/**'
               - '.github/workflows/ci.yml'
+      # Whether a pull request changes anything beyond the web app and prose. Nothing outside apps/web
+      # imports it (scripts/ci-test-groups.test.ts holds the tree to that), so its tests alone can't
+      # be broken by a change to it.
+      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        id: beyond
+        if: github.event_name == 'pull_request'
+        with:
+          predicate-quantifier: every
+          filters: |
+            web:
+              - '**'
+              - '!apps/web/**'
+              - '!*.md'
+              - '!docs/**'
+              - '!brand/**'
+              - '!.github/ISSUE_TEMPLATE/**'
+              - '!.github/CODEOWNERS'
+              - '!.github/pull_request_template.md'
+              - '!.github/dependabot.yml'
+      # The test groups, by what they test, as `group|paths` (pathspecs; the :! ones exclude). Every
+      # group runs, except on a pull request that changes nothing beyond the web app: then its own
+      # group alone. Main and the merge queue run every group, so nothing goes untested past a merge.
+      # The test step's seconds on main's run of 2026-11-04 (41755839405), with the last group's
+      # split as its files' times add up: Server lifecycle 562, Backups 384, Accounts 374, Billing
+      # 353, Machine providers 261, Mods 97, Web app 81. A job adds about 45 to its test step. Split a
+      # group again when it passes the slowest by much. The last group is every test no group above
+      # names, so a new one is never left out.
+      - name: Which test groups run
+        id: groups
+        env:
+          WEB_ONLY: ${{ github.event_name == 'pull_request' && steps.beyond.outputs.web == 'false' }}
+        run: |
+          all=$(jq -cR 'split("|") | {group: .[0], paths: .[1]}' <<'GROUPS' | jq -cs .
+          Server lifecycle|apps/control/src/app/operations
+          Machine providers|apps/control/src/infra/fly apps/control/src/infra/docker apps/control/src/infra/boat apps/control/src/infra/fleet apps/control/src/infra/s3 apps/control/src/app/runtimes
+          Backups, worlds and versions|apps/control/src/app/backups apps/control/src/app/revisions apps/control/src/app/worlds apps/control/src/app/servers apps/control/src/app/setups apps/control/src/app/console apps/control/src/app/players apps/control/src/app/uploads apps/control/src/app/artifacts
+          Mods, packs and listings|apps/control/src/app/mods apps/control/src/app/packs apps/control/src/app/curation apps/control/src/app/listings
+          Web app, edge and scripts|apps/web apps/edge scripts
+          Billing, edge routing, anti-cheat and platform|apps/control/src/app/billing apps/control/src/app/edge apps/control/src/app/stop-cheaters apps/control/src/app/platform
+          Accounts and the rest of the control plane|. :!apps/control/src/app/operations :!apps/control/src/infra/fly :!apps/control/src/infra/docker :!apps/control/src/infra/boat :!apps/control/src/infra/fleet :!apps/control/src/infra/s3 :!apps/control/src/app/runtimes :!apps/control/src/app/backups :!apps/control/src/app/revisions :!apps/control/src/app/worlds :!apps/control/src/app/servers :!apps/control/src/app/setups :!apps/control/src/app/console :!apps/control/src/app/players :!apps/control/src/app/uploads :!apps/control/src/app/artifacts :!apps/control/src/app/mods :!apps/control/src/app/packs :!apps/control/src/app/curation :!apps/control/src/app/listings :!apps/web :!apps/edge :!scripts :!apps/control/src/app/billing :!apps/control/src/app/edge :!apps/control/src/app/stop-cheaters :!apps/control/src/app/platform
+          GROUPS
+          )
+          if [ "$WEB_ONLY" = true ]; then
+            echo "Only the web app changed: its tests alone run." >> "$GITHUB_STEP_SUMMARY"
+            echo "tests=$(jq -c 'map(select(.group == "Web app, edge and scripts"))' <<<"$all")" >> "$GITHUB_OUTPUT"
+          else
+            echo "tests=$all" >> "$GITHUB_OUTPUT"
+          fi
 
   static:
     name: Lint, types and structure
@@ -260,27 +309,9 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
-      # Grouped by what they test. The test step's seconds on main's run of 2026-11-04 (41755839405),
-      # with the last group's split as its files' times add up: Server lifecycle 562, Backups 384,
-      # Accounts 374, Billing 353, Machine providers 261, Mods 97, Web app 81. A job adds about 45 to
-      # its test step. Split a group again when it passes the slowest by much.
+      # The groups, and which of them run, are the changes job's `tests`.
       matrix:
-        include:
-          - group: Server lifecycle
-            paths: apps/control/src/app/operations
-          - group: Machine providers
-            paths: apps/control/src/infra/fly apps/control/src/infra/docker apps/control/src/infra/boat apps/control/src/infra/fleet apps/control/src/infra/s3 apps/control/src/app/runtimes
-          - group: Backups, worlds and versions
-            paths: apps/control/src/app/backups apps/control/src/app/revisions apps/control/src/app/worlds apps/control/src/app/servers apps/control/src/app/setups apps/control/src/app/console apps/control/src/app/players apps/control/src/app/uploads apps/control/src/app/artifacts
-          - group: Mods, packs and listings
-            paths: apps/control/src/app/mods apps/control/src/app/packs apps/control/src/app/curation apps/control/src/app/listings
-          - group: Web app, edge and scripts
-            paths: apps/web apps/edge scripts
-          - group: Billing, edge routing, anti-cheat and platform
-            paths: apps/control/src/app/billing apps/control/src/app/edge apps/control/src/app/stop-cheaters apps/control/src/app/platform
-          # Every test no group above names, so a new one is never left out.
-          - group: Accounts and the rest of the control plane
-            paths: . :!apps/control/src/app/operations :!apps/control/src/infra/fly :!apps/control/src/infra/docker :!apps/control/src/infra/boat :!apps/control/src/infra/fleet :!apps/control/src/infra/s3 :!apps/control/src/app/runtimes :!apps/control/src/app/backups :!apps/control/src/app/revisions :!apps/control/src/app/worlds :!apps/control/src/app/servers :!apps/control/src/app/setups :!apps/control/src/app/console :!apps/control/src/app/players :!apps/control/src/app/uploads :!apps/control/src/app/artifacts :!apps/control/src/app/mods :!apps/control/src/app/packs :!apps/control/src/app/curation :!apps/control/src/app/listings :!apps/web :!apps/edge :!scripts :!apps/control/src/app/billing :!apps/control/src/app/edge :!apps/control/src/app/stop-cheaters :!apps/control/src/app/platform
+        include: ${{ fromJSON(needs.changes.outputs.tests) }}
     services:
       postgres:
         image: mirror.gcr.io/library/postgres:17-alpine
