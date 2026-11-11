@@ -9,6 +9,7 @@ import { entitlementsFor, PAID_PLANS, planName } from '../../domain/account/enti
 import { installUnsoldPlans, planOnSaleHere } from '../../domain/account/on-sale.ts'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
 import { emailOf } from '../accounts/persistence.ts'
+import { installOffers } from '../billing/paid-offered.ts'
 import { friendTurnedAway } from '../emails/play.ts'
 import { CameByNotice } from './came-by-notice.ts'
 
@@ -64,6 +65,29 @@ for (const onSale of [true, false]) {
     30 * SECOND_MS,
   )
 }
+
+test.skipIf(!hasDatabase)(
+  'the notice says the hours a new subscriber is offered now',
+  async () => {
+    const owner = await h.user('Offered owner', 'free')
+    const server = { id: crypto.randomUUID(), name: 'Offered', ownerId: owner.userId }
+    const paid = planOnSaleHere()
+    if (paid === null) throw new Error('a paid plan is on sale by default')
+    // Made-up hours, unlike the plan's own.
+    const hours = (entitlementsFor(paid).includedUnits ?? 0) + 7
+    const before = h.mail.sent.length
+    installOffers(async () => [{ plan: paid, priceCents: 1, includedHours: hours }])
+    try {
+      await new CameByNotice({ db: h.db, mailer: h.mail, webOrigin: origin }).friendCame(server, {
+        name: 'Alex',
+      })
+    } finally {
+      installOffers(async () => [])
+    }
+    expect(h.mail.sent.slice(before)[0]?.text).toContain(`with ${hours} hours a month`)
+  },
+  30 * SECOND_MS,
+)
 
 test.skipIf(!hasDatabase)(
   'paid and missing accounts receive no trial notice or error',

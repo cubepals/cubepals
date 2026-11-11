@@ -10,8 +10,18 @@
  * --proof asks for 200 exactly from each page and from a picture through /_next/image: what a
  * preview must answer before Deploy production's website route takes its commit. --api asks for
  * /api/health too, as every production deploy does after.
+ *
+ * Once the pages are up, the prices they state (lib/stated-prices.ts): one price and hours a month
+ * for each plan, everywhere, and none in the policies. Prices that disagree are asked again a few
+ * times, since a page keeps its reading of the offer for a minute; past that, exits 1 naming them.
  */
+import { SECOND_MS } from '@blockly/contracts/durations'
 import { apiTarget, proofTargets, waitFor, websiteTargets } from './lib/site-pages.ts'
+import { checkPrices } from './lib/stated-prices.ts'
+
+/** How often prices that disagree are asked again, and how long apart: past a page's minute. */
+const PRICE_TRIES = 3
+const PRICE_AGAIN_MS = 40 * SECOND_MS
 
 const flags = process.argv.slice(2).filter((arg) => arg.startsWith('--'))
 const [origin, seconds = '0'] = process.argv.slice(2).filter((arg) => !arg.startsWith('--'))
@@ -24,8 +34,19 @@ const targets = [
   ...(flags.includes('--proof') ? proofTargets(origin) : websiteTargets(origin)),
   ...(flags.includes('--api') ? [apiTarget(origin)] : []),
 ]
-const { failing } = await waitFor(targets, Number(seconds), (line) => process.stdout.write(`${line}\n`))
+const say = (line: string) => process.stdout.write(`${line}\n`)
+const { failing } = await waitFor(targets, Number(seconds), say)
 if (failing.length > 0) {
   process.stderr.write(`::error::${origin} is down: ${failing.length} of its pages don't answer.\n`)
   process.exit(1)
+}
+for (let tried = 1; ; tried++) {
+  const problems = await checkPrices(origin, say)
+  if (problems.length === 0) break
+  for (const line of problems) say(`Prices: ${line}`)
+  if (tried === PRICE_TRIES) {
+    for (const line of problems) process.stderr.write(`::error::${line}\n`)
+    process.exit(1)
+  }
+  await Bun.sleep(PRICE_AGAIN_MS)
 }

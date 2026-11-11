@@ -15,12 +15,12 @@ import {
 } from '../../domain/account/entitlements.ts'
 import { extraUnits } from '../../domain/account/extra-play.ts'
 import { UNIT_CENTS } from '../../domain/account/meter.ts'
-import { planOnSaleHere } from '../../domain/account/on-sale.ts'
 import { DEFAULT_TIME_ZONE, isTimeZone, monthOf } from '../../domain/account/play-day.ts'
 import type { AccountStanding, Restrictions } from '../../domain/account/standing.ts'
 import { type Actor, requestedBy, runsThePlatform } from '../actor.ts'
 import { chippedInLeft, meteredMonth } from '../billing/chip-in-meter.ts'
 import { keepPlayedBlock } from '../billing/extra-usage.ts'
+import { paidOffered } from '../billing/paid-offered.ts'
 import { extraPlayNow } from '../billing/persistence.ts'
 import { freeHoursWarning, playWarning } from '../emails/play.ts'
 import { AppError, NotFound } from '../errors.ts'
@@ -635,8 +635,7 @@ export class AccountService {
     if (reached === undefined) return null
     const [said, saidMark] = (standing.playWarned ?? '').split(':')
     if (said === 'total' && Number(saidMark) >= reached) return null
-    const paid = planOnSaleHere()
-    const monthly = paid === null ? null : entitlementsFor(paid).includedUnits
+    const paid = await paidOffered()
     const to = await emailOf(this.#db, standing.userId)
     if (to !== null)
       await this.#mailer.send({
@@ -645,7 +644,7 @@ export class AccountService {
           mark: reached,
           included: total.included,
           used: Math.round(total.units * 10) / 10,
-          paid: paid === null || monthly === null ? null : { name: planName(paid), hours: monthly },
+          paid,
           origin: this.#webOrigin,
         }),
       })

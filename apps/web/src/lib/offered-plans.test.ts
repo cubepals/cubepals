@@ -3,12 +3,13 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * The plans the pricing page's cards show: each paid plan with what a month of it charges now,
- * read from the offer endpoint, and the plan table's own wherever that can't be read.
+ * The plans the public pages state: each paid plan with what a month of it charges now, read from
+ * the offer endpoint, a year only where twelve of those months don't cost less, and the plan
+ * table's own wherever the offer can't be read.
  */
 import { afterEach, describe, expect, test } from 'bun:test'
 import { asHeld, type PublicPlan, withOffers } from '@blockly/contracts'
-import { offeredPlans } from './plans.ts'
+import { pricedPlans } from './plans.ts'
 
 const free = {
   key: 'free',
@@ -61,20 +62,35 @@ describe('the plans as a new subscriber is told them', () => {
     })
   })
 
+  test('drop a year where twelve months at the offered price cost less, and keep it where not', () => {
+    const yearly = { ...core, yearlyPriceCents: 9000 }
+    expect(withOffers([yearly], [{ plan: 'core', priceCents: 700, includedHours: null }])[0]).toMatchObject({
+      monthlyPriceCents: 700,
+      yearlyPriceCents: null,
+    })
+    expect(withOffers([yearly], [{ plan: 'core', priceCents: 750, includedHours: null }])[0]).toMatchObject({
+      yearlyPriceCents: 9000,
+    })
+    expect(withOffers([yearly], [])[0]).toBe(yearly)
+  })
+
   test('are read from the offer endpoint, and are the plan table’s own when it fails', async () => {
     const asked: string[] = []
-    globalThis.fetch = (async (url: string) => {
-      asked.push(String(url))
-      return Response.json([{ plan: 'core', priceCents: 700, includedHours: 90 }])
-    }) as typeof fetch
-    expect((await offeredPlans(plans))[1]).toMatchObject({ monthlyPriceCents: 700, includedHours: 90 })
-    expect(asked[0]).toEndWith('/api/public/offer')
-    globalThis.fetch = (async () => new Response('down', { status: 503 })) as unknown as typeof fetch
-    expect(await offeredPlans(plans)).toEqual(plans)
-    globalThis.fetch = (async () => {
+    const offer = (answer: () => Response) => {
+      globalThis.fetch = (async (url: string) => {
+        asked.push(new URL(url).pathname)
+        return url.endsWith('/api/public/plans') ? Response.json(plans) : answer()
+      }) as typeof fetch
+    }
+    offer(() => Response.json([{ plan: 'core', priceCents: 700, includedHours: 90 }]))
+    expect((await pricedPlans())[1]).toMatchObject({ monthlyPriceCents: 700, includedHours: 90 })
+    expect(asked).toEqual(['/api/public/plans', '/api/public/offer'])
+    offer(() => new Response('down', { status: 503 }))
+    expect(await pricedPlans()).toEqual(plans)
+    offer(() => {
       throw new Error('unreachable')
-    }) as unknown as typeof fetch
-    expect(await offeredPlans(plans)).toEqual(plans)
+    })
+    expect(await pricedPlans()).toEqual(plans)
   })
 
   test('leave a subscriber’s own plan at the price and hours they pay', () => {

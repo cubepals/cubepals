@@ -4,7 +4,7 @@
 
 /**
  * What the pages tell search engines Cubepals is, as schema.org JSON-LD. Prices come from the same
- * plan table the page shows, so the markup can't disagree with it. Left out until they exist: the
+ * reading of the plans the page shows (`pricedPlans`), so the markup can't disagree with it. Left out until they exist: the
  * operator's legal name, a contact email, and any profile that doesn't resolve yet. No rating or review: Cubepals has none and makes none up.
  */
 import type { PublicPlan } from '@blockly/contracts'
@@ -40,7 +40,7 @@ export function siteSchema(origin: string) {
   }
 }
 
-/** The product and what each plan costs: on the home and pricing pages. No offers without a plan table. */
+/** The product and what each plan costs: on the home and pricing pages. No offers without the plans. */
 export function appSchema(plans: readonly PublicPlan[], origin: string) {
   return {
     '@context': 'https://schema.org',

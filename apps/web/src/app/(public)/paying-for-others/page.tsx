@@ -8,7 +8,7 @@
  */
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { dollars, FREE, PLUS } from '../../../legal/figures'
+import { FREE, PLUS } from '../../../legal/figures'
 import { pageMetadata } from '../../../lib/site'
 import { Button } from '../../../ui'
 
@@ -29,7 +29,7 @@ export default function PayingForOthersPage() {
       heading: 'How it works',
       lines: [
         `A server belongs to one account, and that account’s plan covers it for everyone who plays. To pay for a friend’s server, or the one your group plays on, give ${PLUS.name} to whoever owns it.`,
-        `Buy a gift here and we email you a code: a month of ${PLUS.name} is ${dollars(PLUS.priceCents)}. Pass it on however you like. They redeem it signed in to their own account, and ${PLUS.name} starts then.`,
+        `Buy a gift here, at the price the gift page shows, and we email you a code. Pass it on however you like. They redeem it signed in to their own account, and ${PLUS.name} starts then.`,
         `It’s still their server and their world. You don’t get access to their account, and they don’t see your card.`,
         `If they already pay for ${PLUS.name}, they set it to end in Manage billing first, and the gift starts when their paid time does. A second gift runs on from the first.`,
       ],

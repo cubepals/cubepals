@@ -2,13 +2,18 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
+/**
+ * What a month of a paid plan charges a new subscriber now, and the plans with it in place of the
+ * plan table's: the one reading every public page states a price from. Not how an offer is
+ * decided, which is the control plane's.
+ */
 import type { PublicPlan } from './accounts.ts'
 
 /**
  * What a month of a paid plan charges someone who subscribes now, for anyone to read: its price
  * and hours, the plan's own or an early price's while one is open. Never how much room is left
- * or how many took it. The plan table's own figures stay in `PublicPlan`, for what is cached or
- * sent (structured data, emails), which can't know whether one is open.
+ * or how many took it. Everything public that states a plan's price or hours states these
+ * (`withOffers`), falling back to the plan table's own, all together, where they can't be read.
  */
 export interface PublicOffer {
   plan: string
@@ -17,17 +22,31 @@ export interface PublicOffer {
   includedHours: number | null
 }
 
-/** The plans with each offer's price and hours in place of the plan table's, for the cards people choose on. */
+/**
+ * Whether a year at `yearlyCents` is sold beside a month at `monthlyCents`: only while it costs no
+ * more than twelve of those months. The control plane refuses a year's checkout where it isn't.
+ */
+export const yearSold = (yearlyCents: number, monthlyCents: number): boolean =>
+  yearlyCents <= 12 * monthlyCents
+
+/**
+ * The plans with each offer's price and hours in place of the plan table's, for everything that
+ * states them, and without a year where twelve months at the offered price cost less.
+ */
 export function withOffers(plans: readonly PublicPlan[], offers: readonly PublicOffer[]): PublicPlan[] {
   return plans.map((plan) => {
+    if (plan.per !== 'month' || plan.monthlyPriceCents === 0) return plan
     const offer = offers.find((each) => each.plan === plan.key)
-    return offer === undefined || plan.per !== 'month' || plan.monthlyPriceCents === 0
-      ? plan
-      : {
-          ...plan,
-          monthlyPriceCents: offer.priceCents,
-          includedHours: offer.includedHours ?? plan.includedHours,
-        }
+    const monthlyPriceCents = offer?.priceCents ?? plan.monthlyPriceCents
+    const year = plan.yearlyPriceCents
+    const yearlyPriceCents = year !== null && yearSold(year, monthlyPriceCents) ? year : null
+    if (offer === undefined && yearlyPriceCents === year) return plan
+    return {
+      ...plan,
+      monthlyPriceCents,
+      yearlyPriceCents,
+      includedHours: offer?.includedHours ?? plan.includedHours,
+    }
   })
 }
 

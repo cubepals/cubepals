@@ -8,7 +8,7 @@
  * there fails, by file and line, the way the folder picker once read one; the copied way passes.
  */
 import { afterAll, describe, expect, test } from 'bun:test'
-import { copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { chosenFiles, droppedEntries, droppedFiles } from './chosen-files'
@@ -90,12 +90,18 @@ afterAll(() => {
   for (const dir of made) rmSync(dir, { recursive: true, force: true })
 })
 
-/** A git checkout holding `files`, with the repository's biome.json and its rule. */
+/** Every plugin biome.json names: Biome reads them all, so each must be there. */
+const PLUGINS = (
+  JSON.parse(readFileSync(join(ROOT, 'biome.json'), 'utf8')) as { plugins: { path: string }[] }
+).plugins.map((plugin) => plugin.path)
+
+/** A git checkout holding `files`, with the repository's biome.json and its rules, this one among them. */
 function tree(files: Record<string, string>): string {
   const dir = mkdtempSync(join(tmpdir(), 'live-files-'))
   made.push(dir)
   Bun.spawnSync(['git', 'init', '-q'], { cwd: dir })
-  for (const path of ['biome.json', RULE]) {
+  expect(PLUGINS.map((path) => path.replace(/^\.\//, ''))).toContain(RULE)
+  for (const path of ['biome.json', ...PLUGINS]) {
     mkdirSync(dirname(join(dir, path)), { recursive: true })
     copyFileSync(join(ROOT, path), join(dir, path))
   }

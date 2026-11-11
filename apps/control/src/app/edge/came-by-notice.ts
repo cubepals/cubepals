@@ -11,11 +11,11 @@
  * server rests, or for what the friend is told (the edge's).
  */
 import type { Db } from '@blockly/db'
-import { entitlementsFor, entitlementsOf, planName } from '../../domain/account/entitlements.ts'
-import { planOnSaleHere } from '../../domain/account/on-sale.ts'
+import { entitlementsOf } from '../../domain/account/entitlements.ts'
 import type { MinecraftServer } from '../../domain/server/server.ts'
 import { emailOf, loadStanding } from '../accounts/persistence.ts'
 import { playTotal } from '../accounts/play-total.ts'
+import { paidOffered } from '../billing/paid-offered.ts'
 import { friendTurnedAway } from '../emails/play.ts'
 import type { Mailer } from '../ports/platform.ts'
 
@@ -42,14 +42,13 @@ export class CameByNotice {
       const to = await emailOf(this.#db, server.ownerId)
       const trialHours = await this.#trialHours(server.ownerId, new Date())
       if (to === null || trialHours === null) return
-      // What brings it back: the plan by the month on sale here, with its own hours.
-      const paid = planOnSaleHere()
-      const monthly = paid === null ? null : entitlementsFor(paid).includedUnits
+      // What brings it back: the plan by the month on sale here, with the hours it is offered with now.
+      const paid = await paidOffered()
       const email = friendTurnedAway({
         player: player.name,
         server: { id: server.id, name: server.name },
         trialHours,
-        paid: paid === null || monthly === null ? null : { name: planName(paid), hours: monthly },
+        paid,
         origin: this.#webOrigin,
       })
       await this.#mailer.send({
