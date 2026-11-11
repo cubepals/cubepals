@@ -14,7 +14,7 @@
  * It is not where covered play is read (`chip-in-meter.ts`) or where a server may run on it (the
  * policy and `AccountService.enforceLimits`).
  */
-import { CHIP_IN_CENTS, type ChipInsView } from '@blockly/contracts'
+import { CHIP_IN_CENTS, CheckoutConsent, type ChipInsView } from '@blockly/contracts'
 import { DAY_MS } from '@blockly/contracts/durations'
 import { type Db, type Queryable, schema, type Tx } from '@blockly/db'
 import { and, desc, eq, gte, sql } from 'drizzle-orm'
@@ -83,7 +83,9 @@ export class ChipIns {
 
   /**
    * A checkout for `cents` of hours on `server`, reached from `page` (its public page or an
-   * invitation, where the payer comes back to). Refused past the caps (`AbuseLimits.chipIn`), counted
+   * invitation, where the payer comes back to). `consent` is what the payer agreed to on that page,
+   * as a plan's checkout asks it (the Terms, and that the hours start now); none is refused, and the
+   * start keeps it. Refused past the caps (`AbuseLimits.chipIn`), counted
    * from the checkouts started in the last day, so a stolen card can't do much. The start is kept
    * before its checkout is made, and dropped again if the provider makes none.
    */
@@ -92,9 +94,16 @@ export class ChipIns {
     server: MinecraftServer | null,
     cents: number,
     page: string,
+    consent: CheckoutConsent | undefined,
   ): Promise<{ url: string }> {
     if (actor.kind !== 'user') throw new NotFound('Account')
     if (server === null) throw new NotFound('Server')
+    const agreed = CheckoutConsent.safeParse(consent)
+    if (!agreed.success)
+      throw new AppError(
+        'invalid_choice',
+        'Agree to the Terms and to your hours starting straight away, then chip in.',
+      )
     if (!Number.isInteger(cents) || cents < CHIP_IN_CENTS.min || cents > CHIP_IN_CENTS.max)
       throw new AppError(
         'invalid_choice',
@@ -115,7 +124,7 @@ export class ChipIns {
     if (!(await emailVerified(this.#db, actor.userId)))
       throw new AppError('email_unverified', 'Confirm your email address first — we sent you a link.')
     await this.#db.transaction((tx) => this.#policy.require(tx, actor.userId, { kind: 'billing' }))
-    const counted = await this.#db.transaction((tx) => this.#within(tx, actor, server, cents))
+    const counted = await this.#db.transaction((tx) => this.#within(tx, actor, server, cents, agreed.data))
     const returnUrl = new URL(page, this.#webOrigin)
     returnUrl.searchParams.set('chipped', '1')
     const url = await billing
@@ -145,11 +154,18 @@ export class ChipIns {
   }
 
   /**
-   * The chip-in counted against the day's caps (`AbuseLimits.chipIn`) and kept as started, under
+   * The chip-in counted against the day's caps (`AbuseLimits.chipIn`) and kept as started, with
+   * what the payer agreed to, under
    * the payer's and the server's locks, so each start counts every one before it; answers the
    * entry that counts it. Refused past either cap.
    */
-  async #within(tx: Tx, actor: UserActor, server: MinecraftServer, cents: number): Promise<string> {
+  async #within(
+    tx: Tx,
+    actor: UserActor,
+    server: MinecraftServer,
+    cents: number,
+    consent: CheckoutConsent,
+  ): Promise<string> {
     // Always the payer first, then the server, so two starts never wait on each other's.
     await lockAccountActions(tx, actor.userId)
     await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`chip-in-started:${server.id}`}))`)
@@ -174,7 +190,7 @@ export class ChipIns {
         action: 'billing.chip_in_started',
         subjectType: 'account',
         subjectId: actor.userId,
-        data: { server: server.id, cents },
+        data: { server: server.id, cents, terms: consent.terms, startNow: consent.startNow },
       })
       .returning({ id: log.id })
     if (entry === undefined) throw new Error('the chip-in was not kept as started')
@@ -270,6 +286,7 @@ export class ChipIns {
         milli: chipIns.milli,
         netCents: chipIns.netCents,
         refundedCents: chipIns.refundedCents,
+        withdrawnMilli: chipIns.withdrawnMilli,
         at: chipIns.receivedAt,
       })
       .from(chipIns)

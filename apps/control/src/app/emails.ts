@@ -25,7 +25,8 @@
  *
  * Parts (`emails/`):
  * - `account.ts`: welcome, confirming an email, a reset link and a changed password.
- * - `admins.ts`: what the platform tells every admin: a raised alert, the daily spend limit.
+ * - `admins.ts`: what the platform tells every admin: a raised alert, the daily spend limit, a
+ *   purchase cancelled within 14 days to refund by hand.
  * - `billing.ts`: a payment carrying extra play that failed, one still owed after that, and a
  *   year of Plus about to end.
  * - `gifts.ts`: a gift's emails: to whoever bought it (paid, its code, an address that bounced,
@@ -34,6 +35,8 @@
  * - `notices.ts`: what Cubepals itself changed on someone's server, from the address nobody reads
  *   (MAIL_NOTICE_FROM): a new address, out of Browse.
  * - `play.ts`: the warnings as a month's included play runs out, and as extra play is used.
+ * - `purchases.ts`: to a buyer, what they bought once it is paid, and that their cancellation of
+ *   it within 14 days was received.
  * - `servers.ts`: what happened to one server: off the directory, an idle world, a rebuild.
  */
 

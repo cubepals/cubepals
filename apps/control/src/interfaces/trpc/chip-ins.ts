@@ -15,6 +15,7 @@ export const chipIns = router({
       reached?.server ?? null,
       input.cents,
       reached?.page ?? '/',
+      input.consent,
     )
   }),
   own: authedProcedure

@@ -49,6 +49,8 @@ describe('the API router', () => {
       'listings.addNote',
       'listings.deleteNote',
       'chipIns.start',
+      'billing.cancellable',
+      'billing.cancel',
       'chipIns.own',
       'chipIns.setOpen',
       'sharing.inviteShared',

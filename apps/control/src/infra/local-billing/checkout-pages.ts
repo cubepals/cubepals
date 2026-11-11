@@ -9,6 +9,7 @@
  * route a Polar delivery takes, then goes back to the account page, which reads
  * the plan as it would after a real payment. Only `local-billing.ts` makes their links.
  */
+import { randomUUID } from 'node:crypto'
 import { Hono } from 'hono'
 import { LOCAL_BILLING_PATH, type LocalBilling, type Ticket } from './local-billing.ts'
 
@@ -43,12 +44,15 @@ export function localCheckoutPages(deps: {
   app.post(`${LOCAL_BILLING_PATH}/checkout`, async (c) => {
     const ticket = deps.billing.ticket(String((await c.req.parseBody()).ticket ?? ''), 'checkout')
     if (ticket?.userId == null || ticket.planKey === null) return c.html(expired(), 400)
-    // A year is one order, with no subscription to renew it.
-    if (!ticket.year)
+    // A year is one order, with no subscription to renew it. A month's first order names the
+    // subscription it starts, as Polar's does.
+    const subscriptionId = ticket.year ? undefined : `local-${randomUUID()}`
+    if (subscriptionId !== undefined)
       await deliver({
         type: 'subscription.started',
         userId: ticket.userId,
         planKey: ticket.planKey,
+        subscriptionId,
         ...(ticket.productId === undefined ? {} : { productId: ticket.productId }),
       })
     await deliver({
@@ -56,7 +60,7 @@ export function localCheckoutPages(deps: {
       userId: ticket.userId,
       planKey: ticket.planKey,
       cents: ticket.priceCents,
-      ...(ticket.year ? { year: true } : {}),
+      ...(ticket.year ? { year: true } : { subscriptionId }),
     })
     return c.redirect(ticket.returnUrl, 303)
   })

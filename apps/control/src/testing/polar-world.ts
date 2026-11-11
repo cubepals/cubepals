@@ -55,6 +55,9 @@ export const YEAR = '0f6f9a52-3b8c-4d0e-9a51-1f0ab2a1c004'
 /** The one-time product friends chip in to a server with, found by its metadata. */
 export const CHIP_IN = '0f6f9a52-3b8c-4d0e-9a51-1f0ab2a1c005'
 
+/** How a purchase's confirmation is titled (`emails/purchases.ts`). */
+const CONFIRMATION = 'Your Cubepals purchase: '
+
 /** The rest of a pending update Polar holds. */
 const PENDING = { id: 'pending-update', created_at: '2026-10-01T00:00:00Z', modified_at: null, seats: null }
 
@@ -414,9 +417,13 @@ export class PolarWorld {
     return rows.filter((row) => row.action === action).map((row) => row.data)
   }
 
-  /** The emails sent to the owner. */
-  async mailTo(owner: UserActor) {
+  /**
+   * The emails sent to the owner, without the confirmation of each purchase they paid
+   * (`purchase-confirmation.ts`), which its own tests read: with `confirmations`, every one.
+   */
+  async mailTo(owner: UserActor, confirmations = false) {
     const [user] = await this.h.db.select().from(schema.users).where(eq(schema.users.id, owner.userId))
-    return this.h.mail.to(user?.email ?? '')
+    const mail = this.h.mail.to(user?.email ?? '')
+    return confirmations ? mail : mail.filter((m) => !m.subject.startsWith(CONFIRMATION))
   }
 }

@@ -35,8 +35,13 @@ describe('what a chip-in buys', () => {
     expect(milliFor(500)).toBe(20_000)
     expect(milliFor(700)).toBe(28_000)
     // A refund of half of what it cost before tax takes half its hours.
-    expect(heldMilli({ milli: 28_000, netCents: 560, refundedCents: 280 })).toBe(14_000)
-    expect(heldMilli({ milli: 20_000, netCents: 500, refundedCents: 500 })).toBe(0)
+    expect(heldMilli({ milli: 28_000, netCents: 560, refundedCents: 280, withdrawnMilli: 0 })).toBe(14_000)
+    expect(heldMilli({ milli: 20_000, netCents: 500, refundedCents: 500, withdrawnMilli: 0 })).toBe(0)
+    // Cancelled with 15 hours unplayed: it holds the 5 played, and the refund for the 15 takes no more.
+    expect(heldMilli({ milli: 20_000, netCents: 500, refundedCents: 0, withdrawnMilli: 15_000 })).toBe(5_000)
+    expect(heldMilli({ milli: 20_000, netCents: 500, refundedCents: 375, withdrawnMilli: 15_000 })).toBe(
+      5_000,
+    )
   })
 })
 

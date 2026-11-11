@@ -4,8 +4,9 @@
 
 /**
  * What the platform tells every admin by email: an alert it raised (platform/alerts.ts), a day
- * whose spend passed the daily limit (operations/schedules/spend.ts), and the signals just raised
- * of the kinds `SIGNALS` emails (joins/signal-mail.ts).
+ * whose spend passed the daily limit (operations/schedules/spend.ts), the signals just raised
+ * of the kinds `SIGNALS` emails (joins/signal-mail.ts), and a purchase cancelled within its 14 days,
+ * whose refund a person pays at the provider (billing/withdrawals.ts).
  */
 import { dollars } from '../../domain/policy/spend.ts'
 import { ADMIN, box, type Email, esc, INK, layout, MONO, MUTED, p, SANS, small } from '../emails.ts'
@@ -104,6 +105,50 @@ export function signalDigest(input: { lines: readonly SignalLine[]; origin: stri
         )
         .join(''),
       after: small(esc(after)),
+      why: ADMIN,
+    }),
+  }
+}
+
+/**
+ * A purchase cancelled within its 14 days from the account page (`billing/withdrawals.ts`), for
+ * whoever pays refunds at the provider by hand, or refuses one that is abuse. Nothing was paid out.
+ */
+export function withdrawalToRefund(input: {
+  userId: string
+  order: string
+  kind: string
+  title: string
+  receivedAt: string
+  hoursPlayed: number | null
+  paid: string
+  refund: string
+  rule: string
+  earlierFull: boolean
+  origin: string
+}): Email {
+  const summary = `A purchase was cancelled within 14 days: ${input.refund} to refund by hand.`
+  const lines = [
+    `Account: ${input.userId}`,
+    `Order: ${input.order} (${input.kind}, ${input.title.replace(/^your /, '')})`,
+    `Received: ${input.receivedAt}`,
+    `Hours played: ${input.hoursPlayed === null ? 'none count' : input.hoursPlayed}`,
+    `Paid: ${input.paid}. The Refunds page's rule (${input.rule}) gives back ${input.refund}.`,
+    `A full refund on an earlier purchase: ${input.earlierFull ? 'yes' : 'no'}.`,
+    'The purchase has stopped. Nothing was paid out: refund it at the provider, to the payment method used, within 14 days, or refuse it there if it is abuse.',
+  ]
+  const url = `${input.origin}/admin/accounts/${encodeURIComponent(input.userId)}`
+  return {
+    subject: `Cubepals: refund to pay by hand, ${input.refund}`,
+    preheader: summary,
+    text: [summary, '', ...lines, '', url].join('\n'),
+    html: layout({
+      origin: input.origin,
+      preheader: summary,
+      chip: { label: 'Refund by hand', tone: 'danger' },
+      heading: esc(summary),
+      body: lines.map((line) => p(esc(line))).join(''),
+      action: { label: 'Open the account', url },
       why: ADMIN,
     }),
   }

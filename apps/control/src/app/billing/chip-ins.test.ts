@@ -9,6 +9,7 @@
  * once the month's hours are used: a start the policy would refuse, and hours never billed as extra.
  */
 import { afterAll, afterEach, beforeAll, beforeEach, expect, spyOn, test } from 'bun:test'
+import { TERMS_VERSION } from '@blockly/contracts'
 import { HOUR_MS, MINUTE_MS } from '@blockly/contracts/durations'
 import { schema } from '@blockly/db'
 import type { models } from '../../infra/polar/polar-models.ts'
@@ -20,6 +21,9 @@ import { installTuning, tuning } from '../tuning.ts'
 import { extraThisMonth } from './extra-usage.ts'
 
 const w = new PolarWorld()
+
+/** What the chip-in's page sends once both boxes are ticked. */
+const AGREED = { terms: TERMS_VERSION, startNow: true } as const
 
 beforeAll(async () => {
   if (hasDatabase) await w.start()
@@ -56,7 +60,7 @@ const stoppedServer = async (owner: UserActor) => {
 /** A chip-in started from the server's invitation, as the page asks for it. */
 const chipIn = async (payer: UserActor, code: string, cents: number) => {
   const reached = await w.h.app.sharingQueries.reach({ code }, payer)
-  return w.h.app.billing.chipIns.start(payer, reached?.server ?? null, cents, reached?.page ?? '/')
+  return w.h.app.billing.chipIns.start(payer, reached?.server ?? null, cents, reached?.page ?? '/', AGREED)
 }
 
 /** The 15th of next month, after anything the harness really ran. */

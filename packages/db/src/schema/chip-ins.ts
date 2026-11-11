@@ -35,6 +35,11 @@ export const chipIns = pgTable(
     netCents: integer('net_cents').notNull(),
     refundedCents: integer('refunded_cents').notNull().default(0),
     milli: integer('milli').notNull(),
+    /**
+     * The hours of it not yet played when its payer cancelled it within its 14 days, in
+     * thousandths: from then they can't be played, whatever the refund that follows.
+     */
+    withdrawnMilli: integer('withdrawn_milli').notNull().default(0),
     receivedAt: createdAt(),
     updatedAt: updatedAt(),
   },

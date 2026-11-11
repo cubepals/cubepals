@@ -71,6 +71,7 @@ import {
 } from './plan-moves.ts'
 import { refundSecondCharge, stopSecondSubscriptions } from './second-subscriptions.ts'
 import { shownOffersOf } from './shown-offers.ts'
+import { Withdrawals } from './withdrawals.ts'
 import {
   accountsWithYearsEnded,
   markReminded,
@@ -189,6 +190,8 @@ export class BillingService {
   readonly chipIns: ChipIns
   /** Time on a plan bought for someone else, redeemed with a code. */
   readonly gifts: Gifts
+  /** Purchases cancelled within their 14 days from the account page; nothing paid out. */
+  readonly withdrawals: Withdrawals
   /** Money paid that was owed no more, refunded at once. */
   readonly #overpaid: Overpayments
   /** Subscriptions Blockly ends at the provider itself: a withdrawal, a renewal left unpaid. */
@@ -210,6 +213,7 @@ export class BillingService {
     mailer: Mailer
     limits: Limits
     webOrigin: string
+    adminInbox?: readonly string[]
   }) {
     this.#db = deps.db
     this.#policy = deps.policy
@@ -227,6 +231,7 @@ export class BillingService {
       webOrigin: deps.webOrigin,
     })
     this.gifts = new Gifts(deps)
+    this.withdrawals = new Withdrawals(deps)
     this.#overpaid = new Overpayments(deps)
     this.#ending = new SubscriptionEnding(deps)
     this.#owed = new OwedPayments(deps)
@@ -520,6 +525,7 @@ export class BillingService {
     if (event.kind === 'order') {
       const kept = await recordOrder(this.#db, billing.provider, event.order)
       if (kept !== null) await this.#orderKept(billing.provider, kept)
+      if (kept !== null) await this.withdrawals.confirm(billing.provider, kept)
       return kept !== null ? 'recorded' : 'ignored'
     }
     await this.syncSubscription(event.state, 'system:billing', 'webhook')

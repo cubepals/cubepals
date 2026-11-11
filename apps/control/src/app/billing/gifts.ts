@@ -36,7 +36,7 @@ import {
 } from '../ports/optional.ts'
 import type { Mailer } from '../ports/platform.ts'
 import { tuning } from '../tuning.ts'
-import { type AuditEntry, planChange, writeEntries } from './audit.ts'
+import { type AuditEntry, type BillingSource, planChange, writeEntries } from './audit.ts'
 import { codeHash, codeHint, newCode, readCode } from './gift-codes.ts'
 import { latestSubscription, PAID_ORDER, PAYING } from './persistence.ts'
 import { addMonths, lastYearEnd } from './years.ts'
@@ -266,7 +266,8 @@ export class Gifts {
    * had it moves to the plan it has without it, and what that plan doesn't allow stops. A gift
    * order refunded before its paid delivery is handled (`paid`) is kept as a gift refunded, with no
    * code, so its paid delivery coming after never makes one; a gift made before its checkout is
-   * found by its id for that. Who it was for is kept no longer.
+   * found by its id for that. Who it was for is kept no longer. One cancelled from the account page
+   * was voided then (`voidGift`), and its refund changes nothing more.
    */
   async #void(provider: string, externalOrderId: string, paid: Paid | null): Promise<void> {
     const redeemedBy = await this.#db.transaction(async (tx) => {
@@ -277,30 +278,11 @@ export class Gifts {
         .where(and(eq(gifts.provider, provider), eq(gifts.externalOrderId, externalOrderId)))
         .for('update')
       if (!row || row.voidedAt !== null) return null
-      if (row.redeemedBy !== null) await lockStanding(tx, row.redeemedBy)
-      const now = new Date()
-      const before = row.redeemedBy === null ? null : (await loadStanding(tx, row.redeemedBy, now)).plan
-      await tx
-        .update(gifts)
-        .set({ voidedAt: now, state: 'refunded', recipientEmail: null })
-        .where(eq(gifts.id, row.id))
-      await writeEntries(
-        tx,
-        row.buyerId ?? row.id,
-        'system:billing',
-        'webhook',
-        [{ action: 'billing.gift_refunded', data: { gift: row.id, redeemed: row.redeemedBy !== null } }],
-        subjectOf(row),
-      )
-      if (row.redeemedBy !== null && before !== null)
-        await writeEntries(
-          tx,
-          row.redeemedBy,
-          'system:billing',
-          'webhook',
-          planChange(before, (await loadStanding(tx, row.redeemedBy, now)).plan, { gift: row.id }),
-        )
-      return row.redeemedBy
+      return voidGift(tx, row, {
+        actor: 'system:billing',
+        source: 'webhook',
+        action: 'billing.gift_refunded',
+      })
     })
     if (redeemedBy !== null) await this.#accounts.enforceLimits(redeemedBy)
   }
@@ -537,6 +519,44 @@ export class Gifts {
       throw new AppError('invalid_choice', 'This is a test account: its plan is set by an admin.')
     return user
   }
+}
+
+/**
+ * The gift ends now: its code stops working, time already redeemed with it ends, and the account
+ * that had it moves to the plan it has without it, each audited (`action` on the buyer's side: a
+ * refund, or a cancel from the account page, `withdrawals.ts`). Who it was for is kept no longer.
+ * Run with the gift's row locked and not voided yet. Answers the account that had redeemed it,
+ * whose limits the caller enforces once this commits; null for a gift nobody redeemed.
+ */
+export async function voidGift(
+  tx: Tx,
+  row: typeof gifts.$inferSelect,
+  by: { actor: string; source: BillingSource; action: string },
+): Promise<string | null> {
+  if (row.redeemedBy !== null) await lockStanding(tx, row.redeemedBy)
+  const now = new Date()
+  const before = row.redeemedBy === null ? null : (await loadStanding(tx, row.redeemedBy, now)).plan
+  await tx
+    .update(gifts)
+    .set({ voidedAt: now, state: 'refunded', recipientEmail: null })
+    .where(eq(gifts.id, row.id))
+  await writeEntries(
+    tx,
+    row.buyerId ?? row.id,
+    by.actor,
+    by.source,
+    [{ action: by.action, data: { gift: row.id, redeemed: row.redeemedBy !== null } }],
+    subjectOf(row),
+  )
+  if (row.redeemedBy !== null && before !== null)
+    await writeEntries(
+      tx,
+      row.redeemedBy,
+      by.actor,
+      by.source,
+      planChange(before, (await loadStanding(tx, row.redeemedBy, now)).plan, { gift: row.id }),
+    )
+  return row.redeemedBy
 }
 
 /**

@@ -98,7 +98,8 @@ const bought = async () => {
   })
   expect(await h.app.billing.receiveWebhook(delivery.body, delivery.headers)).toBe('recorded')
   const email = `${buyer.userId}@example.test`
-  const text = h.mail.to(email).at(-1)?.text ?? ''
+  // The code's own email, not the confirmation of the purchase sent beside it.
+  const text = h.mail.to(email).find((m) => m.subject.startsWith('Your Cubepals gift code'))?.text ?? ''
   const code = text.match(/[0-9A-Z]{4}(-[0-9A-Z]{4}){3}/)?.[0]
   if (code === undefined) throw new Error('no code was emailed')
   const [row] = await h.db.select().from(schema.planGifts).where(eq(schema.planGifts.buyerId, buyer.userId))

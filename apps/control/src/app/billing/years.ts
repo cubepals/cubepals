@@ -21,6 +21,7 @@ import { loadStanding } from '../accounts/persistence.ts'
 import type { BillingOrder } from '../ports/optional.ts'
 import { type AuditEntry, type BillingSource, planChange, planRecordedSince, writeEntries } from './audit.ts'
 import { PAID_ORDER, PAYING } from './persistence.ts'
+import { withdrawalOf } from './withdrawal-records.ts'
 
 const years = schema.planYears
 const orders = schema.billingOrders
@@ -63,7 +64,7 @@ export function monthsKept(order: Pick<BillingOrder, 'netCents' | 'refundedCents
  * delivery that comes again after a refund never gives the year back: its end only ever moves
  * earlier. Answers what changed, for the audit log; null for an order that pays for no year or
  * hasn't been paid. Run under the account's standing lock, so two years can't both start at the
- * same end.
+ * same end. A year cancelled from the account page ended then, and a refund after it moves nothing.
  */
 export async function recordYear(
   tx: Tx,
@@ -86,6 +87,8 @@ export async function recordYear(
     .from(years)
     .where(and(eq(years.provider, provider), eq(years.externalOrderId, order.externalOrderId)))
   if (held !== undefined) {
+    // Cancelled from the account page, it ended then: the refund that follows moves nothing.
+    if ((await withdrawalOf(tx, provider, order.externalOrderId)) !== null) return []
     const endsAt = addMonths(held.startsAt, monthsKept(paid))
     if (endsAt.getTime() >= held.endsAt.getTime()) return []
     await tx

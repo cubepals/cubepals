@@ -71,7 +71,14 @@ export interface Ticket {
 
 /** What a page did, as the webhook receives it. */
 export type Delivery =
-  | { type: 'subscription.started'; userId: string; planKey: string; productId?: string }
+  | {
+      type: 'subscription.started'
+      userId: string
+      planKey: string
+      productId?: string
+      /** The id it is kept under, which its first order names, as Polar's order names its subscription. */
+      subscriptionId?: string
+    }
   | { type: 'subscription.cancelled'; userId: string }
   | {
       type: 'order.paid'
@@ -84,7 +91,15 @@ export type Delivery =
       giftId?: string
       payerEmail?: string
       chipIn?: string
+      /** The subscription a plan's first order starts (`subscription.started`); none for anything else. */
+      subscriptionId?: string
     }
+
+/** The subscription a delivery names, from the page that started it; null where it names none. */
+const named = (subscriptionId: string | undefined): string | null => subscriptionId ?? null
+
+/** The id a subscription started here is kept under: the one its page chose, or a new one. */
+const startedAs = (subscriptionId: string | undefined): string => subscriptionId ?? `local-${randomUUID()}`
 
 export class LocalBilling implements BillingProvider {
   readonly provider = 'local'
@@ -315,7 +330,7 @@ export class LocalBilling implements BillingProvider {
           refundedCents: 0,
           status: 'paid',
           extraCents: 0,
-          externalSubscriptionId: null,
+          externalSubscriptionId: named(event.subscriptionId),
           settles: event.settles ?? [],
           // Only the settle page sends what it settles.
           balance: event.planKey === null && (event.settles ?? []).length > 0,
@@ -335,7 +350,7 @@ export class LocalBilling implements BillingProvider {
       subscription:
         event.type === 'subscription.started'
           ? {
-              externalSubscriptionId: `local-${randomUUID()}`,
+              externalSubscriptionId: startedAs(event.subscriptionId),
               planKey: event.planKey,
               status: 'active',
               currentPeriodEnd: new Date(Date.now() + PERIOD_MS),

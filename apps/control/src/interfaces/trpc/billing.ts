@@ -4,10 +4,11 @@
 
 /**
  * The billing procedures the web app calls: the plan table, a month's price held for the checkout
- * page, checkout, moves between plans, a price switch, the provider's portal and what is owed. What
+ * page, checkout, moves between plans, a price switch, the provider's portal, what is owed, and
+ * cancelling a purchase within its 14 days. What
  * each decides is `app/billing/`'s.
  */
-import { CheckoutInput, OfferInput, type PlanOfferView, withOffers } from '@blockly/contracts'
+import { CheckoutInput, OfferInput, type PlanOfferView, WithdrawInput, withOffers } from '@blockly/contracts'
 import { z } from 'zod'
 import { publicPlans } from '../../app/accounts/queries.ts'
 import { shownOffersOf } from '../../app/billing/shown-offers.ts'
@@ -57,6 +58,12 @@ export const billing = router({
   settle: authedProcedure.mutation(({ ctx }) => ctx.services.billing.settleBalance(ctx.actor)),
   /** After a checkout: the provider's word now, before its webhook arrives. */
   refresh: authedProcedure.mutation(({ ctx }) => ctx.services.billing.refresh(ctx.actor)),
+  /** The purchases of the last 14 days that can be cancelled, or were, with what comes back. */
+  cancellable: authedProcedure.query(({ ctx }) => ctx.services.billing.withdrawals.list(ctx.actor)),
+  /** Cancels one of them, once (`Withdrawals.request`). It pays nothing out itself. */
+  cancel: authedProcedure
+    .input(WithdrawInput)
+    .mutation(({ ctx, input }) => ctx.services.billing.withdrawals.request(ctx.actor, input.order)),
 })
 
 /** A plan's offer as the page reads it: whether it is early is the account's own record, not a label. */

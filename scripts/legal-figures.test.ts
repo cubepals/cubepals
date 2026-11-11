@@ -23,6 +23,7 @@ import {
 } from '../apps/control/src/domain/account/entitlements.ts'
 import { UNIT_CENTS } from '../apps/control/src/domain/account/meter.ts'
 import { DEFAULT_ABUSE_LIMITS } from '../apps/control/src/domain/account/tuning.ts'
+import { FULL_REFUND_UNDER_HOURS as REFUND_LINE } from '../apps/control/src/domain/account/withdrawal.ts'
 import {
   dollars,
   EXTRA_HOUR_CENTS,
@@ -100,6 +101,8 @@ describe('what the policies say about the plans', () => {
 
   test('the full refund stops at 30 hours, under what every paid plan includes', () => {
     expect(FULL_REFUND_UNDER_HOURS).toBe(30)
+    // The control plane works out refunds to the same line.
+    expect(FULL_REFUND_UNDER_HOURS).toBe(REFUND_LINE)
     for (const key of PAID_PLANS)
       expect(FULL_REFUND_UNDER_HOURS, key).toBeLessThan(entitlementsFor(key).includedUnits ?? Number.NaN)
   })

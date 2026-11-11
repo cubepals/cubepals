@@ -18,12 +18,22 @@ export const milliFor = (cents: number): number => Math.floor((cents * 1000) / U
 
 /**
  * What a chip-in still holds once part of it was refunded: the same share of its hours as of what
- * it cost before tax, which is how the provider counts a refund.
+ * it cost before tax, which is how the provider counts a refund. One its payer cancelled holds no
+ * more than was played by then (`withdrawnMilli` taken off), and the refund that follows takes
+ * nothing more unless it is for more than that.
  */
-export const heldMilli = (chipIn: { milli: number; netCents: number; refundedCents: number }): number =>
-  chipIn.netCents <= 0
-    ? 0
-    : Math.max(0, Math.floor((chipIn.milli * (chipIn.netCents - chipIn.refundedCents)) / chipIn.netCents))
+export const heldMilli = (chipIn: {
+  milli: number
+  netCents: number
+  refundedCents: number
+  withdrawnMilli: number
+}): number => {
+  const refunded =
+    chipIn.netCents <= 0
+      ? 0
+      : Math.max(0, Math.floor((chipIn.milli * (chipIn.netCents - chipIn.refundedCents)) / chipIn.netCents))
+  return Math.max(0, Math.min(refunded, chipIn.milli - chipIn.withdrawnMilli))
+}
 
 /** A server running, from `start` to `end` (ms), counting `rate` units an hour; or play covered. */
 export interface Span {
