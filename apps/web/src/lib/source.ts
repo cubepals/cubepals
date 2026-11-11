@@ -6,7 +6,8 @@
  * Where someone came from, as the link that brought them said: `utm_source` or `ref`, and the
  * rest of a campaign's tags (`utm_medium`, `utm_campaign`, `utm_content`, `utm_term`). They ride
  * on the addresses someone follows into sign-up and are kept once on the account; no cookie
- * carries them. A tag that isn't a short plain word is left out rather than kept as typed.
+ * carries them. Without a source on the link, the website that sent someone stands in for it
+ * (`./landing-source.ts`). A tag that isn't a short plain word is left out rather than kept as typed.
  */
 export interface LinkSource {
   source: string

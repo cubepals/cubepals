@@ -9,6 +9,7 @@ import { ChevronDown } from 'lucide-react'
 import { type ReactNode, useEffect, useId, useRef, useState } from 'react'
 import { AGREED } from '../../lib/agreement'
 import { authClient } from '../../lib/auth'
+import { BACK_FROM, withLanding } from '../../lib/landing-source'
 import { Button, ICON, Note } from '../../ui'
 import { ctaMark } from '../(public)/steps'
 import { AgreementNote } from './agreement'
@@ -48,7 +49,7 @@ function failureCopy(code: string, provider: string): string {
 
 /** The error page a round trip to `provider` returns to, marked with the provider it came from. */
 const markedWith = (url: string, provider: Provider) =>
-  `${url}${url.includes('?') ? '&' : '?'}via=${provider}`
+  `${url}${url.includes('?') ? '&' : '?'}${BACK_FROM}=${provider}`
 
 /**
  * The way into Blockly: the deployment's sign-in providers first, and email and password one step
@@ -136,7 +137,10 @@ export function AuthEntry({
     const { error } = await authClient.signIn.social({
       provider: provider.id,
       ...redirects,
-      errorCallbackURL: markedWith(redirects.errorCallbackURL, provider.id),
+      // A new account's first page keeps where this tab first landed, when nothing else said, and
+      // so does the page a cancelled or failed round trip comes back to, for the next try.
+      newUserCallbackURL: withLanding(redirects.newUserCallbackURL),
+      errorCallbackURL: markedWith(withLanding(redirects.errorCallbackURL), provider.id),
       additionalData: { agreement: AGREED },
     })
     if (error) {
