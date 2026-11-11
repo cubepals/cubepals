@@ -8,7 +8,7 @@
  */
 import { beforeEach, describe, expect, test } from 'bun:test'
 import { OWN_DOMAIN } from '@blockly/contracts'
-import { forgetLanding, landingSource, noteLanding, withLanding } from './landing-source.ts'
+import { BACK_FROM, forgetLanding, landingSource, noteLanding, withLanding } from './landing-source.ts'
 
 const HERE = OWN_DOMAIN
 const landing = (search: string, referrer: string, host = HERE) => ({ search, referrer, host })
@@ -81,5 +81,20 @@ describe('the first landing in a tab', () => {
 
   test('adds nothing before any page is noted', () => {
     expect(withLanding('/account?get=plus')).toBe('/account?get=plus')
+  })
+
+  test('survives a sign-in provider round trip that comes back without an account', () => {
+    noteLanding(landing('', 'https://www.reddit.com/r/admincraft/'))
+    // Sign-up sends the provider this address to come back to when it is cancelled or fails.
+    const back = `${withLanding('/sign-up?next=%2Fservers%2Fnew')}&${BACK_FROM}=google`
+    expect(back).toBe(`/sign-up?next=%2Fservers%2Fnew&ref=reddit.com&utm_medium=referral&${BACK_FROM}=google`)
+    // The page it comes back to is a new document, whose referrer is the provider.
+    forgetLanding()
+    noteLanding(landing(new URL(back, `https://${HERE}`).search, 'https://accounts.google.com/'))
+    expect(withLanding('/servers/new')).toBe('/servers/new?ref=reddit.com&utm_medium=referral')
+  })
+
+  test('takes no source from the provider a round trip came back from', () => {
+    expect(landingSource(landing(`?${BACK_FROM}=github`, 'https://github.com/'))).toBeNull()
   })
 })

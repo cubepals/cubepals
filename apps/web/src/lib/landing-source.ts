@@ -40,14 +40,25 @@ function referrerSource(referrer: string, here: string): LinkSource | null {
   return sourceOf({ ref: site, utm_medium: medium })
 }
 
-/** Where a visit came from: the address's own source first, then the website that sent it. */
+/**
+ * The parameter sign-in puts on the page a Google or GitHub round trip comes back to with an
+ * error. That page's referrer is the provider, never where the visit came from.
+ */
+export const BACK_FROM = 'via'
+
+/**
+ * Where a visit came from: the address's own source first, then the website that sent it, unless
+ * the page is one a sign-in provider sent back (`BACK_FROM`), which carries its source on itself.
+ */
 export function landingSource(landing: {
   search: string
   referrer: string
   host: string
 }): LinkSource | null {
   const params = Object.fromEntries(new URLSearchParams(landing.search))
-  return sourceOf(params) ?? referrerSource(landing.referrer, landing.host)
+  const linked = sourceOf(params)
+  if (linked !== null || BACK_FROM in params) return linked
+  return referrerSource(landing.referrer, landing.host)
 }
 
 /** The first landing in this tab: undefined until it is noted, null when it had no source. */
