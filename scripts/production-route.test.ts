@@ -4,7 +4,7 @@
 
 /** The road a change takes to production, from its paths, and that every doubt takes the whole road. */
 import { describe, expect, test } from 'bun:test'
-import { areaOf, describeRoute, routeOf } from './production-route.ts'
+import { areaOf, besideTheWebsite, describeRoute, routeOf } from './production-route.ts'
 
 const route = (...paths: string[]) => routeOf(paths).route
 
@@ -85,4 +85,25 @@ test('the summary names the route and the paths behind each area', () => {
   expect(lines).toContain('  website: apps/web/src/a.tsx')
   expect(lines).toContain('  control: apps/control/src/b.ts')
   expect(lines).toContain('  none: docs/c.md')
+})
+
+describe('what stops the website going alone (production.ts web) agrees with the route', () => {
+  test('a test or prose beside the Fly apps’ code is nothing, as it is to the route', () => {
+    const paths = ['apps/control/src/app/billing/charges.test.ts', 'docs/x.md', 'apps/web/src/legal/terms.ts']
+    expect(route(...paths)).toBe('website')
+    expect(besideTheWebsite(paths)).toEqual({ terraform: [], fly: [] })
+  })
+
+  test('what a Fly image is built from, or Terraform, still stops it', () => {
+    expect(
+      besideTheWebsite([
+        'apps/web/src/legal/terms.ts',
+        'apps/control/src/app/billing/service.ts',
+        'infra/terraform/modules/web/main.tf',
+      ]),
+    ).toEqual({
+      terraform: ['infra/terraform/modules/web/main.tf'],
+      fly: ['apps/control/src/app/billing/service.ts'],
+    })
+  })
 })
