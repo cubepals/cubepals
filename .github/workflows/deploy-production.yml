@@ -6,7 +6,8 @@ name: Deploy production
 
 # Production deployed from GitHub's machine, so no deploy depends on one person's disk
 # (docs/production.md § Deploy from GitHub). `apply` takes a nightly that passed on staging through
-# `bun scripts/production.ts apply`; the rollbacks put back what the last deploy changed. The
+# `bun scripts/production.ts apply`; `ship now` starts a nightly of main's newest commit, which
+# starts `apply` for itself once it passes; the rollbacks put back what the last deploy changed. The
 # values are production.env and config.auto.tfvars.json, taken from the encrypted bundle in the
 # private records repository with the age key this environment holds; nothing else of it is opened.
 #
@@ -24,6 +25,7 @@ on:
         type: choice
         options:
           - apply
+          - ship now
           - rollback
           - rollback website
           - rollback fly
@@ -36,17 +38,34 @@ on:
 permissions:
   contents: read
 
-# One deploy at a time; a second waits rather than deploying under the first.
-concurrency:
-  group: production
-  cancel-in-progress: false
-
 jobs:
+  # The hot path: main's newest commit through staging now, rather than tonight, then here. It
+  # opens nothing of production's; the nightly starts this workflow's `apply` when it passes.
+  ship-now:
+    name: "Production: ship now"
+    if: inputs.command == 'ship now'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      - name: A nightly of main's newest commit, and production once it passes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh workflow run nightly.yml --repo "$GITHUB_REPOSITORY" --ref main -f production=true
+          echo "Started a nightly of main's newest commit; once it passes on staging, it starts Deploy production's apply for its tag." >> "$GITHUB_STEP_SUMMARY"
+
   deploy:
     name: "Production: ${{ inputs.command }}"
+    if: inputs.command != 'ship now'
     runs-on: ubuntu-latest
     environment: production
     timeout-minutes: 90
+    # One deploy at a time; a second waits rather than deploying under the first.
+    concurrency:
+      group: production
+      cancel-in-progress: false
     steps:
       # DEPLOY_GITHUB_TOKEN pushes the `production` branch (workflows included), makes the release,
       # sets the Database dump workflow's secrets and reads the private records.

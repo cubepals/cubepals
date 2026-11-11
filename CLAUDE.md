@@ -1,4 +1,4 @@
-<!-- The rules live in AGENTS.md, which every agent and person reads; Claude Code reads it through this import. The sections below are the full form of three of them. -->
+<!-- The rules live in AGENTS.md, which every agent and person reads; Claude Code reads it through this import. The sections below are the full form of four of them. -->
 @AGENTS.md
 
 ## Business internals stay private
@@ -24,6 +24,15 @@ A player meets one product, not one per pull request. Before deciding how someth
   - **How it reads on the page:** the same words, the same waiting line with Cancel, the same confirmation before what is destructive.
 - **Apply it; don't invent another.** A new control doesn't get its own rule for when it works, its own kind of undo or its own wording when one already exists. It isn't hidden, or limited to "while they play", when the controls beside it wait instead. Limit it only where it means nothing later, and say why on the page.
 - **Where the existing way doesn't fit,** say why in the pull request. Then either change it everywhere it applies, or leave it alone. Two ways of doing the same thing is a bug.
+
+## Shipping to production
+
+Production moves only when someone asks; a merge lands on main and waits there. Both ways to ship go through the **Deploy production** workflow, so both get staging, main's guard, the reviewed plan and the site check.
+
+- **The usual path.** Merge, and tonight's nightly takes main through staging. Then Actions → Deploy production → Run workflow → `apply`, or `gh workflow run deploy-production.yml -f command=apply`. It deploys the newest nightly.
+- **The hot path, for what can't wait for tonight.** Actions → Deploy production → Run workflow → `ship now`, or `gh workflow run deploy-production.yml -f "command=ship now"`. It runs a nightly of main's newest commit at once; when that passes on staging, the nightly starts `apply` for its own tag. One click, about twenty minutes, nothing to come back for. Whatever else is on main goes with it.
+- **An agent asked to ship** takes `apply` when main's newest commit already has its nightly (`git tag --points-at origin/main`), and the hot path when it doesn't. It watches the nightly and the deploy it starts to the end (`gh run watch`), asks production for its pages, and says what went out.
+- **Faster than that** is `bun scripts/production.ts hotfix` ([docs/production.md](docs/production.md#a-fix-that-cant-wait-for-the-nightly)): no staging and no Terraform, for a fix that can't wait twenty minutes or one main can't take yet.
 
 ## The website's runtime moves only when proven
 

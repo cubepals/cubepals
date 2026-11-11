@@ -6,11 +6,18 @@ name: Nightly
 
 # Main's newest commit deployed to staging and taken through the staging check, then staging is
 # stopped again. A commit that passes is tagged v<next>-nightly.<date>.<run> (scripts/versions.ts)
-# and made a prerelease; production.ts deploys only such a commit.
+# and made a prerelease; production.ts deploys only such a commit. With `production` ticked (Deploy
+# production's `ship now` starts it so), a nightly that passes goes on to production at once: it
+# starts Deploy production's `apply` for its own tag, which main's guard checks like any other.
 on:
   schedule:
     - cron: '13 2 * * *'
   workflow_dispatch:
+    inputs:
+      production:
+        description: Deploy it to production once it passes
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -28,6 +35,8 @@ jobs:
     timeout-minutes: 75
     permissions:
       contents: write
+      # `production` starts Deploy production for the nightly it made.
+      actions: write
       # The release's archive gets a signed provenance attestation (docs/build-provenance.md).
       id-token: write
       attestations: write
@@ -111,8 +120,18 @@ jobs:
           git archive --format=tar.gz --prefix="cubepals-$tag/" -o "$RUNNER_TEMP/cubepals-$tag.tar.gz" "$GITHUB_SHA"
           gh release create "$tag" "$RUNNER_TEMP/cubepals-$tag.tar.gz" --target "$GITHUB_SHA" --prerelease --generate-notes --title "$tag"
           echo "archive=$RUNNER_TEMP/cubepals-$tag.tar.gz" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
       - name: Attest the release's archive
         if: steps.release.outputs.archive != ''
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: ${{ steps.release.outputs.archive }}
+      # Named by its tag, so a nightly made in the meantime isn't the one that goes.
+      - name: Deploy this nightly to production
+        if: inputs.production && steps.release.outputs.tag != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          gh workflow run deploy-production.yml --repo "$GITHUB_REPOSITORY" --ref main -f command=apply -f "version=$TAG"
+          echo "$TAG passed on staging and is on its way to production: Actions → Deploy production." >> "$GITHUB_STEP_SUMMARY"
