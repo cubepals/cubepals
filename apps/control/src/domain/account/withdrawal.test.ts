@@ -8,9 +8,11 @@
  */
 import { describe, expect, test } from 'bun:test'
 import { entitlementsFor } from './entitlements.ts'
-import { FULL_REFUND_UNDER_HOURS as LINE, type Withdrawn, withdrawalAmount } from './withdrawal.ts'
+import { type Withdrawn, withdrawalAmount } from './withdrawal.ts'
 
 const HOURS = entitlementsFor('plus').includedUnits ?? Number.NaN
+/** The line the rule is given; the one in force is `FULL_REFUND_UNDER_HOURS`, which the app layer passes. */
+const LINE = 30
 const month = (playedUnits: number, earlierFull = false): Withdrawn => ({
   kind: 'time',
   paidCents: 1500,
@@ -19,6 +21,7 @@ const month = (playedUnits: number, earlierFull = false): Withdrawn => ({
   playedUnits,
   includedUnits: HOURS,
   earlierFull,
+  fullUnderHours: LINE,
 })
 
 describe('a first month cancelled within 14 days', () => {
@@ -61,6 +64,7 @@ describe('a year cancelled within 14 days', () => {
     playedUnits,
     includedUnits: HOURS,
     earlierFull,
+    fullUnderHours: LINE,
   })
 
   test('below the line, everything; past it, the first month’s twelfth as a month, the rest in full', () => {

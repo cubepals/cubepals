@@ -9,8 +9,9 @@
  * they stood then, and in the same transaction the purchase stops, the way a refund from the
  * provider already stops it (`purchase-stop.ts`); a first month's subscription is ended at the
  * provider first, so it never renews. It also sends each paid order's confirmation, which says how
- * to cancel (`purchase-confirmation.ts`). The person and the operator are emailed before it
- * commits, so neither is told of a request that wasn't kept.
+ * to cancel (`purchase-confirmation.ts`). The operator and the person are told only once the
+ * request is kept, each once, and the billing pass tells whatever couldn't be then
+ * (`withdrawal-mail.ts`).
  *
  * It never pays money out: a person refunds the order at the provider by hand, or refuses it there.
  * The refund's own delivery then ends nothing twice (`years.ts`, `gifts.ts`, `ending.ts` read the
@@ -20,12 +21,10 @@
 import type { WithdrawalView } from '@blockly/contracts'
 import type { Db } from '@blockly/db'
 import { sql } from 'drizzle-orm'
-import { adminInbox, emailOf, lockStanding } from '../accounts/persistence.ts'
+import { emailOf, lockStanding } from '../accounts/persistence.ts'
 import type { AccountService } from '../accounts/service.ts'
 import { type Actor, requestedBy } from '../actor.ts'
 import { type DeploymentCapabilities, requireCapability } from '../capabilities.ts'
-import { withdrawalToRefund } from '../emails/admins.ts'
-import { money, whenSaid, withdrawalReceived } from '../emails/purchases.ts'
 import { AppError, NotFound } from '../errors.ts'
 import { listingsOfOwner } from '../listings/persistence.ts'
 import type { JobQueue } from '../ports/jobs.ts'
@@ -34,8 +33,9 @@ import type { Mailer } from '../ports/platform.ts'
 import { writeEntries } from './audit.ts'
 import { WITHDRAWAL_MS } from './ending.ts'
 import { confirmPurchase } from './purchase-confirmation.ts'
-import { stopPurchase, tenths } from './purchase-stop.ts'
+import { stopPurchase } from './purchase-stop.ts'
 import { assess, type Purchase, purchasesOf, purchaseTitle } from './withdrawable.ts'
+import { tenths, WithdrawalMail } from './withdrawal-mail.ts'
 import {
   keepWithdrawal,
   type WithdrawalRecord,
@@ -58,7 +58,8 @@ export class Withdrawals {
   readonly #jobs: JobQueue
   readonly #mailer: Mailer
   readonly #webOrigin: string
-  readonly #inbox: readonly string[]
+  /** Telling the operator and the person, once the request is kept. */
+  readonly mail: WithdrawalMail
 
   constructor(deps: {
     db: Db
@@ -76,7 +77,13 @@ export class Withdrawals {
     this.#jobs = deps.jobs
     this.#mailer = deps.mailer
     this.#webOrigin = deps.webOrigin
-    this.#inbox = deps.adminInbox ?? []
+    this.mail = new WithdrawalMail({
+      db: deps.db,
+      mailer: deps.mailer,
+      webOrigin: deps.webOrigin,
+      inbox: deps.adminInbox ?? [],
+      insight: deps.capabilities.insight ?? null,
+    })
   }
 
   /** The buyer of an order just paid told what they bought, once (`purchase-confirmation.ts`). */
@@ -146,6 +153,8 @@ export class Withdrawals {
         paidCents: purchase.paidCents,
         sentTo,
         ...assessed,
+        acknowledgedAt: null,
+        operatorsToldAt: null,
       }
       if (!(await keepWithdrawal(tx, kept))) throw alreadyAsked(at)
       const by = requestedBy(actor)
@@ -167,9 +176,11 @@ export class Withdrawals {
       ])
       for (const account of stopped.affected)
         await this.#jobs.enqueueEligibility(await listingsOfOwner(tx, account), tx)
-      await this.#tell(purchase, kept, stopped.ended)
       return { record: kept, affected: stopped.affected }
     })
+    // Kept and stopped: now the operator and the person are told, each once. One that fails is
+    // reported and left for the billing pass, and the request stands.
+    await this.mail.tell(record.provider, record.externalOrderId)
     for (const account of affected) await this.#accounts.enforceLimits(account)
     return viewOf(purchase, record, record.requestedAt)
   }
@@ -193,39 +204,6 @@ export class Withdrawals {
     if (!cancellable(purchase, now))
       throw new AppError('invalid_choice', `${capital(purchaseTitle(purchase))} has been refunded already.`)
     return purchase
-  }
-
-  /** The operator, then the person: an email that fails undoes the request, which can be made again. */
-  async #tell(purchase: Purchase, record: WithdrawalRecord, ended: string): Promise<void> {
-    const title = purchaseTitle(purchase)
-    const operator = withdrawalToRefund({
-      userId: record.userId,
-      order: record.externalOrderId,
-      kind: record.kind,
-      title,
-      receivedAt: whenSaid(record.requestedAt),
-      hoursPlayed:
-        purchase.kind === 'gift' && purchase.gift?.redeemedBy == null ? null : tenths(record.playedMilli),
-      paid: money(record.paidCents, record.currency),
-      refund: money(record.refundCents, record.currency),
-      rule: record.rule,
-      earlierFull: record.earlierFull,
-      origin: this.#webOrigin,
-    })
-    for (const to of await adminInbox(this.#db, this.#inbox)) await this.#mailer.send({ to, ...operator })
-    if (record.sentTo === '') return
-    await this.#mailer.send({
-      to: record.sentTo,
-      ...withdrawalReceived({
-        title,
-        receivedAt: record.requestedAt,
-        paidCents: record.paidCents,
-        refundCents: record.refundCents,
-        currency: record.currency,
-        ended,
-        origin: this.#webOrigin,
-      }),
-    })
   }
 }
 

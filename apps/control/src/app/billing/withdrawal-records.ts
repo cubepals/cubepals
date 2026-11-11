@@ -9,7 +9,7 @@
  * amount worked out (`withdrawable.ts`), nor what a request does (`withdrawals.ts`).
  */
 import { type Queryable, schema } from '@blockly/db'
-import { and, desc, eq, gt, ne } from 'drizzle-orm'
+import { and, desc, eq, gt } from 'drizzle-orm'
 
 const withdrawals = schema.billingWithdrawals
 
@@ -41,25 +41,6 @@ export async function keepWithdrawal(q: Queryable, record: WithdrawalRecord): Pr
     order: withdrawals.externalOrderId,
   })
   return kept.length > 0
-}
-
-/**
- * Whether the account had everything back on an earlier purchase under the line the Refunds page
- * draws (`rule: full`), which a person has once; `except` is the order being asked about now.
- */
-export async function hadFullRefund(q: Queryable, userId: string, except: string): Promise<boolean> {
-  const [row] = await q
-    .select({ order: withdrawals.externalOrderId })
-    .from(withdrawals)
-    .where(
-      and(
-        eq(withdrawals.userId, userId),
-        eq(withdrawals.rule, 'full'),
-        ne(withdrawals.externalOrderId, except),
-      ),
-    )
-    .limit(1)
-  return row !== undefined
 }
 
 /** What the account cancelled since `since`, newest first, for its page to say. */

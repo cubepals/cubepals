@@ -12,7 +12,6 @@
  */
 import { schema, type Tx } from '@blockly/db'
 import { and, eq } from 'drizzle-orm'
-import { planName } from '../../domain/account/entitlements.ts'
 import { AppError, NotFound } from '../errors.ts'
 import { writeEntries } from './audit.ts'
 import { endedHere, REVOKED } from './ending.ts'
@@ -20,14 +19,10 @@ import { voidGift } from './gifts.ts'
 import type { Assessed, Purchase } from './withdrawable.ts'
 import { recordYearEnds } from './years.ts'
 
-/** What stopping it changed: the accounts whose plan or servers it moved, and what ended, said whole. */
+/** What stopping it changed: the accounts whose plan or servers it moved. */
 export interface Stopped {
   affected: string[]
-  ended: string
 }
-
-/** Hours as the page and the emails say them: to a tenth. */
-export const tenths = (milli: number) => Math.round(milli / 100) / 10
 
 /** Stops the purchase; `by` is who asked, as the audit log names them. */
 export function stopPurchase(
@@ -56,11 +51,7 @@ async function stopPlan(tx: Tx, purchase: Purchase, by: string): Promise<Stopped
         data: { provider: purchase.provider, subscription: sub, plan: purchase.planKey, why: 'withdrawal' },
       },
     ])
-  const plan = planName(purchase.planKey ?? 'plus')
-  return {
-    affected: [userId],
-    ended: `${plan} has ended, and nothing more will be charged for it. Your account is on the free trial now; your worlds stay.`,
-  }
+  return { affected: [userId] }
 }
 
 async function stopYear(tx: Tx, purchase: Purchase, by: string, now: Date): Promise<Stopped> {
@@ -77,13 +68,7 @@ async function stopYear(tx: Tx, purchase: Purchase, by: string, now: Date): Prom
       ),
     )
   await recordYearEnds(tx, year.userId, by, 'user', now)
-  const plan = planName(year.planKey)
-  return {
-    affected: [year.userId],
-    ended: waiting
-      ? `Your year of ${plan} won’t start.`
-      : `Your year of ${plan} has ended. Your account is on the free trial now, unless something else you paid for runs; your worlds stay.`,
-  }
+  return { affected: [year.userId] }
 }
 
 async function stopGift(tx: Tx, purchase: Purchase, by: string): Promise<Stopped> {
@@ -96,13 +81,7 @@ async function stopGift(tx: Tx, purchase: Purchase, by: string): Promise<Stopped
   if (row === undefined || row.voidedAt !== null)
     throw new AppError('changed_meanwhile', 'That gift was refunded a moment ago.')
   const redeemedBy = await voidGift(tx, row, { actor: by, source: 'user', action: 'billing.gift_withdrawn' })
-  return {
-    affected: redeemedBy === null ? [] : [redeemedBy],
-    ended:
-      redeemedBy === null
-        ? 'Its code has stopped working.'
-        : 'Its code has stopped working, and the time it gave the account that redeemed it has ended.',
-  }
+  return { affected: redeemedBy === null ? [] : [redeemedBy] }
 }
 
 async function stopChipIn(
@@ -131,5 +110,5 @@ async function stopChipIn(
     subjectId: chipIn.serverId,
     data: { order: chipIn.externalOrderId, payer: chipIn.payerId, milli: unplayed },
   })
-  return { affected: [], ended: `The ${tenths(unplayed)} hours of it nobody had played can’t be played now.` }
+  return { affected: [] }
 }

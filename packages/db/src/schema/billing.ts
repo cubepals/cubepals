@@ -289,6 +289,12 @@ export const billingWithdrawals = pgTable(
     earlierFull: boolean('earlier_full').notNull(),
     /** Where the acknowledgement went: the account's email when it was asked for. */
     sentTo: text('sent_to').notNull(),
+    /**
+     * When the person's acknowledgement, and the operator's word, were handed over to be sent:
+     * each after the request was kept, at most once, and retried by the billing pass while null.
+     */
+    acknowledgedAt: ts('acknowledged_at'),
+    operatorsToldAt: ts('operators_told_at'),
   },
   (t) => [
     primaryKey({ columns: [t.provider, t.externalOrderId] }),

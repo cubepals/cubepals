@@ -5,7 +5,7 @@
 /**
  * What the Refunds page's rule gives back when a purchase is cancelled within its 14 days. Pure.
  * Time on a plan (a first month, a year, a gift redeemed): everything below
- * `FULL_REFUND_UNDER_HOURS` played, once per person; otherwise the person pays for the hours played
+ * the line played (`FULL_REFUND_UNDER_HOURS`, which the caller gives), once per person; otherwise the person pays for the hours played
  * out of the hours the plan includes in a month, from its first month's share of the price, and
  * gets the rest back, the other months in full. Time that hasn't started, and a gift nobody
  * redeemed, come back whole. A chip-in gives back its share for the hours nobody has played.
@@ -13,13 +13,6 @@
  * The amount is what the operator is told and the person shown; nothing here pays it. Where the
  * purchase and its play are read from is `app/billing/withdrawable.ts`.
  */
-
-/**
- * Hours played below which a plan cancelled within 14 days is refunded in full, once per person.
- * The web app's policy states it (`apps/web/src/legal/figures.ts`), and `scripts/legal-figures.test.ts`
- * holds the two to the same number.
- */
-export const FULL_REFUND_UNDER_HOURS = 30
 
 /** Which part of the rule gave the amount. `full` is the one a person has once. */
 export type WithdrawalRule = 'full' | 'played' | 'unstarted' | 'unredeemed' | 'unplayed'
@@ -39,6 +32,8 @@ export type Withdrawn =
       includedUnits: number | null
       /** The person had a full refund on an earlier purchase. */
       earlierFull: boolean
+      /** Hours played below which everything comes back, the first time: `FULL_REFUND_UNDER_HOURS`. */
+      fullUnderHours: number
     }
   | { kind: 'unredeemed'; paidCents: number }
   | {
@@ -61,7 +56,7 @@ export function withdrawalAmount(purchase: Withdrawn): { refundCents: number; ru
     return { refundCents: purchase.paidCents - kept, rule: 'unplayed' }
   }
   if (!purchase.started) return { refundCents: purchase.paidCents, rule: 'unstarted' }
-  if (purchase.playedUnits < FULL_REFUND_UNDER_HOURS && !purchase.earlierFull)
+  if (purchase.playedUnits < purchase.fullUnderHours && !purchase.earlierFull)
     return { refundCents: purchase.paidCents, rule: 'full' }
   // A plan with no monthly hours has none to measure play against: nothing of it is kept.
   const included = purchase.includedUnits ?? 0

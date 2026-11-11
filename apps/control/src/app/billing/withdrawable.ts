@@ -14,21 +14,22 @@
  * It decides and stops nothing (`withdrawals.ts`), and reads purchases only of the account asking,
  * or of one order for its confirmation (`purchase-confirmation.ts`).
  */
+import { FULL_REFUND_UNDER_HOURS } from '@blockly/contracts'
 import { type Queryable, schema } from '@blockly/db'
-import { and, desc, eq, gt, inArray, lte } from 'drizzle-orm'
+import { and, desc, eq, gt, inArray, lte, ne } from 'drizzle-orm'
 import { heldMilli } from '../../domain/account/chip-in.ts'
 import { entitlementsFor, planName } from '../../domain/account/entitlements.ts'
 import { type WithdrawalRule, type Withdrawn, withdrawalAmount } from '../../domain/account/withdrawal.ts'
 import { meteredUnitsSince, pendingDraws } from './chip-in-meter.ts'
 import { WITHDRAWAL_MS } from './ending.ts'
 import { PAID_ORDER } from './persistence.ts'
-import { hadFullRefund } from './withdrawal-records.ts'
 
 const orders = schema.billingOrders
 const years = schema.planYears
 const gifts = schema.planGifts
 const chipIns = schema.chipIns
 const servers = schema.minecraftServers
+const withdrawals = schema.billingWithdrawals
 
 /** What an order bought, of the purchases that can be cancelled. */
 type PurchaseKind = 'plan' | 'year' | 'gift' | 'chip_in'
@@ -43,9 +44,13 @@ export interface Purchase {
   orderedAt: Date
   /** The last moment it can be cancelled from the account page. */
   until: Date
-  /** What the order charged, tax included, and what was refunded of it, as the provider says. */
+  /**
+   * What the order charged, tax included, and what was refunded of it, as the provider says,
+   * counted against `netCents`, what it earned before tax, as the provider counts a refund.
+   */
   paidCents: number
   refundedCents: number
+  netCents: number
   currency: string
   planKey: string | null
   externalSubscriptionId: string | null
@@ -105,6 +110,7 @@ export async function purchasesOf(
     until: new Date(order.orderedAt.getTime() + WITHDRAWAL_MS),
     paidCents: order.totalCents,
     refundedCents: order.refundedCents,
+    netCents: order.netCents,
     currency: order.currency,
     planKey: order.planKey,
     externalSubscriptionId: order.externalSubscriptionId,
@@ -160,7 +166,7 @@ export interface Assessed {
  */
 export async function assess(q: Queryable, purchase: Purchase, now: Date): Promise<Assessed> {
   const buyer = purchase.userId
-  const earlierFull = buyer === null ? false : await hadFullRefund(q, buyer, purchase.externalOrderId)
+  const earlierFull = buyer === null ? false : await hadFullRefund(q, purchase.provider, buyer, purchase)
   const paidCents = purchase.paidCents
   const of = (withdrawn: Withdrawn, playedMilli: number, includedUnits: number | null) => ({
     playedMilli,
@@ -184,9 +190,51 @@ export async function assess(q: Queryable, purchase: Purchase, now: Date): Promi
     playedUnits,
     includedUnits: time.includedUnits,
     earlierFull,
+    fullUnderHours: FULL_REFUND_UNDER_HOURS,
   }
   return of(withdrawn, Math.round(playedUnits * 1000), time.includedUnits)
 }
+
+/**
+ * Whether the account had everything back on another purchase of time on a plan, which a person
+ * has once: one cancelled here under the line (`rule: full`), or one the provider refunded in full,
+ * as a refund through support arrives, its refund reaching what the order earned before tax (as
+ * `monthsKept` counts it). A purchase refunded in part doesn't count, nor does a gift nobody
+ * redeemed or a chip-in, which come back whole or by their unplayed share whatever came before.
+ */
+async function hadFullRefund(
+  q: Queryable,
+  provider: string,
+  userId: string,
+  purchase: Pick<Purchase, 'externalOrderId'>,
+): Promise<boolean> {
+  const [asked] = await q
+    .select({ order: withdrawals.externalOrderId })
+    .from(withdrawals)
+    .where(
+      and(
+        eq(withdrawals.userId, userId),
+        eq(withdrawals.rule, 'full'),
+        ne(withdrawals.externalOrderId, purchase.externalOrderId),
+      ),
+    )
+    .limit(1)
+  if (asked !== undefined) return true
+  const others = await purchasesOf(q, provider, { userId })
+  return others.some(
+    (other) =>
+      other.externalOrderId !== purchase.externalOrderId &&
+      timeOnPlan(other) &&
+      other.netCents > 0 &&
+      other.refundedCents >= other.netCents,
+  )
+}
+
+/** A purchase of time on a plan: a first month, a year, or a gift somebody redeemed. */
+const timeOnPlan = (purchase: Purchase): boolean =>
+  purchase.kind === 'plan' ||
+  purchase.kind === 'year' ||
+  (purchase.kind === 'gift' && purchase.gift?.redeemedBy != null)
 
 /**
  * The time on a plan a purchase gave, whose play counts: whose account, from when, over how many

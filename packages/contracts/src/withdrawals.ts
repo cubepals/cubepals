@@ -10,6 +10,15 @@ import { z } from 'zod'
  * Refunds page's rule gives back; nothing it does pays money out.
  */
 
+/**
+ * Hours of play, counted as the account page counts them (a large server spends two an hour, the
+ * largest four), below which a paid plan cancelled in its first 14 days gets everything back, the
+ * first time a person has one. At or past it, only the part not played is refunded, as the law
+ * requires. The Refunds page states it (`apps/web/src/legal/figures.ts`), and the control plane
+ * works refunds out to it (`app/billing/withdrawable.ts`).
+ */
+export const FULL_REFUND_UNDER_HOURS = 30
+
 /** What the account page sends to cancel one purchase: its order, as the list named it. */
 export const WithdrawInput = z.object({ order: z.string().trim().min(1).max(200) })
 export type WithdrawInput = z.infer<typeof WithdrawInput>

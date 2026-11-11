@@ -406,3 +406,88 @@ db('what was bought is emailed once, however often Polar delivers it', async () 
   })
   expect(await w.mailTo(owner, true)).toHaveLength(1)
 })
+
+/**
+ * A mailer that refuses the emails `refused` picks, as an outage would, until it is let go; the
+ * Outbox keeps only what went.
+ */
+function refusing(refused: (message: { to: string; subject: string }) => boolean) {
+  const send = w.h.mail.send.bind(w.h.mail)
+  return spyOn(w.h.mail, 'send').mockImplementation(async (message) => {
+    if (refused(message)) throw new Error('the mail server is down')
+    return send(message)
+  })
+}
+
+const told = (order: string) =>
+  w.h.db
+    .select({
+      acknowledgedAt: schema.billingWithdrawals.acknowledgedAt,
+      operatorsToldAt: schema.billingWithdrawals.operatorsToldAt,
+    })
+    .from(schema.billingWithdrawals)
+    .where(eq(schema.billingWithdrawals.externalOrderId, order))
+
+db('the person’s email failing leaves the request kept, and the billing pass sends it once', async () => {
+  const inbox = await admin()
+  const { owner, order } = await firstMonth('Rae', 2)
+  const email = `${owner.userId}@example.test`
+  const down = refusing((m) => m.to === email && m.subject.startsWith('We received'))
+  try {
+    expect(await withdrawals().request(owner, order)).toMatchObject({
+      order,
+      requestedAt: expect.any(String),
+    })
+  } finally {
+    down.mockRestore()
+  }
+  // Kept and stopped, the operator told once, the person not yet; the page says it was cancelled.
+  expect(await kept(order)).toHaveLength(1)
+  expect((await w.h.app.accountQueries.overview(owner)).plan.key).toBe('free')
+  expect(w.h.mail.to(inbox)).toHaveLength(1)
+  expect((await subjects(owner)).filter((s) => s.startsWith('We received'))).toEqual([])
+  expect(await told(order)).toMatchObject([{ acknowledgedAt: null, operatorsToldAt: expect.any(Date) }])
+  expect(await withdrawals().list(owner)).toMatchObject([{ order, requestedAt: expect.any(String) }])
+
+  await withdrawals().mail.tellUntold()
+  await withdrawals().mail.tellUntold()
+  expect((await subjects(owner)).filter((s) => s.startsWith('We received'))).toHaveLength(1)
+  expect(w.h.mail.to(inbox)).toHaveLength(1)
+  expect(await told(order)).toMatchObject([{ acknowledgedAt: expect.any(Date) }])
+})
+
+db('the operator’s email failing leaves the request kept, and the billing pass sends it once', async () => {
+  const inbox = await admin()
+  const { owner, order } = await firstMonth('Sol', 2)
+  const down = refusing((m) => m.to === inbox)
+  try {
+    await withdrawals().request(owner, order)
+  } finally {
+    down.mockRestore()
+  }
+  expect(await kept(order)).toHaveLength(1)
+  expect(w.h.mail.to(inbox)).toEqual([])
+  expect((await subjects(owner)).filter((s) => s.startsWith('We received'))).toHaveLength(1)
+
+  await withdrawals().mail.tellUntold()
+  await withdrawals().mail.tellUntold()
+  expect(w.h.mail.to(inbox).filter((m) => m.text.includes(order))).toHaveLength(1)
+  expect((await subjects(owner)).filter((s) => s.startsWith('We received'))).toHaveLength(1)
+})
+
+db('a full refund given through support counts as the person’s once; a part refund doesn’t', async () => {
+  const refundedEarlier = async (name: string, amount: number) => {
+    const { owner, order } = await firstMonth(name, 5)
+    const held = w.orders.get(order)
+    if (held === undefined) throw new Error('no order')
+    const refunded = amount >= held.net_amount ? 'refunded' : 'partially_refunded'
+    await w.post(orderEvent({ ...held, status: refunded, refunded_amount: amount }, 'order.refunded'))
+    // Bought again, a day ago.
+    const again = randomUUID()
+    await w.standing(owner, again)
+    const second = await w.ordered(owner, again, { created_at: new Date(Date.now() - DAY_MS).toISOString() })
+    return withdrawals().request(owner, second)
+  }
+  expect(await refundedEarlier('Tia', 1500)).toMatchObject({ rule: 'played' })
+  expect(await refundedEarlier('Uli', 500)).toMatchObject({ rule: 'full' })
+})

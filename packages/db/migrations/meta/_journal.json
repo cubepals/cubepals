@@ -827,6 +827,13 @@
       "when": 1794403313285,
       "tag": "0117_withdrawals",
       "breakpoints": true
+    },
+    {
+      "idx": 118,
+      "version": "7",
+      "when": 1794413035474,
+      "tag": "0118_withdrawal_mail",
+      "breakpoints": true
     }
   ]
 }
