@@ -9,6 +9,13 @@ name: Deploy production
 # `bun scripts/production.ts apply`; the rollbacks put back what the last deploy changed. The
 # values are production.env and config.auto.tfvars.json, taken from the encrypted bundle in the
 # private records repository with the age key this environment holds; nothing else of it is opened.
+#
+# What runs is decided by main, not by what is deployed: scripts/production-guard.ts, from main at
+# the commit it is on when the run starts, refuses an old run started again, a nightly that isn't
+# on main or is older than production's settings need, and a Terraform plan that would move the
+# play names' wildcard or give the Fly apps a setting of Terraform's own. The age key is
+# PRODUCTION_AGE_KEY: a workflow from before the guard asks for another name, gets nothing, and
+# can't open the values.
 on:
   workflow_dispatch:
     inputs:
@@ -47,22 +54,25 @@ jobs:
         with:
           fetch-depth: 0
           token: ${{ secrets.DEPLOY_GITHUB_TOKEN }}
-      - name: The commit to deploy
-        if: inputs.command == 'apply'
-        env:
-          VERSION: ${{ inputs.version }}
-        run: |
-          tag="$VERSION"
-          [ -n "$tag" ] || tag=$(git tag --list '*-nightly.*' --sort=-v:refname | head -n 1)
-          case "$tag" in
-            *-nightly.*) ;;
-            *) echo "\"$tag\" isn't a nightly. Production takes only a commit a nightly passed on staging."; exit 1 ;;
-          esac
-          git checkout --quiet --detach "refs/tags/$tag"
-          echo "Deploying $tag, $(git rev-parse --short HEAD)."
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: 1.4.3
+      # Main's guard, in a checkout of its own that stays as it is for the whole run. It needs no
+      # install: only node's modules and the files beside it.
+      - name: Main's guard, and the commit to deploy
+        id: guard
+        env:
+          COMMAND: ${{ inputs.command }}
+          VERSION: ${{ inputs.version }}
+          WORKFLOW_SHA: ${{ github.workflow_sha }}
+        run: |
+          main=$(git rev-parse --verify 'refs/remotes/origin/main^{commit}')
+          git worktree add --quiet --detach "$RUNNER_TEMP/guard" "$main"
+          bun "$RUNNER_TEMP/guard/scripts/production-guard.ts" run "$COMMAND" "$VERSION"
+      - name: The commit to deploy
+        env:
+          COMMIT: ${{ steps.guard.outputs.commit }}
+        run: git checkout --quiet --detach "$COMMIT" && git log -1 --format='%H %s'
       - uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1 # 1.6
         with:
           version: 0.4.111
@@ -78,7 +88,7 @@ jobs:
       - run: bun install --frozen-lockfile
       - name: Production's values, from the private records
         env:
-          AGE_SECRET_KEY: ${{ secrets.AGE_SECRET_KEY }}
+          AGE_SECRET_KEY: ${{ secrets.PRODUCTION_AGE_KEY }}
           RECORDS_TOKEN: ${{ secrets.DEPLOY_GITHUB_TOKEN }}
         run: |
           umask 077
@@ -92,13 +102,17 @@ jobs:
             local/production/production.env \
             infra/terraform/environments/production/config.auto.tfvars.json
           rm -rf "$RUNNER_TEMP/age.key" "$records"
-      # Terraform shows its plan and asks; starting this workflow is the yes. The Database dump
-      # workflow keeps the secrets it has: changing an environment takes administration rights the
-      # token doesn't need for anything else.
+      - name: The nightly fits production's settings
+        if: inputs.command == 'apply'
+        run: bun "$RUNNER_TEMP/guard/scripts/production-guard.ts" fits "$(git rev-parse HEAD)"
+      # Terraform shows its plan, main's guard reviews it, and apply asks; starting this workflow is
+      # the yes, to that plan file alone. The Database dump workflow keeps the secrets it has:
+      # changing an environment takes administration rights the token doesn't need for anything else.
       - name: Deploy
         env:
           GH_TOKEN: ${{ secrets.DEPLOY_GITHUB_TOKEN }}
           COMMAND: ${{ inputs.command }}
+          PRODUCTION_GUARD: ${{ runner.temp }}/guard/scripts/production-guard.ts
         run: |
           if [ "$COMMAND" = apply ]; then
             echo yes | bun scripts/production.ts apply --keep-dump-secrets
@@ -110,4 +124,4 @@ jobs:
         run: bun scripts/site-check.ts https://cubepals.com 180
       - name: Leave no value behind
         if: always()
-        run: rm -f local/production/production.env local/production/backend.hcl infra/terraform/environments/production/config.auto.tfvars.json
+        run: rm -f local/production/production.env local/production/backend.hcl infra/terraform/environments/production/config.auto.tfvars.json infra/terraform/environments/production/production.tfplan

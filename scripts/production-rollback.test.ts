@@ -10,7 +10,7 @@
  */
 import { afterAll, describe, expect, test } from 'bun:test'
 import { spawnSync } from 'node:child_process'
-import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -40,17 +40,23 @@ afterAll(() => {
 })
 
 /** Runs `production.ts rollback fly …` against these histories; returns each deploy as `app ← image`. */
-function rollback(
+const rollback = (releases: Record<string, string[]>, ...args: string[]) =>
+  rollbackWith({}, releases, ...args)
+
+/** The same, with production's settings changed by `settings`; also returns the exit code. */
+function rollbackWith(
+  settings: Record<string, string>,
   releases: Record<string, string[]>,
   ...args: string[]
-): { deployed: string[]; said: string } {
+): { deployed: string[]; said: string; code: number | null } {
   const dir = mkdtempSync(join(tmpdir(), 'production-rollback-'))
   dirs.push(dir)
   mkdirSync(join(dir, ENVIRONMENT_DIR), { recursive: true })
-  copyFileSync(
-    join(ROOT, ENVIRONMENT_DIR, 'config.auto.tfvars.example.json'),
-    join(dir, ENVIRONMENT_DIR, 'config.auto.tfvars.json'),
+  const config = JSON.parse(
+    readFileSync(join(ROOT, ENVIRONMENT_DIR, 'config.auto.tfvars.example.json'), 'utf8'),
   )
+  Object.assign(config.settings, settings)
+  writeFileSync(join(dir, ENVIRONMENT_DIR, 'config.auto.tfvars.json'), JSON.stringify(config))
   mkdirSync(join(dir, 'local/production'), { recursive: true })
   writeFileSync(join(dir, 'local/production/production.env'), '')
   const bin = join(dir, 'bin')
@@ -100,7 +106,7 @@ Bun.sleep = (async () => {}) as typeof Bun.sleep
     .map((line) => JSON.parse(line) as string[])
     .filter((call) => call[0] === 'deploy')
     .map((call) => `${call[call.indexOf('--app') + 1]} ← ${call[call.indexOf('--image') + 1]}`)
-  return { deployed, said: result.stdout }
+  return { deployed, said: result.stdout, code: result.status }
 }
 
 describe('rollback after a deploy that touched only some apps', () => {
@@ -134,5 +140,29 @@ describe('rollback after a deploy that touched only some apps', () => {
     }
     expect(rollback(unlabelled).deployed).toEqual([])
     expect(rollback(unlabelled, 'control').deployed).toEqual(['bly-prod-control ← registry.fly.io/c:1'])
+  }, 90_000)
+})
+
+describe('rollback of the control app past what production’s settings need', () => {
+  const routed = { PLAY_IPV4_BY_REGION: 'us:203.0.113.9' }
+  /** A deploy's image of this checkout's commit, which keeps the play names' own records. */
+  const head = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: ROOT, encoding: 'utf8' }).stdout.trim()
+  const atHead = (app: string, deploy: number) =>
+    `registry.fly.io/bly-prod-${app}:deploy-20261017T11000${deploy}-${head}`
+
+  test('leaves control where it is, rolls the other apps back, and fails', () => {
+    // The images AFTER_HOTFIX names are of commits this checkout doesn't have, so they meet nothing.
+    const { deployed, said, code } = rollbackWith(routed, AFTER_HOTFIX, 'control', 'edge')
+    expect(deployed).toEqual([`bly-prod-edge ← ${image('edge', 0)}`])
+    expect(said).toContain('control: left as it is.')
+    expect(said).toContain('PLAY_IPV4_BY_REGION is set, and the code is older than #447')
+    expect(code).toBe(1)
+  }, 90_000)
+
+  test('goes back to an image that keeps the records', () => {
+    const releases = { ...AFTER_HOTFIX, 'bly-prod-control': [image('control', 2), atHead('control', 1)] }
+    const { deployed, code } = rollbackWith(routed, releases, 'control')
+    expect(deployed).toEqual([`bly-prod-control ← ${atHead('control', 1)}`])
+    expect(code).toBe(0)
   }, 90_000)
 })

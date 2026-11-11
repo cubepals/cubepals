@@ -1,0 +1,490 @@
+{
+  "nightlyBefore445": {
+    "format_version": "1.2",
+    "variables": {
+      "settings": {
+        "value": {
+          "PLAY_DOMAIN": "play.cubepals.com",
+          "PLAY_DOMAIN_ALIASES": "",
+          "PLAY_IPV4": "203.0.113.7",
+          "PLAY_IPV4_BY_REGION": "us:203.0.113.9"
+        }
+      }
+    },
+    "planned_values": {
+      "root_module": {
+        "child_modules": [
+          {
+            "address": "module.environment",
+            "child_modules": [
+              {
+                "address": "module.environment.module.edge",
+                "resources": [
+                  {
+                    "address": "module.environment.module.edge.fly_ip.v4",
+                    "mode": "managed",
+                    "type": "fly_ip",
+                    "name": "v4",
+                    "values": {
+                      "address": "198.51.100.1",
+                      "type": "public_v4"
+                    }
+                  },
+                  {
+                    "address": "module.environment.module.edge.fly_ip.v6",
+                    "mode": "managed",
+                    "type": "fly_ip",
+                    "name": "v6",
+                    "values": {
+                      "address": "2001:db8::1",
+                      "type": "public_v6"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "resource_changes": [
+      {
+        "address": "module.environment.module.control.fly_secret.setting[\"control/PLAY_DOMAIN\"]",
+        "module_address": "module.environment.module.control",
+        "mode": "managed",
+        "type": "fly_secret",
+        "name": "setting",
+        "index": "control/PLAY_DOMAIN",
+        "change": {
+          "actions": ["no-op"],
+          "before": {
+            "app": "bly-prod-control",
+            "name": "PLAY_DOMAIN",
+            "value_wo": null,
+            "value_wo_version": "play.cubepals.com"
+          },
+          "after": {
+            "app": "bly-prod-control",
+            "name": "PLAY_DOMAIN",
+            "value_wo": null,
+            "value_wo_version": "play.cubepals.com"
+          },
+          "after_unknown": {}
+        }
+      },
+      {
+        "address": "module.environment.module.control.fly_secret.setting[\"control/PLAY_IPV4\"]",
+        "module_address": "module.environment.module.control",
+        "mode": "managed",
+        "type": "fly_secret",
+        "name": "setting",
+        "index": "control/PLAY_IPV4",
+        "change": {
+          "actions": ["create"],
+          "before": null,
+          "after": {
+            "app": "bly-prod-control",
+            "name": "PLAY_IPV4",
+            "value_wo": null,
+            "value_wo_version": "203.0.113.7"
+          },
+          "after_unknown": {}
+        }
+      },
+      {
+        "address": "module.environment.module.control.fly_secret.setting[\"control/PLAY_IPV4_BY_REGION\"]",
+        "module_address": "module.environment.module.control",
+        "mode": "managed",
+        "type": "fly_secret",
+        "name": "setting",
+        "index": "control/PLAY_IPV4_BY_REGION",
+        "change": {
+          "actions": ["no-op"],
+          "before": {
+            "app": "bly-prod-control",
+            "name": "PLAY_IPV4_BY_REGION",
+            "value_wo": null,
+            "value_wo_version": "us:203.0.113.9"
+          },
+          "after": {
+            "app": "bly-prod-control",
+            "name": "PLAY_IPV4_BY_REGION",
+            "value_wo": null,
+            "value_wo_version": "us:203.0.113.9"
+          },
+          "after_unknown": {}
+        }
+      },
+      {
+        "address": "module.environment.module.control.fly_secret.setting[\"realtime/PLAY_DOMAIN\"]",
+        "module_address": "module.environment.module.control",
+        "mode": "managed",
+        "type": "fly_secret",
+        "name": "setting",
+        "index": "realtime/PLAY_DOMAIN",
+        "change": {
+          "actions": ["no-op"],
+          "before": {
+            "app": "bly-prod-realtime",
+            "name": "PLAY_DOMAIN",
+            "value_wo": null,
+            "value_wo_version": "play.cubepals.com"
+          },
+          "after": {
+            "app": "bly-prod-realtime",
+            "name": "PLAY_DOMAIN",
+            "value_wo": null,
+            "value_wo_version": "play.cubepals.com"
+          },
+          "after_unknown": {}
+        }
+      },
+      {
+        "address": "module.environment.module.control.fly_secret.setting[\"realtime/PLAY_IPV4\"]",
+        "module_address": "module.environment.module.control",
+        "mode": "managed",
+        "type": "fly_secret",
+        "name": "setting",
+        "index": "realtime/PLAY_IPV4",
+        "change": {
+          "actions": ["create"],
+          "before": null,
+          "after": {
+            "app": "bly-prod-realtime",
+            "name": "PLAY_IPV4",
+            "value_wo": null,
+            "value_wo_version": "203.0.113.7"
+          },
+          "after_unknown": {}
+        }
+      },
+      {
+        "address": "module.environment.module.control.fly_secret.setting[\"realtime/PLAY_IPV4_BY_REGION\"]",
+        "module_address": "module.environment.module.control",
+        "mode": "managed",
+        "type": "fly_secret",
+        "name": "setting",
+        "index": "realtime/PLAY_IPV4_BY_REGION",
+        "change": {
+          "actions": ["no-op"],
+          "before": {
+            "app": "bly-prod-realtime",
+            "name": "PLAY_IPV4_BY_REGION",
+            "value_wo": null,
+            "value_wo_version": "us:203.0.113.9"
+          },
+          "after": {
+            "app": "bly-prod-realtime",
+            "name": "PLAY_IPV4_BY_REGION",
+            "value_wo": null,
+            "value_wo_version": "us:203.0.113.9"
+          },
+          "after_unknown": {}
+        }
+      },
+      {
+        "address": "module.environment.module.dns.cloudflare_dns_record.play_challenge[\"play.cubepals.com\"]",
+        "module_address": "module.environment.module.dns",
+        "mode": "managed",
+        "type": "cloudflare_dns_record",
+        "name": "play_challenge",
+        "index": "play.cubepals.com",
+        "change": {
+          "actions": ["update"],
+          "before": {
+            "content": "play.cubepals.com.example.flydns.net",
+            "name": "_acme-challenge.play.cubepals.com",
+            "proxied": false,
+            "ttl": 300,
+            "type": "CNAME"
+          },
+          "after": {
+            "content": "play.cubepals.com.example.flydns.net.",
+            "name": "_acme-challenge.play.cubepals.com",
+            "proxied": false,
+            "ttl": 300,
+            "type": "CNAME"
+          },
+          "after_unknown": {}
+        }
+      },
+      {
+        "address": "module.environment.module.dns.cloudflare_dns_record.play_v4[\"play.cubepals.com\"]",
+        "module_address": "module.environment.module.dns",
+        "mode": "managed",
+        "type": "cloudflare_dns_record",
+        "name": "play_v4",
+        "index": "play.cubepals.com",
+        "change": {
+          "actions": ["update"],
+          "before": {
+            "content": "203.0.113.7",
+            "name": "*.play.cubepals.com",
+            "proxied": false,
+            "ttl": 300,
+            "type": "A"
+          },
+          "after": {
+            "content": "198.51.100.1",
+            "name": "*.play.cubepals.com",
+            "proxied": false,
+            "ttl": 300,
+            "type": "A"
+          },
+          "after_unknown": {}
+        }
+      },
+      {
+        "address": "module.environment.module.dns.cloudflare_dns_record.play_v6[\"play.cubepals.com\"]",
+        "module_address": "module.environment.module.dns",
+        "mode": "managed",
+        "type": "cloudflare_dns_record",
+        "name": "play_v6",
+        "index": "play.cubepals.com",
+        "change": {
+          "actions": ["no-op"],
+          "before": {
+            "content": "2001:db8::1",
+            "name": "*.play.cubepals.com",
+            "proxied": false,
+            "ttl": 300,
+            "type": "AAAA"
+          },
+          "after": {
+            "content": "2001:db8::1",
+            "name": "*.play.cubepals.com",
+            "proxied": false,
+            "ttl": 300,
+            "type": "AAAA"
+          },
+          "after_unknown": {}
+        }
+      }
+    ]
+  },
+  "main": {
+    "format_version": "1.2",
+    "variables": {
+      "settings": {
+        "value": {
+          "PLAY_DOMAIN": "play.cubepals.com",
+          "PLAY_DOMAIN_ALIASES": "",
+          "PLAY_IPV4": "203.0.113.7",
+          "PLAY_IPV4_BY_REGION": "us:203.0.113.9"
+        }
+      }
+    },
+    "planned_values": {
+      "root_module": {
+        "child_modules": [
+          {
+            "address": "module.environment",
+            "child_modules": [
+              {
+                "address": "module.environment.module.edge",
+                "resources": [
+                  {
+                    "address": "module.environment.module.edge.fly_ip.v4",
+                    "mode": "managed",
+                    "type": "fly_ip",
+                    "name": "v4",
+                    "values": {
+                      "address": "198.51.100.1",
+                      "type": "public_v4"
+                    }
+                  },
+                  {
+                    "address": "module.environment.module.edge.fly_ip.v6",
+                    "mode": "managed",
+                    "type": "fly_ip",
+                    "name": "v6",
+                    "values": {
+                      "address": "2001:db8::1",
+                      "type": "public_v6"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "resource_changes": [
+      {
+        "address": "module.environment.module.control.fly_secret.setting[\"control/PLAY_DOMAIN\"]",
+        "module_address": "module.environment.module.control",
+        "mode": "managed",
+        "type": "fly_secret",
+        "name": "setting",
+        "index": "control/PLAY_DOMAIN",
+        "change": {
+          "actions": ["no-op"],
+          "before": {
+            "app": "bly-prod-control",
+            "name": "PLAY_DOMAIN",
+            "value_wo": null,
+            "value_wo_version": "play.cubepals.com"
+          },
+          "after": {
+            "app": "bly-prod-control",
+            "name": "PLAY_DOMAIN",
+            "value_wo": null,
+            "value_wo_version": "play.cubepals.com"
+          },
+          "after_unknown": {}
+        }
+      },
+      {
+        "address": "module.environment.module.control.fly_secret.setting[\"control/PLAY_IPV4_BY_REGION\"]",
+        "module_address": "module.environment.module.control",
+        "mode": "managed",
+        "type": "fly_secret",
+        "name": "setting",
+        "index": "control/PLAY_IPV4_BY_REGION",
+        "change": {
+          "actions": ["no-op"],
+          "before": {
+            "app": "bly-prod-control",
+            "name": "PLAY_IPV4_BY_REGION",
+            "value_wo": null,
+            "value_wo_version": "us:203.0.113.9"
+          },
+          "after": {
+            "app": "bly-prod-control",
+            "name": "PLAY_IPV4_BY_REGION",
+            "value_wo": null,
+            "value_wo_version": "us:203.0.113.9"
+          },
+          "after_unknown": {}
+        }
+      },
+      {
+        "address": "module.environment.module.control.fly_secret.setting[\"realtime/PLAY_DOMAIN\"]",
+        "module_address": "module.environment.module.control",
+        "mode": "managed",
+        "type": "fly_secret",
+        "name": "setting",
+        "index": "realtime/PLAY_DOMAIN",
+        "change": {
+          "actions": ["no-op"],
+          "before": {
+            "app": "bly-prod-realtime",
+            "name": "PLAY_DOMAIN",
+            "value_wo": null,
+            "value_wo_version": "play.cubepals.com"
+          },
+          "after": {
+            "app": "bly-prod-realtime",
+            "name": "PLAY_DOMAIN",
+            "value_wo": null,
+            "value_wo_version": "play.cubepals.com"
+          },
+          "after_unknown": {}
+        }
+      },
+      {
+        "address": "module.environment.module.control.fly_secret.setting[\"realtime/PLAY_IPV4_BY_REGION\"]",
+        "module_address": "module.environment.module.control",
+        "mode": "managed",
+        "type": "fly_secret",
+        "name": "setting",
+        "index": "realtime/PLAY_IPV4_BY_REGION",
+        "change": {
+          "actions": ["no-op"],
+          "before": {
+            "app": "bly-prod-realtime",
+            "name": "PLAY_IPV4_BY_REGION",
+            "value_wo": null,
+            "value_wo_version": "us:203.0.113.9"
+          },
+          "after": {
+            "app": "bly-prod-realtime",
+            "name": "PLAY_IPV4_BY_REGION",
+            "value_wo": null,
+            "value_wo_version": "us:203.0.113.9"
+          },
+          "after_unknown": {}
+        }
+      },
+      {
+        "address": "module.environment.module.dns.cloudflare_dns_record.play_challenge[\"play.cubepals.com\"]",
+        "module_address": "module.environment.module.dns",
+        "mode": "managed",
+        "type": "cloudflare_dns_record",
+        "name": "play_challenge",
+        "index": "play.cubepals.com",
+        "change": {
+          "actions": ["update"],
+          "before": {
+            "content": "play.cubepals.com.example.flydns.net",
+            "name": "_acme-challenge.play.cubepals.com",
+            "proxied": false,
+            "ttl": 300,
+            "type": "CNAME"
+          },
+          "after": {
+            "content": "play.cubepals.com.example.flydns.net.",
+            "name": "_acme-challenge.play.cubepals.com",
+            "proxied": false,
+            "ttl": 300,
+            "type": "CNAME"
+          },
+          "after_unknown": {}
+        }
+      },
+      {
+        "address": "module.environment.module.dns.cloudflare_dns_record.play_v4[\"play.cubepals.com\"]",
+        "module_address": "module.environment.module.dns",
+        "mode": "managed",
+        "type": "cloudflare_dns_record",
+        "name": "play_v4",
+        "index": "play.cubepals.com",
+        "change": {
+          "actions": ["no-op"],
+          "before": {
+            "content": "203.0.113.7",
+            "name": "*.play.cubepals.com",
+            "proxied": false,
+            "ttl": 300,
+            "type": "A"
+          },
+          "after": {
+            "content": "203.0.113.7",
+            "name": "*.play.cubepals.com",
+            "proxied": false,
+            "ttl": 300,
+            "type": "A"
+          },
+          "after_unknown": {}
+        }
+      },
+      {
+        "address": "module.environment.module.dns.cloudflare_dns_record.play_v6[\"play.cubepals.com\"]",
+        "module_address": "module.environment.module.dns",
+        "mode": "managed",
+        "type": "cloudflare_dns_record",
+        "name": "play_v6",
+        "index": "play.cubepals.com",
+        "change": {
+          "actions": ["no-op"],
+          "before": {
+            "content": "2001:db8::1",
+            "name": "*.play.cubepals.com",
+            "proxied": false,
+            "ttl": 300,
+            "type": "AAAA"
+          },
+          "after": {
+            "content": "2001:db8::1",
+            "name": "*.play.cubepals.com",
+            "proxied": false,
+            "ttl": 300,
+            "type": "AAAA"
+          },
+          "after_unknown": {}
+        }
+      }
+    ]
+  }
+}

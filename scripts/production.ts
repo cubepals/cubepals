@@ -14,7 +14,8 @@
  *                                     wrong, and starts the control plane's own configuration check
  *                                     on them, as a machine will
  *   bun scripts/production.ts apply   check, the website built from this checkout, then Terraform
- *                                     (it shows the plan and asks), then the control, realtime and
+ *                                     (it saves the plan, has it reviewed by production-guard.ts,
+ *                                     asks, and applies that file), then the control, realtime and
  *                                     edge apps deployed from this checkout, then this commit pushed
  *                                     as the `production` branch, the website deployed, and the
  *                                     commit released as the next vX.Y.Z (versions.ts).
@@ -48,7 +49,8 @@
  * Needs terraform, flyctl and gh. Nothing here prints a value, only names.
  */
 import { spawnSync } from 'node:child_process'
-import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { createHash } from 'node:crypto'
+import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { SECOND_MS } from '@blockly/contracts/durations'
 import { authWorks } from './lib/auth-through-website.ts'
@@ -62,6 +64,7 @@ import {
   regionsToRoll,
 } from './production-edge.ts'
 import { buildEdgeImage, machinesOf, rollEdgeApp } from './production-edge-deploy.ts'
+import { missing, type Part, REQUIREMENTS, whyNot } from './production-guard.ts'
 import { bringUpToDate } from './production-tfvars.ts'
 import {
   backendConfig,
@@ -71,6 +74,7 @@ import {
   ENVIRONMENT_DIR,
   ENVIRONMENT_EXAMPLE,
   ENVIRONMENT_FILE,
+  type Environment,
   environment,
   parseValues,
   problemsOf,
@@ -351,6 +355,48 @@ function stagingPass(): string | undefined {
   return git('tag', '--points-at', 'HEAD').split('\n').find(isNightly)
 }
 
+/** Stops when this checkout's parts are older than production's settings need (production-guard.ts). */
+function requireFits(parts: readonly Part[]): void {
+  const unmet = missing(git('rev-parse', 'HEAD'), environment().settings, parts)
+  if (unmet.length === 0) return
+  say('This checkout is older than production’s settings need:')
+  for (const line of whyNot(unmet)) say(line)
+  process.exit(1)
+}
+
+/** Where apply saves its plan, in the environment's directory. */
+const PLAN_FILE = 'production.tfplan'
+
+/**
+ * Terraform's plan saved, reviewed (production-guard.ts plan: main's copy in the workflow, named
+ * by PRODUCTION_GUARD, else this checkout's), asked about, and that same file applied. A plan that
+ * went stale is refused by Terraform, never made again unreviewed. The file holds the values it
+ * was made with, so it goes when the process does.
+ */
+function applyReviewed(retried: (...args: string[]) => void, env: NodeJS.ProcessEnv): void {
+  const file = resolve(ENVIRONMENT_DIR, PLAN_FILE)
+  process.on('exit', () => rmSync(file, { force: true }))
+  retried('plan', '-input=false', `-out=${PLAN_FILE}`)
+  const guard =
+    process.env.PRODUCTION_GUARD ?? (process.env.GITHUB_ACTIONS ? '' : 'scripts/production-guard.ts')
+  if (guard === '') {
+    say('In a workflow, main’s guard reviews the plan, and PRODUCTION_GUARD doesn’t name it.')
+    process.exit(1)
+  }
+  const hash = () => createHash('sha256').update(readFileSync(file)).digest('hex')
+  const reviewed = hash()
+  run(process.execPath, [guard, 'plan', ENVIRONMENT_DIR, file, reviewed], env)
+  if (prompt('Apply this plan? Only "yes" applies it:')?.trim() !== 'yes') {
+    say('Nothing was applied.')
+    process.exit(1)
+  }
+  if (hash() !== reviewed) {
+    say('The plan changed after it was reviewed, so nothing was applied.')
+    process.exit(1)
+  }
+  run('terraform', [`-chdir=${ENVIRONMENT_DIR}`, 'apply', '-input=false', PLAN_FILE], env)
+}
+
 async function apply(): Promise<void> {
   const values = read()
   if (!check(values)) process.exit(1)
@@ -364,6 +410,7 @@ async function apply(): Promise<void> {
     say('run the Nightly workflow on it, or, to skip staging this once, add --without-staging.')
     process.exit(1)
   }
+  requireFits(['terraform', 'control'])
   const { missing, bucketFirst } = problemsOf(values)
 
   const env = productionEnv(values)
@@ -372,11 +419,11 @@ async function apply(): Promise<void> {
   const terraform = (...args: string[]) => run('terraform', [`-chdir=${ENVIRONMENT_DIR}`, ...args], env)
   terraform('init', '-input=false', `-backend-config=${backend}`)
   // Fly's API sometimes times out while Terraform reads an app's secrets ("List Secrets Error …
-  // deadline exceeded"), which stops the apply before it changes anything. Terraform changes only
-  // what differs, so the same apply run again rides that out: two more tries, a little apart.
-  const apply = (...args: string[]) => {
+  // deadline exceeded"), which stops a plan or apply before it changes anything. Terraform changes
+  // only what differs, so the same command run again rides that out: two more tries, a little apart.
+  const retried = (...args: string[]) => {
     for (let tries = 1; ; tries++) {
-      const done = spawnSync('terraform', [`-chdir=${ENVIRONMENT_DIR}`, 'apply', ...args], {
+      const done = spawnSync('terraform', [`-chdir=${ENVIRONMENT_DIR}`, ...args], {
         stdio: 'inherit',
         env,
       })
@@ -385,17 +432,22 @@ async function apply(): Promise<void> {
       // One stopped by a signal, as a cancelled deploy is, stops the deploy here: never run again.
       if (tries === 3 || done.status === null) {
         say(
-          `terraform apply stopped (${done.signal ?? `exit ${done.status}`}). Fix what it says, then run apply again.`,
+          `terraform ${args[0]} stopped (${done.signal ?? `exit ${done.status}`}). Fix what it says, then run apply again.`,
         )
         process.exit(1)
       }
-      say(`terraform apply stopped (exit ${done.status}); trying again.`)
+      say(`terraform ${args[0]} stopped (exit ${done.status}); trying again.`)
       Bun.sleepSync(APPLY_RETRY_MS)
     }
   }
 
   if (bucketFirst) {
-    apply('-input=false', '-target=module.environment.module.archive', '-target=module.database_dumps')
+    retried(
+      'apply',
+      '-input=false',
+      '-target=module.environment.module.archive',
+      '-target=module.database_dumps',
+    )
     say('')
     say(
       `The buckets, ${environment().settings.ARCHIVE_S3_BUCKET} and ${DUMPS_BUCKET}, are made. Now make their tokens and put them in the file:`,
@@ -410,7 +462,7 @@ async function apply(): Promise<void> {
   const site = productionSite(values, environment())
   const head = git('rev-parse', 'HEAD')
   buildWorker(site, head, say)
-  apply('-input=false')
+  applyReviewed(retried, env)
   if (process.argv.includes('--keep-dump-secrets'))
     say('The Database dump workflow keeps the secrets it has (--keep-dump-secrets).')
   else setDumpSecrets(values, env)
@@ -545,6 +597,7 @@ async function hotfix(): Promise<void> {
     process.exit(1)
   }
   const apps = appsFor(paths)
+  if (apps.includes('control')) requireFits(['control'])
   const site = reachesWebsite(paths)
   if (apps.length === 0 && !site) {
     say('Nothing that runs in production changed since the last deploy.')
@@ -607,13 +660,46 @@ function moveProductionTo(commit: string, env: NodeJS.ProcessEnv): void {
 }
 
 /**
+ * Whether an image is refused as the control app while production's settings are what they are:
+ * those in its config and those the control app holds, since a rollback applies no Terraform. Says
+ * why, and the way back that far. When the app's secrets can't be listed, every setting a
+ * requirement names counts as set.
+ */
+function controlRefused(image: string, env: NodeJS.ProcessEnv): boolean {
+  // From where read() found it: environment() reads the repository's own, wherever this runs.
+  const settings = { ...(JSON.parse(readFileSync(ENVIRONMENT_FILE, 'utf8')) as Environment).settings }
+  const listed = spawnSync('fly', ['secrets', 'list', '-a', 'bly-prod-control', '--json'], {
+    encoding: 'utf8',
+    env,
+  })
+  const held =
+    listed.status === 0
+      ? (JSON.parse(listed.stdout || '[]') as { name: string }[]).map((secret) => secret.name)
+      : REQUIREMENTS.map((r) => r.setting)
+  for (const name of held) settings[name] ||= 'held by the control app'
+  const unmet = missing(deployOf(image)?.commit ?? '', settings, ['control'])
+  if (unmet.length === 0) return false
+  say(`control: left as it is. ${image} is older than production’s settings need:`)
+  for (const line of whyNot(unmet)) say(line)
+  say(
+    '  To go back that far: empty the setting, apply, give the control plane a minute to remove its records, then roll back.',
+  )
+  return true
+}
+
+/**
  * The Fly apps back to what ran before the last deploy, and only the apps it changed: that deploy
  * is the newest label among the images the apps run now (deployLabel). Each goes to its newest
  * image from an earlier deploy, so a second rollback goes further back rather than forward again.
  * Apps named after `fly` go back to their previous image whatever deployed it, for images from
- * before labels. Returns the apps it deployed.
+ * before labels. The control app stays where it is when its earlier image is older than the
+ * settings need (controlRefused); the other apps go back all the same. Returns the apps it
+ * deployed, and whether control was refused.
  */
-async function rollbackFly(named: FlyApp[], env: NodeJS.ProcessEnv): Promise<FlyApp[]> {
+async function rollbackFly(
+  named: FlyApp[],
+  env: NodeJS.ProcessEnv,
+): Promise<{ deployed: FlyApp[]; refused: boolean }> {
   const images = Object.fromEntries(
     (['control', 'realtime', 'edge'] as const).map((app) => [app, imagesOf(app, env)]),
   ) as Record<FlyApp, string[]>
@@ -624,7 +710,7 @@ async function rollbackFly(named: FlyApp[], env: NodeJS.ProcessEnv): Promise<Fly
   if (named.length === 0 && last === null) {
     say('The images the Fly apps run don’t say which deploy made them, so none was rolled back.')
     say('Name the apps that deploy changed: bun scripts/production.ts rollback fly control realtime edge')
-    return []
+    return { deployed: [], refused: false }
   }
   const changed = (app: FlyApp) =>
     named.length > 0
@@ -632,6 +718,17 @@ async function rollbackFly(named: FlyApp[], env: NodeJS.ProcessEnv): Promise<Fly
       : last !== null && current(app)?.time === last.time && current(app)?.commit === last.commit
   const restored: Deploy[] = []
   const deployed: FlyApp[] = []
+  let refused = false
+  /** One app to an earlier image; the deploy it then runs, which for a refused control is `now`. */
+  const goBack = async (app: FlyApp, image: string, now: Deploy | null): Promise<Deploy | null> => {
+    if (app === 'control' && controlRefused(image, env)) {
+      refused = true
+      return now
+    }
+    await deployApp(app, env, { image })
+    deployed.push(app)
+    return deployOf(image)
+  }
   for (const app of ['control', 'realtime', 'edge'] as const) {
     const [now, ...earlier] = images[app]
     if (!changed(app)) {
@@ -646,9 +743,7 @@ async function rollbackFly(named: FlyApp[], env: NodeJS.ProcessEnv): Promise<Fly
       say(`${app}: there is no earlier image to go back to.`)
       continue
     }
-    await deployApp(app, env, { image })
-    deployed.push(app)
-    const deploy = deployOf(image)
+    const deploy = await goBack(app, image, nowDeploy)
     if (deploy) restored.push(deploy)
   }
   const live = restored.reduce<Deploy | null>(
@@ -656,7 +751,7 @@ async function rollbackFly(named: FlyApp[], env: NodeJS.ProcessEnv): Promise<Fly
     null,
   )
   if (deployed.length > 0 && live) moveProductionTo(live.commit, env)
-  return deployed
+  return { deployed, refused }
 }
 
 /**
@@ -673,7 +768,8 @@ async function rollback(part: string | undefined, named: string[]): Promise<void
     say(`There is no Fly app called ${unknown.join(', ')}: name control, realtime or edge.`)
     process.exit(1)
   }
-  const apps = part === 'website' ? [] : await rollbackFly(named as FlyApp[], env)
+  const { deployed: apps, refused } =
+    part === 'website' ? { deployed: [], refused: false } : await rollbackFly(named as FlyApp[], env)
   if (part !== 'fly' && !rollbackWebsite(productionSite(values, environment()), say))
     say('The website has no earlier version to go back to.')
   say(
@@ -681,6 +777,7 @@ async function rollback(part: string | undefined, named: string[]): Promise<void
       ? 'Rolled back, and production answers.'
       : 'Rolled back, but production isn’t answering yet. Look now.',
   )
+  if (refused) process.exit(1)
 }
 
 const command = process.argv[2]
