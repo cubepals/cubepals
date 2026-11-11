@@ -11,12 +11,28 @@
  * policies point to the Pricing and checkout pages for those, and state no such figure.
  */
 export interface PlanFigures {
+  /** The plan's name as the product says it (`planName`). */
   name: string
   /** Hours of play included once, in all, to play on any day; null: none. A large server spends two an hour, the largest four. */
   totalHours: number | null
   /** The most of a month's unused hours that carry into the next month, once; null: none carry. */
   carryHours: number | null
   maxServers: number
+  /** Players on a server at once; null: as many as the server's size holds. */
+  maxPlayers: number | null
+  /** Whether a server may run mods, plugins and modpacks. */
+  mods: boolean
+  datapacks: boolean
+  /** Whether servers come in more than one size. */
+  largerSizes: boolean
+  /** Whether the owner may allow extra hours, paid for after they are played. */
+  extraHours: boolean
+  /** The most extra hours a month the plan lets an owner allow; null: no most of its own. */
+  mostExtraHours: number | null
+  /** Whether the owner sets how long a player may stand still before the game removes them. */
+  ownAfkKick: boolean
+  /** Whether the plan is also sold as a year, paid once. */
+  byYear: boolean
   /** Minutes a server keeps running after the last player leaves. */
   sleepsAfterMinutes: number
   /** Days without play before a world rests in storage. */
@@ -25,42 +41,95 @@ export interface PlanFigures {
   deletedAfterDays: number | null
   /** Backups taken after play kept: one each time a server sleeps, or each day it plays on. */
   backupsKept: number
+  /** Whether a download is also made each week and kept. */
+  weeklyDownload: boolean
+  /** World downloads a day; null: as many as the owner likes. */
+  downloadsPerDay: number | null
   /** Days a deleted server waits in the trash. */
   trashDays: number
   /** Days a world download is kept to fetch. */
   downloadDays: number
 }
 
-export const FREE: PlanFigures = {
-  name: 'Free',
-  totalHours: 20,
-  carryHours: null,
-  maxServers: 1,
-  sleepsAfterMinutes: 10,
-  restsAfterDays: 14,
-  deletedAfterDays: 365,
-  backupsKept: 3,
-  trashDays: 7,
-  downloadDays: 7,
-}
-
-export const PLUS: PlanFigures = {
-  name: 'Plus',
-  totalHours: null,
-  carryHours: 50,
-  maxServers: 3,
+/**
+ * What every paid plan has alike: the policies say these of "a paid plan", so each paid plan
+ * takes them from here, and the test holds every one of them to its own row of the plan table.
+ */
+export const PAID = {
+  ownAfkKick: true,
   sleepsAfterMinutes: 15,
   restsAfterDays: 30,
   deletedAfterDays: null,
   backupsKept: 14,
+  weeklyDownload: true,
+  downloadsPerDay: null,
   trashDays: 30,
   downloadDays: 30,
+} as const satisfies Partial<PlanFigures>
+
+/** The free trial: its hours come once, so the policies call it a trial, never a plan that lasts. */
+export const FREE: PlanFigures = {
+  name: 'Free trial',
+  totalHours: 20,
+  carryHours: null,
+  maxServers: 1,
+  maxPlayers: 5,
+  mods: false,
+  datapacks: false,
+  largerSizes: false,
+  extraHours: false,
+  mostExtraHours: null,
+  ownAfkKick: false,
+  byYear: false,
+  sleepsAfterMinutes: 10,
+  restsAfterDays: 14,
+  deletedAfterDays: 365,
+  backupsKept: 3,
+  weeklyDownload: false,
+  downloadsPerDay: 1,
+  trashDays: 7,
+  downloadDays: 7,
 }
+
+/** Plain Minecraft for a group of friends. */
+export const CORE: PlanFigures = {
+  ...PAID,
+  name: 'Core',
+  totalHours: null,
+  carryHours: null,
+  maxServers: 1,
+  maxPlayers: 5,
+  mods: false,
+  datapacks: false,
+  largerSizes: false,
+  extraHours: true,
+  mostExtraHours: 60,
+  byYear: false,
+}
+
+/** Mods, plugins, modpacks and larger servers. */
+export const PLUS: PlanFigures = {
+  ...PAID,
+  name: 'Plus',
+  totalHours: null,
+  carryHours: 50,
+  maxServers: 3,
+  maxPlayers: null,
+  mods: true,
+  datapacks: true,
+  largerSizes: true,
+  extraHours: true,
+  mostExtraHours: null,
+  byYear: true,
+}
+
+/** Every plan the policies describe, by its key in the plan table: the test holds them to one another. */
+export const PLAN_FIGURES: Readonly<Record<string, PlanFigures>> = { free: FREE, core: CORE, plus: PLUS }
 
 /** Days before an unplayed world is deleted that its owner is emailed (`schedules/expiring.ts`). */
 export const DELETION_WARNINGS_DAYS = [30, 7] as const
 
-/** What an extra hour of play costs on Plus, in US cents (`domain/account/meter.ts`). */
+/** What an extra hour of play costs on a paid plan, in US cents (`domain/account/meter.ts`). */
 export const EXTRA_HOUR_CENTS = 25
 
 /** Days a failed renewal keeps the paid plan while the card is fixed (`billing/persistence.ts`). */

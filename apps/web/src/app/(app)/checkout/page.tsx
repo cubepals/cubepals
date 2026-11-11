@@ -8,8 +8,8 @@
  * The step before a paid plan's payment page: what the plan is and costs, VAT included, by the
  * month or for a year paid at once (which never renews, and is also how a year is renewed), and
  * the two things the person agrees to before it starts (the Terms, and that it starts now inside
- * the 14 days they could cancel in: a full refund below 30 hours played, the unplayed part past
- * it). The API refuses a checkout without them, and the audit log keeps them with it. A month's
+ * the 14 days they could cancel in: a full refund below 30 hours played the first time, the unplayed
+ * part past it or after a full refund before). The API refuses a checkout without them, and the audit log keeps them with it. A month's
  * price and hours are the ones the control plane holds for this page when it opens
  * (`billing.offer`), the price the checkout then charges. Then the payment page, which is Polar's.
  */
@@ -219,8 +219,8 @@ function Offer({
           error={unticked && consent === null ? UNCONSENTED : null}
         >
           Start {name} straight away. I understand that if I cancel within 14 days of buying, I get a full
-          refund only if I’ve played less than {FULL_REFUND_UNDER_HOURS} hours; otherwise I pay for the hours
-          I played.
+          refund only if I’ve played less than {FULL_REFUND_UNDER_HOURS} hours and haven’t had a full refund
+          before; otherwise I pay for the hours I played.
         </Checkbox>
       </div>
       <p className="type-body-sm" style={{ color: 'var(--ink-muted)' }}>

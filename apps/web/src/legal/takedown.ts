@@ -39,7 +39,7 @@ export const TAKEDOWN: Policy = {
             'why you believe it is illegal or infringes your rights. For copyright, say which work is yours and how it is being copied;',
             'your name and email address (you can leave these out only if you are reporting sexual content involving children);',
             'a statement that you believe in good faith that the information in your notice is accurate and complete;',
-            'for copyright notices, a statement that you are the owner of the rights or authorised to act for them, under penalty of perjury, and your physical or electronic signature.',
+            'for copyright notices, a statement that you believe in good faith that the use you are reporting isn’t authorised by the rights owner, their agent or the law; a statement, under penalty of perjury, that you are the owner of the rights or authorised to act for them; and your physical or electronic signature.',
           ],
         },
       ],
@@ -70,7 +70,7 @@ export const TAKEDOWN: Policy = {
           steps: [
             'what was removed and where it was before;',
             'a statement, under penalty of perjury, that you believe in good faith it was removed by mistake or because it was misidentified;',
-            'your name, address and phone number, and that you agree to the courts named in our [Terms](/legal/terms#law) (or, if you live outside them, of where we are) and to accept legal papers from the person who sent the notice;',
+            'your name, address and phone number, and a statement that you accept the jurisdiction of the US federal court for the district where you live, or, if you live outside the United States, of any district where we can be found, and that you will accept legal papers from the person who sent the notice, or from someone acting for them;',
             'your physical or electronic signature.',
           ],
         },
