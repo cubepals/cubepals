@@ -13,6 +13,7 @@ import { display } from '../landing/fonts'
 import { BETA_UNREAD, betaOn } from '../lib/beta'
 import { Insight } from '../lib/insight'
 import { canonicalOrigin, indexable, PRIVATE } from '../lib/site'
+import { FirstLanding } from './first-landing'
 import { KeepPictures } from './keep-pictures'
 import { ThemeTransitions } from './theme-transitions'
 import './globals.css'
@@ -68,6 +69,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <ThemeTransitions />
         <KeepPictures />
         <Insight />
+        <FirstLanding />
         {children}
       </body>
     </html>

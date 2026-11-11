@@ -98,7 +98,7 @@ export const PRIVACY: Policy = {
                 'Contract and legal obligation (tax and accounting)',
               ],
               [
-                '**Where you came from:** if you followed a link with a source on it (such as ?ref= or utm_source=), that source, saved once with your account in your first week. No cookie is used for it.',
+                '**Where you came from:** the source on the link you followed to {brand} (such as ?ref= or utm_source=) or, if it had none, the name of the website that sent you (such as google.com), saved once with your account in your first week. No cookie or browser storage is used for it.',
                 'To know which places bring people to {brand}.',
                 'Legitimate interests',
               ],

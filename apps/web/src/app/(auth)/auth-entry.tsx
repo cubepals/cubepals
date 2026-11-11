@@ -9,6 +9,7 @@ import { ChevronDown } from 'lucide-react'
 import { type ReactNode, useEffect, useId, useRef, useState } from 'react'
 import { AGREED } from '../../lib/agreement'
 import { authClient } from '../../lib/auth'
+import { withLanding } from '../../lib/landing-source'
 import { Button, ICON, Note } from '../../ui'
 import { ctaMark } from '../(public)/steps'
 import { AgreementNote } from './agreement'
@@ -136,6 +137,8 @@ export function AuthEntry({
     const { error } = await authClient.signIn.social({
       provider: provider.id,
       ...redirects,
+      // A new account's first page keeps where this tab first landed, when nothing else said.
+      newUserCallbackURL: withLanding(redirects.newUserCallbackURL),
       errorCallbackURL: markedWith(redirects.errorCallbackURL, provider.id),
       additionalData: { agreement: AGREED },
     })

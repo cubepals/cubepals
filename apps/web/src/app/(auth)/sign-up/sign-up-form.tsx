@@ -10,6 +10,7 @@ import { useRouter } from 'next/navigation'
 import { type SubmitEvent, useState } from 'react'
 import { AGREED } from '../../../lib/agreement'
 import { type AuthErrorCode, authClient } from '../../../lib/auth'
+import { withLanding } from '../../../lib/landing-source'
 import * as rules from '../../../lib/rules'
 import { useChecked } from '../../../lib/use-checked'
 import { Button, TextField } from '../../../ui'
@@ -68,7 +69,8 @@ export function SignUpForm({ next, turnstileSiteKey }: { next: string; turnstile
         name: '',
         email,
         password,
-        callbackURL: next,
+        // Where this tab first landed, when the address into sign-up named no source of its own.
+        callbackURL: withLanding(next),
         ...AGREEING,
       },
       token === null ? {} : { headers: { 'x-captcha-response': token } },
