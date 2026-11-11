@@ -120,8 +120,8 @@ bun scripts/production.ts apply
    bound before the next one goes. `EDGE_CORDON=1` also cordons the region first while another is
    ready, so no new join arrives while it drains; it is off because on staging a cordoned region
    made the other region fail joins.
-5. It pushes the commit as the `production` branch and deploys the website's build: live when it
-   returns.
+5. It deploys the website's build, live when it returns, and once the site answers pushes the
+   commit as the `production` branch.
 
 `apply` can be run again at any time: it changes only what differs. It's also how a value changes
 later: edit the file, run `apply`. Never run `terraform destroy` here.
@@ -133,7 +133,8 @@ bun scripts/production.ts web
 ```
 
 From a clean checkout of main's latest commit, once main's CI has passed on it, it builds and
-checks the website, pushes the commit as the `production` branch and deploys the build. It refuses
+checks the website, deploys the build and, once the site answers, pushes the commit as the
+`production` branch. It refuses
 when anything the Fly apps are built from changed since the last deploy (`apps/control`,
 `apps/edge`, `packages`, `infra/fly`, the lockfile), or Terraform did: that goes through `apply`,
 after a nightly.
@@ -190,7 +191,12 @@ deploy's time and commit, so the Fly apps that deploy changed go back to the ima
 before it, and the apps it didn't change stay as they are; it says which. A second rollback
 goes back one deploy further. The `production` branch moves back to the commit that is live
 again. The website goes to the Worker version that was live before, at once and without a build
-(`wrangler rollback`; any of the last 100 versions). A rollback doesn't undo a migration or a
+(`wrangler rollback`; any of the last 100 versions). It then takes the `production` branch to the
+commit that version's commit and the branch's share: that commit itself when it is older, and the
+point they forked from when it is a hotfix branch's or the Fly apps went back elsewhere. A deploy
+whose website doesn't answer never moves the branch. So the branch never names code newer than
+what is live, which [Routes](#routes) rely on. A version older than the last ten wrangler names has no known commit: the branch then
+stays, the rollback says so, and the next deploy should be `apply`. A rollback doesn't undo a migration or a
 secret: fix forward, then deploy again. A release that sells Core has `core:<id>` in
 `POLAR_PRODUCTS`, which older code refuses as not a paid plan: remove `core:<id>` from
 `POLAR_PRODUCTS` before rolling back past the Core release, and put it back after going forward.
@@ -216,9 +222,10 @@ Once production exists, it deploys from the **Deploy production** workflow
 (`.github/workflows/deploy-production.yml`) on GitHub's machine, so no deploy depends on one
 person's disk: Actions → Deploy production → Run workflow. `apply` deploys a nightly, the newest
 or the one named in `version`, exactly as `bun scripts/production.ts apply` does from a checkout;
-`ship now` is the hot path: it starts a nightly of main's newest commit, ticking the Nightly
-workflow's `production` box, and that nightly starts `apply` for its own tag once it passes on
-staging, so one click ships main in about twenty minutes. `rollback`, `rollback website` and
+`ship now` is the hot path: it takes the road main's newest commit needs ([Routes](#routes)), which
+for most changes is a nightly of main's newest commit, ticking the Nightly workflow's `production`
+box, that starts `apply` for its own tag once it passes on staging, so one click ships main in
+about twenty minutes. `rollback`, `rollback website` and
 `rollback fly` are the rollbacks of [Going back](#going-back). It ends by asking production for its
 pages. One deploy runs at a time. It leaves the Database dump
 workflow's secrets as they are (`--keep-dump-secrets`); a change to those values goes through
@@ -270,6 +277,36 @@ workflow's two secrets:
 | `DEPLOY_GITHUB_TOKEN` | A fine-grained token. On this repository: Contents and Workflows, read and write; Actions, read. On the private records: Contents, read |
 
 An agent runs it as well when a maintainer asks for a deploy ([AGENTS.md](../AGENTS.md#production)).
+
+### Routes
+
+`ship now` first asks main's guard which road main's newest commit takes
+(`bun scripts/production-guard.ts route`). The guard compares the commit with the `production`
+branch, which names what production runs, and gives each changed path an area by the first rule it
+matches in `scripts/production-route.ts`. Both sides of a rename count. The rules, in order:
+
+| Paths | Area |
+|---|---|
+| Tests (`*.test.ts`, `*.test.tsx`) | none |
+| `packages/` (migrations included), any `package.json`, `bun.lock`, `bunfig.toml` | full |
+| `infra/terraform/`, `.github/workflows/`, `scripts/`, `apps/web/wrangler.jsonc` | full |
+| What a Fly image is built from, as its Dockerfile copies it, with its Dockerfile and Fly config | control (control and realtime), edge, or full when it reaches both |
+| The rest of `apps/web/` | website |
+| Prose: `docs/`, `brand/`, `LICENSES/`, `*.md`, `REUSE.toml`, `CITATION.cff`, `.github/settings/` and the issue and pull request templates | none |
+| Anything else | full |
+
+A change whose paths are all `none` is the `none` route; one whose other paths share one area takes
+that area's route; any other change, or one the guard can't compare with production, is `full`.
+What isn't known to be narrow takes the whole road.
+
+| Route | What `ship now` does |
+|---|---|
+| `none` | Deploys nothing, and says so in the run's summary |
+| `full` | A nightly of main's newest commit, then `apply` for its tag: everything, as before |
+| `website`, `control`, `edge` | The same as `full` |
+
+The run's summary lists each area it found with its paths, so the reason for the road is on the
+run. The Nightly still runs every night on main, whatever road a change took.
 
 ## 4. Check it
 

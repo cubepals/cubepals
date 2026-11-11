@@ -473,8 +473,8 @@ async function apply(): Promise<void> {
     if (skipped === null) await deployApp(app, env, { label })
     else say(skipped)
   }
-  moveProduction(env)
   await deployChecked(site, head, say)
+  moveProduction(env)
   await signInGuard()
   await pingIndexNow(site, say)
   const version = `v${nextVersion(repositoryTags())}`
@@ -520,8 +520,8 @@ async function web(): Promise<void> {
   }
   const site = productionSite(values, environment())
   buildWorker(site, head, say)
-  moveProduction(process.env)
   await deployChecked(site, head, say)
+  moveProduction(process.env)
   await signInGuard()
   await pingIndexNow(site, say)
 }
@@ -608,9 +608,9 @@ async function hotfix(): Promise<void> {
   if (website) buildWorker(website, head, say)
   const label = deployLabel(head)
   for (const app of apps) await deployApp(app, env, { label })
+  if (website) await deployChecked(website, head, say)
   moveProduction(env)
   if (website) {
-    await deployChecked(website, head, say)
     await signInGuard()
     await pingIndexNow(website, say)
   }
@@ -770,8 +770,13 @@ async function rollback(part: string | undefined, named: string[]): Promise<void
   }
   const { deployed: apps, refused } =
     part === 'website' ? { deployed: [], refused: false } : await rollbackFly(named as FlyApp[], env)
-  if (part !== 'fly' && !rollbackWebsite(productionSite(values, environment()), say))
-    say('The website has no earlier version to go back to.')
+  const back = part === 'fly' ? null : rollbackWebsite(productionSite(values, environment()), say)
+  if (back === undefined) say('The website has no earlier version to go back to.')
+  // The production branch names nothing newer than what is live: where the website and the branch
+  // now differ (older, a hotfix branch's, Fly apps gone back elsewhere), the commit both came from.
+  else if (back?.commit)
+    moveProductionTo(git('merge-base', back.commit, 'origin/production') || back.commit, env)
+  else if (back) say('The website’s commit is unknown, so the production branch stays: run apply next.')
   say(
     (await answers(apps, env))
       ? 'Rolled back, and production answers.'

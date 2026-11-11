@@ -12,6 +12,10 @@
  *       refuses a run whose workflow isn't main's (an old run started again runs its own steps),
  *       and names the commit it deploys: for apply, the nightly's, which must be on main; for a
  *       rollback, main's own
+ *   bun <main>/scripts/production-guard.ts route
+ *       refuses an old run started again, as `run` does, and names the road main's newest commit
+ *       takes from what production runs (production-route.ts): `route` and `commit` in
+ *       GITHUB_OUTPUT, and why in the run's summary. `ship now` follows it
  *   bun <main>/scripts/production-guard.ts fits <commit>
  *       refuses a commit production's settings need something newer of (REQUIREMENTS), or one whose
  *       apply doesn't have its plan reviewed
@@ -29,6 +33,7 @@ import { createHash } from 'node:crypto'
 import { appendFileSync, existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { type Plan, planProblems, terraformOnly } from './production-plan-review.ts'
+import { describeRoute, pathsBetween, routeOf } from './production-route.ts'
 import { isNightly } from './versions.ts'
 
 /** The checkout this file is in: main's, in the workflow. Its git sees every commit and tag. */
@@ -116,8 +121,8 @@ function refuse(lines: readonly string[]): never {
 
 const rev = (spec: string) => git(HERE, 'rev-parse', '--verify', '--quiet', spec).stdout.trim()
 
-/** The workflow's first step: whether this run may go on, and the commit it deploys. */
-function run(command: string, version: string): void {
+/** Main's commit, once this run's workflow is main's: an old run started again runs its old steps. */
+function mainsRun(): string {
   const main = rev('HEAD^{commit}')
   const workflowSha = process.env.WORKFLOW_SHA ?? ''
   if (workflowSha === '') refuse(['WORKFLOW_SHA, the commit this run’s workflow is from, isn’t given.'])
@@ -126,6 +131,16 @@ function run(command: string, version: string): void {
       `This run's workflow, from ${workflowSha.slice(0, 8)}, isn't main's (${main.slice(0, 8)}): an old run started again runs its old steps.`,
       'Start a new run: gh workflow run deploy-production.yml',
     ])
+  return main
+}
+
+const output = (lines: string) => {
+  if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, lines)
+}
+
+/** The workflow's first step: whether this run may go on, and the commit it deploys. */
+function run(command: string, version: string): void {
+  const main = mainsRun()
   let commit = main
   if (command === 'apply') {
     const tag =
@@ -138,7 +153,27 @@ function run(command: string, version: string): void {
     say(`Deploying ${tag}, ${commit}.`)
   } else if (command.startsWith('rollback')) say(`Rolling back with main's code, ${main}.`)
   else refuse([`There is no command "${command}".`])
-  if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `commit=${commit}\n`)
+  output(`commit=${commit}\n`)
+}
+
+/**
+ * The road main's newest commit takes from what production runs. When the `production` branch
+ * can't be read, or git can't compare the two, it is the whole road.
+ */
+function route(): void {
+  const main = mainsRun()
+  const live = rev('refs/remotes/origin/production^{commit}')
+  const paths = live === '' ? null : pathsBetween(HERE, live, main)
+  const decision = paths === null ? { route: 'full' as const, areas: [] } : routeOf(paths)
+  const lines =
+    paths === null
+      ? ['Route: full.', '  What production runs couldn’t be compared with main, so the whole road it is.']
+      : describeRoute(decision)
+  for (const line of lines) say(line)
+  say(`From ${live.slice(0, 8) || 'an unknown commit'} to ${main.slice(0, 8)}.`)
+  if (process.env.GITHUB_STEP_SUMMARY)
+    appendFileSync(process.env.GITHUB_STEP_SUMMARY, `\`\`\`\n${lines.join('\n')}\n\`\`\`\n`)
+  output(`route=${decision.route}\ncommit=${main}\n`)
 }
 
 /** Whether `commit` may be applied to production as its settings are now. */
@@ -181,10 +216,11 @@ function plan(directory: string, file: string, sha256: string): void {
 if (import.meta.main) {
   const [command, ...args] = process.argv.slice(2)
   if (command === 'run') run(args[0] ?? '', args[1] ?? '')
+  else if (command === 'route') route()
   else if (command === 'fits') fits(args[0] ?? '')
   else if (command === 'plan') plan(args[0] ?? '', args[1] ?? '', args[2] ?? '')
   else
     refuse([
-      'Usage: bun scripts/production-guard.ts run <command> [version] | fits <commit> | plan <dir> <file> <sha256>',
+      'Usage: bun scripts/production-guard.ts run <command> [version] | route | fits <commit> | plan <dir> <file> <sha256>',
     ])
 }

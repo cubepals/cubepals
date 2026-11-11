@@ -47,20 +47,27 @@ function copiedFrom(dockerfile: string): string[] {
     .map((source) => source.replace(/^\.\//, '').replace(/\/$/, ''))
 }
 
-/** What each Fly app is built from: its image's sources, its Dockerfile and its Fly config. */
-const APP_INPUTS = Object.fromEntries(
-  Object.entries(BUILDS).map(([app, { dockerfile, config }]) => [
-    app,
-    [...copiedFrom(readFileSync(new URL(dockerfile, ROOT), 'utf8')), dockerfile, config],
-  ]),
-) as Record<FlyApp, string[]>
+/**
+ * What each Fly app is built from: its image's sources, its Dockerfile and its Fly config. Read
+ * when first asked, so main's guard, which imports this, starts without the Dockerfiles.
+ */
+let appInputs: Record<FlyApp, string[]> | undefined
+function inputsOf(app: FlyApp): string[] {
+  appInputs ??= Object.fromEntries(
+    Object.entries(BUILDS).map(([name, { dockerfile, config }]) => [
+      name,
+      [...copiedFrom(readFileSync(new URL(dockerfile, ROOT), 'utf8')), dockerfile, config],
+    ]),
+  ) as Record<FlyApp, string[]>
+  return appInputs[app]
+}
 
 /**
  * Whether a deploy has anything to put on `app`, given the paths that differ between the commit
  * its running release was built from and this one: its image's sources, Dockerfile or Fly config.
  */
 export const changedFor = (app: FlyApp, paths: readonly string[]): boolean =>
-  paths.some((path) => within(path, APP_INPUTS[app]))
+  paths.some((path) => within(path, inputsOf(app)))
 
 /** Whether a path is one of the inputs, or inside one that is a directory. */
 const within = (path: string, inputs: readonly string[]): boolean =>
@@ -68,14 +75,14 @@ const within = (path: string, inputs: readonly string[]): boolean =>
 
 /** The changed paths that ship to Fly; none means the website can go on its own. */
 export function flyInputs(paths: readonly string[]): string[] {
-  const all = Object.values(APP_INPUTS).flat()
+  const all = (['control', 'realtime', 'edge'] as const).flatMap(inputsOf)
   return paths.filter((path) => within(path, all))
 }
 
 /** The Fly apps a change is built into, control first: its release runs the migrations. */
 export function appsFor(paths: readonly string[]): FlyApp[] {
   return (['control', 'realtime', 'edge'] as const).filter((app) =>
-    paths.some((path) => within(path, APP_INPUTS[app])),
+    paths.some((path) => within(path, inputsOf(app))),
   )
 }
 
