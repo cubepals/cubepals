@@ -495,7 +495,8 @@ async function web(): Promise<void> {
   requireClean()
   git('fetch', '--quiet', 'origin', 'main')
   const head = git('rev-parse', 'HEAD')
-  if (head !== git('rev-parse', 'origin/main')) {
+  // In the workflow, main's guard named this commit and proved it (production-guard.ts run website).
+  if (!process.env.PRODUCTION_GUARD && head !== git('rev-parse', 'origin/main')) {
     say('Only main’s latest commit goes to production. Check out main and pull it.')
     process.exit(1)
   }
@@ -514,7 +515,7 @@ async function web(): Promise<void> {
     say('Run apply after a nightly has passed on this commit, or hotfix if it can’t wait.')
     process.exit(1)
   }
-  if (!ciPassed(head)) {
+  if (!process.env.PRODUCTION_GUARD && !ciPassed(head)) {
     say('CI hasn’t passed on this commit yet; the website goes once it has.')
     process.exit(1)
   }

@@ -41,18 +41,27 @@ permissions:
 
 jobs:
   # The hot path, by the road main's newest commit takes from what production runs
-  # (scripts/production-route.ts, from main's guard). Prose and tests alone deploy nothing, and the
-  # run says so. Everything else goes through staging now, rather than tonight, then here: a
-  # nightly of main's newest commit, which starts this workflow's `apply` when it passes. It opens
-  # nothing of production's.
+  # (scripts/production-route.ts, from main's guard):
+  # - prose and tests alone deploy nothing, and the run says so;
+  # - the website alone waits until its commit is proved (CI passed and a preview answered, on it
+  #   or on a pull request head with its tree), then the deploy job below deploys the website alone;
+  # - everything else goes through staging now, rather than tonight: a nightly of main's newest
+  #   commit, which starts this workflow's `apply` when it passes.
+  # It opens nothing of production's.
   ship-now:
     name: "Production: ship now"
     if: inputs.command == 'ship now'
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 40
     permissions:
       contents: read
       actions: write
+      checks: read
+      statuses: read
+      pull-requests: read
+    outputs:
+      route: ${{ steps.route.outputs.route }}
+      commit: ${{ steps.route.outputs.commit }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -75,20 +84,43 @@ jobs:
           COMMIT: ${{ steps.route.outputs.commit }}
         run: |
           echo "Since what production runs, main changed only prose and tests: nothing to deploy for ${COMMIT:0:8}." | tee -a "$GITHUB_STEP_SUMMARY"
+      # Proved at once when the merged pull request was up to date with main; otherwise once main's
+      # CI and staging's website deploy have run on the commit, about fifteen minutes.
+      - name: The website's commit is proved
+        if: steps.route.outputs.route == 'website'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          COMMIT: ${{ steps.route.outputs.commit }}
+        run: |
+          for _ in $(seq 1 70); do
+            bun "$RUNNER_TEMP/guard/scripts/production-guard.ts" proven "$COMMIT" && exit 0
+            sleep 30
+          done
+          echo "::error::${COMMIT:0:8} wasn't proved in 35 minutes: look at main's CI and Website on staging."
+          exit 1
       - name: A nightly of main's newest commit, and production once it passes
-        if: steps.route.outputs.route != 'none'
+        if: steps.route.outputs.route != 'none' && steps.route.outputs.route != 'website'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh workflow run nightly.yml --repo "$GITHUB_REPOSITORY" --ref main -f production=true
           echo "Started a nightly of main's newest commit; once it passes on staging, it starts Deploy production's apply for its tag." >> "$GITHUB_STEP_SUMMARY"
 
+  # Every other command, and ship now's website route: the website alone, the commit ship now named.
   deploy:
-    name: "Production: ${{ inputs.command }}"
-    if: inputs.command != 'ship now'
+    name: "Production: ${{ inputs.command == 'ship now' && 'website' || inputs.command }}"
+    needs: ship-now
+    if: >-
+      !cancelled() && (inputs.command != 'ship now'
+        || (needs.ship-now.result == 'success' && needs.ship-now.outputs.route == 'website'))
     runs-on: ubuntu-latest
     environment: production
     timeout-minutes: 90
+    permissions:
+      contents: read
+      checks: read
+      statuses: read
+      pull-requests: read
     # One deploy at a time; a second waits rather than deploying under the first.
     concurrency:
       group: production
@@ -108,9 +140,10 @@ jobs:
       - name: Main's guard, and the commit to deploy
         id: guard
         env:
-          COMMAND: ${{ inputs.command }}
-          VERSION: ${{ inputs.version }}
+          COMMAND: ${{ inputs.command == 'ship now' && 'website' || inputs.command }}
+          VERSION: ${{ inputs.command == 'ship now' && needs.ship-now.outputs.commit || inputs.version }}
           WORKFLOW_SHA: ${{ github.workflow_sha }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           main=$(git rev-parse --verify 'refs/remotes/origin/main^{commit}')
           git worktree add --quiet --detach "$RUNNER_TEMP/guard" "$main"
@@ -157,17 +190,20 @@ jobs:
       - name: Deploy
         env:
           GH_TOKEN: ${{ secrets.DEPLOY_GITHUB_TOKEN }}
-          COMMAND: ${{ inputs.command }}
+          COMMAND: ${{ inputs.command == 'ship now' && 'website' || inputs.command }}
           PRODUCTION_GUARD: ${{ runner.temp }}/guard/scripts/production-guard.ts
         run: |
           if [ "$COMMAND" = apply ]; then
             echo yes | bun scripts/production.ts apply --keep-dump-secrets
+          elif [ "$COMMAND" = website ]; then
+            # The website alone: no Terraform and no Fly deploy (docs/production.md § Routes).
+            bun scripts/production.ts web
           else
             # shellcheck disable=SC2086 # "rollback website" is the command and its argument.
             bun scripts/production.ts $COMMAND
           fi
-      - name: Ask production for its pages
-        run: bun scripts/site-check.ts https://cubepals.com 180
+      - name: Ask production for its pages and its API
+        run: bun scripts/site-check.ts https://cubepals.com 180 --api
       - name: Leave no value behind
         if: always()
         run: rm -f local/production/production.env local/production/backend.hcl infra/terraform/environments/production/config.auto.tfvars.json infra/terraform/environments/production/production.tfplan
