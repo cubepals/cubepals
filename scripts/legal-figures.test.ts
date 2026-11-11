@@ -15,45 +15,67 @@ import { DAY_MS, MINUTE_MS } from '@blockly/contracts/durations'
 import { PAST_DUE_GRACE_MS } from '../apps/control/src/app/billing/persistence.ts'
 import { YEAR_REMINDER_DAYS as REMINDED } from '../apps/control/src/app/billing/years.ts'
 import { JOINS_KEPT_DAYS, SOURCE_KEPT_AT_MOST_MS } from '../apps/control/src/app/joins/service.ts'
-import { entitlementsFor, PAID_PLANS } from '../apps/control/src/domain/account/entitlements.ts'
+import {
+  entitlementsFor,
+  PAID_PLANS,
+  PLAN_KEYS,
+  planName,
+} from '../apps/control/src/domain/account/entitlements.ts'
 import { UNIT_CENTS } from '../apps/control/src/domain/account/meter.ts'
 import { DEFAULT_ABUSE_LIMITS } from '../apps/control/src/domain/account/tuning.ts'
 import {
   dollars,
   EXTRA_HOUR_CENTS,
-  FREE,
   FULL_REFUND_UNDER_HOURS,
   JOIN_ADDRESS_MINUTES,
   JOIN_RECORD_DAYS,
   KNOWN_NETWORK_DAYS,
   PAST_DUE_GRACE_DAYS,
-  PLUS,
-  type PlanFigures,
+  PLAN_FIGURES,
   YEAR_REMINDER_DAYS,
 } from '../apps/web/src/legal/figures.ts'
-import { POLICIES } from '../apps/web/src/legal/policies.ts'
+import { POLICIES, policyAt } from '../apps/web/src/legal/policies.ts'
 import type { Block } from '../apps/web/src/legal/policy.ts'
 
 describe('what the policies say about the plans', () => {
-  for (const [key, said] of [
-    ['free', FREE],
-    ['plus', PLUS],
-  ] as [string, PlanFigures][])
+  test('covers every plan in the plan table, and no other', () => {
+    expect(Object.keys(PLAN_FIGURES).sort()).toEqual([...PLAN_KEYS].sort())
+  })
+
+  for (const key of PLAN_KEYS)
     test(`is what ${key} enforces`, () => {
       const plan = entitlementsFor(key)
-      expect(said).toEqual({
-        name: said.name,
+      expect(PLAN_FIGURES[key]).toEqual({
+        name: planName(key),
         totalHours: plan.totalUnits,
         carryHours: plan.carryUnits,
         maxServers: plan.maxServers,
+        maxPlayers: plan.settingCaps?.maxPlayers ?? null,
+        mods: plan.mayUseMods,
+        datapacks: plan.mayUseDatapacks,
+        largerSizes: plan.allowedMemoryTiers.length > 1,
+        extraHours: plan.mayBuyMore,
+        mostExtraHours: plan.mostExtraUnits,
+        ownAfkKick: plan.mayChooseAfkKick,
+        byYear: plan.yearlyPriceCents !== null,
         sleepsAfterMinutes: plan.idleShutdownAfterMinutes ?? Number.NaN,
         restsAfterDays: plan.storeAfterIdleDays,
         deletedAfterDays: plan.deleteAfterIdleDays,
         backupsKept: plan.backupPolicy.snapshotsKept,
+        weeklyDownload: plan.backupPolicy.archiveEnabled,
+        downloadsPerDay: plan.backupPolicy.downloadsPerDay,
         trashDays: plan.trashRetentionDays,
         downloadDays: plan.backupPolicy.archiveRetentionDays,
       })
     })
+
+  test('the Terms describe every plan by its name', () => {
+    const terms = policyAt('terms')
+    const plans = terms?.sections.find((section) => section.id === 'plans')
+    const text = (plans?.blocks ?? []).flatMap(blockSentences).join('\n').toLowerCase()
+    for (const key of PLAN_KEYS)
+      expect(text, key).toContain(`**${key === 'free' ? 'the ' : ''}${planName(key).toLowerCase()}**`)
+  })
 
   test('an extra hour costs what they say', () => {
     expect(EXTRA_HOUR_CENTS).toBe(UNIT_CENTS)
@@ -76,9 +98,10 @@ describe('what the policies say about the plans', () => {
     expect(PAST_DUE_GRACE_DAYS * DAY_MS).toBe(PAST_DUE_GRACE_MS)
   })
 
-  test('the full refund stops at 30 hours, under what Plus includes', () => {
+  test('the full refund stops at 30 hours, under what every paid plan includes', () => {
     expect(FULL_REFUND_UNDER_HOURS).toBe(30)
-    expect(FULL_REFUND_UNDER_HOURS).toBeLessThan(entitlementsFor('plus').includedUnits ?? Number.NaN)
+    for (const key of PAID_PLANS)
+      expect(FULL_REFUND_UNDER_HOURS, key).toBeLessThan(entitlementsFor(key).includedUnits ?? Number.NaN)
   })
 
   test('state no plan’s price or hours a month: only figures no offer moves', () => {
@@ -97,19 +120,21 @@ describe('what the policies say about the plans', () => {
   })
 })
 
+/** The sentences a block holds: a paragraph, its list items or steps, or its table's cells. */
+const blockSentences = (block: Block): string[] =>
+  typeof block === 'string'
+    ? [block]
+    : 'list' in block
+      ? [...block.list]
+      : 'steps' in block
+        ? [...block.steps]
+        : [...block.table.head, ...block.table.rows.flat()]
+
 /** Every sentence a policy holds: summary, headings, paragraphs, list items and table cells. */
 function sentencesOf(policy: (typeof POLICIES)[number]): string[] {
-  const ofBlock = (block: Block): string[] =>
-    typeof block === 'string'
-      ? [block]
-      : 'list' in block
-        ? [...block.list]
-        : 'steps' in block
-          ? [...block.steps]
-          : [...block.table.head, ...block.table.rows.flat()]
   return [
     policy.description,
     ...policy.summary,
-    ...policy.sections.flatMap((section) => [section.heading, ...section.blocks.flatMap(ofBlock)]),
+    ...policy.sections.flatMap((section) => [section.heading, ...section.blocks.flatMap(blockSentences)]),
   ]
 }

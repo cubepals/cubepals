@@ -13,6 +13,7 @@ import {
   JOIN_ADDRESS_MINUTES,
   JOIN_RECORD_DAYS,
   KNOWN_NETWORK_DAYS,
+  PAID,
   PLUS,
 } from './figures'
 import type { Policy } from './policy'
@@ -22,7 +23,7 @@ export const PRIVACY: Policy = {
   title: 'Privacy Policy',
   description: 'What personal data {brand} collects, why, who else handles it, and your rights.',
   summary: [
-    'We collect what we need to run your account and your servers: your email, how you sign in, your servers and worlds, and the Minecraft names of the people who play on them.',
+    'We collect what we need to run your account and your servers: your email, how you sign in, your servers and worlds, and the Minecraft names (or Bedrock gamertags) of the people who play on them.',
     'We don’t sell your data, show ads, or use tracking cookies. We count how {brand} is used without cookies or anything stored on your device.',
     '{brand} is run from {country}. Your servers and our database are in Frankfurt, Germany, unless you move a server. Some of the companies that help us run {brand} are in the US.',
     'You can ask us for a copy of your data, to correct it, or to delete it, by emailing {privacy}.',
@@ -72,7 +73,7 @@ export const PRIVACY: Policy = {
                 'Contract',
               ],
               [
-                '**Players on your servers:** Minecraft usernames and player IDs (UUIDs) of people who join, when each was first and last seen, who is on right now, and your allow list, operator list and bans (with any reason you give). Minecraft also keeps its own files and logs inside the world, which include player names, positions and chat.',
+                '**Players on your servers:** Minecraft usernames and player IDs (UUIDs) of people who join (for a player on Bedrock Edition, their Xbox gamertag and an ID made from their Xbox user ID), when each was first and last seen, who is on right now, and your allow list, operator list and bans (with any reason you give). Minecraft also keeps its own files and logs inside the world, which include player names, positions and chat.',
                 'To run the server you asked for, show who is on, and manage who may join.',
                 'Contract (for you) and legitimate interests (for the players, who expect the server to work)',
               ],
@@ -124,6 +125,7 @@ export const PRIVACY: Policy = {
             ],
           },
         },
+        'Across everything above, we also use this data to keep {brand} working, to find and fix problems, to protect it and its players from misuse, and to improve it, in the way we judge works best, within this policy and the law (legitimate interests); never to sell it or to advertise.',
         'We don’t use your data for advertising, we don’t sell it, and we don’t make decisions about you by automated means that have legal or similarly significant effects. Automatic limits (like servers sleeping when your hours run out) just apply your plan.',
         'You don’t have to give us any personal data, but we can’t give you an account without an email address.',
       ],
@@ -137,8 +139,8 @@ export const PRIVACY: Policy = {
           list: [
             '**What we receive from Google:** your name, your email address, whether Google has confirmed that email address, the address of your profile picture, and your Google account ID, with the sign-in tokens Google gives us for it.',
             '**What we use it for:** only to create your {brand} account and sign you in to it, to keep your name and picture with your account, to show your first name and last initial on notes you leave on public servers, and to email you about your account and servers. Your Google account ID is how we know it’s you the next time you sign in with Google.',
-            '**Who we share it with:** no one, except the providers that store our database and run {brand} for us ({§sharing}), who keep it on our behalf. We don’t sell it, use it for advertising, or use it to train AI models, and no person reads it except to answer you or to keep {brand} safe.',
-            '**How we keep it safe:** it is stored in our database in Frankfurt, Germany, encrypted in transit, and only we have access to it ({§security}).',
+            '**Who we share it with:** no one, except the service providers that work for us ({§sharing}): those that store our database and run {brand}, who keep it on our behalf, and the providers of automated assistants and developer tools that help us operate, fix and protect {brand}, which process it only on our instructions and only as far as that work needs. We don’t sell it, use it for advertising, or use it to train AI models, and no person reads it except to answer you or to keep {brand} safe.',
+            '**How we keep it safe:** it is stored in our database in Frankfurt, Germany, encrypted in transit, and access to it is limited to us and to the service providers and automated software assistants that work for us, under our instructions, each only as far as its job needs ({§security}).',
             '**How long we keep it, and how to remove it:** for as long as you have your account. Delete your account, or email {privacy}, and we delete what Google gave us with it within 30 days. You can also remove {brand}’s access at any time from your Google account, at myaccount.google.com/permissions; you then can’t sign in with Google until you allow it again.',
           ],
         },
@@ -150,7 +152,9 @@ export const PRIVACY: Policy = {
       heading: 'If you play on someone’s server',
       blocks: [
         'You don’t need a {brand} account to join a server. When you join one, we process your Minecraft username and player ID, when you were on, and anything the server’s owner adds about you (for example a ban reason). The server’s own files and logs keep what Minecraft records, such as your position and chat. If the server is published, its public page shows your Minecraft name while you are on it, if the server checks accounts.',
-        'If you join with an invite link, we check the name you type with Mojang so the owner can add you.',
+        'If you join with an invite link, we check the name you type with Mojang (or, for a Bedrock gamertag, with GeyserMC) so the owner can add you.',
+        `The server you join can see the IP address you connect from, as any Minecraft server can: it can show in the server’s log, which its owner can read, and, where its owner has added plugins (on ${PLUS.name}), those plugins can see it too.`,
+        'If a server lets in friends on Bedrock Edition and you join it from Bedrock, you sign in with your Xbox account, as Bedrock always asks, and our network checks that sign-in. The server knows you by your gamertag and an ID made from your Xbox user ID, in place of a Minecraft name and player ID, and everything on this page about those applies to them. When you join, the software that lets Bedrock players in sends your skin to GeyserMC, and we fetch it from there to show your face. When a server’s owner adds you by your gamertag (to its allow list, for example), we look up your Xbox user ID with GeyserMC.',
         'On servers with Stop cheaters on, we record when you were removed or banned automatically, from which server, and why, and show it to that server’s owner.',
         `When you leave a server, we keep a scrambled code made from the network you joined it from (your IP address, or the first half of an IPv6 address), not the address itself. It lets that server start as soon as your game’s server list checks it, before you press Join. The code is different on every server, can’t be turned back into your address, and is deleted ${KNOWN_NETWORK_DAYS} days after your last visit.`,
         `Each time you join a server, or your game’s server list checks it, we also keep a record of how it went: the address you typed, your Minecraft username and player ID, your game version, when each step happened, why you left, and how smoothly the server ran. We use it to find and fix joins that are slow or fail. The IP address and port you came from stay with the record for ${JOIN_ADDRESS_MINUTES} minutes at most, only to match what our network saw with what the server saw; after that only the scrambled code above is left. The record is deleted ${JOIN_RECORD_DAYS} days after you joined.`,
@@ -161,7 +165,7 @@ export const PRIVACY: Policy = {
       id: 'sharing',
       heading: 'Who else handles your data',
       blocks: [
-        'We use a small number of providers to run {brand}. They handle personal data on our behalf, under contracts that require them to keep it safe and use it only to provide their service to us. We don’t share your data with anyone else unless the law requires it (for example a valid court order), or to protect people’s safety.',
+        'We use a small number of providers to run {brand}. They handle personal data on our behalf, under contracts that require them to keep it safe and use it only to provide their service to us; the rows from “Google or GitHub” on are other services your data reaches when you use what they are for, each under its own terms. We don’t share your data with anyone else unless the law requires it (for example a valid court order), or to protect people’s safety.',
         {
           table: {
             head: ['Who', 'What for', 'Where'],
@@ -178,7 +182,7 @@ export const PRIVACY: Policy = {
               ],
               [
                 'Cloudflare, Inc.',
-                'Hosts the {brand} website, stores copies of worlds (resting worlds, downloads and uploads), runs our domain names, checks that a person is signing up (Turnstile), and sends our personal notes.',
+                'Hosts the {brand} website, stores copies of worlds (resting worlds, downloads and uploads), keeps the nightly backups of our database, encrypted, runs our domain names, checks that a person is signing up (Turnstile), and sends our personal notes.',
                 'US company; serves the site from its global network, and chooses where copies of worlds are stored automatically.',
               ],
               [
@@ -197,6 +201,11 @@ export const PRIVACY: Policy = {
                 '{emailProviderWhere}',
               ],
               [
+                'Providers of automated assistants and developer tools',
+                'Help us operate, fix, protect and improve {brand}, and so process the data we look at while doing that, on our instructions.',
+                'US companies.',
+              ],
+              [
                 'Google or GitHub',
                 'Only if you choose to sign in with them. They tell us your email, name and profile picture.',
                 'US companies.',
@@ -205,6 +214,11 @@ export const PRIVACY: Policy = {
                 'Mojang (Microsoft)',
                 'We look up Minecraft names, player IDs and skins with Mojang, and Minecraft servers check players’ accounts with Mojang as they join.',
                 'Mojang’s services.',
+              ],
+              [
+                'GeyserMC',
+                'Only where a server lets in friends on Bedrock Edition: the open-source software that lets them in sends a Bedrock player’s skin to GeyserMC when they join, and we look up gamertags’ Xbox user IDs, and Bedrock players’ skins, with GeyserMC.',
+                'GeyserMC’s services.',
               ],
               [
                 'Modrinth',
@@ -237,9 +251,10 @@ export const PRIVACY: Policy = {
         {
           list: [
             '**Your account** is kept until you ask us to delete it, or until we close it. We then delete your account, servers, worlds and backups within 30 days, except for what we must keep by law (below).',
-            `**Worlds you don’t play:** a world rests in storage after ${FREE.restsAfterDays} days without play on Free (${PLUS.restsAfterDays} on ${PLUS.name}). On Free, a world nobody has played for a year can be deleted, after we email you ${DELETION_WARNINGS_DAYS[0]} and ${DELETION_WARNINGS_DAYS[1]} days before. ${PLUS.name} worlds are kept while you have ${PLUS.name}.`,
-            `**Deleted servers** wait in the trash for ${FREE.trashDays} days on Free and ${PLUS.trashDays} on ${PLUS.name}, then are deleted with their backups and their player lists. A world download you already made is kept until it expires (${FREE.downloadDays} days on Free, ${PLUS.downloadDays} on ${PLUS.name}).`,
-            `**Backups:** Free keeps the latest ${FREE.backupsKept} backups taken after play and ${PLUS.name} the latest ${PLUS.backupsKept}; older ones are deleted. Our hosting provider removes old backup copies after at most 60 days.`,
+            `**Worlds you don’t play:** a world rests in storage after ${FREE.restsAfterDays} days without play on the free trial (${PAID.restsAfterDays} on a paid plan). On the free trial, a world nobody has played for a year can be deleted, after we email you ${DELETION_WARNINGS_DAYS[0]} and ${DELETION_WARNINGS_DAYS[1]} days before. Worlds on a paid plan are kept while you have a paid plan.`,
+            `**Deleted servers** wait in the trash for ${FREE.trashDays} days on the free trial and ${PAID.trashDays} on a paid plan, then are deleted with their backups and their player lists. A world download you already made is kept until it expires (${FREE.downloadDays} days on the free trial, ${PAID.downloadDays} on a paid plan).`,
+            `**Backups:** the free trial keeps the latest ${FREE.backupsKept} backups taken after play and a paid plan the latest ${PAID.backupsKept}; older ones are deleted. Our hosting provider removes old backup copies after at most 60 days.`,
+            '**Backups of our database** are taken every night, encrypted, and each is deleted after 30 days, so what we delete from the database is gone from its backups within 30 days more.',
             '**Sign-in sessions** last 7 days from when you last used {brand}. Session records, with the IP address and browser they came from, are kept with your account.',
             '**The network you signed up from** is deleted after two days.',
             `**The networks players joined a server from** are kept, as a scrambled code, for ${KNOWN_NETWORK_DAYS} days after each player’s last visit to that server.`,
@@ -256,7 +271,7 @@ export const PRIVACY: Policy = {
       id: 'security',
       heading: 'Keeping it safe',
       blocks: [
-        'Passwords are stored only as secure hashes. Everything between your browser and {brand} is encrypted. Sign-in cookies can’t be read by scripts on the page. Access to our systems is limited to us. If a breach puts your data at risk, we will tell you and the regulator as the law requires.',
+        'Passwords are stored only as secure hashes. Everything between your browser and {brand} is encrypted. Sign-in cookies can’t be read by scripts on the page. Access to our systems is limited to us and to the service providers and automated software assistants that work for us, under our instructions, each only as far as its job needs. If a breach puts your data at risk, we will tell you and the regulator as the law requires.',
       ],
     },
     {

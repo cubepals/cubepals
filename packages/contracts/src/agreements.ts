@@ -31,7 +31,8 @@ export type SignUpAgreement = z.infer<typeof SignUpAgreement>
 /**
  * What the checkout page sends before a paid plan's payment page opens: the person agreed to the
  * Terms and asked for the plan to start now, inside the 14 days they can cancel in, knowing they
- * pay for the hours they played if they do past the Refunds page's line.
+ * pay for the hours they played if they do past the Refunds page's line, or after a full refund
+ * before.
  */
 export const CheckoutConsent = z.object({
   terms: version,

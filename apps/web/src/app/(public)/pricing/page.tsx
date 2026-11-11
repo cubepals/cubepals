@@ -6,6 +6,7 @@ import type { PublicPlan } from '@blockly/contracts'
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { digits, pixel } from '../../../landing/fonts'
+import { FULL_REFUND_UNDER_HOURS } from '../../../legal/figures'
 import { bedrockLive } from '../../../lib/bedrock'
 import { pricedPlans } from '../../../lib/plans'
 import { canonicalOrigin, pageMetadata } from '../../../lib/site'
@@ -78,8 +79,10 @@ export default async function PricingPage() {
       </p>
       <p className="type-body-sm" style={{ color: 'var(--ink-muted)' }}>
         Prices are in US dollars and include VAT where it applies. Paid plans renew monthly until you cancel
-        {yearSaid(plus, `; a year of ${plus?.name} is paid once and doesn’t renew on its own`)}. Cancelling
-        within 14 days of buying gets you a full refund if you’ve played less than 30 hours: see{' '}
+        {yearSaid(plus, `; a year of ${plus?.name} is paid once and doesn’t renew on its own`)}. Cancel within
+        14 days of buying a paid plan having played less than {FULL_REFUND_UNDER_HOURS} hours, and you get a
+        full refund the first time; past {FULL_REFUND_UNDER_HOURS} hours, or if you’ve had a full refund
+        before, you pay for the hours you played: see{' '}
         <Link href="/legal/refunds">Refunds and cancellation</Link>.
       </p>
 

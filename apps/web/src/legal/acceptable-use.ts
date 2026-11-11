@@ -13,7 +13,7 @@ export const ACCEPTABLE_USE: Policy = {
   title: 'Acceptable Use Policy',
   description: 'What you can and can’t do with {brand}.',
   summary: [
-    '{brand} is for running Minecraft: Java Edition servers. Nothing else.',
+    '{brand} is for running Minecraft servers. Nothing else.',
     'Don’t break the law, hurt people, or attack anyone or anything.',
     'Anything you publish in the directory must be suitable for everyone.',
     'Breaking these rules can get a listing removed, a server stopped, or an account closed.',
@@ -23,7 +23,7 @@ export const ACCEPTABLE_USE: Policy = {
       id: 'run',
       heading: 'Only run Minecraft',
       blocks: [
-        'A {brand} server is for playing Minecraft: Java Edition, with the mods, plugins and modpacks made for it. Don’t use it for anything else, including:',
+        'A {brand} server is for playing Minecraft. It runs Minecraft: Java Edition’s server software, with the mods, plugins and modpacks made for it, and where it lets them in, friends on Bedrock Edition play on it too. Don’t use it for anything else, including:',
         {
           list: [
             'mining cryptocurrency, or any other work that uses a server’s computing power for something other than the game;',
@@ -80,7 +80,7 @@ export const ACCEPTABLE_USE: Policy = {
       id: 'minecraft',
       heading: 'Follow Mojang’s rules',
       blocks: [
-        'Every server must follow [Mojang’s EULA](https://www.minecraft.net/eula) and [Usage Guidelines](https://www.minecraft.net/usage-guidelines). Don’t let people play without their own copy of Minecraft, don’t give away or sell Mojang’s server software, and if you charge players for anything, follow Mojang’s rules about it.',
+        'Every server must follow [Mojang’s EULA](https://www.minecraft.net/eula) and [Usage Guidelines](https://www.minecraft.net/usage-guidelines). Don’t let people play without their own genuine copy of Minecraft (Java Edition or Bedrock Edition), don’t give away or sell Mojang’s server software, and if you charge players for anything, follow Mojang’s rules about it.',
       ],
     },
     {
