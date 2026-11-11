@@ -7,8 +7,10 @@
  * provider already stops it, by the same code: a first month's subscription is marked ended here
  * (`endedHere`; the provider ended it first), a year ends now or, not started, never starts, and
  * its end is recorded (`recordYearEnds`), a gift is voided (`voidGift`), and a chip-in's hours
- * nobody played can no longer be played (`withdrawn_milli`). Run in the transaction that keeps the
- * request (`withdrawals.ts`). It decides nothing about whether it may be cancelled, and pays nothing.
+ * nobody played can no longer be played (`withdrawn_milli`). Each answers the accounts it moved,
+ * whose limits are judged again once it is kept: for a chip-in, the server's owner. Run in the
+ * transaction that keeps the request (`withdrawals.ts`). It decides nothing about whether it may be
+ * cancelled, and pays nothing.
  */
 import { schema, type Tx } from '@blockly/db'
 import { and, eq } from 'drizzle-orm'
@@ -110,5 +112,6 @@ async function stopChipIn(
     subjectId: chipIn.serverId,
     data: { order: chipIn.externalOrderId, payer: chipIn.payerId, milli: unplayed },
   })
-  return { affected: [] }
+  // The server's owner: a server that ran on these hours alone has nothing left to run on.
+  return { affected: [chipIn.ownerId] }
 }

@@ -506,12 +506,16 @@ db('a chip-in gives back its unplayed share, the newest chip-ins taken as the la
   await w.h.db.insert(schema.chipInMarks).values({ userId: owner.userId, drawnThrough: new Date() })
   expect((await chippedInLeft(w.h.db, owner.userId)).get(server.id)).toBeCloseTo(35, 3)
 
+  const judged = spyOn(w.h.app.accounts, 'enforceLimits')
   expect(await withdrawals().request(first, older)).toMatchObject({
     kind: 'chip_in',
     rule: 'unplayed',
     hoursPlayed: 5,
     refundCents: 375,
   })
+  // The owner's limits are judged again at once: a server may have run on those hours alone.
+  expect(judged.mock.calls).toEqual([[owner.userId]])
+  judged.mockRestore()
   // Its fifteen unplayed hours are gone from the server; the newer chip-in's twenty stay.
   expect((await chippedInLeft(w.h.db, owner.userId)).get(server.id)).toBeCloseTo(20, 3)
   const held = w.orders.get(older)
