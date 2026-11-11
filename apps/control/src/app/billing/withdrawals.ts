@@ -34,7 +34,7 @@ import { writeEntries } from './audit.ts'
 import { WITHDRAWAL_MS } from './ending.ts'
 import { confirmPurchase } from './purchase-confirmation.ts'
 import { stopPurchase } from './purchase-stop.ts'
-import { assess, type Purchase, purchasesOf, purchaseTitle } from './withdrawable.ts'
+import { assess, type Purchase, purchaseHeld, purchasesOf, purchaseTitle } from './withdrawable.ts'
 import { tenths, WithdrawalMail } from './withdrawal-mail.ts'
 import {
   keepWithdrawal,
@@ -125,21 +125,29 @@ export class Withdrawals {
    * Cancels one of the account's purchases, once, while its 14 days last; refused kindly for one
    * cancelled already, one past its 14 days, a renewal, or one refunded already, and not found for
    * another account's. A first month's subscription is ended at the provider first, so a failure
-   * after leaves nothing that renews; the request is then kept and the purchase stopped together.
+   * after leaves nothing that renews; the request is then kept and the purchase stopped together,
+   * on the purchase as it is read again then, so a refund that arrived meanwhile refuses it.
    */
   async request(actor: Actor, order: string, now = new Date()): Promise<WithdrawalView> {
     const userId = person(actor)
     const billing = requireCapability(this.#caps, 'billing')
-    const purchase = await this.#refusedUnless(billing.provider, userId, order, now)
-    if (purchase.kind === 'plan' && purchase.externalSubscriptionId !== null) {
-      const sub = purchase.externalSubscriptionId
+    const { provider } = billing
+    const [first] = await purchasesOf(this.#db, provider, { userId, order })
+    const found = refusedUnless(first, await withdrawalOf(this.#db, provider, order), now)
+    if (found.kind === 'plan' && found.externalSubscriptionId !== null) {
+      const sub = found.externalSubscriptionId
       await reach(() => billing.endSubscription(sub))
     }
-    const { record, affected } = await this.#db.transaction(async (tx) => {
+    const { purchase, record, affected } = await this.#db.transaction(async (tx) => {
       await lockStanding(tx, userId)
       // One draw of a server's hours at a time (`ChipIns.draw`): none moves what is unplayed meanwhile.
-      if (purchase.chipIn !== null)
-        await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`chip-in:${purchase.chipIn.ownerId}`}))`)
+      if (found.chipIn !== null)
+        await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`chip-in:${found.chipIn.ownerId}`}))`)
+      const purchase = refusedUnless(
+        await purchaseHeld(tx, provider, userId, order),
+        await withdrawalOf(tx, provider, order),
+        now,
+      )
       const at = new Date()
       const assessed = await assess(tx, purchase, at)
       const sentTo = (await emailOf(tx, userId)) ?? ''
@@ -176,34 +184,13 @@ export class Withdrawals {
       ])
       for (const account of stopped.affected)
         await this.#jobs.enqueueEligibility(await listingsOfOwner(tx, account), tx)
-      return { record: kept, affected: stopped.affected }
+      return { purchase, record: kept, affected: stopped.affected }
     })
     // Kept and stopped: now the operator and the person are told, each once. One that fails is
     // reported and left for the billing pass, and the request stands.
     await this.mail.tell(record.provider, record.externalOrderId)
     for (const account of affected) await this.#accounts.enforceLimits(account)
     return viewOf(purchase, record, record.requestedAt)
-  }
-
-  /** The purchase, when this account may cancel it now; refused, kindly, when it may not. */
-  async #refusedUnless(provider: string, userId: string, order: string, now: Date): Promise<Purchase> {
-    const [purchase] = await purchasesOf(this.#db, provider, { userId, order })
-    if (purchase === undefined) throw new NotFound('Purchase')
-    const asked = await withdrawalOf(this.#db, provider, order)
-    if (asked !== null) throw alreadyAsked(asked.requestedAt)
-    if (purchase.kind === null)
-      throw new AppError(
-        'invalid_choice',
-        'A renewal isn’t a new purchase, so it has no 14 days of its own. You can cancel your plan any time in Manage billing.',
-      )
-    if (now > purchase.until)
-      throw new AppError(
-        'invalid_choice',
-        `The 14 days to cancel ${purchaseTitle(purchase)} ended on ${DAY.format(purchase.until)}.`,
-      )
-    if (!cancellable(purchase, now))
-      throw new AppError('invalid_choice', `${capital(purchaseTitle(purchase))} has been refunded already.`)
-    return purchase
   }
 }
 
@@ -226,6 +213,25 @@ const alreadyAsked = (at: Date) =>
     'invalid_choice',
     `You cancelled this on ${DAY.format(at)} already. Your refund follows within 14 days of then.`,
   )
+
+/** The purchase, when its account may cancel it now; refused, kindly, when it may not. */
+function refusedUnless(purchase: Purchase | undefined, asked: WithdrawalRecord | null, now: Date): Purchase {
+  if (purchase === undefined) throw new NotFound('Purchase')
+  if (asked !== null) throw alreadyAsked(asked.requestedAt)
+  if (purchase.kind === null)
+    throw new AppError(
+      'invalid_choice',
+      'A renewal isn’t a new purchase, so it has no 14 days of its own. You can cancel your plan any time in Manage billing.',
+    )
+  if (now > purchase.until)
+    throw new AppError(
+      'invalid_choice',
+      `The 14 days to cancel ${purchaseTitle(purchase)} ended on ${DAY.format(purchase.until)}.`,
+    )
+  if (!cancellable(purchase, now))
+    throw new AppError('invalid_choice', `${capital(purchaseTitle(purchase))} has been refunded already.`)
+  return purchase
+}
 
 const capital = (s: string) => `${s[0]?.toUpperCase() ?? ''}${s.slice(1)}`
 

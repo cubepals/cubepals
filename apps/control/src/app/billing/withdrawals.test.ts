@@ -223,6 +223,28 @@ db('refused: day 15, a renewal, another account’s order; and two at once keep 
   expect((await subjects(owner)).filter((s) => s.startsWith('We received'))).toHaveLength(1)
 })
 
+db('a refund arriving while the plan is ended at Polar refuses the request, and nobody is told', async () => {
+  const { owner, order } = await firstMonth('Fay', 2)
+  const held = w.orders.get(order)
+  if (held === undefined || w.billing === null) throw new Error('no order')
+  // The refund's own delivery ends the subscription too: only the first call brings it.
+  let delivered = false
+  const ending = spyOn(w.billing, 'endSubscription').mockImplementation(async () => {
+    if (delivered) return
+    delivered = true
+    await w.post(orderEvent({ ...held, status: 'refunded', refunded_amount: 1500 }, 'order.refunded'))
+  })
+  try {
+    expect(await refusal(withdrawals().request(owner, order))).toBe(
+      'Your first month of Plus has been refunded already.',
+    )
+  } finally {
+    ending.mockRestore()
+  }
+  expect(await kept(order)).toEqual([])
+  expect((await subjects(owner)).filter((s) => s.startsWith('We received'))).toEqual([])
+})
+
 db('a year ends now, and the refund that follows moves its end no further', async () => {
   const owner = await w.h.user('Gil')
   const order = await w.paidYear(owner, { created_at: new Date().toISOString() })

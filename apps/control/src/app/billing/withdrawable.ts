@@ -61,6 +61,26 @@ export interface Purchase {
 }
 
 /**
+ * One of the account's purchases read for a change to it, inside a transaction: its order's row is
+ * locked first, so a refund the provider delivers meanwhile is either in what is read or waits for
+ * the transaction to end. Undefined when the account has no such paid order.
+ */
+export async function purchaseHeld(
+  tx: Queryable,
+  provider: string,
+  userId: string,
+  order: string,
+): Promise<Purchase | undefined> {
+  await tx
+    .select({ order: orders.externalOrderId })
+    .from(orders)
+    .where(and(eq(orders.provider, provider), eq(orders.externalOrderId, order)))
+    .for('update')
+  const [purchase] = await purchasesOf(tx, provider, { userId, order })
+  return purchase
+}
+
+/**
  * The account's paid orders, or one of them (`order`), newest first, with what each bought: only
  * those ordered after `since`, when given. Another account's order is never among them.
  */
