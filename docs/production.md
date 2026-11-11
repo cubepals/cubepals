@@ -102,7 +102,8 @@ bun scripts/production.ts apply
 2. It builds the website from this checkout with production's values and checks the build
    (`robots.txt` lets crawlers in, `/api` goes to `bly-prod-control`), so a build that fails stops
    it before anything changes.
-3. Terraform shows the plan and asks before it changes anything. Answer `yes`.
+3. Terraform shows the plan, the guard reviews it ([below](#deploy-from-github)), and `apply` asks
+   before it changes anything. Answer `yes`, and that saved plan is applied.
    Then it gives the Database dump workflow its secrets ([below](#database-dumps)).
 4. It deploys `bly-prod-control` (its release runs the migrations), then `bly-prod-realtime` (one
    machine, always), then `bly-prod-edge`, all from this checkout. An app whose image sources,
@@ -190,6 +191,13 @@ secret: fix forward, then deploy again. A release that sells Core has `core:<id>
 `POLAR_PRODUCTS`, which older code refuses as not a paid plan: remove `core:<id>` from
 `POLAR_PRODUCTS` before rolling back past the Core release, and put it back after going forward.
 
+The control app isn't taken back past what production's settings need of it
+(`scripts/production-guard.ts`): while `PLAY_IPV4_BY_REGION` is set, in the config or on the
+control app, an image from before #447 would stop keeping the play names' own records, which then
+go stale as servers change. The rollback leaves control where it is, says why, takes the other
+apps and the website back all the same, and ends failed. To go back that far, empty the setting
+and `apply`, give the control plane a minute to remove its records, then roll back.
+
 Until the first `apply` or `hotfix` built with this tagging has run, the images the Fly apps run
 don't say which deploy made them, so a bare `rollback` or `rollback fly` leaves every Fly app as
 it is and says so. Name the apps instead:
@@ -209,6 +217,32 @@ It ends by asking production for its pages. One runs at a time. It leaves the Da
 workflow's secrets as they are (`--keep-dump-secrets`); a change to those values goes through
 `apply` from a checkout.
 
+What a run deploys is decided by main, not by what is deployed. A nightly runs its own
+`production.ts` and its own Terraform, so a check inside it would protect only nightlies made after
+it. The workflow's first step checks out main, at the commit it is on when the run starts, beside
+the run's own checkout, and runs `scripts/production-guard.ts` from there:
+
+- **The run is main's.** A run whose workflow file differs from main's is refused: an old run
+  started again runs its own old steps. Start a new one.
+- **The commit is fixed.** `apply` resolves the nightly to its commit, which must be on main, and
+  deploys that commit, not the tag. A rollback runs main's code.
+- **The nightly fits production's settings.** With `PLAY_IPV4` set, a nightly from before #445 is
+  refused: its Terraform points the play names' wildcard back at the edge's anycast address and
+  gives the Fly apps `PLAY_IPV4`. With `PLAY_IPV4_BY_REGION` set, one from before #447 is refused:
+  its control plane doesn't keep the play names' own records. A nightly whose `apply` doesn't have
+  its plan reviewed is refused too. To go back to older code, roll back; a rollback runs no
+  Terraform.
+- **The plan is reviewed, then applied as it was.** `apply` saves Terraform's plan, main's guard
+  reads it (`production-plan-review.ts`) and refuses one that points a play name's wildcard
+  anywhere but where the settings say, replaces one, or gives the Fly apps a setting the stack keeps
+  for Terraform alone (`terraform_only`). Then that same file is applied, checked by its hash;
+  Terraform refuses it if anything changed since it was made. A plan that stopped on a Fly timeout
+  is made again and reviewed again; an apply that stopped is started again as a new run.
+
+`bun scripts/production.ts apply` from a checkout runs the same checks with that checkout's copy of
+the guard. Anyone holding production's values can still run an old checkout's Terraform by hand;
+production deploys from this workflow.
+
 ```sh
 gh workflow run deploy-production.yml -f command=apply             # the newest nightly
 gh workflow run deploy-production.yml -f command=apply -f version=v0.1.110-nightly.20261028.120
@@ -224,7 +258,7 @@ workflow's two secrets:
 
 | Secret | What it is |
 |---|---|
-| `AGE_SECRET_KEY` | The age key the bundle is encrypted to: the line that starts `AGE-SECRET-KEY-` |
+| `PRODUCTION_AGE_KEY` | The age key the bundle is encrypted to: the line that starts `AGE-SECRET-KEY-`. Workflows from before the guard asked for it as `AGE_SECRET_KEY`, which the environment no longer holds, so a run of one can't open the values |
 | `DEPLOY_GITHUB_TOKEN` | A fine-grained token. On this repository: Contents and Workflows, read and write; Actions, read. On the private records: Contents, read |
 
 An agent runs it as well when a maintainer asks for a deploy ([AGENTS.md](../AGENTS.md#production)).
