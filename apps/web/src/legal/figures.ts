@@ -135,12 +135,8 @@ export const EXTRA_HOUR_CENTS = 25
 /** Days a failed renewal keeps the paid plan while the card is fixed (`billing/persistence.ts`). */
 export const PAST_DUE_GRACE_DAYS = 7
 
-/**
- * Hours of play, counted as the account page counts them (a large server spends two an hour, the largest four),
- * below which cancelling in the first 14 days gets everything back, a policy choice. At or past
- * it, only the part not played is refunded, as the law requires.
- */
-export const FULL_REFUND_UNDER_HOURS = 30
+/** The hours line for a full refund within 14 days, as the control plane works refunds out to it. */
+export { FULL_REFUND_UNDER_HOURS } from '@blockly/contracts'
 
 /** Minutes a player may stand still in game before the server kicks them, by default. */
 export const AFK_KICK_MINUTES = 15

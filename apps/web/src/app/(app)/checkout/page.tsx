@@ -24,7 +24,7 @@ import { consentFor, UNCONSENTED } from '../../../lib/agreement'
 import { messageOf, useTRPC } from '../../../lib/api'
 import { type CheckoutAsk, checkoutHref, checkoutOf } from '../../../lib/checkout'
 import { checkoutContinued, checkoutOpened } from '../../../lib/paying'
-import { Button, Card, Checkbox, LoadFailed, Note, PlayHours, Skeleton } from '../../../ui'
+import { Button, Card, Checkbox, LoadFailed, Note, PlayHours, Skeleton, TermsBox } from '../../../ui'
 
 export default function CheckoutPage() {
   return (
@@ -201,17 +201,7 @@ function Offer({
       </header>
       <Price ask={ask} name={name} offered={offered} month={month} monthNow={monthNow} startsAt={startsAt} />
       <div className="bk-stack" style={{ gap: 'var(--space-16)' }}>
-        <Checkbox checked={terms} onChange={setTerms} invalid={unticked && !terms}>
-          I agree to the{' '}
-          <Link href="/legal/terms" target="_blank">
-            Terms of Service
-          </Link>{' '}
-          and the{' '}
-          <Link href="/legal/refunds" target="_blank">
-            Refunds and cancellation
-          </Link>{' '}
-          policy.
-        </Checkbox>
+        <TermsBox checked={terms} onChange={setTerms} invalid={unticked && !terms} />
         <Checkbox
           checked={startNow}
           onChange={setStartNow}

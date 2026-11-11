@@ -13,6 +13,7 @@ import {
   date,
   index,
   integer,
+  jsonb,
   pgTable,
   primaryKey,
   text,
@@ -151,6 +152,13 @@ export const billingOrders = pgTable(
      * read again a day later, not every pass; any word from the provider about it clears this.
      */
     unknownAt: ts('unknown_at'),
+    /**
+     * When its buyer was emailed what they bought, once, as the confirmation of a purchase they can
+     * keep (`billing/purchase-confirmation.ts`); null for an order nobody was told about: a renewal,
+     * or a purchase whose email is still to be sent, which the billing pass sends. An order from
+     * before confirmations were sent carries the moment they began, so none is sent for it.
+     */
+    confirmedAt: ts('confirmed_at'),
     orderedAt: ts('ordered_at').notNull(),
     updatedAt: updatedAt(),
   },
@@ -253,5 +261,67 @@ export const planYears = pgTable(
   (t) => [
     primaryKey({ columns: [t.provider, t.externalOrderId] }),
     index('plan_years_user').on(t.userId, t.endsAt),
+  ],
+)
+
+/** One other order of a subscription cancelled with its first month, as the request kept it. */
+export interface WithdrawnWithJson {
+  order: string
+  paidCents: number
+  /** The plan its product sells, to say what the charge was for; null when none. */
+  planKey: string | null
+  orderedAt: string
+}
+
+/**
+ * A purchase cancelled within its 14 days from the account page (`billing/withdrawals.ts`): one per
+ * order, kept as it stood when it was asked for, so later play can't change what it says. `kind`
+ * is what the order bought; `playedMilli` the hours played by then, in thousandths, as the account
+ * counts them (a large server two an hour); `includedUnits` the hours a month of its plan, where it
+ * has any; `refundCents` what the Refunds page's rule gives back of `paidCents` (tax included), by
+ * `rule`; `earlierFull` whether the account had a full refund on an earlier purchase. Nothing here
+ * pays anything: a person pays the refund at the provider, which then reports it on the order.
+ */
+export const billingWithdrawals = pgTable(
+  'billing_withdrawals',
+  {
+    provider: text('provider').notNull(),
+    externalOrderId: text('external_order_id').notNull(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id),
+    kind: text('kind').notNull(),
+    requestedAt: ts('requested_at').notNull(),
+    playedMilli: integer('played_milli').notNull(),
+    includedUnits: integer('included_units'),
+    paidCents: integer('paid_cents').notNull(),
+    currency: text('currency').notNull(),
+    refundCents: integer('refund_cents').notNull(),
+    rule: text('rule').notNull(),
+    earlierFull: boolean('earlier_full').notNull(),
+    /** Where the acknowledgement went: the account's email when it was asked for. */
+    sentTo: text('sent_to').notNull(),
+    /**
+     * When the person's acknowledgement, and the operator's word, were handed over to be sent:
+     * each after the request was kept, at most once, and retried by the billing pass while null.
+     */
+    acknowledgedAt: ts('acknowledged_at'),
+    operatorsToldAt: ts('operators_told_at'),
+    /**
+     * The subscription's other paid orders cancelled with a first month: a change of plan or price
+     * charged inside its 14 days. The subscription ends whole, so each is refunded with it, and
+     * `paid_cents` and `refund_cents` count them all.
+     */
+    alsoOrders: jsonb('also_orders').$type<WithdrawnWithJson[]>().notNull().default([]),
+  },
+  (t) => [
+    primaryKey({ columns: [t.provider, t.externalOrderId] }),
+    index('billing_withdrawals_user').on(t.userId, t.requestedAt),
+    check('billing_withdrawals_kind', sql`${t.kind} in ('plan', 'year', 'gift', 'chip_in')`),
+    check(
+      'billing_withdrawals_rule',
+      sql`${t.rule} in ('full', 'played', 'unstarted', 'unredeemed', 'unplayed')`,
+    ),
+    check('billing_withdrawals_refund', sql`${t.refundCents} between 0 and ${t.paidCents}`),
   ],
 )

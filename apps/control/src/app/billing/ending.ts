@@ -14,7 +14,7 @@
  * It decides no plan (`persistence.ts`), and gives no refund (`balance.ts`).
  */
 import { DAY_MS } from '@blockly/contracts/durations'
-import { type Db, type Queryable, schema } from '@blockly/db'
+import { type Db, type Queryable, schema, type Tx } from '@blockly/db'
 import { and, desc, eq, lte, ne, sql } from 'drizzle-orm'
 import { planName } from '../../domain/account/entitlements.ts'
 import { emailOf, loadStanding, lockStanding } from '../accounts/persistence.ts'
@@ -39,13 +39,17 @@ import { stoppedAsSecond } from './second-subscriptions.ts'
 
 const subscriptions = schema.billingSubscriptions
 
-/** The Refunds page's withdrawal: a first month refunded within this long of its order. */
-const WITHDRAWAL_MS = 14 * DAY_MS
+/**
+ * The Refunds page's 14 days: a first month refunded within this long of its order is the
+ * withdrawal, and a purchase can be cancelled from the account page for this long after it.
+ */
+export const WITHDRAWAL_MS = 14 * DAY_MS
 
 /** Why Blockly ended a subscription, as the audit log keeps it and the account page says it. */
 export type EndedFor = 'withdrawal' | 'unpaid'
 
-const REVOKED = 'billing.subscription_revoked'
+/** What the audit log calls a subscription Blockly ended itself, with why (`endedFor` reads it). */
+export const REVOKED = 'billing.subscription_revoked'
 
 export class SubscriptionEnding {
   readonly #db: Db
@@ -149,38 +153,14 @@ export class SubscriptionEnding {
     await billing.endSubscription(sub)
     const planKey = await this.#db.transaction(async (tx) => {
       await lockStanding(tx, userId)
-      const now = new Date()
-      // Time that ran out before it ended (a grace past) is its own change, recorded first.
-      await recordLapses(tx, userId, 'system:billing', source, now)
-      const before = {
-        plan: (await loadStanding(tx, userId, now)).plan,
-        subs: await snapshotSubscriptions(tx, userId),
-      }
-      const [row] = await tx
-        .update(subscriptions)
-        .set({
-          status: 'ended',
-          canceledAt: sql`coalesce(${subscriptions.canceledAt}, now())`,
-          updatedAt: now,
-        })
-        .where(
-          and(
-            eq(subscriptions.userId, userId),
-            eq(subscriptions.provider, billing.provider),
-            eq(subscriptions.externalSubscriptionId, sub),
-            ne(subscriptions.status, 'ended'),
-          ),
-        )
-        .returning({ planKey: subscriptions.planKey })
-      if (row === undefined) return null
-      const after = (await loadStanding(tx, userId, now)).plan
-      await writeEntries(tx, userId, 'system:billing', source, [
-        { action: REVOKED, data: { provider: billing.provider, subscription: sub, plan: row.planKey, why } },
-        ...subscriptionChanges(before.subs, await snapshotSubscriptions(tx, userId)),
-        ...planChange(before.plan, after),
-      ])
-      if (after !== before.plan) await this.#jobs.enqueueEligibility(await listingsOfOwner(tx, userId), tx)
-      return row.planKey
+      const ended = await endedHere(
+        tx,
+        { provider: billing.provider, userId, sub, why },
+        'system:billing',
+        source,
+      )
+      if (ended?.planChanged) await this.#jobs.enqueueEligibility(await listingsOfOwner(tx, userId), tx)
+      return ended?.planKey ?? null
     })
     if (planKey === null) return false
     const to = await emailOf(this.#db, userId)
@@ -189,6 +169,52 @@ export class SubscriptionEnding {
     await this.#accounts.enforceLimits(userId)
     return true
   }
+}
+
+/**
+ * The subscription marked ended here, once, audited with why (`billing.subscription_revoked`) and
+ * the plan change it made: what `SubscriptionEnding` does once the provider has ended it, and what
+ * cancelling a first month from the account page does (`withdrawals.ts`). Run under the account's
+ * standing lock. Null when it had ended here already.
+ */
+export async function endedHere(
+  tx: Tx,
+  ending: { provider: string; userId: string; sub: string; why: EndedFor },
+  actor: string,
+  source: BillingSource,
+): Promise<{ planKey: string; planChanged: boolean } | null> {
+  const { provider, userId, sub, why } = ending
+  const now = new Date()
+  // Time that ran out before it ended (a grace past) is its own change, recorded first.
+  await recordLapses(tx, userId, actor, source, now)
+  const before = {
+    plan: (await loadStanding(tx, userId, now)).plan,
+    subs: await snapshotSubscriptions(tx, userId),
+  }
+  const [row] = await tx
+    .update(subscriptions)
+    .set({
+      status: 'ended',
+      canceledAt: sql`coalesce(${subscriptions.canceledAt}, now())`,
+      updatedAt: now,
+    })
+    .where(
+      and(
+        eq(subscriptions.userId, userId),
+        eq(subscriptions.provider, provider),
+        eq(subscriptions.externalSubscriptionId, sub),
+        ne(subscriptions.status, 'ended'),
+      ),
+    )
+    .returning({ planKey: subscriptions.planKey })
+  if (row === undefined) return null
+  const after = (await loadStanding(tx, userId, now)).plan
+  await writeEntries(tx, userId, actor, source, [
+    { action: REVOKED, data: { provider, subscription: sub, plan: row.planKey, why } },
+    ...subscriptionChanges(before.subs, await snapshotSubscriptions(tx, userId)),
+    ...planChange(before.plan, after),
+  ])
+  return { planKey: row.planKey, planChanged: after !== before.plan }
 }
 
 /** Why Blockly ended the subscription itself, from the audit log; null when it didn't. */

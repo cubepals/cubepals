@@ -53,6 +53,7 @@ export async function pendingDraws(q: Queryable, ownerId: string, to: Date): Pro
       milli: chipIns.milli,
       netCents: chipIns.netCents,
       refundedCents: chipIns.refundedCents,
+      withdrawnMilli: chipIns.withdrawnMilli,
       at: chipIns.receivedAt,
     })
     .from(chipIns)
@@ -104,7 +105,14 @@ export async function pendingDraws(q: Queryable, ownerId: string, to: Date): Pro
  * chip-ins paid since, each from when it was.
  */
 function atMark(
-  paid: ReadonlyArray<{ serverId: string; milli: number; netCents: number; refundedCents: number; at: Date }>,
+  paid: ReadonlyArray<{
+    serverId: string
+    milli: number
+    netCents: number
+    refundedCents: number
+    withdrawnMilli: number
+    at: Date
+  }>,
   mark: Date,
   drawn: ReadonlyMap<string, number>,
 ) {

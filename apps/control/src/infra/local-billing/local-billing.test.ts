@@ -243,6 +243,11 @@ describe.skipIf(!hasDatabase)('the local gift page, with GIFTS_BY_EMAIL', () => 
     const { gift, order } = await bought(`${account.userId}@example.test`)
     expect(order?.userId).toBeNull()
     expect(gift).toMatchObject({ state: 'paid', buyerId: null })
-    expect(h.mail.to(`${account.userId}@example.test`)).toHaveLength(0)
+    // The one email is the purchase's confirmation, to the address it was paid with, as a guest's:
+    // cancelled by replying, since no account's page has it.
+    const mail = h.mail.to(`${account.userId}@example.test`)
+    expect(mail.map((m) => m.subject)).toEqual(['Your Cubepals purchase: a gift of a month of Plus'])
+    expect(mail[0]?.text).toContain('by replying to this email')
+    expect(mail[0]?.text).not.toContain('on your account')
   })
 })

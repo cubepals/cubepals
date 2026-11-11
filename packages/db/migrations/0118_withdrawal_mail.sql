@@ -1,0 +1,2 @@
+ALTER TABLE "billing_withdrawals" ADD COLUMN "acknowledged_at" timestamp with time zone;--> statement-breakpoint
+ALTER TABLE "billing_withdrawals" ADD COLUMN "operators_told_at" timestamp with time zone;

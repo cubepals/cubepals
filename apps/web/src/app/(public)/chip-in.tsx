@@ -6,16 +6,18 @@
 
 /**
  * Chipping in, on a server's page or an invitation: a friend who plays there adds hours to it, paid
- * once, through the same checkout a plan uses. It is not where the owner sees who did (the Share
+ * once, through the same checkout a plan uses, after the same two boxes a plan's checkout page asks
+ * for (the Terms, and that the hours start now). It is not where the owner sees who did (the Share
  * sheet's `ui/chip-ins.tsx`).
  */
 import { CHIP_IN_AMOUNTS, type PublicServerView } from '@blockly/contracts'
 import { useMutation } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
+import { consentFor, UNCONSENTED } from '../../lib/agreement'
 import { messageOf, useTRPC } from '../../lib/api'
 import { chipInOpened, chipInReturned } from '../../lib/paying'
 import { behindSignIn, useSignedIn } from '../../lib/viewer'
-import { Button, FormSection, Note } from '../../ui'
+import { Button, Checkbox, FormSection, Note, TermsBox } from '../../ui'
 
 /**
  * The offer itself: only where the server takes it, and never to its own owner. `to` is the page
@@ -34,6 +36,10 @@ export function ChipIn({ view, to }: { view: PublicServerView; to: { slug: strin
   const start = useMutation(
     trpc.chipIns.start.mutationOptions({ onSuccess: ({ url }) => window.location.assign(url) }),
   )
+  const [terms, setTerms] = useState(false)
+  const [startNow, setStartNow] = useState(false)
+  const [unticked, setUnticked] = useState(false)
+  const consent = consentFor(terms, startNow)
   const offer = view.chipIn
   if (offer === null) return null
   const page = 'code' in to ? `/join/${to.code}` : `/server/${to.slug}`
@@ -48,6 +54,20 @@ export function ChipIn({ view, to }: { view: PublicServerView; to: { slug: strin
           Thank you. The hours reach {view.name} as soon as the payment goes through.
         </Note>
       )}
+      {signedIn && (
+        <div className="bk-stack" style={{ gap: 'var(--space-16)' }}>
+          <TermsBox checked={terms} onChange={setTerms} invalid={unticked && !terms} />
+          <Checkbox
+            checked={startNow}
+            onChange={setStartNow}
+            invalid={unticked && !startNow}
+            error={unticked && consent === null ? UNCONSENTED : null}
+          >
+            Start my hours straight away. I understand that if I cancel within 14 days of chipping in, I get
+            back only what I paid for the hours nobody has played yet.
+          </Checkbox>
+        </div>
+      )}
       <div className="bk-row bk-wrap" style={{ gap: 'var(--space-8)' }}>
         {CHIP_IN_AMOUNTS.map((cents) =>
           signedIn ? (
@@ -56,8 +76,12 @@ export function ChipIn({ view, to }: { view: PublicServerView; to: { slug: strin
               variant="outline"
               disabled={start.isPending}
               onClick={() => {
+                if (consent === null) {
+                  setUnticked(true)
+                  return
+                }
                 chipInOpened(cents)
-                start.mutate({ to, cents })
+                start.mutate({ to, cents, consent })
               }}
             >
               ${cents / 100} · {hours(cents)} hours

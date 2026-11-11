@@ -82,7 +82,7 @@ export function giftCode(input: { code: string; planKey: string; months: number;
   const lines = [
     `Here’s your gift: ${what}. Pass the code on to whoever it’s for.`,
     'They redeem it on Cubepals, signed in to their own account, and it starts then. It works once, and it doesn’t run out.',
-    'Not given it yet and changed your mind? Reply within 14 days of buying it for a full refund.',
+    'Not given it yet and changed your mind? Within 14 days of buying it, cancel it on your account or reply to this email, for a full refund.',
   ]
   const subject = `Your Cubepals gift code: ${what}`
   return {

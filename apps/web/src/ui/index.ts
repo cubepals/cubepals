@@ -31,6 +31,7 @@ export {
   PageSkeleton,
   Skeleton,
 } from './surfaces'
+export { TermsBox } from './terms-box'
 export { Tip } from './tip'
 
 /** Lucide, as the design system uses it: 20px, 1.75 stroke, currentColor. */

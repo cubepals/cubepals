@@ -38,6 +38,7 @@ import {
 import { ctaMark, seenMark } from '../../(public)/steps'
 import { FreeHoursUsed } from '../free-hours-used'
 import { PlusOffer } from '../plus-offer'
+import { CancelPurchase } from './cancel-purchase'
 import { type LargerPlan, pastWhichCheaper, useLargerPlan } from './larger-plan'
 import { planAction } from './plan-action'
 import { PriceSwitch } from './price-switch'
@@ -81,6 +82,7 @@ function Account() {
         </Note>
       )}
       <Plan overview={overview.data} />
+      <CancelPurchase email={me.data.email} />
       <PlayTotal overview={overview.data} />
       <Play overview={overview.data} />
       <Includes overview={overview.data} />
@@ -473,7 +475,7 @@ function planSummary(overview: AccountOverviewView): string {
 /** Cubepals ended the plan's subscription itself: after a withdrawal, or a renewal left unpaid. */
 function endedSummary(why: 'withdrawal' | 'unpaid', plan: string): string {
   return why === 'withdrawal'
-    ? `Your refund went through, and ${plan} has ended. You can subscribe again any time.`
+    ? `${plan} has ended, as you cancelled it within 14 days of buying it. You can subscribe again any time.`
     : `Your payment didn’t go through, so ${plan} has ended and your card won’t be charged for it again. You can subscribe again any time.`
 }
 

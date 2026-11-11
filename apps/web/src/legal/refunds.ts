@@ -67,7 +67,7 @@ export const REFUNDS: Policy = {
         'A paid plan is a service. Before you pay, the checkout page asks you to agree that it starts straight away, inside those 14 days, so you can play at once, and that if you cancel you pay for the hours you played as this section says.',
         `If you are a consumer in the UK, the EU, Norway or Iceland, the law gives you the right to cancel a contract made online within 14 days, paying only for what you have already had. This section is how we apply that right, and it never gives you less.`,
         'The 14 days start on the day you buy a paid plan. Monthly renewals after that are not new purchases, so they don’t start a new 14 days, but you can still cancel any time as {§cancel} says. Moving between paid plans keeps the same subscription, so it isn’t a new purchase either and doesn’t start a new 14 days. Renewing a year is a new purchase, with 14 days of its own; one that hasn’t started yet is refunded in full.',
-        '**How to cancel within the 14 days:** email {support} from the address on your account, saying that you are cancelling (withdrawing from) your contract. You can use the form below, but you don’t have to. You only need to send it before the 14 days end. We will confirm by email that we received it. Your plan then ends straight away, and your account moves to the free trial ({§lapse}).',
+        '**How to cancel within the 14 days:** on your [account](/account), under **Cancel within 14 days**, choose **Cancel purchase**, then **Confirm cancellation**. Or email {support} from the address on your account, saying that you are cancelling (withdrawing from) your contract: you can use the form below, but you don’t have to. You only need to do it before the 14 days end. We will confirm by email that we received it, with the date and time. Your plan then ends straight away, and your account moves to the free trial ({§lapse}).',
         'We will refund you without undue delay, and no later than 14 days after you tell us, to the payment method you used. You won’t pay any fee for the refund.',
       ],
     },
@@ -141,7 +141,7 @@ export const REFUNDS: Policy = {
       heading: 'Gifts',
       blocks: [
         'A gift is paid once by the person who buys it, and the refund goes back to them, to the payment method they used.',
-        '**Not redeemed yet: a full refund within 14 days of buying it.** Reply to the email the code came in, or email {support} from the address on the account that bought it. The code stops working straight away.',
+        '**Not redeemed yet: a full refund within 14 days of buying it.** Cancel it on your [account](/account), under **Cancel within 14 days**, or reply to the email the code came in, or email {support} from the address on the account that bought it. The code stops working straight away.',
         `**Redeemed: as the plan it gives.** Within 14 days of buying the gift, {§withdrawal} applies to the hours played on the account that redeemed it: a full refund below ${FULL_REFUND_UNDER_HOURS} hours, the first time the buyer has one; otherwise the part not played. The gifted plan then ends straight away, and that account moves to the free trial ({§lapse}).`,
         'After the 14 days, a gift is refunded only for the reasons in {§refunds}.',
         'A gift doesn’t renew, so there is nothing to cancel. When its time runs out, the account that redeemed it moves to the free trial, as {§lapse} says, unless it has another gift or a plan of its own.',
@@ -152,7 +152,7 @@ export const REFUNDS: Policy = {
       heading: 'Chipping in to a friend’s server',
       blocks: [
         `When you chip in to a server, you pay once, and what you pay becomes hours of play on that server at ${dollars(EXTRA_HOUR_CENTS)} an hour, VAT included where it applies. A large server uses two hours for each hour it runs, and the largest uses four. The hours stay with the server until they are played. They are played once its owner has used their own hours for that month, carried ones included, and while the owner doesn’t have a paid plan, they wait.`,
-        '**Within 14 days of chipping in,** you can ask for a refund of the hours that haven’t been played yet: email {support} from the address on your account. We refund that share of what you paid. You don’t have to give a reason.',
+        '**Within 14 days of chipping in,** you can ask for a refund of the hours that haven’t been played yet: cancel it on your [account](/account), under **Cancel within 14 days**, or email {support} from the address on your account. We refund that share of what you paid. You don’t have to give a reason.',
         '**After 14 days,** a chip-in isn’t refunded, except in the cases {§refunds} lists. If the server is deleted for good while hours you chipped in are still on it, we refund those hours when you ask.',
         'Your chip-in is a payment to {brand}, not to the server’s owner. The owner sees your name and the hours you chipped in.',
       ],

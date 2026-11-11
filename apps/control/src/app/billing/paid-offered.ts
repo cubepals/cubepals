@@ -72,3 +72,13 @@ export async function largerOffered(held: Entitlements): Promise<{
   if (past === null) return { unitCents: UNIT_CENTS }
   return { unitCents: UNIT_CENTS, larger: { name: planName(next.plan), extraHoursCheaper: past } }
 }
+
+/**
+ * The hours a month the pricing page offers for `planKey` now; null where they can't be read. A
+ * year or a gift is sold at the plan table's hours, so its confirmation says them only when they
+ * are these (`purchase-confirmation.ts`).
+ */
+export async function offeredHours(planKey: string): Promise<number | null> {
+  const now = (await offersNow().catch(() => [])).find((offer) => offer.plan === planKey)
+  return now?.includedHours ?? null
+}

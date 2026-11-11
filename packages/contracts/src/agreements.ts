@@ -6,7 +6,7 @@ import { z } from 'zod'
 
 /**
  * What a person agrees to: the Terms (which hold the 18-or-over rule) when they make an account,
- * and, before a paid plan starts, that it starts at once.
+ * and, before a paid plan or a chip-in starts, that it starts at once.
  * The web app asks; the control plane refuses an account or a checkout without it and keeps what
  * was said in the audit log. The policies themselves are pages on the web app (`/legal`).
  */
@@ -32,7 +32,8 @@ export type SignUpAgreement = z.infer<typeof SignUpAgreement>
  * What the checkout page sends before a paid plan's payment page opens: the person agreed to the
  * Terms and asked for the plan to start now, inside the 14 days they can cancel in, knowing they
  * pay for the hours they played if they do past the Refunds page's line, or after a full refund
- * before.
+ * before. A chip-in sends the same before its payment page, its hours starting now and
+ * only those not played coming back.
  */
 export const CheckoutConsent = z.object({
   terms: version,
