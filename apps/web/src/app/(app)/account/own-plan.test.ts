@@ -275,3 +275,45 @@ describe('a subscriber’s own plan on the account page', () => {
     expect(drawn(overviewOf({ billed: ended, year: null }))).not.toContain('Your current subscription')
   })
 })
+
+describe('another plan’s figures where the month is used up', () => {
+  /**
+   * A Core account by the month with its hours played and extra play allowed, where the plan table
+   * says Plus differs from what `billing.plans` offers now (`plus`): made-up figures.
+   */
+  const usedUp = (): AccountOverviewView => {
+    const overview = onCore()
+    const table = {
+      ...held,
+      plan: 'plus',
+      monthlyPriceCents: plus.monthlyPriceCents + 500,
+      includedUnits: 150,
+    }
+    return {
+      ...overview,
+      entitlements: { ...overview.entitlements, mayBuyMore: true },
+      usage: {
+        ...overview.usage,
+        unitsThisMonth: held.includedUnits ?? 0,
+        hoursThisMonth: held.includedUnits ?? 0,
+        extra: { ...overview.usage.extra, may: true, ceiling: 50, choices: [0, 10] },
+      },
+      plans: [
+        { key: 'core', entitlements: overview.entitlements },
+        { key: 'plus', entitlements: table },
+      ],
+    }
+  }
+
+  test('states the larger plan’s hours and where it costs less as it is offered now', () => {
+    const overview = usedUp()
+    const html = drawn(overview)
+    const past = (cents: number) => Math.floor((cents - held.monthlyPriceCents) / overview.usage.unitCents)
+    const table = overview.plans[1]?.entitlements
+    if (table === undefined) throw new Error('the overview lists Plus')
+    expect(html).toContain(`past ${past(plus.monthlyPriceCents)} extra hours a month, Plus costs less.`)
+    expect(html).not.toContain(`past ${past(table.monthlyPriceCents)} extra hours`)
+    expect(html).toContain(`Plus has ${plus.includedHours} hours a month.`)
+    expect(html).not.toContain(`${table.includedUnits} hours`)
+  })
+})

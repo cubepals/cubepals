@@ -5,22 +5,14 @@
 import { PLAY_WARNING_AT, type SignUpAgreement, type SignupSource } from '@blockly/contracts'
 import { MINUTE_MS } from '@blockly/contracts/durations'
 import { type Db, schema, type Tx } from '@blockly/db'
-import {
-  type Entitlements,
-  entitlementsFor,
-  entitlementsOf,
-  PAID_PLANS,
-  planGap,
-  planName,
-} from '../../domain/account/entitlements.ts'
+import { type Entitlements, entitlementsOf, PAID_PLANS, planGap } from '../../domain/account/entitlements.ts'
 import { extraUnits } from '../../domain/account/extra-play.ts'
-import { UNIT_CENTS } from '../../domain/account/meter.ts'
 import { DEFAULT_TIME_ZONE, isTimeZone, monthOf } from '../../domain/account/play-day.ts'
 import type { AccountStanding, Restrictions } from '../../domain/account/standing.ts'
 import { type Actor, requestedBy, runsThePlatform } from '../actor.ts'
 import { chippedInLeft, meteredMonth } from '../billing/chip-in-meter.ts'
 import { keepPlayedBlock } from '../billing/extra-usage.ts'
-import { paidOffered } from '../billing/paid-offered.ts'
+import { largerOffered, paidOffered } from '../billing/paid-offered.ts'
 import { extraPlayNow } from '../billing/persistence.ts'
 import { freeHoursWarning, playWarning } from '../emails/play.ts'
 import { AppError, NotFound } from '../errors.ts'
@@ -81,30 +73,6 @@ const WAITLIST_PER_MINUTE = 30
  * arrives late still makes sense on its own.
  */
 const WARN_AT = [PLAY_WARNING_AT, 100] as const
-
-/**
- * What an email about running out says of extra hours and the plan with more than this one: its name, and how many extra
- * hours a month cost what it costs over this plan, past which it is the cheaper. Nothing for the
- * largest plan.
- */
-function extraOffer(plan: Entitlements): {
-  unitCents: number
-  larger?: { name: string; extraHoursCheaper: number }
-} {
-  const next = PAID_PLANS.map((key) => entitlementsFor(key)).find(
-    (each) =>
-      each.monthlyPriceCents > plan.monthlyPriceCents &&
-      (each.includedUnits ?? 0) > (plan.includedUnits ?? 0),
-  )
-  if (next === undefined || plan.plan === 'free') return { unitCents: UNIT_CENTS }
-  return {
-    unitCents: UNIT_CENTS,
-    larger: {
-      name: planName(next.plan),
-      extraHoursCheaper: Math.floor((next.monthlyPriceCents - plan.monthlyPriceCents) / UNIT_CENTS),
-    },
-  }
-}
 
 /** An account as the auth layer tells of it, for the admins ADMIN_EMAILS lists. */
 type ListedUser = { id: string; email: string; emailVerified: boolean }
@@ -611,7 +579,7 @@ export class AccountService {
           used: Math.round(units * 10) / 10,
           extraAllowed: extraUnits(decision),
           mayBuyMore: decision.may,
-          ...extraOffer(plan),
+          ...(await largerOffered(plan)),
           origin: this.#webOrigin,
         }),
       })

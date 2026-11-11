@@ -38,6 +38,7 @@ import {
 import { ctaMark, seenMark } from '../../(public)/steps'
 import { FreeHoursUsed } from '../free-hours-used'
 import { PlusOffer } from '../plus-offer'
+import { type LargerPlan, pastWhichCheaper, useLargerPlan } from './larger-plan'
 import { planAction } from './plan-action'
 import { PriceSwitch } from './price-switch'
 
@@ -134,6 +135,7 @@ const money = (cents: number) => `$${(cents / 100).toFixed(2)}`
  */
 function Play({ overview }: { overview: AccountOverviewView }) {
   const { usage: u, entitlements: e } = overview
+  const more = useLargerPlan(overview)
   if (e.includedUnits === null) return null
   const included = e.includedUnits + u.carriedUnits
   const share = Math.round(Math.min(1, u.unitsThisMonth / included) * 100)
@@ -148,12 +150,12 @@ function Play({ overview }: { overview: AccountOverviewView }) {
     >
       <BlockMeter left={left} included={included} label="This month's play" />
       {share >= 100 ? (
-        <UsedUp overview={overview} included={included} />
+        <UsedUp overview={overview} included={included} more={more} />
       ) : share >= 80 ? (
         <Note tone="info">
           Running low. When they’re used, your servers sleep until the 1st
           {u.extra.may ? ', and nothing more is charged unless you allow it below' : ''}.
-          {cheaperSaid(overview)}
+          {cheaperSaid(overview, more)}
         </Note>
       ) : null}
       {doubled && (
@@ -196,34 +198,31 @@ const extraOf = (u: AccountOverviewView['usage']) => ({
   hours: Math.round(u.extra.countedUnits * 10) / 10,
 })
 
-/** The plan with more hours than this one, for an upgrade: none for an account on the largest. */
-const largerPlan = (overview: AccountOverviewView) =>
-  overview.plans.find(
-    (p) =>
-      (p.entitlements.includedUnits ?? 0) > (overview.entitlements.includedUnits ?? 0) &&
-      p.entitlements.monthlyPriceCents > overview.entitlements.monthlyPriceCents,
-  )
-
 /**
- * Where extra hours can be allowed and a larger plan exists, what each costs and when that plan
- * costs less: "Extra hours are $0.25 each; past 60 extra hours a month, Plus costs less." Empty otherwise.
+ * Where extra hours can be allowed and a larger plan exists, what each costs and when that plan, as
+ * it is offered now, costs less: "Extra hours are $0.25 each; past 60 extra hours a month, Plus
+ * costs less." Empty otherwise.
  */
-function cheaperSaid(overview: AccountOverviewView): string {
-  const more = largerPlan(overview)
+function cheaperSaid(overview: AccountOverviewView, more: LargerPlan | undefined): string {
   if (!more || !overview.usage.extra.may) return ''
-  const { unitCents } = overview.usage
-  const past = Math.floor(
-    (more.entitlements.monthlyPriceCents - overview.entitlements.monthlyPriceCents) / unitCents,
-  )
-  return ` Extra hours are ${money(unitCents)} each; past ${past} extra hours a month, ${title(more.key)} costs less.`
+  const past = pastWhichCheaper(overview, more)
+  if (past === null) return ''
+  return ` Extra hours are ${money(overview.usage.unitCents)} each; past ${past} extra hours a month, ${title(more.key)} costs less.`
 }
 
 /** The month's included play is used: on extra hours now, or asleep until the 1st, and why. */
-function UsedUp({ overview, included }: { overview: AccountOverviewView; included: number }) {
+function UsedUp({
+  overview,
+  included,
+  more,
+}: {
+  overview: AccountOverviewView
+  included: number
+  /** An upgrade only: with an admin's own hours on the account, a cheaper plan can have more. */
+  more: LargerPlan | undefined
+}) {
   const x = overview.usage.extra
   const { allowedNow, billed, hours } = extraOf(overview.usage)
-  // An upgrade only: with an admin's own hours on the account, a cheaper plan can have more.
-  const more = largerPlan(overview)
   const plan = title(overview.plan.key)
   if (allowedNow > 0)
     return (
@@ -238,11 +237,11 @@ function UsedUp({ overview, included }: { overview: AccountOverviewView; include
         {x.countedUnits > 0
           ? ` Your ${hours} extra hours this month, ${billed}, are billed with your ${plan} payments.`
           : ''}
-        {cheaperSaid(overview)}
+        {cheaperSaid(overview, more)}
       </Note>
       {more && (
         <PlusOffer
-          why={`${title(more.key)} has ${more.entitlements.includedUnits} hours a month.`}
+          why={`${title(more.key)} has ${more.hours} hours a month.`}
           plan={more.key}
           reason="hours"
           next="/account"
@@ -268,6 +267,7 @@ function ExtraPlay({ overview }: { overview: AccountOverviewView }) {
       },
     }),
   )
+  const more = useLargerPlan(overview)
   const u = overview.usage
   const x = u.extra
   if (!x.may)
@@ -306,10 +306,10 @@ function ExtraPlay({ overview }: { overview: AccountOverviewView }) {
         }
       />
       {allow.isError && <Note tone="danger">{messageOf(allow.error)}</Note>}
-      {overview.entitlements.mostExtraUnits !== null && largerPlan(overview) && (
+      {overview.entitlements.mostExtraUnits !== null && more && (
         <p className="type-body-sm">
           {title(overview.plan.key)} stops at {overview.entitlements.mostExtraUnits} extra hours;{' '}
-          {title(largerPlan(overview)?.key ?? '')} covers more.
+          {title(more.key)} covers more.
         </p>
       )}
     </>
