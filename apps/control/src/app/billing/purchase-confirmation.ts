@@ -6,10 +6,12 @@
  * The confirmation of a purchase a buyer can keep, by email, once its order is paid: what they
  * bought, what they paid as the order states it, the hours it includes, that it started straight
  * away as they asked (a gift starts only when redeemed), and that they can cancel within 14 days
- * and where. Sent once per order: the order is marked (`confirmed_at`) in the transaction that
- * sends it, so a delivery that comes again, or two at once, sends nothing more, and one whose email
- * failed is tried again by the provider's next delivery. A renewal is no new purchase and has none;
- * nor has an order already refunded, or one older than its 14 days.
+ * and where. The order is marked (`confirmed_at`) in the transaction that sends it, so a delivery
+ * that comes again, or two at once, sends nothing more, and one whose email failed stays unmarked
+ * for the billing pass to send (`confirmUnsent`), the way a cancellation's emails are. That makes it
+ * sent at least once: an email that went just before its mark failed to be kept goes again, which
+ * is better than a confirmation the law asks for never going. A renewal is no new purchase and has
+ * none; nor has an order already refunded, or one older than its 14 days.
  *
  * The provider's own receipt is separate. Not here: what a purchase is (`withdrawable.ts`).
  */
@@ -18,11 +20,9 @@ import { and, eq, isNull } from 'drizzle-orm'
 import { entitlementsFor } from '../../domain/account/entitlements.ts'
 import { emailOf } from '../accounts/persistence.ts'
 import { purchaseConfirmed } from '../emails/purchases.ts'
-import type { BillingOrder } from '../ports/optional.ts'
 import type { Mailer } from '../ports/platform.ts'
 import { WITHDRAWAL_MS } from './ending.ts'
 import { offeredHours } from './paid-offered.ts'
-import { PAID_ORDER } from './persistence.ts'
 import { type Purchase, purchasesOf, purchaseTitle, subscriptionHours } from './withdrawable.ts'
 
 const orders = schema.billingOrders
@@ -35,20 +35,52 @@ const DAY = new Intl.DateTimeFormat('en-GB', {
   timeZone: 'UTC',
 })
 
+interface Confirming {
+  db: Db
+  mailer: Mailer
+  webOrigin: string
+}
+
 /**
  * Emails the buyer what an order they paid bought, once. Run after the order's word was handled
  * (`BillingService`), so the year, gift or chip-in it made is there to say.
  */
 export async function confirmPurchase(
-  deps: { db: Db; mailer: Mailer; webOrigin: string },
+  deps: Confirming,
   provider: string,
-  order: BillingOrder,
+  order: string,
   now = new Date(),
 ): Promise<void> {
-  if (!PAID_ORDER.includes(order.status) || order.refundedCents > 0) return
-  if (now.getTime() - order.orderedAt.getTime() > WITHDRAWAL_MS) return
-  const [purchase] = await purchasesOf(deps.db, provider, { order: order.externalOrderId })
-  if (purchase === undefined || purchase.kind === null || purchase.refundedCents > 0) return
+  const [purchase] = await purchasesOf(deps.db, provider, { order })
+  if (purchase === undefined) return
+  await confirm(deps, purchase, now)
+}
+
+/**
+ * The billing pass: each purchase of the last 14 days whose confirmation is still unsent, sent now,
+ * the oldest first. One that fails is handed to `failed` and waits for the next pass; one with
+ * nobody to send to is passed over, so it holds nothing back.
+ */
+export async function confirmUnsent(
+  deps: Confirming,
+  provider: string,
+  failed: (order: string, error: unknown) => void,
+  now = new Date(),
+): Promise<void> {
+  const since = new Date(now.getTime() - WITHDRAWAL_MS)
+  const unsent = await purchasesOf(deps.db, provider, { since, unconfirmed: true })
+  for (const purchase of unsent.reverse()) {
+    try {
+      await confirm(deps, purchase, now)
+    } catch (error) {
+      failed(purchase.externalOrderId, error)
+    }
+  }
+}
+
+async function confirm(deps: Confirming, purchase: Purchase, now: Date): Promise<void> {
+  if (purchase.kind === null || purchase.refundedCents > 0 || purchase.confirmedAt !== null) return
+  if (now > purchase.until) return
   const to =
     purchase.userId !== null ? await emailOf(deps.db, purchase.userId) : (purchase.gift?.buyerEmail ?? null)
   if (to === null) return
@@ -56,7 +88,7 @@ export async function confirmPurchase(
     title: purchaseTitle(purchase),
     paidCents: purchase.paidCents,
     currency: purchase.currency,
-    includes: await includes(deps.db, purchase),
+    includes: await includes(purchase),
     started: started(purchase, now),
     until: purchase.until,
     onAccount: purchase.userId !== null,
@@ -68,8 +100,8 @@ export async function confirmPurchase(
       .set({ confirmedAt: now })
       .where(
         and(
-          eq(orders.provider, provider),
-          eq(orders.externalOrderId, order.externalOrderId),
+          eq(orders.provider, purchase.provider),
+          eq(orders.externalOrderId, purchase.externalOrderId),
           isNull(orders.confirmedAt),
         ),
       )
@@ -79,13 +111,12 @@ export async function confirmPurchase(
 }
 
 /** The hours it includes, said whole; null for a plan with none. */
-async function includes(db: Db, purchase: Purchase): Promise<string | null> {
+async function includes(purchase: Purchase): Promise<string | null> {
   if (purchase.kind === 'chip_in' && purchase.chipIn !== null) {
     const hours = Math.floor(purchase.chipIn.milli / 100) / 10
     return `${hours} hours of play on ${purchase.chipIn.serverName}, kept there until they’re played`
   }
-  const monthly =
-    purchase.kind === 'plan' ? await subscriptionHours(db, purchase) : await tableHours(purchase)
+  const monthly = purchase.kind === 'plan' ? subscriptionHours(purchase) : await tableHours(purchase)
   if (monthly === null) return null
   if (purchase.kind === 'gift') {
     const months = purchase.gift?.months ?? 1

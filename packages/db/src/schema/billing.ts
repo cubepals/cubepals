@@ -13,6 +13,7 @@ import {
   date,
   index,
   integer,
+  jsonb,
   pgTable,
   primaryKey,
   text,
@@ -153,7 +154,9 @@ export const billingOrders = pgTable(
     unknownAt: ts('unknown_at'),
     /**
      * When its buyer was emailed what they bought, once, as the confirmation of a purchase they can
-     * keep (`billing/purchase-confirmation.ts`); null for an order nobody was told about, a renewal.
+     * keep (`billing/purchase-confirmation.ts`); null for an order nobody was told about: a renewal,
+     * or a purchase whose email is still to be sent, which the billing pass sends. An order from
+     * before confirmations were sent carries the moment they began, so none is sent for it.
      */
     confirmedAt: ts('confirmed_at'),
     orderedAt: ts('ordered_at').notNull(),
@@ -261,6 +264,15 @@ export const planYears = pgTable(
   ],
 )
 
+/** One other order of a subscription cancelled with its first month, as the request kept it. */
+export interface WithdrawnWithJson {
+  order: string
+  paidCents: number
+  /** The plan its product sells, to say what the charge was for; null when none. */
+  planKey: string | null
+  orderedAt: string
+}
+
 /**
  * A purchase cancelled within its 14 days from the account page (`billing/withdrawals.ts`): one per
  * order, kept as it stood when it was asked for, so later play can't change what it says. `kind`
@@ -295,6 +307,12 @@ export const billingWithdrawals = pgTable(
      */
     acknowledgedAt: ts('acknowledged_at'),
     operatorsToldAt: ts('operators_told_at'),
+    /**
+     * The subscription's other paid orders cancelled with a first month: a change of plan or price
+     * charged inside its 14 days. The subscription ends whole, so each is refunded with it, and
+     * `paid_cents` and `refund_cents` count them all.
+     */
+    alsoOrders: jsonb('also_orders').$type<WithdrawnWithJson[]>().notNull().default([]),
   },
   (t) => [
     primaryKey({ columns: [t.provider, t.externalOrderId] }),

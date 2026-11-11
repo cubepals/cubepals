@@ -8,10 +8,14 @@
  * (`billing_withdrawals`), with the hours played and what the Refunds page's rule gives back as
  * they stood then, and in the same transaction the purchase stops, the way a refund from the
  * provider already stops it (`purchase-stop.ts`); a first month's subscription is ended at the
- * provider first, so it never renews. It also sends each paid order's confirmation, which says how
- * to cancel (`purchase-confirmation.ts`). The operator and the person are told only once the
- * request is kept, each once, and the billing pass tells whatever couldn't be then
- * (`withdrawal-mail.ts`).
+ * provider first, so it never renews, and its other charges of the 14 days (an upgrade paid at
+ * once) are cancelled and refunded with it, since the subscription ends whole. It also sends each
+ * paid order's confirmation, which says how to cancel (`purchase-confirmation.ts`). The operator and
+ * the person are told only once the request is kept, each once, and the billing pass tells whatever
+ * couldn't be then, and sends any confirmation still unsent (`withdrawal-mail.ts`).
+ *
+ * A failure after the provider ended the subscription is reported with its order, for the plan is
+ * gone there while no request is kept; asking again from the account page then keeps it.
  *
  * It never pays money out: a person refunds the order at the provider by hand, or refuses it there.
  * The refund's own delivery then ends nothing twice (`years.ts`, `gifts.ts`, `ending.ts` read the
@@ -25,16 +29,17 @@ import { emailOf, lockStanding } from '../accounts/persistence.ts'
 import type { AccountService } from '../accounts/service.ts'
 import { type Actor, requestedBy } from '../actor.ts'
 import { type DeploymentCapabilities, requireCapability } from '../capabilities.ts'
-import { AppError, NotFound } from '../errors.ts'
+import { AppError, inFull, NotFound } from '../errors.ts'
 import { listingsOfOwner } from '../listings/persistence.ts'
+import type { Insight } from '../ports/insight.ts'
 import type { JobQueue } from '../ports/jobs.ts'
 import { type BillingOrder, BillingUnavailable } from '../ports/optional.ts'
 import type { Mailer } from '../ports/platform.ts'
 import { writeEntries } from './audit.ts'
 import { WITHDRAWAL_MS } from './ending.ts'
-import { confirmPurchase } from './purchase-confirmation.ts'
+import { confirmPurchase, confirmUnsent } from './purchase-confirmation.ts'
 import { stopPurchase } from './purchase-stop.ts'
-import { assess, type Purchase, purchaseHeld, purchasesOf, purchaseTitle } from './withdrawable.ts'
+import { alsoTitle, assess, type Purchase, purchaseHeld, purchasesOf, purchaseTitle } from './withdrawable.ts'
 import { tenths, WithdrawalMail } from './withdrawal-mail.ts'
 import {
   keepWithdrawal,
@@ -58,6 +63,7 @@ export class Withdrawals {
   readonly #jobs: JobQueue
   readonly #mailer: Mailer
   readonly #webOrigin: string
+  readonly #insight: Insight | null
   /** Telling the operator and the person, once the request is kept. */
   readonly mail: WithdrawalMail
 
@@ -77,6 +83,7 @@ export class Withdrawals {
     this.#jobs = deps.jobs
     this.#mailer = deps.mailer
     this.#webOrigin = deps.webOrigin
+    this.#insight = deps.capabilities.insight ?? null
     this.mail = new WithdrawalMail({
       db: deps.db,
       mailer: deps.mailer,
@@ -86,13 +93,39 @@ export class Withdrawals {
     })
   }
 
-  /** The buyer of an order just paid told what they bought, once (`purchase-confirmation.ts`). */
-  confirm(provider: string, order: BillingOrder): Promise<void> {
-    return confirmPurchase(
-      { db: this.#db, mailer: this.#mailer, webOrigin: this.#webOrigin },
-      provider,
-      order,
-    )
+  /**
+   * The buyer of an order just paid told what they bought, once (`purchase-confirmation.ts`). An
+   * email that fails is reported and never thrown at the provider's delivery: the order is kept
+   * either way, and the billing pass sends the confirmation (`sendUnsent`).
+   */
+  async confirm(provider: string, order: BillingOrder): Promise<void> {
+    try {
+      await confirmPurchase(this.#confirming, provider, order.externalOrderId)
+    } catch (error) {
+      this.#report(`confirming order ${order.externalOrderId}`, error, { order: order.externalOrderId })
+    }
+  }
+
+  /**
+   * The billing pass: confirmations of purchases still unsent, then requests still untold, each
+   * sent now. One that fails again is reported and waits for the next pass.
+   */
+  async sendUnsent(): Promise<void> {
+    const billing = this.#caps.billing
+    if (billing !== null)
+      await confirmUnsent(this.#confirming, billing.provider, (order, error) =>
+        this.#report(`confirming order ${order}`, error, { order }),
+      )
+    await this.mail.tellUntold()
+  }
+
+  get #confirming() {
+    return { db: this.#db, mailer: this.#mailer, webOrigin: this.#webOrigin }
+  }
+
+  #report(doing: string, error: unknown, properties: Record<string, string>): void {
+    console.error(`billing: ${doing} failed: ${inFull(error)}`)
+    this.#insight?.exception(error, { properties })
   }
 
   /**
@@ -116,7 +149,7 @@ export class Withdrawals {
         userId,
         order: record.externalOrderId,
       })
-      if (purchase !== undefined) views.push(viewOf(purchase, record, record.requestedAt))
+      if (purchase !== undefined) views.push(viewOf(purchase, record, record))
     }
     return views
   }
@@ -134,11 +167,32 @@ export class Withdrawals {
     const { provider } = billing
     const [first] = await purchasesOf(this.#db, provider, { userId, order })
     const found = refusedUnless(first, await withdrawalOf(this.#db, provider, order), now)
-    if (found.kind === 'plan' && found.externalSubscriptionId !== null) {
-      const sub = found.externalSubscriptionId
-      await reach(() => billing.endSubscription(sub))
-    }
-    const { purchase, record, affected } = await this.#db.transaction(async (tx) => {
+    const ended = found.kind === 'plan' ? found.externalSubscriptionId : null
+    if (ended !== null) await reach(() => billing.endSubscription(ended))
+    const { purchase, record, affected } = await this.#kept(actor, found, order, now).catch((error) => {
+      // A refusal says why. Anything else left the plan ended at the provider with no request kept.
+      if (ended !== null && !(error instanceof AppError) && !(error instanceof NotFound))
+        this.#report(`keeping the cancellation of order ${order}, its subscription ended`, error, {
+          order,
+          subscription: ended,
+        })
+      throw error
+    })
+    // Kept and stopped: now the operator and the person are told, each once. One that fails is
+    // reported and left for the billing pass, and the request stands.
+    await this.mail.tell(record.provider, record.externalOrderId)
+    for (const account of affected) await this.#accounts.enforceLimits(account)
+    return viewOf(purchase, record, record)
+  }
+
+  /**
+   * The request kept and the purchase stopped, together, on the purchase as it is read again under
+   * its locks; refused when it may no longer be cancelled.
+   */
+  #kept(actor: Actor, found: Purchase, order: string, now: Date) {
+    const userId = person(actor)
+    const { provider } = found
+    return this.#db.transaction(async (tx) => {
       await lockStanding(tx, userId)
       // One draw of a server's hours at a time (`ChipIns.draw`): none moves what is unplayed meanwhile.
       if (found.chipIn !== null)
@@ -158,11 +212,16 @@ export class Withdrawals {
         kind: purchase.kind ?? 'plan',
         requestedAt: at,
         currency: purchase.currency,
-        paidCents: purchase.paidCents,
         sentTo,
         ...assessed,
         acknowledgedAt: null,
         operatorsToldAt: null,
+        alsoOrders: purchase.also.map((other) => ({
+          order: other.externalOrderId,
+          paidCents: other.paidCents,
+          planKey: other.planKey,
+          orderedAt: other.orderedAt.toISOString(),
+        })),
       }
       if (!(await keepWithdrawal(tx, kept))) throw alreadyAsked(at)
       const by = requestedBy(actor)
@@ -175,7 +234,8 @@ export class Withdrawals {
             order: purchase.externalOrderId,
             kind: kept.kind,
             playedMilli: assessed.playedMilli,
-            paidCents: purchase.paidCents,
+            paidCents: assessed.paidCents,
+            ...(kept.alsoOrders.length === 0 ? {} : { also: kept.alsoOrders.map((other) => other.order) }),
             refundCents: assessed.refundCents,
             rule: assessed.rule,
             earlierFull: assessed.earlierFull,
@@ -186,11 +246,6 @@ export class Withdrawals {
         await this.#jobs.enqueueEligibility(await listingsOfOwner(tx, account), tx)
       return { purchase, record: kept, affected: stopped.affected }
     })
-    // Kept and stopped: now the operator and the person are told, each once. One that fails is
-    // reported and left for the billing pass, and the request stands.
-    await this.mail.tell(record.provider, record.externalOrderId)
-    for (const account of affected) await this.#accounts.enforceLimits(account)
-    return viewOf(purchase, record, record.requestedAt)
   }
 }
 
@@ -235,24 +290,41 @@ function refusedUnless(purchase: Purchase | undefined, asked: WithdrawalRecord |
 
 const capital = (s: string) => `${s[0]?.toUpperCase() ?? ''}${s.slice(1)}`
 
-/** A purchase as the account page lists it, with the amount now or as its request kept it. */
+/**
+ * A purchase as the account page lists it, with the amount now or as its request kept it. Its other
+ * charges are those the request kept, once there is one.
+ */
 function viewOf(
   purchase: Purchase,
-  amount: { playedMilli: number; refundCents: number; rule: string },
-  requestedAt: Date | null,
+  amount: { paidCents: number; playedMilli: number; refundCents: number; rule: string },
+  kept: WithdrawalRecord | null,
 ): WithdrawalView {
   const counts = !(purchase.kind === 'gift' && purchase.gift?.redeemedBy == null)
+  const also =
+    kept?.alsoOrders ??
+    purchase.also.map((other) => ({
+      order: other.externalOrderId,
+      paidCents: other.paidCents,
+      planKey: other.planKey,
+      orderedAt: other.orderedAt.toISOString(),
+    }))
   return {
     order: purchase.externalOrderId,
     kind: purchase.kind ?? 'plan',
     title: purchaseTitle(purchase),
     boughtAt: purchase.orderedAt.toISOString(),
     until: purchase.until.toISOString(),
-    paidCents: purchase.paidCents,
+    paidCents: amount.paidCents,
     refundCents: amount.refundCents,
+    also: also.map((other) => ({
+      order: other.order,
+      title: alsoTitle(purchase, other),
+      boughtAt: other.orderedAt,
+      paidCents: other.paidCents,
+    })),
     hoursPlayed: counts ? tenths(amount.playedMilli) : null,
     rule: amount.rule as WithdrawalView['rule'],
-    requestedAt: requestedAt?.toISOString() ?? null,
+    requestedAt: kept?.requestedAt.toISOString() ?? null,
   }
 }
 

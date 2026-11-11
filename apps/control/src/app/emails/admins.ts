@@ -119,6 +119,8 @@ export function withdrawalToRefund(input: {
   order: string
   kind: string
   title: string
+  /** The subscription's other orders cancelled with it, each to refund too; `paid` counts them. */
+  also: { order: string; title: string; paid: string }[]
   receivedAt: string
   hoursPlayed: number | null
   paid: string
@@ -131,9 +133,10 @@ export function withdrawalToRefund(input: {
   const lines = [
     `Account: ${input.userId}`,
     `Order: ${input.order} (${input.kind}, ${input.title.replace(/^your /, '')})`,
+    ...input.also.map((other) => `Also its order: ${other.order} (${other.title}, ${other.paid})`),
     `Received: ${input.receivedAt}`,
     `Hours played: ${input.hoursPlayed === null ? 'none count' : input.hoursPlayed}`,
-    `Paid: ${input.paid}. The Refunds page's rule (${input.rule}) gives back ${input.refund}.`,
+    `Paid: ${input.paid}${input.also.length === 0 ? '' : ' across these orders'}. The Refunds page's rule (${input.rule}) gives back ${input.refund}${input.also.length === 0 ? '' : ' of it in all'}.`,
     `A full refund on an earlier purchase: ${input.earlierFull ? 'yes' : 'no'}.`,
     'The purchase has stopped. Nothing was paid out: refund it at the provider, to the payment method used, within 14 days, or refuse it there if it is abuse.',
   ]

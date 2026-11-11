@@ -89,8 +89,9 @@ function schedules(
       run: async () => {
         const lapsed = await app.billing.sweep()
         if (lapsed > 0) console.warn(`standing: recorded ${lapsed} lapsed subscriptions`)
-        // Purchases cancelled within 14 days whose operator or person couldn't be told at once.
-        await app.billing.withdrawals.mail.tellUntold()
+        // Purchase confirmations, and the emails of purchases cancelled within 14 days, that
+        // couldn't be sent at once.
+        await app.billing.withdrawals.sendUnsent()
         const enforced = await app.accounts.enforce()
         if (enforced.stopped + enforced.closed > 0)
           console.warn(`standing: stopped ${enforced.stopped}, closed ${enforced.closed}`)

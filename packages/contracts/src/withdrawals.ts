@@ -32,9 +32,17 @@ export interface WithdrawalView {
   boughtAt: string
   /** The last moment it can be cancelled here. */
   until: string
-  /** What it cost, tax included, and what the Refunds page's rule gives back of it now. */
+  /**
+   * What it cost in all, tax included, with `also` counted, and what the Refunds page's rule gives
+   * back of it now.
+   */
   paidCents: number
   refundCents: number
+  /**
+   * A first month's other charges, cancelled and refunded with it: a change of plan or price paid
+   * inside its 14 days. Each as its emails call it: "the upgrade to Plus".
+   */
+  also: { order: string; title: string; boughtAt: string; paidCents: number }[]
   /** Hours played that count, as the account counts them; null where none count (a gift not redeemed). */
   hoursPlayed: number | null
   /** The rule's part: `full` everything, `played` less the hours played, the rest everything or the unplayed share. */

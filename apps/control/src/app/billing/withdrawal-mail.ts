@@ -5,16 +5,18 @@
 /**
  * Telling of a purchase cancelled within its 14 days, once the request is kept: the operator, who
  * pays the refund at the provider by hand, and the person, whose acknowledgement says when it was
- * received. Each is handed over at most once: its moment on `billing_withdrawals` is set in the
- * transaction that sends it, so a send that fails leaves it unset, and two passes at once never
- * both send. The request tells right after it is kept; the billing pass (`standing-sweep`) tells
- * whatever is still untold. A failure is reported and logged, never thrown at the person: the
- * request stands either way.
+ * received. Each has its moment on `billing_withdrawals`, set in the transaction that sends it, so
+ * a send that fails leaves it unset, and two passes at once never both send. That makes each sent
+ * at least once: an email that went just before its moment failed to be kept goes again, which is
+ * better than an acknowledgement the law asks for, or a refund to pay, never being told. The request
+ * tells right after it is kept; the billing pass (`standing-sweep`) tells whatever is still untold,
+ * the person's and the operators' apart, so one that can't be sent holds back nothing else. A
+ * failure is reported and logged, never thrown at the person: the request stands either way.
  *
  * It is not where a request is made (`withdrawals.ts`), and it pays nothing.
  */
 import { type Db, schema } from '@blockly/db'
-import { and, eq, isNull, or } from 'drizzle-orm'
+import { and, eq, isNull } from 'drizzle-orm'
 import { planName } from '../../domain/account/entitlements.ts'
 import { adminInbox } from '../accounts/persistence.ts'
 import { withdrawalToRefund } from '../emails/admins.ts'
@@ -22,7 +24,7 @@ import { money, whenSaid, withdrawalReceived } from '../emails/purchases.ts'
 import { inFull } from '../errors.ts'
 import type { Insight } from '../ports/insight.ts'
 import type { Mailer } from '../ports/platform.ts'
-import { type Purchase, purchasesOf, purchaseTitle } from './withdrawable.ts'
+import { alsoTitle, type Purchase, purchasesOf, purchaseTitle } from './withdrawable.ts'
 import type { WithdrawalRecord } from './withdrawal-records.ts'
 
 const withdrawals = schema.billingWithdrawals
@@ -57,37 +59,54 @@ export class WithdrawalMail {
     this.#insight = deps.insight
   }
 
-  /** What of one request is still untold, told now; false when a send failed (reported, not thrown). */
-  async tell(provider: string, order: string): Promise<boolean> {
-    let told = true
-    for (const which of ['operators', 'person'] as const) {
-      try {
-        await this.#send(provider, order, which)
-      } catch (error) {
-        told = false
-        console.error(`billing: telling of cancelled order ${order} (${which}) failed: ${inFull(error)}`)
-        this.#insight?.exception(error, { properties: { order, told: which } })
-      }
-    }
-    return told
-  }
-
-  /** The billing pass: requests still untold, each told now. Answers how many are told in full. */
-  async tellUntold(): Promise<number> {
-    const untold = await this.#db
-      .select({ provider: withdrawals.provider, order: withdrawals.externalOrderId })
-      .from(withdrawals)
-      .where(or(isNull(withdrawals.acknowledgedAt), isNull(withdrawals.operatorsToldAt)))
-      .orderBy(withdrawals.requestedAt)
-      .limit(BATCH)
-    let done = 0
-    for (const row of untold) if (await this.tell(row.provider, row.order)) done++
-    return done
+  /** What of one request is still untold, told now. A send that fails is reported, not thrown. */
+  async tell(provider: string, order: string): Promise<void> {
+    for (const which of ['operators', 'person'] as const) await this.#try(provider, order, which)
   }
 
   /**
-   * One of the two, handed over once: its moment set under the row's lock, the email sent in the
-   * same transaction, so a failed send leaves it to be tried again.
+   * The billing pass: requests still untold, each told now, the oldest first. The person's and the
+   * operators' are read apart, each to its own batch, and with no operator address at all the
+   * operators' are left for a pass that has one, said once: requests that can't be told never fill
+   * a batch ahead of ones that can.
+   */
+  async tellUntold(): Promise<void> {
+    for (const row of await this.#untold('person')) await this.#try(row.provider, row.order, 'person')
+    const waiting = await this.#untold('operators')
+    if (waiting.length === 0) return
+    if ((await adminInbox(this.#db, this.#inbox)).length === 0) {
+      const error = new Error('no operator address to tell of cancelled purchases')
+      console.error(
+        `billing: ${waiting.length} or more cancelled purchases wait to be told: ${error.message}`,
+      )
+      this.#insight?.exception(error, { properties: { told: 'operators' } })
+      return
+    }
+    for (const row of waiting) await this.#try(row.provider, row.order, 'operators')
+  }
+
+  #untold(which: Told) {
+    return this.#db
+      .select({ provider: withdrawals.provider, order: withdrawals.externalOrderId })
+      .from(withdrawals)
+      .where(isNull(which === 'operators' ? withdrawals.operatorsToldAt : withdrawals.acknowledgedAt))
+      .orderBy(withdrawals.requestedAt)
+      .limit(BATCH)
+  }
+
+  async #try(provider: string, order: string, which: Told): Promise<void> {
+    try {
+      await this.#send(provider, order, which)
+    } catch (error) {
+      console.error(`billing: telling of cancelled order ${order} (${which}) failed: ${inFull(error)}`)
+      this.#insight?.exception(error, { properties: { order, told: which } })
+    }
+  }
+
+  /**
+   * One of the two, handed over: its moment set under the row's lock, the email sent in the same
+   * transaction, so a failed send leaves it to be tried again, and one whose moment then fails to
+   * be kept is sent again (at least once, as the header says).
    */
   async #send(provider: string, order: string, which: Told): Promise<void> {
     const column = which === 'operators' ? withdrawals.operatorsToldAt : withdrawals.acknowledgedAt
@@ -145,6 +164,11 @@ export class WithdrawalMail {
       order: record.externalOrderId,
       kind: record.kind,
       title: purchaseTitle(purchase),
+      also: record.alsoOrders.map((other) => ({
+        order: other.order,
+        title: alsoTitle(purchase, other),
+        paid: money(other.paidCents, record.currency),
+      })),
       receivedAt: whenSaid(record.requestedAt),
       hoursPlayed:
         purchase.kind === 'gift' && purchase.gift?.redeemedBy == null ? null : tenths(record.playedMilli),
@@ -159,6 +183,7 @@ export class WithdrawalMail {
   #toPerson(purchase: Purchase, record: WithdrawalRecord) {
     return withdrawalReceived({
       title: purchaseTitle(purchase),
+      also: record.alsoOrders.map((other) => alsoTitle(purchase, other)),
       receivedAt: record.requestedAt,
       paidCents: record.paidCents,
       refundCents: record.refundCents,
@@ -183,5 +208,7 @@ function endedSaid(purchase: Purchase, record: WithdrawalRecord): string {
       : 'Its code has stopped working, and the time it gave the account that redeemed it has ended.'
   if (purchase.kind === 'chip_in')
     return `The ${tenths(purchase.chipIn?.withdrawnMilli ?? 0)} hours of it nobody had played can’t be played now.`
-  return `${planName(purchase.planKey ?? 'plus')} has ended, and nothing more will be charged for it. Your account is on the free trial now; your worlds stay.`
+  // The plan its subscription sold when it ended: an upgrade since the first month changed it.
+  const plan = purchase.subscription?.planKey ?? purchase.planKey ?? 'plus'
+  return `${planName(plan)} has ended, and nothing more will be charged for it. Your account is on the free trial now; your worlds stay.`
 }

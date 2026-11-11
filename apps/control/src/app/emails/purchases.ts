@@ -75,6 +75,8 @@ export function purchaseConfirmed(input: {
 
 export function withdrawalReceived(input: {
   title: string
+  /** A first month's other charges cancelled with it, as each is called: "the upgrade to Plus". */
+  also: string[]
   receivedAt: Date
   paidCents: number
   refundCents: number
@@ -84,7 +86,7 @@ export function withdrawalReceived(input: {
   origin: string
 }): Email {
   const lines = [
-    `We received your cancellation of ${input.title} on ${whenSaid(input.receivedAt)}. This email is your confirmation of it.`,
+    `We received your cancellation of ${input.title}${input.also.length === 0 ? '' : `, with ${input.also.join(' and ')},`} on ${whenSaid(input.receivedAt)}. This email is your confirmation of it.`,
     input.ended,
     `Under our Refunds page, ${input.refundCents === input.paidCents ? `that is a full refund of ${money(input.paidCents, input.currency)}` : `that is ${money(input.refundCents, input.currency)} of the ${money(input.paidCents, input.currency)} you paid`}. It goes back to the payment method you used, through Polar, within 14 days of the date above, with no fee.`,
   ]

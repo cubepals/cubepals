@@ -18,7 +18,7 @@ import { schema } from '@blockly/db'
 import { eq } from 'drizzle-orm'
 import { entitlementsFor } from '../../domain/account/entitlements.ts'
 import { hasDatabase } from '../../testing/harness.ts'
-import { orderEvent } from '../../testing/polar.ts'
+import { CORE_PRODUCT, orderEvent } from '../../testing/polar.ts'
 import { PolarWorld } from '../../testing/polar-world.ts'
 import type { UserActor } from '../actor.ts'
 import { AppError, NotFound } from '../errors.ts'
@@ -243,6 +243,129 @@ db('a refund arriving while the plan is ended at Polar refuses the request, and 
   }
   expect(await kept(order)).toEqual([])
   expect((await subjects(owner)).filter((s) => s.startsWith('We received'))).toEqual([])
+})
+
+/** A charge for a change to the subscription, paid a day ago, as Polar invoices one made at once. */
+const changed = (owner: UserActor, sub: string, cents: number) =>
+  w.ordered(owner, sub, {
+    billing_reason: 'subscription_update',
+    created_at: new Date(Date.now() - DAY_MS).toISOString(),
+    subtotal_amount: cents,
+    net_amount: cents,
+    tax_amount: 0,
+    total_amount: cents,
+  })
+
+db('an upgrade paid inside the 14 days is cancelled and refunded with the first month', async () => {
+  const inbox = await admin()
+  const owner = await w.h.user('Ida')
+  const sub = randomUUID()
+  await w.standing(owner, sub, { product_id: CORE_PRODUCT })
+  const order = await w.ordered(owner, sub, {
+    created_at: new Date(Date.now() - 3 * DAY_MS).toISOString(),
+    product_id: CORE_PRODUCT,
+    subtotal_amount: 999,
+    net_amount: 999,
+    total_amount: 999,
+  })
+  // Core becomes Plus on the same subscription, the difference charged at once.
+  await w.standing(owner, sub)
+  const upgrade = await changed(owner, sub, 420)
+
+  const also = [{ order: upgrade, title: 'the upgrade to Plus', paidCents: 420 }]
+  expect(await withdrawals().list(owner)).toMatchObject([{ order, paidCents: 1419, refundCents: 1419, also }])
+  // Past the line, the hours played are counted against the plan the subscription sells now.
+  await played(owner, 35)
+  const refund = 1419 - Math.floor((1419 * 35) / HOURS)
+  expect(await withdrawals().request(owner, order)).toMatchObject({
+    title: 'your first month of Core',
+    rule: 'played',
+    paidCents: 1419,
+    refundCents: refund,
+    also,
+  })
+  expect(await kept(order)).toMatchObject([
+    {
+      paidCents: 1419,
+      refundCents: refund,
+      alsoOrders: [{ order: upgrade, paidCents: 420, planKey: 'plus' }],
+    },
+  ])
+  // Listed after as the request kept it.
+  expect(await withdrawals().list(owner)).toMatchObject([
+    { order, paidCents: 1419, refundCents: refund, also },
+  ])
+
+  const [toOperator] = (await w.h.mail.to(inbox)).filter((m) => m.text.includes(order))
+  expect(toOperator?.text).toContain(`Also its order: ${upgrade} (the upgrade to Plus, $4.20)`)
+  expect(toOperator?.text).toContain('Paid: $14.19 across these orders.')
+  const [toPerson] = (await w.mailTo(owner, true)).filter((m) => m.subject.startsWith('We received'))
+  expect(toPerson?.text).toContain('your first month of Core, with the upgrade to Plus, on ')
+  expect(toPerson?.text).toContain('Plus has ended')
+
+  // Each order's refund, paid by hand later, ends nothing again and counts as no second request.
+  for (const [id, amount] of [
+    [order, 999],
+    [upgrade, 420],
+  ] as const) {
+    const held = w.orders.get(id)
+    if (held === undefined) throw new Error('no order')
+    await w.post(orderEvent({ ...held, status: 'refunded', refunded_amount: amount }, 'order.refunded'))
+  }
+  expect(await kept(order)).toHaveLength(1)
+  expect(await kept(upgrade)).toEqual([])
+})
+
+db('a charge refunded already, a renewal and a change past the 14 days are no part of it', async () => {
+  const { owner, sub, order } = await firstMonth('Jem', 3)
+  const refunded = await changed(owner, sub, 300)
+  const held = w.orders.get(refunded)
+  if (held === undefined) throw new Error('no order')
+  await w.post(orderEvent({ ...held, status: 'refunded', refunded_amount: 300 }, 'order.refunded'))
+  await w.ordered(owner, sub, { billing_reason: 'subscription_cycle', created_at: new Date().toISOString() })
+  await w.ordered(owner, sub, {
+    billing_reason: 'subscription_update',
+    created_at: new Date(Date.now() + 12 * DAY_MS).toISOString(),
+  })
+  const price = await changed(owner, sub, 200)
+  expect(await withdrawals().list(owner)).toMatchObject([
+    { order, paidCents: 1700, also: [{ order: price, title: 'a change to its price', paidCents: 200 }] },
+  ])
+})
+
+db('a failure after Polar ended the plan is reported, and asking again keeps the request', async () => {
+  const { owner, sub, order } = await firstMonth('Jo', 2)
+  if (w.billing === null) throw new Error('no billing')
+  const said = spyOn(console, 'error').mockImplementation(() => {})
+  const end = w.billing.endSubscription.bind(w.billing)
+  let down: ReturnType<typeof spyOn> | null = null
+  // The plan ends at Polar, then the database refuses the transaction that would keep the request.
+  const ending = spyOn(w.billing, 'endSubscription').mockImplementationOnce(async (id) => {
+    await end(id)
+    down = spyOn(w.h.db, 'transaction').mockImplementationOnce(() =>
+      Promise.reject(new Error('the database is down')),
+    )
+  })
+  try {
+    await expect(withdrawals().request(owner, order)).rejects.toThrow('the database is down')
+    expect(said.mock.calls.flat().join('\n')).toContain(
+      `billing: keeping the cancellation of order ${order}, its subscription ended failed`,
+    )
+  } finally {
+    ;(down as ReturnType<typeof spyOn> | null)?.mockRestore()
+    ending.mockRestore()
+    said.mockRestore()
+  }
+  expect(await kept(order)).toEqual([])
+
+  // Polar's word that the subscription ended arrives first: the plan is over here already.
+  await w.standing(owner, sub, {}, false)
+  expect((await w.h.app.accountQueries.overview(owner)).plan.key).toBe('free')
+  // Asked again: Polar refuses a second end as ended already, and the request is kept all the same.
+  expect(await withdrawals().request(owner, order)).toMatchObject({ rule: 'full', refundCents: 1500 })
+  expect(await kept(order)).toHaveLength(1)
+  expect(await w.audited(owner, 'billing.withdrawal_requested')).toHaveLength(1)
+  expect((await subjects(owner)).filter((s) => s.startsWith('We received'))).toHaveLength(1)
 })
 
 db('a year ends now, and the refund that follows moves its end no further', async () => {
@@ -544,4 +667,74 @@ db('a full refund given through support counts as the person’s once; a part re
   }
   expect(await refundedEarlier('Tia', 1500)).toMatchObject({ rule: 'played' })
   expect(await refundedEarlier('Uli', 500)).toMatchObject({ rule: 'full' })
+})
+
+db('a confirmation that fails never fails Polar’s delivery, and the billing pass sends it once', async () => {
+  const owner = await w.h.user('Kit')
+  const sub = randomUUID()
+  await w.standing(owner, sub)
+  const down = refusing((m) => m.subject.startsWith('Your Cubepals purchase'))
+  const order = await w.ordered(owner, sub, { created_at: new Date().toISOString() })
+  const held = w.orders.get(order)
+  if (held === undefined) throw new Error('no order')
+  const said = spyOn(console, 'error').mockImplementation(() => {})
+  try {
+    expect((await w.post(orderEvent(held, 'order.paid'))).status).toBe(200)
+    expect(said.mock.calls.flat().join('\n')).toContain(`billing: confirming order ${order} failed`)
+    expect(await subjects(owner)).toEqual([])
+    // Still down: the pass reports it and leaves it for the next.
+    await withdrawals().sendUnsent()
+    expect(await subjects(owner)).toEqual([])
+  } finally {
+    down.mockRestore()
+    said.mockRestore()
+  }
+  await withdrawals().sendUnsent()
+  await withdrawals().sendUnsent()
+  expect(await subjects(owner)).toEqual(['Your Cubepals purchase: your first month of Plus'])
+})
+
+db('requests no operator can be told of never hold back a person’s acknowledgement', async () => {
+  // No operator address at all, and more requests waiting for one than a pass tells.
+  await w.h.db.delete(schema.platformAdmins)
+  const earlier = await w.h.user('Lou')
+  const waiting = Array.from({ length: 60 }, (_, i) => ({
+    provider: 'polar',
+    externalOrderId: `waiting-${randomUUID()}`,
+    userId: earlier.userId,
+    kind: 'plan',
+    requestedAt: new Date(Date.now() - DAY_MS + i),
+    playedMilli: 0,
+    includedUnits: null,
+    paidCents: 1500,
+    currency: 'usd',
+    refundCents: 1500,
+    rule: 'full',
+    earlierFull: false,
+    sentTo: '',
+    acknowledgedAt: new Date(),
+    operatorsToldAt: null,
+    alsoOrders: [],
+  }))
+  await w.h.db.insert(schema.billingWithdrawals).values(waiting)
+
+  const { owner, order } = await firstMonth('Mo', 2)
+  const email = `${owner.userId}@example.test`
+  const down = refusing((m) => m.to === email && m.subject.startsWith('We received'))
+  const said = spyOn(console, 'error').mockImplementation(() => {})
+  try {
+    await withdrawals().request(owner, order)
+    expect(await told(order)).toEqual([{ acknowledgedAt: null, operatorsToldAt: null }])
+    down.mockRestore()
+    said.mockClear()
+    await withdrawals().sendUnsent()
+    expect(await told(order)).toMatchObject([{ acknowledgedAt: expect.any(Date), operatorsToldAt: null }])
+    expect((await subjects(owner)).filter((s) => s.startsWith('We received'))).toHaveLength(1)
+    // Said once for the pass, not once for each request that waits.
+    expect(said.mock.calls.filter(([line]) => String(line).includes('wait to be told'))).toHaveLength(1)
+  } finally {
+    down.mockRestore()
+    said.mockRestore()
+    await w.h.db.delete(schema.billingWithdrawals).where(eq(schema.billingWithdrawals.userId, earlier.userId))
+  }
 })

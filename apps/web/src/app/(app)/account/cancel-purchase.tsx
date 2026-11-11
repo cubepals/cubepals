@@ -67,11 +67,17 @@ function why(purchase: WithdrawalView): string {
   }
 }
 
+/** A first month's other charges, which end and come back with it: " That includes the upgrade to Plus ($4.20, 5 Nov 2026)." */
+const includes = (purchase: WithdrawalView) =>
+  purchase.also.length === 0
+    ? ''
+    : ` That includes ${purchase.also.map((other) => `${other.title} (${money(other.paidCents)}, ${dayOf(other.boughtAt)})`).join(' and ')}.`
+
 /** What comes back, as the Refunds page's rule gives it now. */
 const comesBack = (purchase: WithdrawalView) =>
   purchase.refundCents === purchase.paidCents
-    ? `You get everything back: ${money(purchase.paidCents)}${why(purchase)}.`
-    : `You get back ${money(purchase.refundCents)} of the ${money(purchase.paidCents)} you paid${why(purchase)}.`
+    ? `You get everything back: ${money(purchase.paidCents)}${why(purchase)}.${includes(purchase)}`
+    : `You get back ${money(purchase.refundCents)} of the ${money(purchase.paidCents)} you paid${why(purchase)}.${includes(purchase)}`
 
 /** Nothing at all when nothing of the last 14 days can be cancelled, or was. */
 export function CancelPurchase({ email }: { email: string }) {

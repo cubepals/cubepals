@@ -9,14 +9,16 @@
  * Refunds page's rule (`domain/account/withdrawal.ts`) over the hours played, counted as the
  * account page counts them (`meteredUnitsSince`): since the first month began, since the year or
  * the redeemed gift started, on the account that redeemed it; for a chip-in, its hours nobody
- * played, the newest chip-ins to a server taken as the last to be played.
+ * played, the newest chip-ins to a server taken as the last to be played. A first month carries the
+ * subscription's other charges of its 14 days (a change of plan or price paid at once): cancelling
+ * it ends the subscription whole, so they come back with it, counted in what was paid.
  *
  * It decides and stops nothing (`withdrawals.ts`), and reads purchases only of the account asking,
  * or of one order for its confirmation (`purchase-confirmation.ts`).
  */
 import { FULL_REFUND_UNDER_HOURS } from '@blockly/contracts'
 import { type Queryable, schema } from '@blockly/db'
-import { and, desc, eq, gt, inArray, lte, ne } from 'drizzle-orm'
+import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, lte, ne, or } from 'drizzle-orm'
 import { heldMilli } from '../../domain/account/chip-in.ts'
 import { entitlementsFor, planName } from '../../domain/account/entitlements.ts'
 import { type WithdrawalRule, type Withdrawn, withdrawalAmount } from '../../domain/account/withdrawal.ts'
@@ -26,6 +28,7 @@ import { PAID_ORDER } from './persistence.ts'
 import { stoppedAsSecond } from './second-subscriptions.ts'
 
 const orders = schema.billingOrders
+const subs = schema.billingSubscriptions
 const years = schema.planYears
 const gifts = schema.planGifts
 const chipIns = schema.chipIns
@@ -34,6 +37,22 @@ const withdrawals = schema.billingWithdrawals
 
 /** What an order bought, of the purchases that can be cancelled. */
 type PurchaseKind = 'plan' | 'year' | 'gift' | 'chip_in'
+
+/**
+ * Polar's `billing_reason` for an order that starts a subscription, and for one that charges a
+ * change to it at once (`proration_behavior: invoice`), as its API documents an order.
+ */
+const STARTS_SUBSCRIPTION = 'subscription_create'
+const CHANGES_SUBSCRIPTION = 'subscription_update'
+
+/** Another paid order of the subscription a first month began: a change of plan or price since. */
+interface AlsoPaid {
+  externalOrderId: string
+  paidCents: number
+  /** The plan its product sells; null when none. */
+  planKey: string | null
+  orderedAt: Date
+}
 
 /** One paid order, with what it bought. `kind` is null for an order that isn't a purchase (a renewal). */
 export interface Purchase {
@@ -55,6 +74,15 @@ export interface Purchase {
   currency: string
   planKey: string | null
   externalSubscriptionId: string | null
+  /** The plan its subscription sells now, and the hours it was sold with where its product set them. */
+  subscription: { planKey: string; includedUnits: number | null } | null
+  /**
+   * A first month's other charges, each paid within its 14 days and not refunded; none for any
+   * other purchase. They are what `paidInAll` adds.
+   */
+  also: AlsoPaid[]
+  /** When its buyer was emailed its confirmation; null while that is still to send. */
+  confirmedAt: Date | null
   year: typeof years.$inferSelect | null
   gift: typeof gifts.$inferSelect | null
   chipIn: (typeof chipIns.$inferSelect & { ownerId: string; serverName: string }) | null
@@ -71,23 +99,37 @@ export async function purchaseHeld(
   userId: string,
   order: string,
 ): Promise<Purchase | undefined> {
-  await tx
-    .select({ order: orders.externalOrderId })
+  const [held] = await tx
+    .select({ sub: orders.externalSubscriptionId })
     .from(orders)
     .where(and(eq(orders.provider, provider), eq(orders.externalOrderId, order)))
     .for('update')
+  // Its subscription's other orders too: a refund of one of them is as much a change to it.
+  if (held?.sub != null)
+    await tx
+      .select({ order: orders.externalOrderId })
+      .from(orders)
+      .where(and(eq(orders.provider, provider), eq(orders.externalSubscriptionId, held.sub)))
+      .orderBy(asc(orders.externalOrderId))
+      .for('update')
   const [purchase] = await purchasesOf(tx, provider, { userId, order })
   return purchase
 }
 
+/** What was paid for a purchase in all: its order, and a first month's other charges. */
+const paidInAll = (purchase: Pick<Purchase, 'paidCents' | 'also'>): number =>
+  purchase.also.reduce((sum, other) => sum + other.paidCents, purchase.paidCents)
+
 /**
  * The account's paid orders, or one of them (`order`), newest first, with what each bought: only
- * those ordered after `since`, when given. Another account's order is never among them.
+ * those ordered after `since`, when given. Another account's order is never among them. With
+ * `unconfirmed`, only purchases whose buyer hasn't been emailed a confirmation and that nothing
+ * was refunded of, for the billing pass to send.
  */
 export async function purchasesOf(
   q: Queryable,
   provider: string,
-  filter: { userId?: string; order?: string; since?: Date },
+  filter: { userId?: string; order?: string; since?: Date; unconfirmed?: boolean },
 ): Promise<Purchase[]> {
   const rows = await q
     .select({
@@ -97,8 +139,14 @@ export async function purchasesOf(
       chipIn: chipIns,
       ownerId: servers.ownerId,
       serverName: servers.name,
+      subPlan: subs.planKey,
+      subUnits: subs.includedUnits,
     })
     .from(orders)
+    .leftJoin(
+      subs,
+      and(eq(subs.provider, orders.provider), eq(subs.externalSubscriptionId, orders.externalSubscriptionId)),
+    )
     .leftJoin(
       years,
       and(eq(years.provider, orders.provider), eq(years.externalOrderId, orders.externalOrderId)),
@@ -119,26 +167,99 @@ export async function purchasesOf(
         ...(filter.userId === undefined ? [] : [eq(orders.userId, filter.userId)]),
         ...(filter.order === undefined ? [] : [eq(orders.externalOrderId, filter.order)]),
         ...(filter.since === undefined ? [] : [gt(orders.orderedAt, filter.since)]),
+        ...(filter.unconfirmed
+          ? [
+              isNull(orders.confirmedAt),
+              eq(orders.refundedCents, 0),
+              or(
+                eq(orders.billingReason, STARTS_SUBSCRIPTION),
+                isNotNull(years.externalOrderId),
+                isNotNull(gifts.id),
+                isNotNull(chipIns.externalOrderId),
+              ),
+            ]
+          : []),
       ),
     )
     .orderBy(desc(orders.orderedAt))
-  return rows.map(({ order, year, gift, chipIn, ownerId, serverName }) => ({
-    provider: order.provider,
-    externalOrderId: order.externalOrderId,
-    userId: order.userId,
-    kind: kindOf(order, { year, gift, chipIn }),
-    orderedAt: order.orderedAt,
-    until: new Date(order.orderedAt.getTime() + WITHDRAWAL_MS),
-    paidCents: order.totalCents,
-    refundedCents: order.refundedCents,
-    netCents: order.netCents,
-    currency: order.currency,
-    planKey: order.planKey,
-    externalSubscriptionId: order.externalSubscriptionId,
-    year,
-    gift,
-    chipIn: chipIn && ownerId !== null && serverName !== null ? { ...chipIn, ownerId, serverName } : null,
-  }))
+  const others = await alsoPaid(
+    q,
+    provider,
+    rows.flatMap(({ order }) =>
+      order.billingReason === STARTS_SUBSCRIPTION && order.externalSubscriptionId !== null
+        ? [order.externalSubscriptionId]
+        : [],
+    ),
+  )
+  return rows.map(({ order, year, gift, chipIn, ownerId, serverName, subPlan, subUnits }) => {
+    const kind = kindOf(order, { year, gift, chipIn })
+    const until = new Date(order.orderedAt.getTime() + WITHDRAWAL_MS)
+    return {
+      provider: order.provider,
+      externalOrderId: order.externalOrderId,
+      userId: order.userId,
+      kind,
+      orderedAt: order.orderedAt,
+      until,
+      paidCents: order.totalCents,
+      refundedCents: order.refundedCents,
+      netCents: order.netCents,
+      currency: order.currency,
+      planKey: order.planKey,
+      externalSubscriptionId: order.externalSubscriptionId,
+      subscription: subPlan === null ? null : { planKey: subPlan, includedUnits: subUnits },
+      also:
+        kind === 'plan'
+          ? (others.get(order.externalSubscriptionId ?? '') ?? []).filter(
+              (other) => other.orderedAt >= order.orderedAt && other.orderedAt <= until,
+            )
+          : [],
+      confirmedAt: order.confirmedAt,
+      year,
+      gift,
+      chipIn: chipIn && ownerId !== null && serverName !== null ? { ...chipIn, ownerId, serverName } : null,
+    }
+  })
+}
+
+/**
+ * The paid, unrefunded orders that charged a change to each of the subscriptions at once, oldest
+ * first, by subscription. A renewal isn't one, and what was refunded already has come back.
+ */
+async function alsoPaid(
+  q: Queryable,
+  provider: string,
+  subscriptions: string[],
+): Promise<Map<string, AlsoPaid[]>> {
+  const bySub = new Map<string, AlsoPaid[]>()
+  if (subscriptions.length === 0) return bySub
+  const rows = await q
+    .select()
+    .from(orders)
+    .where(
+      and(
+        eq(orders.provider, provider),
+        inArray(orders.externalSubscriptionId, subscriptions),
+        eq(orders.billingReason, CHANGES_SUBSCRIPTION),
+        inArray(orders.status, PAID_ORDER),
+        gt(orders.totalCents, 0),
+        eq(orders.refundedCents, 0),
+      ),
+    )
+    .orderBy(asc(orders.orderedAt), asc(orders.externalOrderId))
+  for (const row of rows) {
+    const sub = row.externalSubscriptionId ?? ''
+    bySub.set(sub, [
+      ...(bySub.get(sub) ?? []),
+      {
+        externalOrderId: row.externalOrderId,
+        paidCents: row.totalCents,
+        planKey: row.planKey,
+        orderedAt: row.orderedAt,
+      },
+    ])
+  }
+  return bySub
 }
 
 /**
@@ -152,8 +273,18 @@ function kindOf(
   if (made.year) return 'year'
   if (made.gift) return 'gift'
   if (made.chipIn) return 'chip_in'
-  const first = order.billingReason === 'subscription_create'
+  const first = order.billingReason === STARTS_SUBSCRIPTION
   return first && order.externalSubscriptionId && order.planKey ? 'plan' : null
+}
+
+/**
+ * What one of a first month's other charges is called: "the upgrade to Plus" where it moved the
+ * subscription to another plan, "a change to its price" where the plan stayed.
+ */
+export function alsoTitle(first: Pick<Purchase, 'planKey'>, other: { planKey: string | null }): string {
+  return other.planKey !== null && other.planKey !== first.planKey
+    ? `the upgrade to ${planName(other.planKey)}`
+    : 'a change to its price'
 }
 
 /**
@@ -173,6 +304,8 @@ export function purchaseTitle(purchase: Purchase): string {
 
 /** What cancelling a purchase now gives back, and what it was worked out from. */
 export interface Assessed {
+  /** What was paid in all (`paidInAll`), which the refund is a part of. */
+  paidCents: number
   playedMilli: number
   includedUnits: number | null
   earlierFull: boolean
@@ -188,8 +321,9 @@ export interface Assessed {
 export async function assess(q: Queryable, purchase: Purchase, now: Date): Promise<Assessed> {
   const buyer = purchase.userId
   const earlierFull = buyer === null ? false : await hadFullRefund(q, purchase.provider, buyer, purchase)
-  const paidCents = purchase.paidCents
+  const paidCents = paidInAll(purchase)
   const of = (withdrawn: Withdrawn, playedMilli: number, includedUnits: number | null) => ({
+    paidCents,
     playedMilli,
     includedUnits,
     earlierFull,
@@ -200,7 +334,7 @@ export async function assess(q: Queryable, purchase: Purchase, now: Date): Promi
     const playedMilli = Math.max(0, heldMilli(purchase.chipIn) - unplayed)
     return of({ kind: 'chip_in', paidCents, milli: purchase.chipIn.milli, playedMilli }, playedMilli, null)
   }
-  const time = await timeOf(q, purchase, now)
+  const time = timeOf(purchase, now)
   if (time === null) return of({ kind: 'unredeemed', paidCents }, 0, null)
   const playedUnits = time.started ? await meteredUnitsSince(q, time.userId, time.since, now) : 0
   const withdrawn: Withdrawn = {
@@ -264,7 +398,7 @@ const timeOnPlan = (purchase: Purchase): boolean =>
  * The time on a plan a purchase gave, whose play counts: whose account, from when, over how many
  * months, and the hours a month its plan includes. Null for a gift nobody has redeemed.
  */
-async function timeOf(q: Queryable, purchase: Purchase, now: Date) {
+function timeOf(purchase: Purchase, now: Date) {
   if (purchase.kind === 'year' && purchase.year !== null) {
     const { userId, startsAt, planKey } = purchase.year
     return { userId, since: startsAt, started: startsAt <= now, months: 12, includedUnits: hoursOf(planKey) }
@@ -287,7 +421,7 @@ async function timeOf(q: Queryable, purchase: Purchase, now: Date) {
     since: purchase.orderedAt,
     started: true,
     months: 1,
-    includedUnits: await subscriptionHours(q, purchase),
+    includedUnits: subscriptionHours(purchase),
   }
 }
 
@@ -295,26 +429,13 @@ async function timeOf(q: Queryable, purchase: Purchase, now: Date) {
 const hoursOf = (planKey: string): number | null => entitlementsFor(planKey).includedUnits
 
 /**
- * The hours a month a first month's subscription was sold with: its own where its product set
- * them (an early price), the plan's otherwise.
+ * The hours a month a first month's subscription gives: its own where its product set them (an
+ * early price), otherwise those of the plan it sells now, which an upgrade since may have changed.
  */
-export async function subscriptionHours(
-  q: Queryable,
-  purchase: Pick<Purchase, 'provider' | 'externalSubscriptionId' | 'planKey'>,
-): Promise<number | null> {
-  if (purchase.externalSubscriptionId !== null) {
-    const [sold] = await q
-      .select({ units: schema.billingSubscriptions.includedUnits })
-      .from(schema.billingSubscriptions)
-      .where(
-        and(
-          eq(schema.billingSubscriptions.provider, purchase.provider),
-          eq(schema.billingSubscriptions.externalSubscriptionId, purchase.externalSubscriptionId),
-        ),
-      )
-    if (sold?.units != null) return sold.units
-  }
-  return purchase.planKey === null ? null : hoursOf(purchase.planKey)
+export function subscriptionHours(purchase: Pick<Purchase, 'subscription' | 'planKey'>): number | null {
+  if (purchase.subscription?.includedUnits != null) return purchase.subscription.includedUnits
+  const planKey = purchase.subscription?.planKey ?? purchase.planKey
+  return planKey === null ? null : hoursOf(planKey)
 }
 
 /**
