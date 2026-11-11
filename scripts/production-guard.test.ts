@@ -9,7 +9,7 @@
  * that moves what a requirement looks for fails here and not at the next deploy.
  */
 import { afterAll, describe, expect, test } from 'bun:test'
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { missing, REQUIREMENTS } from './production-guard.ts'
@@ -199,6 +199,101 @@ describe('route: the road main’s newest commit takes', () => {
     git(dir, 'commit', '-q', '-m', 'move')
     const moved = git(dir, 'rev-parse', 'HEAD')
     expect(guard(dir, ['route'], { WORKFLOW_SHA: moved }).output).toBe(`route=full\ncommit=${moved}\n`)
+  })
+})
+
+describe('run website: the website alone, once proved', () => {
+  /**
+   * A fake `gh` on PATH that answers `gh api repos/<repo>/<path>` from `answers`, by path, one
+   * answer a line, whatever the jq; any other path answers nothing.
+   */
+  function fakeGitHub(dir: string, answers: Record<string, string[]>): Record<string, string> {
+    const bin = join(dir, '.git/fake-bin')
+    mkdirSync(bin, { recursive: true })
+    writeFileSync(join(dir, '.git/answers.json'), JSON.stringify(answers))
+    const answer = join(dir, '.git/fake-gh.js')
+    writeFileSync(
+      answer,
+      `const path = process.argv[2].replace('repos/cubepals/cubepals/', '')
+const all = JSON.parse(require('node:fs').readFileSync(${JSON.stringify(join(dir, '.git/answers.json'))}, 'utf8'))
+for (const line of all[path] ?? []) console.log(line)
+`,
+    )
+    writeFileSync(
+      join(bin, 'gh'),
+      `#!/bin/sh\nexec ${JSON.stringify(process.execPath)} ${JSON.stringify(answer)} "$2"\n`,
+    )
+    chmodSync(join(bin, 'gh'), 0o755)
+    return { PATH: `${bin}:${process.env.PATH ?? ''}`, GITHUB_REPOSITORY: 'cubepals/cubepals' }
+  }
+
+  /** Production on main's commit, then a change to the website alone. */
+  function websiteChange() {
+    const { dir, main } = repository()
+    git(dir, 'update-ref', 'refs/remotes/origin/production', main)
+    const web = commit(dir, { 'apps/web/src/page.tsx': 'x\n' })
+    git(dir, 'update-ref', 'refs/heads/main', web)
+    return { dir, main, web, tree: git(dir, 'rev-parse', `${web}^{tree}`) }
+  }
+
+  const proved = (sha: string) => ({
+    [`commits/${sha}/check-runs?check_name=check`]: ['success'],
+    [`commits/${sha}/statuses`]: ['success'],
+  })
+
+  test('a commit that passed CI with its preview answering goes', () => {
+    const { dir, main, web } = websiteChange()
+    const env = { WORKFLOW_SHA: main, ...fakeGitHub(dir, proved(web)) }
+    const { code, said, output } = guard(dir, ['run', 'website', web], env)
+    expect({ code, said }).toMatchObject({ code: 0 })
+    expect(said).toContain('Deploying the website')
+    expect(output).toBe(`commit=${web}\n`)
+  })
+
+  test('a squash merge goes on its pull request’s proof when the trees are the same', () => {
+    const { dir, main, web, tree } = websiteChange()
+    const head = '7'.repeat(40)
+    const env = fakeGitHub(dir, {
+      [`commits/${web}/pulls`]: [head],
+      [`git/commits/${head}`]: [tree],
+      ...proved(head),
+    })
+    expect(guard(dir, ['run', 'website', web], { WORKFLOW_SHA: main, ...env }).code).toBe(0)
+    expect(guard(dir, ['proven', web], env).code).toBe(0)
+  })
+
+  test('a pull request head with another tree proves nothing, nor CI without the preview', () => {
+    const { dir, main, web } = websiteChange()
+    const head = '7'.repeat(40)
+    const env = fakeGitHub(dir, {
+      [`commits/${web}/pulls`]: [head],
+      [`git/commits/${head}`]: ['0'.repeat(40)],
+      ...proved(head),
+      [`commits/${web}/check-runs?check_name=check`]: ['success'],
+    })
+    const { code, said } = guard(dir, ['run', 'website', web], { WORKFLOW_SHA: main, ...env })
+    expect(code).toBe(1)
+    expect(said).toContain('passed CI with its preview answering')
+    expect(guard(dir, ['proven', web], env).code).toBe(1)
+  })
+
+  test('a change beyond the website is refused, proved or not', () => {
+    const { dir, main } = websiteChange()
+    const both = commit(dir, { 'apps/control/src/main.node.ts': 'x\n' })
+    git(dir, 'update-ref', 'refs/heads/main', both)
+    const env = { WORKFLOW_SHA: main, ...fakeGitHub(dir, proved(both)) }
+    const { code, said } = guard(dir, ['run', 'website', both], env)
+    expect(code).toBe(1)
+    expect(said).toContain('takes another road')
+  })
+
+  test('a commit off main is refused', () => {
+    const { dir, main } = websiteChange()
+    git(dir, 'checkout', '-q', '-b', 'side', main)
+    const side = commit(dir, { 'apps/web/src/other.tsx': 'x\n' })
+    git(dir, 'checkout', '-q', 'main')
+    const env = { WORKFLOW_SHA: main, ...fakeGitHub(dir, proved(side)) }
+    expect(guard(dir, ['run', 'website', side], env).said).toContain("isn't a commit on main")
   })
 })
 

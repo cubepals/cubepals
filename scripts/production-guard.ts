@@ -16,6 +16,12 @@
  *       refuses an old run started again, as `run` does, and names the road main's newest commit
  *       takes from what production runs (production-route.ts): `route` and `commit` in
  *       GITHUB_OUTPUT, and why in the run's summary. `ship now` follows it
+ *   bun <main>/scripts/production-guard.ts run website <commit>
+ *       the website route: refuses a commit not on main, one whose change since what production runs
+ *       isn't the website's alone, and one without its proof (`proven`)
+ *   bun <main>/scripts/production-guard.ts proven <commit>
+ *       whether a commit with `commit`'s tree (itself, or its pull request's head) passed CI's `check`
+ *       and had its preview answer as CLAUDE.md asks (PREVIEW_PROOF, set by web-staging.yml)
  *   bun <main>/scripts/production-guard.ts fits <commit>
  *       refuses a commit production's settings need something newer of (REQUIREMENTS), or one whose
  *       apply doesn't have its plan reviewed
@@ -121,6 +127,70 @@ function refuse(lines: readonly string[]): never {
 
 const rev = (spec: string) => git(HERE, 'rev-parse', '--verify', '--quiet', spec).stdout.trim()
 
+/**
+ * The commit status web-staging.yml sets on a pull request's head once the version uploaded for that
+ * commit, at its own address, answers 200 on the pages and a picture.
+ */
+export const PREVIEW_PROOF = 'Website preview answers'
+
+/** GitHub's API through gh, as this run's token reads it; one answer a line. */
+function api(path: string, jq: string): string[] {
+  const repository = process.env.GITHUB_REPOSITORY ?? 'cubepals/cubepals'
+  const answer = spawnSync('gh', ['api', `repos/${repository}/${path}`, '--jq', jq], { encoding: 'utf8' })
+  return answer.status === 0 ? answer.stdout.split('\n').filter(Boolean) : []
+}
+
+/**
+ * The commits GitHub checked that have `commit`'s tree: the commit, and each pull request head it
+ * came from with the same tree. A squash merge of a pull request that was up to date with main is
+ * the tree its CI and preview already ran, so it needn't wait for main's run.
+ */
+function sameTree(commit: string): string[] {
+  const tree = rev(`${commit}^{tree}`)
+  const heads = api(`commits/${commit}/pulls`, '.[].head.sha')
+  return [commit, ...heads.filter((head) => api(`git/commits/${head}`, '.tree.sha')[0] === tree)]
+}
+
+/** Whether Actions' `check` passed on a commit, and its preview proof is GitHub Actions' own. */
+const checked = (sha: string) =>
+  api(
+    `commits/${sha}/check-runs?check_name=check`,
+    '.check_runs[] | select(.app.slug == "github-actions") | .conclusion',
+  ).includes('success')
+const previewed = (sha: string) =>
+  api(
+    `commits/${sha}/statuses`,
+    `map(select(.context == "${PREVIEW_PROOF}" and .creator.login == "github-actions[bot]"))[0].state`,
+  )[0] === 'success'
+
+/** The commit of `commit`'s tree that passed CI and whose preview answered; undefined when none did. */
+const proofOf = (commit: string) => sameTree(commit).find((sha) => checked(sha) && previewed(sha))
+
+const onMain = (commit: string, main: string) =>
+  commit !== '' && git(HERE, 'merge-base', '--is-ancestor', commit, main).status === 0
+
+/** The website route's commit, refused unless it is the website's alone and proved. */
+function website(version: string, main: string): string {
+  const commit = rev(`${version}^{commit}`)
+  if (!onMain(commit, main)) refuse([`${version || 'No commit'} isn't a commit on main.`])
+  const live = rev('refs/remotes/origin/production^{commit}')
+  const paths = live === '' ? null : pathsBetween(HERE, live, commit)
+  const decision = paths === null ? null : routeOf(paths)
+  if (decision?.route !== 'website')
+    refuse([
+      `${commit.slice(0, 8)} isn't a change to the website alone since what production runs, so it takes another road.`,
+      ...(decision ? describeRoute(decision) : []),
+    ])
+  const proof = proofOf(commit)
+  if (proof === undefined)
+    refuse([
+      `Neither ${commit.slice(0, 8)} nor a pull request head with its tree has passed CI with its preview answering.`,
+      `A website change that isn't proved takes the nightly: ship now chooses it (\`${PREVIEW_PROOF}\`).`,
+    ])
+  say(`Deploying the website from ${commit}, proved by CI and the preview on ${proof.slice(0, 8)}.`)
+  return commit
+}
+
 /** Main's commit, once this run's workflow is main's: an old run started again runs its old steps. */
 function mainsRun(): string {
   const main = rev('HEAD^{commit}')
@@ -148,10 +218,11 @@ function run(command: string, version: string): void {
     if (!isNightly(tag))
       refuse([`"${tag}" isn't a nightly. Production takes only a commit a nightly passed on staging.`])
     commit = rev(`refs/tags/${tag}^{commit}`)
-    if (commit === '' || git(HERE, 'merge-base', '--is-ancestor', commit, main).status !== 0)
+    if (!onMain(commit, main))
       refuse([`${tag} (${commit.slice(0, 8) || 'no such tag'}) isn't a commit on main.`])
     say(`Deploying ${tag}, ${commit}.`)
-  } else if (command.startsWith('rollback')) say(`Rolling back with main's code, ${main}.`)
+  } else if (command === 'website') commit = website(version, main)
+  else if (command.startsWith('rollback')) say(`Rolling back with main's code, ${main}.`)
   else refuse([`There is no command "${command}".`])
   output(`commit=${commit}\n`)
 }
@@ -217,10 +288,15 @@ if (import.meta.main) {
   const [command, ...args] = process.argv.slice(2)
   if (command === 'run') run(args[0] ?? '', args[1] ?? '')
   else if (command === 'route') route()
-  else if (command === 'fits') fits(args[0] ?? '')
+  else if (command === 'proven') {
+    const proof = proofOf(rev(`${args[0] ?? ''}^{commit}`))
+    if (proof === undefined)
+      refuse([`${args[0] ?? ''} isn't proved yet: no CI pass with its preview answering.`])
+    say(`Proved by CI and the preview on ${proof}.`)
+  } else if (command === 'fits') fits(args[0] ?? '')
   else if (command === 'plan') plan(args[0] ?? '', args[1] ?? '', args[2] ?? '')
   else
     refuse([
-      'Usage: bun scripts/production-guard.ts run <command> [version] | route | fits <commit> | plan <dir> <file> <sha256>',
+      'Usage: bun scripts/production-guard.ts run <command> [version] | route | proven <commit> | fits <commit> | plan <dir> <file> <sha256>',
     ])
 }

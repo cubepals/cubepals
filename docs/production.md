@@ -302,11 +302,33 @@ What isn't known to be narrow takes the whole road.
 | Route | What `ship now` does |
 |---|---|
 | `none` | Deploys nothing, and says so in the run's summary |
+| `website` | When the commit is proved, deploys the website alone (`production.ts web`): no Terraform, no Fly deploy, no nightly. When it isn't, the same as `full` |
 | `full` | A nightly of main's newest commit, then `apply` for its tag: everything, as before |
-| `website`, `control`, `edge` | The same as `full` |
+| `control`, `edge` | The same as `full` |
 
 The run's summary lists each area it found with its paths, so the reason for the road is on the
 run. The Nightly still runs every night on main, whatever road a change took.
+
+**The website route.** A commit is proved when Actions' `check` passed on it and its own preview
+version answered 200 on `/`, `/pricing`, `/sign-in`, `/browse` and a picture through
+`/_next/image` (CLAUDE.md's bar for the website). The preview job of `web-staging.yml` asks the
+commit's address, `<sha7>.preview.cubepals.com`, which serves the version uploaded for that commit
+and nothing else, and sets the commit status `Website preview answers` on the pull request's head.
+The guard (`production-guard.ts run website`) takes main's commit when a pull request head with
+exactly its tree carries both: a squash merge of a pull request that was up to date with main.
+Its website goes within minutes of the merge. A website change that isn't proved so takes the
+nightly instead. The guard also refuses a commit that isn't on main, or whose change since what
+production runs is more than the website's.
+
+Production doesn't run the preview's build itself. A build has its environment written into it
+(the `/api` rewrite's target, `robots.txt`, which environment PostHog counts it in), so production
+builds the same tree with its own values. `deployChecked` then asks `cubepals.com` for its pages
+and puts the previous version back if they fail. After every route, the workflow asks production
+for `/`, `/pricing`, `/sign-in`, `/browse` and `/api/health`. `rollback website` undoes the route,
+as it undoes any website deploy: each version is tagged with its commit.
+
+`next`, `@opennextjs/cloudflare` and `wrangler` never take this route: they change `bun.lock`, so
+their change is `full`.
 
 ## 4. Check it
 

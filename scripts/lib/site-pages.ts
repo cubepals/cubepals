@@ -51,6 +51,29 @@ export const websiteTargets = (origin: string): Target[] =>
     want: '2xx or 3xx',
   }))
 
+/** A picture through Next's image optimizer, as the pages load theirs: the logo, at a width Next allows. */
+const IMAGE_PATH = '/_next/image?url=%2Flogo.png&w=64&q=75'
+
+/**
+ * What proves a preview of the website, as CLAUDE.md sets the bar for one: each page and a picture
+ * answer 200 exactly. Deploy production's website route takes only a commit proved so.
+ */
+export const proofTargets = (origin: string): Target[] =>
+  [...SITE_PAGES, IMAGE_PATH].map((path) => ({
+    name: path === IMAGE_PATH ? '/_next/image' : path,
+    url: new URL(path, origin).href,
+    ok: (status) => status === 200,
+    want: '200',
+  }))
+
+/** The control plane's health through the website, which every production deploy asks after. */
+export const apiTarget = (origin: string): Target => ({
+  name: '/api/health',
+  url: new URL('/api/health', origin).href,
+  ok: (status) => status === 200,
+  want: '200',
+})
+
 /**
  * Production's other public addresses. They are not the website Worker, so a failure here is
  * reported but never rolled back by rolling the Worker back (site-uptime.ts).

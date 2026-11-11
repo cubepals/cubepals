@@ -103,6 +103,8 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
+      # The preview's proof, a commit status Deploy production's website route reads.
+      statuses: write
     # One preview at a time for each pull request, in the order of its pushes: a run waiting behind
     # another starts when it is its turn, finds a newer push and ends green, so the preview is never
     # left on an older commit.
@@ -213,6 +215,24 @@ jobs:
         run: >-
           bun .preview-tools/scripts/preview-comment.ts "$([ -n "$URL" ] && echo ready || echo failed)" ||
           echo "::warning::The preview comment couldn't say how the preview went."
+      # What Deploy production's website route takes as proof (scripts/production-guard.ts): the
+      # commit's own version answers 200 on each page and on a picture through /_next/image, as
+      # CLAUDE.md asks of a preview. Asked at the commit's address, which serves the version uploaded
+      # for it and nothing else, never at the pull request's or staging's, which a later deploy can
+      # move. A preview that doesn't answer leaves the status unset, and that commit takes the full
+      # road. From the base branch's scripts, as the comment is.
+      - name: Prove the preview answers
+        if: ${{ !cancelled() && steps.upload.outputs.commit_url != '' && steps.fresh.outputs.current == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          URL: ${{ steps.upload.outputs.commit_url }}
+        run: |
+          if bun .preview-tools/scripts/site-check.ts "$URL" 180 --proof; then
+            gh api --silent "repos/$REPO/statuses/$SHA" -f state=success -f "context=Website preview answers" \
+              -f "description=/, /pricing, /sign-in, /browse and /_next/image answer 200" -f "target_url=$URL"
+          else
+            echo "::warning::The preview didn't answer 200 everywhere, so Deploy production's website route won't take this commit."
+          fi
       - name: Let the preview upload worlds
         if: ${{ !cancelled() && steps.upload.outputs.url != '' && steps.fresh.outputs.current == 'true' }}
         env:
