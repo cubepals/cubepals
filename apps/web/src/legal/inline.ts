@@ -4,7 +4,8 @@
 
 /**
  * The little markup a policy's sentences use, read into pieces a page renders: `[words](/path)`
- * for a link, `**words**` for the few that must stand out, `{token}` for what the operator
+ * for a link, `**words**` for the few that must stand out (a token or a section inside them is read
+ * as anywhere else), `{token}` for what the operator
  * file says (who runs the service, how to reach them), and `{§id}` for another section of the
  * same policy, by its id, which the page says as "section 4". Nothing else is markup, so a
  * sentence reads the same in the source as on the page.
@@ -80,6 +81,8 @@ export function plainOf(
     .map((piece) => {
       if (piece.kind === 'token') return say(piece.token)
       if (piece.kind === 'section') return sectionCalled(ids, piece.id)
+      // What stands out is a sentence of its own: its tokens and references are read too.
+      if (piece.kind === 'strong') return plainOf(piece.text, say, ids)
       return piece.text
     })
     .join('')

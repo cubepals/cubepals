@@ -10,7 +10,7 @@
 import { describe, expect, test } from 'bun:test'
 import { readdirSync, readFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
-import { piecesOf, TOKENS } from './inline.ts'
+import { piecesOf, plainOf, TOKENS } from './inline.ts'
 import { OPERATOR } from './operator.ts'
 import { hrefOf, POLICIES, policyAt } from './policies.ts'
 import type { Block } from './policy.ts'
@@ -73,6 +73,16 @@ describe('the policies', () => {
         expect(sentence, policy.slug).not.toContain('`')
         expect(sentence, policy.slug).not.toContain('undefined')
       }
+  })
+
+  test('read as a reader reads it, no sentence shows a brace or an asterisk', () => {
+    for (const policy of POLICIES) {
+      const ids = policy.sections.map((s) => s.id)
+      for (const sentence of sentencesOf(policy)) {
+        const read = plainOf(sentence, (token) => token, ids)
+        expect(read, `${policy.slug}: ${sentence}`).not.toMatch(/[{}]|\*\*/)
+      }
+    }
   })
 
   test('accounts are for adults, and every page that needs it says so', () => {
