@@ -31,14 +31,22 @@ const cents = (said: string) => Math.round(Number(said) * 100)
 /** "$13", "$7.77": as the pages write an amount. */
 const dollars = (amount: number) => `$${amount % 100 === 0 ? amount / 100 : (amount / 100).toFixed(2)}`
 
-/** A page's text as read: no tags, comments or scripts, and the few entities React writes. */
+/**
+ * A page's text as read, to look for prices in: no scripts, tags or comments, and the few entities
+ * React writes. Tags are taken out until none is left, so what taking one out puts together goes
+ * too, and `&amp;` is read last, so nothing is read twice. The text is only ever searched, never
+ * shown.
+ */
 function textOf(html: string): string {
-  return html
-    .replace(/<script[\s\S]*?<\/script>/g, ' ')
-    .replace(/<[^>]*>/g, '')
-    .replace(/&amp;/g, '&')
+  let text = html.replace(/<script\b[\s\S]*?<\/script\b[^>]*>/gi, ' ')
+  for (let before = ''; before !== text; ) {
+    before = text
+    text = text.replace(/<[^>]*>/g, '')
+  }
+  return text
     .replace(/&#x27;|&#39;/g, "'")
     .replace(/&quot;/g, '"')
+    .replace(/&amp;/g, '&')
 }
 
 /** A plan's price and hours in a stretch of text: "$13 a month", "150 hours of play each month". */
