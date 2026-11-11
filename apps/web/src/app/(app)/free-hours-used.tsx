@@ -7,6 +7,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { useTRPC } from '../../lib/api'
 import { forSale, Note } from '../../ui'
+import { offeredMonth } from './offered-month'
 import { PlusOffer } from './plus-offer'
 
 /**
@@ -25,6 +26,12 @@ export function FreeHoursUsed({ hours, next }: { hours: number; next?: string })
       p.entitlements.includedUnits !== null &&
       listed.data?.some((plan) => plan.key === p.key && forSale(plan)),
   )
+  // Its hours a month as a new subscriber is offered them now, as the plan cards say them.
+  const monthlyHours = (plan: NonNullable<typeof monthly>) =>
+    offeredMonth(
+      plan.entitlements,
+      listed.data?.find((p) => p.key === plan.key),
+    ).hours
   return (
     <>
       <Note tone="info">
@@ -33,7 +40,7 @@ export function FreeHoursUsed({ hours, next }: { hours: number; next?: string })
       </Note>
       {monthly && (
         <PlusOffer
-          why={`${monthly.key.charAt(0).toUpperCase()}${monthly.key.slice(1)} starts them again, with ${listed.data?.find((plan) => plan.key === monthly.key)?.includedHours ?? monthly.entitlements.includedUnits} hours a month.`}
+          why={`${monthly.key.charAt(0).toUpperCase()}${monthly.key.slice(1)} starts them again, with ${monthlyHours(monthly)} hours a month.`}
           plan={monthly.key}
           reason="hours"
           {...(next === undefined ? {} : { next })}

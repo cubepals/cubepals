@@ -13,6 +13,7 @@ import { checkoutHref } from '../../lib/checkout'
 import { upgradeDeclined, upgradePressed, upgradeShown } from '../../lib/paying'
 import { Button, Card, forSale, Note, PlayHours } from '../../ui'
 import { placeOf } from '../(public)/steps'
+import { offeredMonth } from './offered-month'
 
 /**
  * Where someone has just reached for something their plan leaves out, and only there, the plan
@@ -54,9 +55,10 @@ export function PlusOffer({
   if (lineOnly) return <Note tone="info">{why}</Note>
   const name = `${plan[0]?.toUpperCase() ?? ''}${plan.slice(1)}`
   // What a month charges someone who subscribes now, as the plan cards say it (`billing.plans`).
-  const now = listed.data?.find((p) => p.key === plan)
-  const price = now?.monthlyPriceCents ?? offered.monthlyPriceCents
-  const hours = offered.includedUnits === null ? null : (now?.includedHours ?? offered.includedUnits)
+  const { priceCents: price, hours } = offeredMonth(
+    offered,
+    listed.data?.find((p) => p.key === plan),
+  )
   return (
     <Card
       flat
