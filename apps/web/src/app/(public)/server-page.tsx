@@ -227,7 +227,7 @@ export function JoinThroughInvite({ code, view }: { code: string; view: PublicSe
       title="Get yourself in"
       description="Only players the owner allows can join. Your Minecraft name is enough."
     >
-      <form className="bk-row bk-wrap" style={{ gap: 'var(--space-12)' }} onSubmit={submit}>
+      <form onSubmit={submit}>
         <TextField
           label="Your Minecraft name"
           value={playerName}
@@ -238,10 +238,12 @@ export function JoinThroughInvite({ code, view }: { code: string; view: PublicSe
           help={view.checksAccounts ? undefined : 'Exactly as it is in the game: capitals count.'}
           onChange={(event) => setPlayerName(event.target.value)}
           {...checked.field}
+          trailing={
+            <Button type="submit" variant="primary" disabled={join.isPending || playerName.trim().length < 3}>
+              {join.isPending ? 'Adding you…' : 'Let me in'}
+            </Button>
+          }
         />
-        <Button type="submit" variant="primary" disabled={join.isPending || playerName.trim().length < 3}>
-          {join.isPending ? 'Adding you…' : 'Let me in'}
-        </Button>
       </form>
       {join.isError && <Note tone="danger">{messageOf(join.error)}</Note>}
     </FormSection>

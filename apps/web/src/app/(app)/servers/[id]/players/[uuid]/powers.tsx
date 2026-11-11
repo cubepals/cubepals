@@ -95,7 +95,10 @@ export function PlayerPowers({
           on ? undefined : `These wait for ${name} to join. Healing and kicking show while they play.`
         }
       >
-        <div className="bk-row" style={{ gap: 'var(--space-12)', flexWrap: 'wrap', alignItems: 'flex-end' }}>
+        <div
+          className="bk-row"
+          style={{ gap: 'var(--space-12)', flexWrap: 'wrap', alignItems: 'flex-start' }}
+        >
           {on && <Heal serverId={serverId} player={player} />}
           <ClearInventory serverId={serverId} player={player} />
         </div>
@@ -216,7 +219,15 @@ function ToPlace(props: PowerProps) {
         if (ready) power.run({ kind: 'teleport', dimension, x: xs, y: ys, z: zs })
       }}
     >
-      <div className="bk-row" style={{ gap: 'var(--space-8)', flexWrap: 'wrap', alignItems: 'flex-start' }}>
+      {/* Two even columns, so the world and the three numbers line up on any width. */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+          gap: 'var(--space-8)',
+          alignItems: 'start',
+        }}
+      >
         <Select
           label="World"
           options={WORLDS}
@@ -252,21 +263,21 @@ function ToPlayer({ others, ...props }: PowerProps & { others: readonly { name: 
   const target = others.some((o) => o.uuid === to) ? to : (others[0]?.uuid ?? '')
   return (
     <div className="bk-stack" style={{ gap: 'var(--space-8)' }}>
-      <div className="bk-row" style={{ gap: 'var(--space-8)', flexWrap: 'wrap', alignItems: 'flex-end' }}>
-        <Select
-          label="To a player"
-          options={others.map((o) => ({ value: o.uuid, label: shownName(o) }))}
-          value={target}
-          onChange={(event) => setTo(event.target.value)}
-        />
-        <Button
-          {...power.words('Sent')}
-          disabled={target === '' || power.pending}
-          onClick={() => power.run({ kind: 'to_player', to: target })}
-        >
-          Send there
-        </Button>
-      </div>
+      <Select
+        label="To a player"
+        options={others.map((o) => ({ value: o.uuid, label: shownName(o) }))}
+        value={target}
+        onChange={(event) => setTo(event.target.value)}
+        trailing={
+          <Button
+            {...power.words('Sent')}
+            disabled={target === '' || power.pending}
+            onClick={() => power.run({ kind: 'to_player', to: target })}
+          >
+            Send there
+          </Button>
+        }
+      />
       <Failed error={power.error} />
     </div>
   )
@@ -334,18 +345,18 @@ function Levels(props: PowerProps) {
         if (ready) power.run({ kind: 'levels', levels: n })
       }}
     >
-      <div className="bk-row" style={{ gap: 'var(--space-8)', flexWrap: 'wrap', alignItems: 'flex-end' }}>
-        <TextField
-          label="Experience levels"
-          inputMode="numeric"
-          mono
-          value={levels}
-          onChange={(e) => setLevels(e.target.value)}
-        />
-        <Button type="submit" {...power.words('Given')} disabled={!ready || power.pending}>
-          Give levels
-        </Button>
-      </div>
+      <TextField
+        label="Experience levels"
+        inputMode="numeric"
+        mono
+        value={levels}
+        onChange={(e) => setLevels(e.target.value)}
+        trailing={
+          <Button type="submit" {...power.words('Given')} disabled={!ready || power.pending}>
+            Give levels
+          </Button>
+        }
+      />
       <Failed error={power.error} />
     </form>
   )
@@ -363,19 +374,19 @@ function Kick(props: PowerProps) {
         power.run({ kind: 'kick', reason: reason.trim() })
       }}
     >
-      <div className="bk-row" style={{ gap: 'var(--space-8)', flexWrap: 'wrap', alignItems: 'flex-end' }}>
-        <TextField
-          label="Reason"
-          optional
-          maxLength={200}
-          value={reason}
-          help="Shown to them as they leave. They can join again."
-          onChange={(e) => setReason(e.target.value)}
-        />
-        <Button type="submit" {...power.words('Kicked')} disabled={power.pending}>
-          Kick
-        </Button>
-      </div>
+      <TextField
+        label="Reason"
+        optional
+        maxLength={200}
+        value={reason}
+        help="Shown to them as they leave. They can join again."
+        onChange={(e) => setReason(e.target.value)}
+        trailing={
+          <Button type="submit" {...power.words('Kicked')} disabled={power.pending}>
+            Kick
+          </Button>
+        }
+      />
       <Failed error={power.error} />
     </form>
   )
@@ -388,7 +399,6 @@ function ClearInventory(props: PowerProps) {
   const name = shownName(props.player)
   return (
     <div className="bk-stack" style={{ gap: 'var(--space-8)' }}>
-      {/* A button as the other powers' are; the red one is in the question it asks first. */}
       <Button {...power.words('Cleared')} disabled={power.pending} onClick={() => setAsking(true)}>
         Clear inventory
       </Button>
