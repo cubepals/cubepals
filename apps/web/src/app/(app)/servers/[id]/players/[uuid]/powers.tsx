@@ -388,8 +388,8 @@ function ClearInventory(props: PowerProps) {
   const name = shownName(props.player)
   return (
     <div className="bk-stack" style={{ gap: 'var(--space-8)' }}>
+      {/* A button as the other powers' are; the red one is in the question it asks first. */}
       <Button
-        variant="ghost"
         {...power.words('Cleared')}
         disabled={power.pending}
         onClick={() => setAsking(true)}
