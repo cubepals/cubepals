@@ -3,24 +3,26 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * A policy's words on the page: its blocks, and in each sentence its links, its emphasis and the
- * operator's details. A detail not given yet is a marked placeholder, never a guess.
+ * A policy's words on the page: its blocks, and in each sentence its links, its emphasis, the
+ * operator's details and its references to other sections, each said by number and linked to it.
+ * A detail not given yet is a marked placeholder, never a guess.
  */
 import Link from 'next/link'
 import type { ReactNode } from 'react'
 import { OutLink } from '../ui/out-link'
-import { type Piece, piecesOf, plainOf, type Token } from './inline'
+import { type Piece, piecesOf, plainOf, sectionCalled, type Token } from './inline'
 import styles from './legal.module.css'
 import { OPERATOR, PLACEHOLDERS } from './operator'
 import type { Block } from './policy'
 
-export function Blocks({ blocks }: { blocks: readonly Block[] }) {
+/** `ids` are the policy's section ids in order, which its references are numbered by. */
+export function Blocks({ blocks, ids }: { blocks: readonly Block[]; ids: readonly string[] }) {
   return blocks.map((block, i) => {
     const key = `${i}`
     if (typeof block === 'string')
       return (
         <p key={key}>
-          <Sentence text={block} />
+          <Sentence text={block} ids={ids} />
         </p>
       )
     if ('list' in block)
@@ -28,7 +30,7 @@ export function Blocks({ blocks }: { blocks: readonly Block[] }) {
         <ul key={key}>
           {block.list.map((item) => (
             <li key={item}>
-              <Sentence text={item} />
+              <Sentence text={item} ids={ids} />
             </li>
           ))}
         </ul>
@@ -38,7 +40,7 @@ export function Blocks({ blocks }: { blocks: readonly Block[] }) {
         <ol key={key}>
           {block.steps.map((item) => (
             <li key={item}>
-              <Sentence text={item} />
+              <Sentence text={item} ids={ids} />
             </li>
           ))}
         </ol>
@@ -60,7 +62,7 @@ export function Blocks({ blocks }: { blocks: readonly Block[] }) {
               <tr key={row.join('|')}>
                 {row.map((cell, c) => (
                   <td key={block.table.head[c] ?? cell} data-label={block.table.head[c]}>
-                    <Sentence text={cell} />
+                    <Sentence text={cell} ids={ids} />
                   </td>
                 ))}
               </tr>
@@ -72,15 +74,15 @@ export function Blocks({ blocks }: { blocks: readonly Block[] }) {
   })
 }
 
-/** One sentence, with its markup read. */
-export function Sentence({ text }: { text: string }) {
+/** One sentence, with its markup read; `ids` as for `Blocks`. */
+export function Sentence({ text, ids = [] }: { text: string; ids?: readonly string[] }) {
   return piecesOf(text).map((piece, i) => (
     // biome-ignore lint/suspicious/noArrayIndexKey: a sentence's pieces keep their order
-    <PieceOf key={i} piece={piece} />
+    <PieceOf key={i} piece={piece} ids={ids} />
   ))
 }
 
-function PieceOf({ piece }: { piece: Piece }): ReactNode {
+function PieceOf({ piece, ids }: { piece: Piece; ids: readonly string[] }): ReactNode {
   switch (piece.kind) {
     case 'text':
       return piece.text
@@ -94,6 +96,8 @@ function PieceOf({ piece }: { piece: Piece }): ReactNode {
       )
     case 'token':
       return <TokenOf token={piece.token} />
+    case 'section':
+      return <a href={`#${piece.id}`}>{sectionCalled(ids, piece.id)}</a>
   }
 }
 

@@ -4,9 +4,12 @@
 
 /**
  * The policies hold together: every page has its own path and anchors, every link lands on a page
- * and section that exist, and no markup is left for a reader to see.
+ * and section that exist, section numbers come from order and never from typing, and no markup is
+ * left for a reader to see.
  */
 import { describe, expect, test } from 'bun:test'
+import { readdirSync, readFileSync } from 'node:fs'
+import { join, relative } from 'node:path'
 import { piecesOf, TOKENS } from './inline.ts'
 import { OPERATOR } from './operator.ts'
 import { hrefOf, POLICIES, policyAt } from './policies.ts'
@@ -89,5 +92,78 @@ describe('the policies', () => {
     )
     for (const address of Object.values(OPERATOR.emails))
       expect(address.endsWith(`@${OPERATOR.domain}`)).toBe(true)
+  })
+})
+
+describe('section numbers', () => {
+  test('come from a section’s place: no heading is written with one', () => {
+    for (const policy of POLICIES)
+      for (const { heading } of policy.sections)
+        expect(heading, `${policy.slug}: ${heading}`).not.toMatch(/^\s*(§\s*)?\d+[.):]?\s/)
+  })
+
+  test('no sentence types one: another section is named by its id, as {§id}', () => {
+    for (const policy of POLICIES)
+      for (const sentence of sentencesOf(policy))
+        expect(sentence, `${policy.slug}: ${sentence}`).not.toMatch(/\bsections?\s+\d|§\s*\d/i)
+  })
+
+  test('every {§id} names a section of its own policy', () => {
+    for (const policy of POLICIES) {
+      const ids = policy.sections.map((s) => s.id)
+      for (const piece of sentencesOf(policy).flatMap(piecesOf))
+        if (piece.kind === 'section') expect(ids, `${policy.slug}: {§${piece.id}}`).toContain(piece.id)
+    }
+  })
+
+  test('a description or a heading refers to none: both are shown where sections have no numbers', () => {
+    for (const policy of POLICIES)
+      for (const sentence of [policy.description, ...policy.sections.map((s) => s.heading)])
+        expect(
+          piecesOf(sentence).map((piece) => piece.kind),
+          `${policy.slug}: ${sentence}`,
+        ).not.toContain('section')
+  })
+})
+
+/** The apps whose source may link to a policy: this web app and the control plane's emails. */
+const APPS = join(import.meta.dir, '..', '..', '..')
+
+/** Every `.ts` and `.tsx` file under a directory. */
+function sources(dir: string): string[] {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const path = join(dir, entry.name)
+    if (entry.isDirectory()) return entry.name === 'node_modules' ? [] : sources(path)
+    return /\.tsx?$/.test(entry.name) ? [path] : []
+  })
+}
+
+/**
+ * A link to a policy written out: after a quote, a markdown link's bracket, this site's address or
+ * a template's `}`, so neither an import of a file under `legal/` nor another site's page is one.
+ */
+const POLICY_LINK = new RegExp(
+  `(?:["'\`(]|https?://(?:[\\w-]+\\.)*${OPERATOR.domain.replaceAll('.', '\\.')}|\\})/legal/([a-z-]+)(?:#([\\w-]+))?`,
+  'g',
+)
+
+describe('links to the policies', () => {
+  test('anywhere in the apps, name a policy that exists and a section of it that does', () => {
+    const files = ['web/src', 'control/src'].flatMap((dir) => sources(join(APPS, dir)))
+    expect(files.length).toBeGreaterThan(0)
+    let found = 0
+    for (const file of files)
+      for (const [link, slug = '', anchor] of readFileSync(file, 'utf8').matchAll(POLICY_LINK)) {
+        found++
+        const where = `${relative(APPS, file)}: ${link}`
+        const policy = policyAt(slug)
+        expect(policy, where).toBeDefined()
+        if (anchor !== undefined)
+          expect(
+            policy?.sections.map((s) => s.id),
+            where,
+          ).toContain(anchor)
+      }
+    expect(found).toBeGreaterThan(0)
   })
 })

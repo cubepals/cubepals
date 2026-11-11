@@ -21,7 +21,7 @@ export const TAKEDOWN: Policy = {
   sections: [
     {
       id: 'contact',
-      heading: '1. Where to send notices',
+      heading: 'Where to send notices',
       blocks: [
         'Email {legal}. This is our single point of contact for notices about content, for users and for authorities, in English.',
         'We have no office or company in the EU. Authorities can contact us directly at {legal}.',
@@ -30,7 +30,7 @@ export const TAKEDOWN: Policy = {
     },
     {
       id: 'notice',
-      heading: '2. What a notice must include',
+      heading: 'What a notice must include',
       blocks: [
         'So that we can act quickly, please include:',
         {
@@ -46,7 +46,7 @@ export const TAKEDOWN: Policy = {
     },
     {
       id: 'action',
-      heading: '3. What we do with it',
+      heading: 'What we do with it',
       blocks: [
         {
           list: [
@@ -62,7 +62,7 @@ export const TAKEDOWN: Policy = {
     },
     {
       id: 'counter',
-      heading: '4. If your content was removed',
+      heading: 'If your content was removed',
       blocks: [
         'If you think we got it wrong, reply to our email or write to {legal} within six months. Tell us what was removed and why you think it shouldn’t have been. A person, not an automated system, reviews it, and we tell you the outcome.',
         'For copyright removals, you can send a counter-notice that includes:',
@@ -80,14 +80,14 @@ export const TAKEDOWN: Policy = {
     },
     {
       id: 'mods',
-      heading: '5. Mods and modpacks',
+      heading: 'Mods and modpacks',
       blocks: [
         'Most mods and modpacks on {brand} servers are downloaded from where their authors published them, such as Modrinth, under their authors’ licences. If you are a mod author and think {brand} uses your work in a way your licence doesn’t allow, email {legal} and we will look at it straight away.',
       ],
     },
     {
       id: 'misuse',
-      heading: '6. Misuse of this process',
+      heading: 'Misuse of this process',
       blocks: [
         'Please don’t send notices you know are false or make them to harass someone. If someone repeatedly sends notices that are clearly unfounded, we may stop processing their notices for a while, after warning them.',
       ],

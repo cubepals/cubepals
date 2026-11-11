@@ -30,7 +30,7 @@ export const PRIVACY: Policy = {
   sections: [
     {
       id: 'controller',
-      heading: '1. Who is responsible for your data',
+      heading: 'Who is responsible for your data',
       blocks: [
         '{brand} is run by {name}, based in {country} (“we”, “us”). We are the controller of the personal data described here. We take notices by email, at {legal}.',
         'We have no office or company in the UK or the EU. Because we offer {brand} to people there, the UK GDPR and the EU GDPR apply to us all the same.',
@@ -39,7 +39,7 @@ export const PRIVACY: Policy = {
     },
     {
       id: 'what',
-      heading: '2. What we collect, why, and on what legal basis',
+      heading: 'What we collect, why, and on what legal basis',
       blocks: [
         'The law asks us to say which “legal basis” lets us use each kind of data. The ones we rely on are: **contract** (we need it to provide the service you signed up for), **legitimate interests** (we need it to keep {brand} safe and working, and we’ve checked this doesn’t override your interests), and **legal obligation** (the law requires it).',
         {
@@ -77,7 +77,7 @@ export const PRIVACY: Policy = {
                 'Contract (for you) and legitimate interests (for the players, who expect the server to work)',
               ],
               [
-                '**How players reach your servers:** each time someone joins one, or their game’s server list checks it: the address they typed, their Minecraft username and player ID, their game version, when each step happened (connecting, the server starting, logging in, loading, arriving in the world, leaving), why they left, how much data passed, and how smoothly the server was running. The IP address and port they came from are kept only while we match what our network saw with what the server saw (section 4).',
+                '**How players reach your servers:** each time someone joins one, or their game’s server list checks it: the address they typed, their Minecraft username and player ID, their game version, when each step happened (connecting, the server starting, logging in, loading, arriving in the world, leaving), why they left, how much data passed, and how smoothly the server was running. The IP address and port they came from are kept only while we match what our network saw with what the server saw ({§players}).',
                 'To find and fix joins that are slow or fail, and to notice servers or addresses being misused.',
                 'Legitimate interests (yours and the players’, who expect joining to work)',
               ],
@@ -130,15 +130,15 @@ export const PRIVACY: Policy = {
     },
     {
       id: 'google',
-      heading: '3. Signing in with Google',
+      heading: 'Signing in with Google',
       blocks: [
         'You can make a {brand} account, or sign in to one, with your Google account instead of a password. When you do, Google asks you to let {brand} see your basic profile, and nothing more: we ask only for the openid, email and profile permissions. We never see your Google password, and we can’t read your Gmail, Drive, contacts or anything else in your Google account.',
         {
           list: [
             '**What we receive from Google:** your name, your email address, whether Google has confirmed that email address, the address of your profile picture, and your Google account ID, with the sign-in tokens Google gives us for it.',
             '**What we use it for:** only to create your {brand} account and sign you in to it, to keep your name and picture with your account, to show your first name and last initial on notes you leave on public servers, and to email you about your account and servers. Your Google account ID is how we know it’s you the next time you sign in with Google.',
-            '**Who we share it with:** no one, except the providers that store our database and run {brand} for us (section 5), who keep it on our behalf. We don’t sell it, use it for advertising, or use it to train AI models, and no person reads it except to answer you or to keep {brand} safe.',
-            '**How we keep it safe:** it is stored in our database in Frankfurt, Germany, encrypted in transit, and only we have access to it (section 8).',
+            '**Who we share it with:** no one, except the providers that store our database and run {brand} for us ({§sharing}), who keep it on our behalf. We don’t sell it, use it for advertising, or use it to train AI models, and no person reads it except to answer you or to keep {brand} safe.',
+            '**How we keep it safe:** it is stored in our database in Frankfurt, Germany, encrypted in transit, and only we have access to it ({§security}).',
             '**How long we keep it, and how to remove it:** for as long as you have your account. Delete your account, or email {privacy}, and we delete what Google gave us with it within 30 days. You can also remove {brand}’s access at any time from your Google account, at myaccount.google.com/permissions; you then can’t sign in with Google until you allow it again.',
           ],
         },
@@ -147,19 +147,19 @@ export const PRIVACY: Policy = {
     },
     {
       id: 'players',
-      heading: '4. If you play on someone’s server',
+      heading: 'If you play on someone’s server',
       blocks: [
         'You don’t need a {brand} account to join a server. When you join one, we process your Minecraft username and player ID, when you were on, and anything the server’s owner adds about you (for example a ban reason). The server’s own files and logs keep what Minecraft records, such as your position and chat. If the server is published, its public page shows your Minecraft name while you are on it, if the server checks accounts.',
         'If you join with an invite link, we check the name you type with Mojang so the owner can add you.',
         'On servers with Stop cheaters on, we record when you were removed or banned automatically, from which server, and why, and show it to that server’s owner.',
         `When you leave a server, we keep a scrambled code made from the network you joined it from (your IP address, or the first half of an IPv6 address), not the address itself. It lets that server start as soon as your game’s server list checks it, before you press Join. The code is different on every server, can’t be turned back into your address, and is deleted ${KNOWN_NETWORK_DAYS} days after your last visit.`,
         `Each time you join a server, or your game’s server list checks it, we also keep a record of how it went: the address you typed, your Minecraft username and player ID, your game version, when each step happened, why you left, and how smoothly the server ran. We use it to find and fix joins that are slow or fail. The IP address and port you came from stay with the record for ${JOIN_ADDRESS_MINUTES} minutes at most, only to match what our network saw with what the server saw; after that only the scrambled code above is left. The record is deleted ${JOIN_RECORD_DAYS} days after you joined.`,
-        'You can use the rights in section 9 for this data too: email {privacy} with your Minecraft name. The server’s owner controls who plays and what happens on their server, so we may pass your request on to them.',
+        'You can use the rights in {§rights} for this data too: email {privacy} with your Minecraft name. The server’s owner controls who plays and what happens on their server, so we may pass your request on to them.',
       ],
     },
     {
       id: 'sharing',
-      heading: '5. Who else handles your data',
+      heading: 'Who else handles your data',
       blocks: [
         'We use a small number of providers to run {brand}. They handle personal data on our behalf, under contracts that require them to keep it safe and use it only to provide their service to us. We don’t share your data with anyone else unless the law requires it (for example a valid court order), or to protect people’s safety.',
         {
@@ -173,7 +173,7 @@ export const PRIVACY: Policy = {
               ],
               [
                 'Supabase, Inc.',
-                'Hosts our database: your account and everything in section 2 that we store.',
+                'Hosts our database: your account and everything in {§what} that we store.',
                 'Frankfurt, Germany. Supabase is a US company.',
               ],
               [
@@ -183,7 +183,7 @@ export const PRIVACY: Policy = {
               ],
               [
                 'PostHog, Inc.',
-                'Counts how {brand} is used, keeps errors, and receives Feedback (section 2).',
+                'Counts how {brand} is used, keeps errors, and receives Feedback ({§what}).',
                 'Its EU cloud in Frankfurt, Germany. PostHog is a US company.',
               ],
               [
@@ -224,15 +224,15 @@ export const PRIVACY: Policy = {
     },
     {
       id: 'transfers',
-      heading: '6. Data sent outside the UK and EU',
+      heading: 'Data sent outside the UK and EU',
       blocks: [
-        '{brand} is run from {country}, so when we look after your account, fix a problem or answer you, your data is accessed from there. Neither the UK nor the EU has recognised Saudi Arabia as protecting personal data to their standard. The UK GDPR and the EU GDPR still apply to everything we do with your data, wherever we are, and we follow them: your rights in section 9 are the same.',
+        '{brand} is run from {country}, so when we look after your account, fix a problem or answer you, your data is accessed from there. Neither the UK nor the EU has recognised Saudi Arabia as protecting personal data to their standard. The UK GDPR and the EU GDPR still apply to everything we do with your data, wherever we are, and we follow them: your rights in {§rights} are the same.',
         'Some of the providers above are in the US, so your data may be handled there. When it is, we rely on the provider being certified under the EU–US Data Privacy Framework (and its UK Extension), or on the European Commission’s standard contractual clauses (with the UK Addendum), which require the provider to protect your data to EU and UK standards. Email {privacy} for a copy of the safeguards that apply.',
       ],
     },
     {
       id: 'retention',
-      heading: '7. How long we keep it',
+      heading: 'How long we keep it',
       blocks: [
         {
           list: [
@@ -254,14 +254,14 @@ export const PRIVACY: Policy = {
     },
     {
       id: 'security',
-      heading: '8. Keeping it safe',
+      heading: 'Keeping it safe',
       blocks: [
         'Passwords are stored only as secure hashes. Everything between your browser and {brand} is encrypted. Sign-in cookies can’t be read by scripts on the page. Access to our systems is limited to us. If a breach puts your data at risk, we will tell you and the regulator as the law requires.',
       ],
     },
     {
       id: 'rights',
-      heading: '9. Your rights',
+      heading: 'Your rights',
       blocks: [
         'You have the right to:',
         {
@@ -281,21 +281,21 @@ export const PRIVACY: Policy = {
     },
     {
       id: 'age',
-      heading: '10. Children',
+      heading: 'Children',
       blocks: [
-        '{brand} accounts are for people aged 18 and over, and we don’t knowingly collect data from children to create accounts. If you think a child has made an account, email {privacy} and we will act as our [Terms](/legal/terms#accounts) describe. Players who join a server without an account may be younger; we only process the Minecraft details described in section 3 about them.',
+        '{brand} accounts are for people aged 18 and over, and we don’t knowingly collect data from children to create accounts. If you think a child has made an account, email {privacy} and we will act as our [Terms](/legal/terms#accounts) describe. Players who join a server without an account may be younger; we only process the Minecraft details described in {§players} about them.',
       ],
     },
     {
       id: 'cookies',
-      heading: '11. Cookies',
+      heading: 'Cookies',
       blocks: [
         'We only use cookies and browser storage that are needed for {brand} to work, such as keeping you signed in. We don’t use advertising or tracking cookies, and the way we count how {brand} is used stores nothing on your device. Our [Cookies](/legal/cookies) page lists each one.',
       ],
     },
     {
       id: 'changes',
-      heading: '12. Changes to this policy',
+      heading: 'Changes to this policy',
       blocks: [
         'If we change how we use your data, we will update this page and its date. If the change matters, we will email you before it takes effect.',
       ],

@@ -21,7 +21,7 @@ export const ACCEPTABLE_USE: Policy = {
   sections: [
     {
       id: 'run',
-      heading: '1. Only run Minecraft',
+      heading: 'Only run Minecraft',
       blocks: [
         'A {brand} server is for playing Minecraft: Java Edition, with the mods, plugins and modpacks made for it. Don’t use it for anything else, including:',
         {
@@ -35,7 +35,7 @@ export const ACCEPTABLE_USE: Policy = {
     },
     {
       id: 'law',
-      heading: '2. Stay within the law',
+      heading: 'Stay within the law',
       blocks: [
         'Don’t use {brand} to do, store, or share anything illegal where you are, where we are, or where your players are. In particular, never:',
         {
@@ -51,7 +51,7 @@ export const ACCEPTABLE_USE: Policy = {
     },
     {
       id: 'attacks',
-      heading: '3. Don’t attack anyone or anything',
+      heading: 'Don’t attack anyone or anything',
       blocks: [
         {
           list: [
@@ -65,7 +65,7 @@ export const ACCEPTABLE_USE: Policy = {
     },
     {
       id: 'limits',
-      heading: '4. Play fair with the plans',
+      heading: 'Play fair with the plans',
       blocks: [
         {
           list: [
@@ -78,14 +78,14 @@ export const ACCEPTABLE_USE: Policy = {
     },
     {
       id: 'minecraft',
-      heading: '5. Follow Mojang’s rules',
+      heading: 'Follow Mojang’s rules',
       blocks: [
         'Every server must follow [Mojang’s EULA](https://www.minecraft.net/eula) and [Usage Guidelines](https://www.minecraft.net/usage-guidelines). Don’t let people play without their own copy of Minecraft, don’t give away or sell Mojang’s server software, and if you charge players for anything, follow Mojang’s rules about it.',
       ],
     },
     {
       id: 'public',
-      heading: '6. Public listings and notes',
+      heading: 'Public listings and notes',
       blocks: [
         'If you publish a server, its name, description, icon, tags and everything visible from its public page must be suitable for players of all ages, and must describe the server honestly. Don’t use a listing to advertise something else, and don’t pretend to be Mojang, Microsoft, {brand} or anyone else.',
         'Notes you leave on other people’s servers must be friendly and lawful. No spam, hate or harassment.',
@@ -93,14 +93,14 @@ export const ACCEPTABLE_USE: Policy = {
     },
     {
       id: 'servers',
-      heading: '7. What happens on your server',
+      heading: 'What happens on your server',
       blocks: [
         'You run your server, so you set its rules and decide who plays. You are responsible for what you and the people you let in do with it, as far as it’s within your control. Please moderate your own server, and if a player breaks the law, report it to the police.',
       ],
     },
     {
       id: 'enforcement',
-      heading: '8. If these rules are broken',
+      heading: 'If these rules are broken',
       blocks: [
         'Depending on how serious it is, we may remove a listing or a note, stop a server, limit what an account can do, suspend it, or close it, as the [Terms](/legal/terms#suspension) describe. Where we can, we tell you first and give you a chance to fix it, and we always tell you which rule was broken and how to ask us to look again.',
         'To report something, use Report on a server’s public page, or email {legal}. For copyright, see [Content and copyright](/legal/takedown).',

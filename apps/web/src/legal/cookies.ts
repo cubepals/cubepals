@@ -22,7 +22,7 @@ export const COOKIES: Policy = {
   sections: [
     {
       id: 'what',
-      heading: '1. The cookies we use',
+      heading: 'The cookies we use',
       blocks: [
         'Cookies are small files a website keeps in your browser. These are all the ones {brand} sets. They are only sent to {brand} itself.',
         {
@@ -52,7 +52,7 @@ export const COOKIES: Policy = {
     },
     {
       id: 'storage',
-      heading: '2. Other things kept in your browser',
+      heading: 'Other things kept in your browser',
       blocks: [
         'On a server’s page, {brand} remembers in your browser’s local storage that you dismissed a tip (for example “invite your first friend” or suggested mods), so it doesn’t show it again. It holds only the word “done” and the server it belongs to, and never leaves your browser.',
         'To count which pages are visited and which errors the site hits, {brand} uses PostHog in a mode that sets no cookie and keeps nothing in your browser’s storage. It can’t follow you from one day to the next, records no screens, and sends no name, email or IP address.',
@@ -60,14 +60,14 @@ export const COOKIES: Policy = {
     },
     {
       id: 'third-parties',
-      heading: '3. Other websites',
+      heading: 'Other websites',
       blocks: [
         'When you browse modpacks, mods or plugins, your browser loads their pictures from Modrinth, or from Hangar (hangar.papermc.io) for plugins, which see your IP address as any website you load something from does. {brand} doesn’t add any tracking to them. Payment pages are Polar’s, and use Polar’s own cookies under [Polar’s policies](https://polar.sh/legal/privacy).',
       ],
     },
     {
       id: 'control',
-      heading: '4. Your choices',
+      heading: 'Your choices',
       blocks: [
         'You can delete or block cookies in your browser’s settings. If you block the sign-in cookie, you won’t be able to sign in. If we ever want to use a cookie that isn’t needed for {brand} to work, we will ask you first and add it here.',
       ],
