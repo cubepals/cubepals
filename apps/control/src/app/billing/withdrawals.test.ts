@@ -459,7 +459,8 @@ db('the person’s email failing leaves the request kept, and the billing pass s
 db('the operator’s email failing leaves the request kept, and the billing pass sends it once', async () => {
   const inbox = await admin()
   const { owner, order } = await firstMonth('Sol', 2)
-  const down = refusing((m) => m.to === inbox)
+  // Every operator address at once, as an outage would: with one that took it they'd be told.
+  const down = refusing((m) => m.subject.includes('refund to pay by hand'))
   try {
     await withdrawals().request(owner, order)
   } finally {
@@ -473,6 +474,24 @@ db('the operator’s email failing leaves the request kept, and the billing pass
   await withdrawals().mail.tellUntold()
   expect(w.h.mail.to(inbox).filter((m) => m.text.includes(order))).toHaveLength(1)
   expect((await subjects(owner)).filter((s) => s.startsWith('We received'))).toHaveLength(1)
+})
+
+db('one operator address failing never has another told twice', async () => {
+  const reached = await admin()
+  const dead = await admin()
+  const { owner, order } = await firstMonth('Uma', 2)
+  const down = refusing((m) => m.to === dead)
+  try {
+    await withdrawals().request(owner, order)
+    await withdrawals().mail.tellUntold()
+    await withdrawals().mail.tellUntold()
+  } finally {
+    down.mockRestore()
+  }
+  // Told once the one address has it; the other's failure is reported, never a second email.
+  expect(w.h.mail.to(reached).filter((m) => m.text.includes(order))).toHaveLength(1)
+  expect(w.h.mail.to(dead).filter((m) => m.text.includes(order))).toEqual([])
+  expect(await told(order)).toMatchObject([{ operatorsToldAt: expect.any(Date) }])
 })
 
 db('a full refund given through support counts as the person’s once; a part refund doesn’t', async () => {

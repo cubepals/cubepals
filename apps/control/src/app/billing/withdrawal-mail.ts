@@ -107,12 +107,36 @@ export class WithdrawalMail {
         .update(withdrawals)
         .set(which === 'operators' ? { operatorsToldAt: now } : { acknowledgedAt: now })
         .where(and(eq(withdrawals.provider, provider), eq(withdrawals.externalOrderId, order)))
-      if (which === 'operators') {
-        const email = this.#toOperators(purchase, record)
-        for (const to of await adminInbox(tx, this.#inbox)) await this.#mailer.send({ to, ...email })
-      } else if (record.sentTo !== '')
+      if (which === 'operators')
+        await this.#toEach(await adminInbox(tx, this.#inbox), this.#toOperators(purchase, record), order)
+      else if (record.sentTo !== '')
         await this.#mailer.send({ to: record.sentTo, ...this.#toPerson(purchase, record) })
     })
+  }
+
+  /**
+   * The operators' email to each of their addresses. They are told once any address has it, so an
+   * address that fails never has the others told again; its failure is reported. With no address,
+   * or none that takes it, nobody is told and it is tried again.
+   */
+  async #toEach(
+    addresses: readonly string[],
+    email: ReturnType<typeof withdrawalToRefund>,
+    order: string,
+  ): Promise<void> {
+    let reached = 0
+    let failure: unknown = new Error('no operator address to tell of a cancelled purchase')
+    for (const to of addresses) {
+      try {
+        await this.#mailer.send({ to, ...email })
+        reached++
+      } catch (error) {
+        failure = error
+        console.error(`billing: telling an operator of cancelled order ${order} failed: ${inFull(error)}`)
+        this.#insight?.exception(error, { properties: { order, told: 'operators' } })
+      }
+    }
+    if (reached === 0) throw failure
   }
 
   #toOperators(purchase: Purchase, record: WithdrawalRecord) {
