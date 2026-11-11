@@ -22,7 +22,7 @@
  * main's guard imports this without an install.
  */
 import { spawnSync } from 'node:child_process'
-import { appsFor, flyInputs } from './production-web.ts'
+import { appsFor, flyInputs, terraformIn } from './production-web.ts'
 
 export type Route = 'none' | 'website' | 'control' | 'edge' | 'full'
 
@@ -80,6 +80,16 @@ export function areaOf(path: string): { area: Route; why: string } {
   const rule = RULES.find((r) => r.test(path))
   if (rule === undefined) return { area: 'full', why: 'no narrower road knows it' }
   return { area: rule.area === 'app' ? appArea(path) : rule.area, why: rule.why }
+}
+
+/**
+ * What stops the website going alone (`production.ts web`), among the paths since the last deploy:
+ * Terraform, and what the Fly apps are built from. A path the route counts as `none` (a test,
+ * prose) runs nothing in production, so it stops nothing here either.
+ */
+export function besideTheWebsite(paths: readonly string[]): { terraform: string[]; fly: string[] } {
+  const runs = paths.filter((path) => areaOf(path).area !== 'none')
+  return { terraform: terraformIn(runs), fly: flyInputs(runs) }
 }
 
 export interface Decision {
