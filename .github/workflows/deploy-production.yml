@@ -61,7 +61,8 @@ jobs:
       statuses: read
       pull-requests: read
     outputs:
-      route: ${{ steps.website.outputs.proved == 'true' && 'website' || steps.route.outputs.route }}
+      # A website change that isn't proved takes the nightly, so it is `full` to the deploy job.
+      route: ${{ steps.website.outputs.proved == 'false' && 'full' || steps.route.outputs.route }}
       commit: ${{ steps.route.outputs.commit }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
