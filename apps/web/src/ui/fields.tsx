@@ -76,23 +76,35 @@ export interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
   label: string
   help?: string
   options: Array<{ value: string; label: string; disabled?: boolean }>
+  /** A button beside the select, as tall as it: the same as a text field's. */
+  trailing?: ReactNode
 }
 
-export function Select({ label, help, options, id, ...select }: SelectProps) {
+export function Select({ label, help, options, trailing, id, ...select }: SelectProps) {
   const generated = useId()
   const selectId = id ?? generated
+  const control = (
+    <select id={selectId} className="bk-selectctl" {...select}>
+      {options.map((o) => (
+        <option key={o.value} value={o.value} disabled={o.disabled}>
+          {o.label}
+        </option>
+      ))}
+    </select>
+  )
   return (
     <div className="bk-field">
       <label className="bk-field__label" htmlFor={selectId}>
         {label}
       </label>
-      <select id={selectId} className="bk-selectctl" {...select}>
-        {options.map((o) => (
-          <option key={o.value} value={o.value} disabled={o.disabled}>
-            {o.label}
-          </option>
-        ))}
-      </select>
+      {trailing ? (
+        <div className="bk-affixed">
+          {control}
+          {trailing}
+        </div>
+      ) : (
+        control
+      )}
       {help && <p className="bk-field__help">{help}</p>}
     </div>
   )
