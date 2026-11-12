@@ -18,17 +18,9 @@ import { useTRPC } from '../../../../../lib/api'
 import { busyFor } from '../../../../../lib/button-busy'
 import { type Outcome, said, useOutcome } from '../../../../../lib/outcome'
 import { presentChange } from '../../../../../lib/present'
-import { Button, FormRow, FormSection, Select, TextField, Toggle } from '../../../../../ui'
-import {
-  differences,
-  FIELDS,
-  type Field,
-  type NumberSetting,
-  named,
-  onRunning,
-  type Takes,
-  typedFrom,
-} from './game-fields'
+import { Button, FormRow, FormSection, Select, Toggle } from '../../../../../ui'
+import { differences, FIELDS, type Field, named, numberProblems, onRunning, type Takes } from './game-fields'
+import { GameNumbers } from './game-numbers'
 import { messageProblem, ServerMessage } from './server-message'
 import { ConfirmChange, changeable, planLines, useChanged, whatHappens } from './shared'
 
@@ -75,8 +67,6 @@ function GameForm({
   // A server that never chose keeps nothing on death, as Minecraft has it.
   const current = { ...view.settings, keepInventory: view.settings.keepInventory === true }
   const [draft, setDraft] = useState<ServerSettingsView>(current)
-  // Numbers are typed as text so a half-typed "1" on the way to "12" isn't fought over.
-  const [typed, setTyped] = useState(() => typedFrom(view.settings))
   const [confirming, setConfirming] = useState(false)
   const save = useMutation(
     trpc.servers.changeSettings.mutationOptions({
@@ -88,46 +78,15 @@ function GameForm({
     }),
   )
 
-  const bounds = {
-    maxPlayers: { min: 1, max: options.bounds.maxPlayers },
-    viewDistance: options.bounds.viewDistance,
-    simulationDistance: options.bounds.simulationDistance,
-    spawnProtection: options.bounds.spawnProtection,
-  }
-  const problems = Object.fromEntries(
-    (Object.keys(bounds) as NumberSetting[]).map((key) => {
-      const value = Number(typed[key])
-      const { min, max } = bounds[key]
-      const ok = typed[key].trim() !== '' && Number.isInteger(value) && value >= min && value <= max
-      return [key, ok ? null : `Choose ${min} to ${max}.`]
-    }),
-  ) as Record<NumberSetting, string | null>
+  const problems = numberProblems(draft, options)
   const motdProblem = messageProblem(draft.motd)
   const valid = Object.values(problems).every((p) => p === null) && motdProblem === null
-  const next: ServerSettingsView = {
-    ...draft,
-    maxPlayers: Number(typed.maxPlayers),
-    viewDistance: Number(typed.viewDistance),
-    simulationDistance: Number(typed.simulationDistance),
-    spawnProtection: Number(typed.spawnProtection),
-  }
-  const changes = valid ? differences(current, next) : []
+  const changes = valid ? differences(current, draft) : []
   const allowed = changeable(view)
   const taking = (how: Takes) => FIELDS.filter((field) => options.takes[field] === how)
   const restarts =
     view.movesToSize !== null || changes.some((change) => options.takes[change.field as Field] === 'restart')
 
-  const number = (key: NumberSetting, label: string, help: string) => (
-    <TextField
-      label={label}
-      inputMode="numeric"
-      className="bk-num"
-      value={typed[key]}
-      onChange={(event) => setTyped({ ...typed, [key]: event.target.value })}
-      error={problems[key]}
-      help={help}
-    />
-  )
   const submit = (event: SubmitEvent) => {
     event.preventDefault()
     if (valid && changes.length > 0 && allowed.ok) setConfirming(true)
@@ -141,13 +100,7 @@ function GameForm({
         actions={
           <>
             {changes.length > 0 && (
-              <Button
-                variant="ghost"
-                onClick={() => {
-                  setDraft(view.settings)
-                  setTyped(typedFrom(view.settings))
-                }}
-              >
+              <Button variant="ghost" onClick={() => setDraft(current)}>
                 Undo changes
               </Button>
             )}
@@ -189,20 +142,11 @@ function GameForm({
         <ServerMessage
           view={view}
           value={draft.motd}
-          maxPlayers={problems.maxPlayers === null ? next.maxPlayers : draft.maxPlayers}
+          maxPlayers={draft.maxPlayers}
           problem={motdProblem}
           onChange={(motd) => setDraft({ ...draft, motd })}
         />
-        <div className="bk-grid" style={{ gap: 'var(--space-16)' }}>
-          {number(
-            'maxPlayers',
-            'Max players',
-            `This size holds up to ${options.bounds.maxPlayers}. Pick a bigger size below for more.`,
-          )}
-          {number('spawnProtection', 'Spawn protection', 'Blocks around spawn only operators can change.')}
-          {number('viewDistance', 'View distance', 'How far players see, in chunks.')}
-          {number('simulationDistance', 'Simulation distance', 'How far the world keeps moving, in chunks.')}
-        </div>
+        <GameNumbers draft={draft} options={options} problems={problems} onChange={setDraft} />
       </FormSection>
       <ConfirmChange
         view={restarts ? view : undefined}
@@ -213,9 +157,9 @@ function GameForm({
         confirmLabel={view.status === 'running' && restarts ? 'Save and restart' : 'Save changes'}
         working="Saving your changes"
         error={save.error}
-        onConfirm={(requestId, when) => save.mutateAsync(saved(view, next, { requestId, when }))}
+        onConfirm={(requestId, when) => save.mutateAsync(saved(view, draft, { requestId, when }))}
         onAcknowledge={(requestId, when) =>
-          save.mutateAsync(saved(view, next, { requestId, when, acknowledgeRevoked: true }))
+          save.mutateAsync(saved(view, draft, { requestId, when, acknowledgeRevoked: true }))
         }
       >
         <p className="type-body-sm" style={{ color: 'var(--ink-muted)' }}>

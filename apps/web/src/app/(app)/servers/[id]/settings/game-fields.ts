@@ -57,12 +57,29 @@ export function onRunning(
     : `Nobody is sent away. ${later}`.trim()
 }
 
-export const typedFrom = (settings: ServerSettingsView): Record<NumberSetting, string> => ({
-  maxPlayers: String(settings.maxPlayers),
-  viewDistance: String(settings.viewDistance),
-  simulationDistance: String(settings.simulationDistance),
-  spawnProtection: String(settings.spawnProtection),
+/** Each number's bounds as the page offers them: what the plan and the size allow. */
+export const numberBounds = (
+  options: SettingsOptions,
+): Record<NumberSetting, { min: number; max: number }> => ({
+  maxPlayers: { min: 1, max: options.bounds.maxPlayers },
+  viewDistance: options.bounds.viewDistance,
+  simulationDistance: options.bounds.simulationDistance,
+  spawnProtection: options.bounds.spawnProtection,
 })
+
+/** What is wrong with each number, null where nothing is: one the bounds no longer allow. */
+export function numberProblems(
+  draft: ServerSettingsView,
+  options: SettingsOptions,
+): Record<NumberSetting, string | null> {
+  const bounds = numberBounds(options)
+  return Object.fromEntries(
+    (Object.keys(bounds) as NumberSetting[]).map((key) => {
+      const { min, max } = bounds[key]
+      return [key, draft[key] >= min && draft[key] <= max ? null : `Choose ${min} to ${max}.`]
+    }),
+  ) as Record<NumberSetting, string | null>
+}
 
 export function differences(from: ServerSettingsView, to: ServerSettingsView): RevisionChangeView[] {
   return (

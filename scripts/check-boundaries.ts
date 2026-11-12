@@ -22,11 +22,11 @@ type Layer = (typeof LAYERS)[number]
  * (`@blockly/contracts/published-maps`), the check marks and seals typed text refuses
  * (`@blockly/contracts/seal`), typed text as plain text (`@blockly/contracts/plain-text`),
  * Minecraft's releases in order (`@blockly/contracts/release-order`), and which server types a
- * world names add blocks and items (`@blockly/contracts/server-brands`).
- * None imports anything itself.
+ * world names add blocks and items (`@blockly/contracts/server-brands`), and the distances a new
+ * server starts with (`@blockly/contracts/game-defaults`). None imports anything itself.
  */
 const PURE_PACKAGES =
-  /^@blockly\/contracts\/(durations|example-address|limits|minecraft-font|motd-layout|plain-text|published-maps|release-order|seal|server-brands|server-list)$/
+  /^@blockly\/contracts\/(durations|example-address|game-defaults|limits|minecraft-font|motd-layout|plain-text|published-maps|release-order|seal|server-brands|server-list)$/
 const APP_PACKAGES = /^(@blockly\/(db|contracts)(\/.*)?|drizzle-orm(\/.*)?|zod|node:.*)$/
 
 /** A string literal holding a hostname, with or without a scheme (§17). */
@@ -306,6 +306,7 @@ if (PROVIDER_ID !== null)
 // and the check marks typed text refuses, the edge's image copies Minecraft's ports alone. Each stays a file that imports nothing.
 for (const path of [
   'packages/contracts/src/example-address.ts',
+  'packages/contracts/src/game-defaults.ts',
   'packages/contracts/src/limits.ts',
   'packages/contracts/src/published-maps.ts',
   'packages/contracts/src/seal.ts',

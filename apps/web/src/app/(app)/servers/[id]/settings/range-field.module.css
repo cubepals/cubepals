@@ -1,0 +1,136 @@
+/*
+ * SPDX-FileCopyrightText: 2026 The Cubepals Authors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+/*
+ * The slider (range-field.tsx): a thin Ink track filled to the thumb, the thumb a square block
+ * with a Paper edge so it reads on the fill, and the scale under it measured like a drawing.
+ * Square, as everything on the site is; the colours are the theme's.
+ */
+
+.field {
+  display: grid;
+  gap: var(--space-8);
+  min-inline-size: 0;
+}
+
+.head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-12);
+}
+
+.value {
+  font-family: var(--font-mono);
+  font-size: 18px;
+  line-height: 22px;
+  font-weight: 600;
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+.range {
+  --track: 2px;
+  --thumb: 22px;
+  appearance: none;
+  inline-size: 100%;
+  block-size: var(--thumb);
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.range::-webkit-slider-runnable-track {
+  block-size: var(--track);
+  background: linear-gradient(to right, var(--ink) var(--fill), var(--border) var(--fill));
+}
+.range::-moz-range-track {
+  block-size: var(--track);
+  background: var(--border);
+}
+.range::-moz-range-progress {
+  block-size: var(--track);
+  background: var(--ink);
+}
+
+.range::-webkit-slider-thumb {
+  appearance: none;
+  inline-size: var(--thumb);
+  block-size: var(--thumb);
+  margin-block-start: calc((var(--track) - var(--thumb)) / 2);
+  border: 3px solid var(--surface);
+  border-radius: 0;
+  background: var(--ink);
+  box-shadow: 0 0 0 1.5px var(--ink);
+  transition: transform 120ms cubic-bezier(0.25, 1, 0.5, 1);
+}
+.range::-moz-range-thumb {
+  box-sizing: border-box;
+  inline-size: var(--thumb);
+  block-size: var(--thumb);
+  border: 3px solid var(--surface);
+  border-radius: 0;
+  background: var(--ink);
+  box-shadow: 0 0 0 1.5px var(--ink);
+  transition: transform 120ms cubic-bezier(0.25, 1, 0.5, 1);
+}
+.range:active::-webkit-slider-thumb {
+  transform: scale(1.12);
+}
+.range:active::-moz-range-thumb {
+  transform: scale(1.12);
+}
+.range:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 4px;
+}
+
+.field[data-invalid] .range::-webkit-slider-runnable-track {
+  background: var(--danger);
+}
+.field[data-invalid] .range::-moz-range-track {
+  background: var(--danger);
+}
+
+/* The thumb's centre runs half a thumb in from each end, so the scale does too. */
+.scale {
+  position: relative;
+  display: flex;
+  justify-content: space-between;
+  margin-inline: 11px;
+  color: var(--ink-subtle);
+}
+
+.end:first-child {
+  transform: translateX(-50%);
+}
+.end:last-child {
+  transform: translateX(50%);
+}
+
+/* The mark's tick sits under the thumb's centre and its words run on from it, clear of the start. */
+.mark {
+  position: absolute;
+  inset-block-start: 0;
+  padding-inline-start: 6px;
+  white-space: nowrap;
+  color: var(--ink-muted);
+}
+.mark::before {
+  content: "";
+  position: absolute;
+  inset-block-start: -7px;
+  inset-inline-start: -0.75px;
+  inline-size: 1.5px;
+  block-size: 10px;
+  background: var(--ink-muted);
+}
+@media (prefers-reduced-motion: reduce) {
+  .range::-webkit-slider-thumb,
+  .range::-moz-range-thumb {
+    transition: none;
+  }
+}
