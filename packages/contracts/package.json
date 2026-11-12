@@ -16,6 +16,7 @@
     "./release-order": "./src/release-order.ts",
     "./limits": "./src/limits.ts",
     "./server-list": "./src/server-list.ts",
+    "./game-defaults": "./src/game-defaults.ts",
     "./motd-layout": "./src/motd-layout.ts",
     "./minecraft-font": "./src/minecraft-font.ts",
     "./published-maps": "./src/published-maps.ts",

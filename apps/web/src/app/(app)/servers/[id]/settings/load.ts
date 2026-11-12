@@ -10,10 +10,8 @@
  * chunks: the ones the world simulates are ticked (the cores' work, which is what runs out first),
  * and the ones they only see are held and sent. Both grow with the square around the player.
  */
+import { DEFAULT_DISTANCE } from '@blockly/contracts/game-defaults'
 import { METER } from '@blockly/contracts/meter'
-
-/** Minecraft's own view and simulation distance, which every new server starts with. */
-export const GAME_DEFAULT_DISTANCE = 10
 
 /** Blocks in a chunk's side, so a distance in chunks reads in blocks too. */
 export const CHUNK_BLOCKS = 16
@@ -38,7 +36,7 @@ export interface Load {
  * chunks. The world moves no further than players see, so simulation counts up to the view.
  */
 export function workload({ players, holds, view, simulation }: Load): number {
-  const base = square(GAME_DEFAULT_DISTANCE)
+  const base = square(DEFAULT_DISTANCE)
   const ticked = square(Math.min(view, simulation)) / base
   const held = square(view) / base
   return (Math.max(0, players) / Math.max(1, holds)) * (TICKED * ticked + HELD * held)

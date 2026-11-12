@@ -3,14 +3,15 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { expect, test } from 'bun:test'
+import { DEFAULT_DISTANCE } from '@blockly/contracts/game-defaults'
 import { METER } from '@blockly/contracts/meter'
-import { blocksLit, GAME_DEFAULT_DISTANCE, levelOf, loadLine, workload } from './load'
+import { blocksLit, levelOf, loadLine, workload } from './load'
 
 const at = (players: number, view: number, simulation: number, holds = 5) =>
   workload({ players, holds, view, simulation })
 
 test('a full server at Minecraft’s distances is the work its size holds', () => {
-  expect(at(5, GAME_DEFAULT_DISTANCE, GAME_DEFAULT_DISTANCE)).toBeCloseTo(1)
+  expect(at(5, DEFAULT_DISTANCE, DEFAULT_DISTANCE)).toBeCloseTo(1)
   expect(levelOf(at(5, 10, 10))).toBe('comfortable')
 })
 

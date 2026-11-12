@@ -11,9 +11,9 @@
  */
 
 import type { ServerSettingsView, SettingsOptions } from '@blockly/contracts'
+import { DEFAULT_DISTANCE } from '@blockly/contracts/game-defaults'
 import { settingLabel } from '../../../../../lib/present'
 import { type NumberSetting, numberBounds } from './game-fields'
-import { GAME_DEFAULT_DISTANCE } from './load'
 import { LoadMeter } from './load-meter'
 import { RangeField } from './range-field'
 import { ReachMap } from './reach-map'
@@ -24,7 +24,7 @@ const players = (n: number) => `${n} ${n === 1 ? 'player' : 'players'}`
 const protection = (n: number) => `${n} ${n === 1 ? 'block' : 'blocks'}`
 
 /** Minecraft's own distance, marked on both distance sliders. */
-const DEFAULT_MARK = { value: GAME_DEFAULT_DISTANCE, label: `Default ${GAME_DEFAULT_DISTANCE}` }
+const DEFAULT_MARK = { value: DEFAULT_DISTANCE, label: `Default ${DEFAULT_DISTANCE}` }
 
 export function GameNumbers({
   draft,

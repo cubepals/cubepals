@@ -2,6 +2,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
+import { DEFAULT_DISTANCE } from '@blockly/contracts/game-defaults'
 import { motdCutSentence, motdLayout } from '@blockly/contracts/motd-layout'
 import { sealProblem } from '@blockly/contracts/seal'
 import { motdText } from '@blockly/contracts/server-list'
@@ -139,8 +140,8 @@ export function defaultSettings(input: {
     difficulty: 'normal',
     defaultGameMode: input.gameMode,
     pvp: true,
-    viewDistance: 10,
-    simulationDistance: 10,
+    viewDistance: DEFAULT_DISTANCE,
+    simulationDistance: DEFAULT_DISTANCE,
     maxPlayers: input.maxPlayers,
     motd: welcome(input.name),
     spawnProtection: 0,
