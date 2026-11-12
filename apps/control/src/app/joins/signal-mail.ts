@@ -19,10 +19,17 @@ export interface Written {
   detail: Record<string, unknown>
 }
 
+/** A drop: the last line the provider's proxy wrote around it, or that it wrote none (`provider-said.ts`). */
+const providerSaid = (lines: readonly unknown[]): string =>
+  lines.length === 0
+    ? 'the provider’s proxy said nothing'
+    : `the provider’s proxy said: ${String((lines.at(-1) as { said?: unknown }).said).slice(0, 200)}`
+
 /** What a signal found, in a line: its figures, and why where it says. */
 function said(detail: Record<string, unknown>): string {
   const parts: string[] = []
-  const { figure, limit, reasons, changed, operationKind, attempts, error, player, seconds } = detail
+  const { figure, limit, reasons, changed, operationKind, attempts, error, player, seconds, provider } =
+    detail
   if (operationKind !== undefined) parts.push(String(operationKind))
   if (player !== undefined) parts.push(`player ${String(player)}`)
   if (figure !== undefined) parts.push(limit === undefined ? `${figure}` : `${figure} (limit ${limit})`)
@@ -31,6 +38,7 @@ function said(detail: Record<string, unknown>): string {
   if (Array.isArray(changed) && changed.length > 0) parts.push(`changed ${changed.join(', ')}`)
   if (attempts !== undefined) parts.push(`${attempts} attempts`)
   if (typeof error === 'string' && error !== '') parts.push(`last error: ${error.slice(0, 200)}`)
+  if (Array.isArray(provider)) parts.push(providerSaid(provider))
   return parts.length === 0 ? 'raised' : parts.join('; ')
 }
 

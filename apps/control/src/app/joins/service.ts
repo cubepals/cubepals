@@ -28,7 +28,7 @@ import { z } from 'zod'
 import { type OperatorActor, requestedBy } from '../actor.ts'
 import { NotFound } from '../errors.ts'
 import type { Limits } from '../ports/limits.ts'
-import type { Mailer, PlayAddressing } from '../ports/platform.ts'
+import type { LogSource, Mailer, PlayAddressing } from '../ports/platform.ts'
 import type { SecretKeyring } from '../secrets.ts'
 import { tuning } from '../tuning.ts'
 import { closeSignal, findJoin, type JoinFilter, joinDetail, listJoins, listSignals } from './queries.ts'
@@ -56,6 +56,7 @@ export class JoinService {
   readonly #ring: SecretKeyring
   readonly #limits: Limits
   readonly #tell: ((config: SignalsConfig, written: Written[]) => Promise<unknown>) | undefined
+  readonly #logs: Pick<LogSource, 'edgeSaid'> | undefined
 
   constructor(deps: {
     db: Db
@@ -67,8 +68,11 @@ export class JoinService {
     mailer?: Mailer
     adminInbox?: readonly string[]
     webOrigin?: string
+    /** Read for what the provider's proxy said of the edge, kept on a `dropped` signal (`provider-said.ts`). */
+    logs?: Pick<LogSource, 'edgeSaid'>
   }) {
     this.#db = deps.db
+    this.#logs = deps.logs
     this.#addressing = deps.addressing
     this.#ring = deps.runtimeSecrets
     this.#limits = deps.limits
@@ -139,7 +143,7 @@ export class JoinService {
 
   /** `signals`: raises what the `SIGNALS` setting finds, and closes what has been open a day. */
   raiseSignals(now = new Date()): Promise<number> {
-    return raiseSignals(this.#db, now, this.#tell)
+    return raiseSignals(this.#db, now, this.#tell, this.#logs)
   }
 
   /**

@@ -14,6 +14,12 @@ import { must, succeeded } from './responses.ts'
 
 export const appPrefix = (deployment: string) => `bly-${deployment}-`
 
+/**
+ * The deployment's edge app, by the name every deploy gives it: `bly-<deployment>-edge`
+ * (`DEPLOYMENT_ID` in docs/configuration.md; scripts/staging.ts and scripts/production.ts).
+ */
+export const edgeApp = (deployment: string): string => `${appPrefix(deployment)}edge`
+
 export function appName(deployment: string, key: RuntimeKey): string {
   return `${appPrefix(deployment)}${key.replace(/-/g, '')}`
 }

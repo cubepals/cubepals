@@ -472,6 +472,8 @@ export class RoutedAdapters {
         forHandle(handle).logs.recent(handle, limit),
       tail: (handle: RuntimeHandle, signal: AbortSignal): AsyncIterable<LogLine> =>
         forHandle(handle).logs.tail(handle, signal),
+      edgeSaid: async (handle: RuntimeHandle, from: Date, to: Date): Promise<LogLine[] | null> =>
+        (await forHandle(handle).logs.edgeSaid?.(handle, from, to)) ?? null,
     }
   }
 }

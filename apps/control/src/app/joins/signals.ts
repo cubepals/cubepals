@@ -8,6 +8,8 @@
  * names, the address, the figure and its limit. Kinds judged from joins alone are
  * `signal-kinds.ts`'s; those judged from how operations went are `operation-signals.ts`'s; those
  * that read wakes, the platform's hour or a server's boot report are here. A signal left open a day is closed as expired.
+ * A `dropped` signal also keeps what the provider's proxy said around it, where the deployment can
+ * read that (`provider-said.ts`).
  *
  * The setting is the operators', never in this repository: unset, or not a `SignalsConfig`, no
  * kind runs, and the log says so once.
@@ -16,8 +18,11 @@ import { DAY_MS, HOUR_MS, MINUTE_MS } from '@blockly/contracts/durations'
 import { SignalsConfig } from '@blockly/contracts/join-records'
 import { type Db, type Queryable, schema } from '@blockly/db'
 import { and, count, eq, gt, inArray, isNotNull, isNull, lt, lte, sql } from 'drizzle-orm'
+import type { LogSource } from '../ports/platform.ts'
+import type { RuntimeHandle } from '../ports/runtime.ts'
 import { tuning } from '../tuning.ts'
 import { operationSignals } from './operation-signals.ts'
+import { providerSaid } from './provider-said.ts'
 import { dropped, fromJoins, type JoinRow, type Raised, watched } from './signal-kinds.ts'
 import type { Written } from './signal-mail.ts'
 
@@ -27,6 +32,7 @@ const {
   minecraftServers: servers,
   publicListings: listings,
   serverOperations: operations,
+  serverRuntimes: runtimes,
 } = schema
 
 /** How far back the joins are read: further than any kind looks. */
@@ -51,11 +57,13 @@ function signalsConfig(): SignalsConfig | null {
 /**
  * Raises what the setting finds at `now`, and closes what has been open a day. How many it raised.
  * What it raised goes to `tell` too, which emails the kinds the setting asks for (`signal-mail.ts`).
+ * With `logs`, each `dropped` it raised first gets what the provider's proxy said around it.
  */
 export async function raiseSignals(
   db: Db,
   now: Date,
   tell?: (config: SignalsConfig, written: Written[]) => Promise<unknown>,
+  logs?: Pick<LogSource, 'edgeSaid'>,
 ): Promise<number> {
   await db
     .update(signals)
@@ -80,10 +88,46 @@ export async function raiseSignals(
     .insert(signals)
     .values(raised)
     .onConflictDoNothing({ target: signals.key })
-    .returning({ kind: signals.kind, detail: signals.detail })
+    .returning({ id: signals.id, kind: signals.kind, joinId: signals.joinId, detail: signals.detail })
+  if (logs?.edgeSaid !== undefined) await explainDropped(db, logs, written, [...rows, ...ended])
   if (tell !== undefined && written.length > 0)
     await tell(config, written).catch((error: unknown) => console.error('signals: telling failed', error))
   return written.length
+}
+
+/**
+ * Adds what the provider's proxy said around each `dropped` signal just written, to the signal and
+ * to `written`, which the email is made from. Only what a pass wrote is read for, so each drop
+ * asks the provider once, about the edge of the runtime its server is on. A read that fails
+ * leaves the signal as the edge told it, and says so.
+ */
+async function explainDropped(
+  db: Db,
+  logs: Pick<LogSource, 'edgeSaid'>,
+  written: { id: number; kind: string; joinId: string | null; detail: Record<string, unknown> }[],
+  sessions: readonly JoinRow[],
+): Promise<void> {
+  for (const signal of written) {
+    const session = signal.kind === 'dropped' ? sessions.find((row) => row.id === signal.joinId) : undefined
+    if (session === undefined || session.serverId === null) continue
+    try {
+      const [bound] = await db
+        .select({ handle: runtimes.handle })
+        .from(runtimes)
+        .where(eq(runtimes.serverId, session.serverId))
+      const handle = bound?.handle
+      if (handle == null) continue
+      const provider = await providerSaid(
+        async (from, to) => (await logs.edgeSaid?.(handle as RuntimeHandle, from, to)) ?? null,
+        session,
+      )
+      if (provider === null) continue
+      signal.detail = { ...signal.detail, provider }
+      await db.update(signals).set({ detail: signal.detail }).where(eq(signals.id, signal.id))
+    } catch (error) {
+      console.warn(`signals: the provider's proxy couldn't be read for signal ${signal.id}: ${String(error)}`)
+    }
+  }
 }
 
 /**
