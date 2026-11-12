@@ -17,6 +17,7 @@ import { ARCADE_DATAPACK } from './arcade.ts'
 import { BEDROCK_STEP, bedrockSpec } from './bedrock.ts'
 import { CARRIED_STEP, carriedEnv, placesFiles } from './carried.ts'
 import { DATAPACKS_STEP, datapacksEnv, datapacksOf } from './datapacks.ts'
+import { DIRECT_START_STEP } from './direct-start.ts'
 import { WAITING_DATAPACK } from './duels-waiting.ts'
 import { DATA_DIR, JAR_LISTS, jarsOf } from './jars.ts'
 import { GAME_PORT, RCON_PORT } from './ports.ts'
@@ -541,7 +542,9 @@ const EXEC_IMAGE = `exec ${IMAGE_ENTRYPOINT} "$@"`
  * them (`PAPER_STEP` on Paper, after `VANILLA_PAPER_STEP` on plain Minecraft run on Paper,
  * `DIMENSIONS_STEP` on any other), and the second the world's datapacks (`DATAPACKS_STEP`); the
  * icon, the pack, the files Cubepals places itself and the list of jars the image installs follow
- * where a server has them, and last what spares the image work it would redo (`WAKE_STEP`).
+ * where a server has them, then what spares the image work it would redo (`WAKE_STEP`), and last
+ * what starts the server without the image's scripts where they would change nothing
+ * (`DIRECT_START_STEP`).
  */
 function entrypointFor(steps: {
   paper: boolean
@@ -567,6 +570,7 @@ function entrypointFor(steps: {
     ...(steps.bedrock ? [BEDROCK_STEP] : []),
     ...(steps.jars === null ? [] : [jarListStep(steps.jars)]),
     WAKE_STEP,
+    DIRECT_START_STEP,
     EXEC_IMAGE,
   ].join(' ')
   return ['/bin/sh', '-c', script, 'start']

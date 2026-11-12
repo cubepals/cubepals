@@ -6,6 +6,7 @@ import { describe, expect, test } from 'bun:test'
 import { accessCommand, parseAccessFiles } from './access.ts'
 import { ARCADE_FILES } from './arcade.ts'
 import { announce, announceNotice, normalizeUuid, parseOnlinePlayers, refusedCommand } from './console.ts'
+import { DIRECT_START_STEP } from './direct-start.ts'
 import { WAITING_FILES } from './duels-waiting.ts'
 import { installCheck, installProblems, parseInstalled } from './install-check.ts'
 import { diskName, jarsOf } from './jars.ts'
@@ -184,8 +185,9 @@ describe('toRuntimeSpec', () => {
     expect(script).toContain('curl -fsSL --max-time 10 -o /tmp/blockly-icon "$ICON"')
     expect(script).toContain('cmp -s /tmp/blockly-icon /data/server-icon.png; then unset OVERRIDE_ICON')
     expect(script).toContain('export ICON=/tmp/blockly-icon')
-    // Last of Blockly's steps, what spares the image work it would redo; drift never sees it.
-    expect(script).toEndWith(`${WAKE_STEP} exec /image/scripts/start "$@"`)
+    // Last of Blockly's steps, what spares the image work it would redo, then what starts the
+    // server without the image's scripts where nothing changed; drift never sees either.
+    expect(script).toEndWith(`${WAKE_STEP} ${DIRECT_START_STEP} exec /image/scripts/start "$@"`)
     expect(withoutOwnSteps(plain.entrypoint)).toBeUndefined()
   })
 

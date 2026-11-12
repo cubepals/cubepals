@@ -22,13 +22,14 @@
  * against 57 s.
  *
  * Not for this step: a class data archive for Minecraft's own JVM, which saved under 2 s of the
- * same wake and weighs 127 MB on the volume, in every backup and every rest.
+ * same wake and weighs 127 MB on the volume, in every backup and every rest; or the boot that
+ * needs none of the scripts, because nothing changed since the last one (`direct-start.ts`).
  */
 
 import { DATA_DIR } from './jars.ts'
 
-/** Where the stand-in lives: the machine's own disk, made again at every start. */
-const SHIM_DIR = '/tmp/blockly-bin'
+/** Where the stand-ins live: the machine's own disk, made again at every start. */
+export const SHIM_DIR = '/tmp/blockly-bin'
 
 /**
  * The stand-in, line by line. A Java 8 `release` says `1.8.0`, which the helper reads as 8 and
