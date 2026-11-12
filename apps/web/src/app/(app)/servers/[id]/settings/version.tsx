@@ -4,15 +4,14 @@
 
 'use client'
 
-import type { Loader, PartySize, RestartWhen, ServerView, SettingsOptions } from '@blockly/contracts'
+import type { Loader, RestartWhen, ServerView, SettingsOptions } from '@blockly/contracts'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { type SubmitEvent, useEffect, useState } from 'react'
+import { type SubmitEvent, useState } from 'react'
 import { messageOf, useTRPC } from '../../../../../lib/api'
 import { busyFor } from '../../../../../lib/button-busy'
 import { type Outcome, said, useOutcome } from '../../../../../lib/outcome'
 import { loaderLabel, presentConflict, presentPlan, runsOnPaper } from '../../../../../lib/present'
 import { Button, FormSection, Note, Select, Skeleton } from '../../../../../ui'
-import { PlusOffer } from '../../../plus-offer'
 import { ConfirmChange, changeable, planLines, RevokedChoice, useChanged, whatHappens } from './shared'
 
 const LOADER_HELP: Record<Loader, string> = {
@@ -204,131 +203,6 @@ function VersionForm({
         )}
         {retype && (
           <p>Your world comes along. Mods and plugins made for one server type don’t run on another.</p>
-        )}
-        <p className="type-body-sm" style={{ color: 'var(--ink-muted)' }}>
-          {whatHappens(view)}
-        </p>
-      </ConfirmChange>
-    </form>
-  )
-}
-
-/** Size, chosen the way people choose it: by how many play at once. */
-export function SizeSettings({ view, options }: { view: ServerView; options: SettingsOptions }) {
-  const outcome = useOutcome(view)
-  return <SizeForm key={view.partySize} view={view} options={options} outcome={outcome} />
-}
-
-function SizeForm({
-  view,
-  options,
-  outcome,
-}: {
-  view: ServerView
-  options: SettingsOptions
-  outcome: Outcome
-}) {
-  const trpc = useTRPC()
-  const changed = useChanged(view.id)
-  const [partySize, setPartySize] = useState<PartySize>(view.partySize)
-  const [confirming, setConfirming] = useState(false)
-  const save = useMutation(
-    trpc.servers.resize.mutationOptions({
-      onSuccess: (next) => {
-        setConfirming(false)
-        changed(next)
-        outcome.settled(next)
-      },
-    }),
-  )
-  const chosen = options.partySizes.find((size) => size.value === partySize)
-  const locked = options.partySizes.find((size) => !size.allowed)
-  const allowed = changeable(view)
-  const dirty = partySize !== view.partySize
-  // Linked to as #size (the overview's out-of-memory note); it renders after its data, so the
-  // browser's own jump to the hash has already come and gone.
-  useEffect(() => {
-    if (window.location.hash === '#size') document.getElementById('size')?.scrollIntoView({ block: 'start' })
-  }, [])
-
-  const submit = (event: SubmitEvent) => {
-    event.preventDefault()
-    if (dirty && allowed.ok) setConfirming(true)
-  }
-  return (
-    // The overview links here when a server ran out of memory.
-    <form id="size" onSubmit={submit}>
-      <FormSection
-        title="Size"
-        description="How many play at the same time. Bigger servers keep up with more players and bigger builds."
-        actions={
-          <Button
-            type="submit"
-            variant="primary"
-            busy={busyFor(outcome, view)}
-            {...said(outcome, { done: 'Resized', failed: 'Didn’t resize' })}
-            disabled={!dirty || !allowed.ok}
-          >
-            Change size
-          </Button>
-        }
-      >
-        <fieldset className="bk-chips">
-          <legend className="bk-visually-hidden">How many play at once</legend>
-          {options.partySizes.map((size) => (
-            <label key={size.value} className="bk-chip bk-num" title={size.reason}>
-              <input
-                type="radio"
-                name="party-size"
-                value={size.value}
-                checked={partySize === size.value}
-                disabled={!size.allowed}
-                onChange={() => setPartySize(size.value)}
-              />
-              {size.label}
-            </label>
-          ))}
-        </fieldset>
-        {/* The group this plan stops at: the plan that holds more, one click away. */}
-        {locked?.plan ? (
-          <PlusOffer
-            why={locked.reason ?? 'Bigger groups come with a bigger plan.'}
-            plan={locked.plan}
-            reason="players"
-            next={`/servers/${view.id}/settings`}
-          />
-        ) : (
-          locked && (
-            <p className="type-body-sm" style={{ color: 'var(--ink-muted)' }}>
-              Bigger sizes need a bigger plan.
-            </p>
-          )
-        )}
-      </FormSection>
-      <ConfirmChange
-        view={view}
-        open={confirming}
-        onClose={() => setConfirming(false)}
-        title={`Resize to hold up to ${chosen?.maxPlayers ?? partySize} players?`}
-        confirmLabel={view.status === 'running' ? 'Resize and restart' : 'Change size'}
-        working="Changing the size"
-        error={save.error}
-        onConfirm={(requestId, when) =>
-          save.mutateAsync({ serverId: view.id, requestId, when, version: view.version, partySize })
-        }
-        onAcknowledge={(requestId, when) =>
-          save.mutateAsync({
-            serverId: view.id,
-            requestId,
-            when,
-            version: view.version,
-            partySize,
-            acknowledgeRevoked: true,
-          })
-        }
-      >
-        {chosen && view.settings.maxPlayers > chosen.maxPlayers && (
-          <p>Max players goes down to {chosen.maxPlayers} to fit the smaller size.</p>
         )}
         <p className="type-body-sm" style={{ color: 'var(--ink-muted)' }}>
           {whatHappens(view)}

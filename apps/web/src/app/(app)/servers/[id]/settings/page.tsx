@@ -32,7 +32,7 @@ import { Location } from './location'
 import { OtherVersionsSetting } from './other-versions'
 import { ChangeState } from './shared'
 import { TellingPlayers } from './telling-players'
-import { SizeSettings, VersionSettings } from './version'
+import { VersionSettings } from './version'
 
 export default function SettingsPage() {
   const server = useServer()
@@ -66,7 +66,6 @@ export default function SettingsPage() {
           <VersionSettings view={view} options={options.data} />
           <OtherVersionsSetting view={view} />
           <BedrockSetting view={view} />
-          <SizeSettings view={view} options={options.data} />
         </>
       )}
 

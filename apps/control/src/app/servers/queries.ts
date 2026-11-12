@@ -91,6 +91,13 @@ import { waitingChanges } from './waiting.ts'
 /** Who is on a running server, as presence has it; null while it isn't running. */
 type Online = { uuid: string; name: string }[] | null
 
+/** Each size with the most players its machine takes on this plan: the settings page measures load by it. */
+const withCapacity = (sizes: ReturnType<typeof partySizesFor>, cap: number | undefined) =>
+  sizes.map((size) => ({
+    ...size,
+    holds: Math.min(playerCapacity(PARTY[size.value].tier), cap ?? Number.POSITIVE_INFINITY),
+  }))
+
 /** Read models for people. Derived facts — addresses, labels, who is online — are joined here. */
 export class ServerQueries {
   readonly #db: Db
@@ -200,7 +207,7 @@ export class ServerQueries {
             }
           }),
         })),
-      partySizes: partySizesFor(entitlements),
+      partySizes: withCapacity(partySizesFor(entitlements), caps?.maxPlayers),
       regions: [...this.#regions.list()],
       takes: Object.fromEntries(
         Object.keys({ keepInventory: false, ...revision.settings }).map((setting) => [

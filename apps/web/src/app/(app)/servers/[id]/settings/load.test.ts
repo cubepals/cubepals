@@ -2,6 +2,11 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
+/**
+ * The load estimate the settings page's meter shows (`load.ts`): its levels, its blocks, its words,
+ * and the lines it says.
+ */
+
 import { expect, test } from 'bun:test'
 import { DEFAULT_DISTANCE } from '@blockly/contracts/game-defaults'
 import { METER } from '@blockly/contracts/meter'
@@ -38,12 +43,8 @@ test('the meter lights at least one block and never past the end', () => {
   expect(blocksLit(at(5, 32, 32))).toBe(METER.blocks)
 })
 
-test('the line says who it counts, and offers a bigger size only where there is one', () => {
-  expect(loadLine('light', 1, true).line).toBe('With one player on, your server has room to spare.')
-  expect(loadLine('heavy', 5, true).line).toBe(
-    'With all 5 on at once, expect lag. Shorten the distances, or pick a bigger size below.',
-  )
-  expect(loadLine('heavy', 100, false).line).toBe(
-    'With all 100 on at once, expect lag. Shorten the distances.',
-  )
+test('the line says who it counts', () => {
+  expect(loadLine('light', 1).line).toBe('With one player on, your server has room to spare.')
+  expect(loadLine('light', 2).line).toBe('With both on at once, your server has room to spare.')
+  expect(loadLine('heavy', 5).line).toBe('With all 5 on at once, expect lag.')
 })

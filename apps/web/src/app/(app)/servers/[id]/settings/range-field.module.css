@@ -12,14 +12,16 @@
 
 .field {
   display: grid;
+  /* A field stretched to its row's height keeps its parts together at the top. */
+  align-content: start;
   gap: var(--space-8);
   min-inline-size: 0;
 }
 
 .head {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: baseline;
-  justify-content: space-between;
   gap: var(--space-12);
 }
 
@@ -30,6 +32,7 @@
   font-weight: 600;
   color: var(--ink);
   white-space: nowrap;
+  text-align: end;
 }
 
 .range {

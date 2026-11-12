@@ -83,14 +83,15 @@ export default async function Guide() {
           alt="The Who’s playing question on the create page, with five choices: Up to 5, Up to 10 (picked), Up to 20, Up to 50 and Up to 100. Under it: How many friends play at once. Bigger groups get a bigger server."
         />
         <p>
-          If your group grows, change it later under the server’s <strong>Settings</strong>, in{' '}
-          <strong>Size</strong>.
+          If your group grows, slide <strong>Max players</strong> under the server’s <strong>Settings</strong>
+          , in <strong>Players, distance and size</strong>. Cubepals moves it up a size when your players or
+          distances need it, says so before you save, and lets you keep the size you have.
         </p>
         <Shot
           src={`${PICTURES}/size.png`}
-          width={572}
-          height={377}
-          alt="The Size card in a server’s settings: How many play at the same time. Bigger servers keep up with more players and bigger builds. A choice for each size, the server’s own picked, and a Change size button."
+          width={496}
+          height={369}
+          alt="How hard your server works, in a server’s settings: ten blocks, four lit, reading Comfortable for everyone on at once. Under it the sizes, the server’s own marked Now, and the line: Cubepals moves your server up a size when what you slide needs it."
         />
       </Part>
 

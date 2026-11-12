@@ -363,7 +363,15 @@ export const SetAfkKickInput = z.object({
 /** Whether this server tells a player in chat when its owner acts on them from their page. */
 export const SetTellPlayersInput = z.object({ serverId: ServerId, tell: z.boolean() })
 
-export const ChangeSettingsInput = z.object({ ...change, settings: ServerSettingsInput })
+/**
+ * The game settings, and `partySize` when the settings page moved the server to another size for
+ * them: both in one change, so the server restarts once.
+ */
+export const ChangeSettingsInput = z.object({
+  ...change,
+  settings: ServerSettingsInput,
+  partySize: PartySize.optional(),
+})
 export const ChangeAuthenticationInput = z.object({ ...change, onlineMode: z.boolean() })
 
 /**
@@ -511,8 +519,12 @@ export interface SettingsOptions {
     /** `allowed`: a server type the plan runs; the others say what they need. */
     loaders: { value: Loader; label: string; allowed: boolean; reason?: string }[]
   }[]
-  /** Each size as the create flow lists it, with the plan that holds a group this one doesn't. */
-  partySizes: CreateOptions['partySizes']
+  /**
+   * Each size as the create flow lists it, with the plan that holds a group this one doesn't, and
+   * `holds`: the most players it takes on this plan, which can be more than its group (a size for
+   * twenty runs on the machine a size for fifty does).
+   */
+  partySizes: (CreateOptions['partySizes'][number] & { holds: number })[]
   /** Where the server can move to. */
   regions: { key: string; label: string }[]
   /**
