@@ -25,7 +25,12 @@ Blockly does about it. A resume that hangs, and the fallbacks for it, are
    (`changed:drift:image`, `changed:drift:env.DIFFICULTY`), or `changed:compat`,
    `changed:stopCheaters`, `changed:ownFiles`, `changed:identity`. `changed:unknown` means the
    boot before it kept no parts to compare with (`app/servers/resume-parts.ts`; each boot keeps
-   them in `server_runtimes.applied`). A start that boots although the server slept with its
+   them in `server_runtimes.applied`). A start on Fly also keeps what Fly answered it:
+   `started_from:<state>` on a resume, the state Fly had the machine in (`suspended` where it
+   still counted it asleep), and `moved_host` where Fly started it on another host, which never
+   brings the memory along (`startMarks`, `infra/fly/fly-runtime/machines.ts`). A resume that boots
+   (`resume_booted`) with `started_from:suspended` and no `moved_host` lost its memory on the host
+   it slept on. A start that boots although the server slept with its
    memory raises the `wake_booted` signal, except a `stale-sleep` refresh, which boots so that a
    player's wake doesn't (docs/diagnosis.md). One server's operations, joins and signals in time
    order are `bun scripts/ops.ts timeline <server>`.
