@@ -113,14 +113,18 @@ bun scripts/production.ts apply
    Dockerfile and Fly config are the same as in the commit its running release was built from is
    left running, and `apply` says so. The edge changes one region at a time, every machine it has
    (a region left out of `edge_regions` too). A region keeps taking joins while `apply` waits up to
-   ten minutes for its connected players to leave, so on an edge with steady traffic the count
-   rarely reaches zero and the wait usually runs its full ten minutes. `apply` then deploys exactly
-   that region's machines and says `restarting with N players still connected; they are cut`: the
-   players on a region at that moment are cut, and the other region takes the joins while the
-   machine is down, losing a few in the seconds after it stops (23 of 336 from one probe on
-   staging). A region whose players couldn't be counted is named, and no "none was cut" is printed
-   for it. Each region must be well, hold the newest routes and, where Bedrock is taken, have Geyser
-   bound before the next one goes. `EDGE_CORDON=1` also cordons the region first while another is
+   ten minutes for its connected players to leave. A region nobody is on then is deployed, exactly
+   its machines, and the other region takes the joins while the machine is down, losing a few in
+   the seconds after it stops (23 of 336 from one probe on staging). A region whose players are
+   still connected is left on the release it runs: a restart ends every session through it.
+   `apply` says `N players still connected after 10 min; left on its release, for the next deploy`
+   and goes on, and the next `apply` finds that machine on the older image and tries it again
+   (`unchangedReason` reads every edge machine's image). The control plane already serves an edge
+   a release behind, as it does during every roll. `EDGE_CUT=1` restarts such a region anyway and
+   says `restarting with N players still connected; they are cut`; a rollback always does, since
+   it puts back what worked. A region whose players couldn't be counted is named, and no "none was
+   cut" is printed for it. Each region must be well, hold the newest routes and, where Bedrock is
+   taken, have Geyser bound before the next one goes. `EDGE_CORDON=1` also cordons the region first while another is
    ready, so no new join arrives while it drains; it is off because on staging a cordoned region
    made the other region fail joins.
 5. It deploys the website's build, live when it returns, and once the site answers pushes the

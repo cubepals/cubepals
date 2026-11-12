@@ -17,10 +17,13 @@
  * reads as running (apps/control/src/app/edge/routed.ts).
  *
  * A deploy restarts the edge one region at a time, every machine it has: each region's players
- * are waited on (up to `EDGE_DRAIN_LIMIT_MS`; those still connected then are cut, and counted),
- * its machines are deployed, and the next region waits until they are well, hold the newest routes
- * and, where Bedrock is taken, have Geyser bound. While a region restarts, Fly's proxy sends its
- * joins to the others; a few are lost as its machine stops (23 of 336 from one probe on staging).
+ * are waited on (up to `EDGE_DRAIN_LIMIT_MS`), its machines are deployed, and the next region waits
+ * until they are well, hold the newest routes and, where Bedrock is taken, have Geyser bound. A
+ * region whose players are still connected at the limit is left on the release it runs, for the
+ * next deploy to take: a restart ends every session through it, and a player can't be handed to
+ * another machine. Only a deploy told to (`cut`: a rollback, or `EDGE_CUT=1`) restarts it anyway,
+ * and counts the players it cut. While a region restarts, Fly's proxy sends its joins to the
+ * others; a few are lost as its machine stops (23 of 336 from one probe on staging).
  * The flyctl calls are production-edge-deploy.ts's; this file decides.
  *
  * Terraform counts the machines against the org's limit (`edge_regions` in the stack); this file
@@ -105,7 +108,7 @@ export function edgeSourceGaps(
   return gaps
 }
 
-/** The longest a restart waits for an edge's players to leave; past it, the ones still in are cut. */
+/** The longest a restart waits for an edge's players to leave; past it, the region is left, or its players cut where the deploy says so. */
 export const EDGE_DRAIN_LIMIT_MS = 10 * MINUTE_MS
 
 /** The longest a restarted edge has to be well and hold the newest routes before the roll stops. */
@@ -193,28 +196,31 @@ export interface RegionSteps {
  * is off by default, since on staging a cordoned region made the other region's probe fail nearly
  * every join. Without it a region serves while it is waited on. A region that doesn't come back
  * ready, or fails anywhere on the way, takes connections again and stops the roll with the others
- * as they were.
- * Returns how many players were counted and cut, and the regions that couldn't count theirs.
+ * as they were. A region whose players are still connected when the wait ends is left as it is,
+ * and the roll goes on to the next, unless `options.cut` says a restart can't wait for them.
+ * Returns how many players were counted and cut, the regions that couldn't count theirs, and the
+ * regions left on the release they ran.
  */
 export async function rollEdge(
   regions: readonly string[],
   steps: RegionSteps,
   say: (line: string) => void,
   clock: Clock,
-  options: { cordon: boolean } = { cordon: false },
-): Promise<{ cut: number; uncounted: string[] }> {
+  options: { cordon: boolean; cut?: boolean } = { cordon: false },
+): Promise<Rolled> {
   let cut = 0
   const uncounted: string[] = []
+  const left: string[] = []
   for (const region of regions) {
     const cordoned = options.cordon && regions.length > 1 && (await steps.othersReady(region))
     say(`${region}: ${cordoned ? 'taking no new joins, ' : ''}waiting for its players to leave`)
     let restarted = false
     try {
       if (cordoned) await steps.cordon(region)
-      const wait = await restartRegion(region, cordoned, steps, (line) => say(`${region}: ${line}`), clock)
-      restarted = true
-      if (wait.unsure) uncounted.push(region)
-      cut += wait.left ?? 0
+      const said = (line: string) => say(`${region}: ${line}`)
+      const wait = await restartRegion(region, cordoned, steps, said, clock, options.cut === true)
+      restarted = wait.restarted
+      cut += tally(region, wait, uncounted, left)
     } finally {
       // Taking joins again is never skipped. Its failure ends the roll; where another error already
       // does, that one is thrown and this one is said, since the region stays cordoned.
@@ -226,7 +232,45 @@ export async function rollEdge(
         })
     }
   }
-  return { cut, uncounted }
+  return { cut, uncounted, left }
+}
+
+/** Notes how one region's turn ended in the roll's lists; the players it cut. */
+function tally(
+  region: string,
+  wait: Wait & { restarted: boolean },
+  uncounted: string[],
+  left: string[],
+): number {
+  if (!wait.restarted) {
+    left.push(region)
+    return 0
+  }
+  if (wait.unsure) uncounted.push(region)
+  return wait.left ?? 0
+}
+
+/** How a roll went: the players counted and cut, the regions that couldn't count theirs, and those left as they were. */
+export interface Rolled {
+  cut: number
+  uncounted: string[]
+  left: string[]
+}
+
+/** What a roll's end says of the players it met, as lines. */
+export function rolledLines({ cut, uncounted, left }: Rolled): string[] {
+  const lines: string[] = []
+  if (left.length > 0)
+    lines.push(
+      `edge: ${left.join(', ')} still had players connected and ${left.length === 1 ? 'was' : 'were'} left on the release ${left.length === 1 ? 'it runs' : 'they run'}; the next deploy takes ${left.length === 1 ? 'it' : 'them'}.`,
+    )
+  if (uncounted.length > 0)
+    lines.push(
+      `edge: ${uncounted.join(', ')} couldn’t say how many players were connected, so the players cut there are unknown.`,
+    )
+  if (cut > 0) lines.push(`edge: restarted with ${cut} counted players still connected; they were cut.`)
+  else if (uncounted.length === 0) lines.push('edge: no player was cut.')
+  return lines
 }
 
 /** Takes the region's connections again, tried a few times before giving up. */
@@ -241,22 +285,29 @@ async function uncordonAgain(region: string, steps: RegionSteps, clock: Clock): 
   }
 }
 
-/** One region's players waited on, the machine deployed and waited on; how the wait ended. */
+/**
+ * One region's players waited on, the machine deployed and waited on; how the wait ended, and
+ * whether it restarted. With players still connected at the limit it restarts only where `cut`.
+ */
 async function restartRegion(
   region: string,
   cordoned: boolean,
   steps: RegionSteps,
   say: (line: string) => void,
   clock: Clock,
-): Promise<Wait> {
+  cut: boolean,
+): Promise<Wait & { restarted: boolean }> {
   const wait = await waitForPlayers(() => steps.players(region), say, clock)
+  const after = `after ${EDGE_DRAIN_LIMIT_MS / MINUTE_MS} min`
   if (wait.left === null) say("it can't say how many players are connected, so none was waited for")
-  else if (wait.left > 0)
-    say(
-      `restarting with ${wait.left} players still connected after ${EDGE_DRAIN_LIMIT_MS / MINUTE_MS} min; they are cut`,
-    )
+  else if (wait.left > 0 && cut)
+    say(`restarting with ${wait.left} players still connected ${after}; they are cut`)
   if (wait.failed > 0)
     say(`${wait.failed} queries for the count failed${wait.unsure ? ', the last one too' : ''}`)
+  if (wait.left !== null && wait.left > 0 && !cut) {
+    say(`${wait.left} players still connected ${after}; left on its release, for the next deploy`)
+    return { ...wait, restarted: false }
+  }
   say(cordoned ? 'deploying' : 'deploying; it takes joins until it restarts, and none while it does')
   await steps.deploy(region)
   const ready = await waitUntil(() => steps.ready(region), clock, EDGE_READY_LIMIT_MS)
@@ -265,7 +316,7 @@ async function restartRegion(
       `The edge in ${region} wasn't ready ${EDGE_READY_LIMIT_MS / MINUTE_MS} min after its deploy: ${ready}. The other regions are as they were.`,
     )
   say('well and up to date with the routes')
-  return wait
+  return { ...wait, restarted: true }
 }
 
 /** A Fly machine, as `fly machines list --json` lists it. */
