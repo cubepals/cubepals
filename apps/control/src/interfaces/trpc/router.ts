@@ -192,6 +192,7 @@ const servers = router({
       acknowledgeRevoked: input.acknowledgeRevoked,
       version: input.version,
       when: input.when,
+      ...(input.partySize === undefined ? {} : { partySize: input.partySize }),
     })
     return ctx.services.queries.get(ctx.actor, input.serverId)
   }),

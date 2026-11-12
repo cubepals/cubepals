@@ -45,7 +45,7 @@ export function workload({ players, holds, view, simulation }: Load): number {
 export type Level = 'light' | 'comfortable' | 'busy' | 'heavy'
 
 /** Up to here the server keeps up easily: light or comfortable. */
-const EASY = 1.25
+export const EASY = 1.25
 
 /** Where each level ends; past the last, heavy. */
 const LEVELS: [Level, number][] = [
@@ -81,28 +81,4 @@ export function loadLine(level: Level, players: number): { word: string; line: s
     case 'heavy':
       return { word: 'Heavy', line: `${all}, expect lag.` }
   }
-}
-
-/** A size as the settings page lists it: how many it holds, and whether this plan has it. */
-export interface Size {
-  value: string
-  maxPlayers: number
-  allowed: boolean
-}
-
-/**
- * The size to offer when the work is past comfortable: the smallest bigger one that keeps up
- * easily with the same players and distances, else the biggest there is (`fits` false). Null when
- * none is bigger. A size the plan doesn't have is offered too: the page then shows the plan that
- * has it, as the size section does.
- */
-export function sizeThatFits(load: Load, sizes: readonly Size[]): { size: Size; fits: boolean } | null {
-  const bigger = sizes
-    .filter((size) => size.maxPlayers > load.holds)
-    .sort((a, b) => a.maxPlayers - b.maxPlayers)
-  const easy = (size: Size) => workload({ ...load, holds: size.maxPlayers }) <= EASY
-  const fitting = bigger.find(easy)
-  if (fitting) return { size: fitting, fits: true }
-  const biggest = bigger.at(-1)
-  return biggest ? { size: biggest, fits: false } : null
 }

@@ -363,7 +363,15 @@ export const SetAfkKickInput = z.object({
 /** Whether this server tells a player in chat when its owner acts on them from their page. */
 export const SetTellPlayersInput = z.object({ serverId: ServerId, tell: z.boolean() })
 
-export const ChangeSettingsInput = z.object({ ...change, settings: ServerSettingsInput })
+/**
+ * The game settings, and `partySize` when the settings page moved the server to another size for
+ * them: both in one change, so the server restarts once.
+ */
+export const ChangeSettingsInput = z.object({
+  ...change,
+  settings: ServerSettingsInput,
+  partySize: PartySize.optional(),
+})
 export const ChangeAuthenticationInput = z.object({ ...change, onlineMode: z.boolean() })
 
 /**

@@ -101,6 +101,38 @@ export interface ResolvedMods {
   files?: CarriedFile[]
 }
 
+/**
+ * The game settings onto what the server keeps apart from them: how players are checked, other
+ * versions and Bedrock. A page from before keeping items was a setting leaves it as it was.
+ */
+function gameOnto(kept: ServerSettings, game: GameSettings): ServerSettings {
+  const keepInventory = game.keepInventory ?? kept.keepInventory
+  return {
+    ...game,
+    ...(keepInventory === undefined ? {} : { keepInventory }),
+    motd: game.motd.trim(),
+    onlineMode: kept.onlineMode,
+    ...(kept.otherVersions === undefined ? {} : { otherVersions: kept.otherVersions }),
+    ...(kept.bedrock === undefined ? {} : { bedrock: kept.bedrock }),
+  }
+}
+
+/** A settings change as a plan: the revision when a setting changed, the size when it moves, both in one. */
+function settingsPlan(
+  draft: RevisionDraft,
+  changes: ReturnType<typeof describeChanges>,
+  from: MemoryTier,
+  to: MemoryTier | undefined,
+): Plan | null {
+  if (to === undefined)
+    return changes.length === 0
+      ? null
+      : { draft, audit: { action: 'server.settings_changed', data: { changes } } }
+  const resized = { from, to }
+  if (changes.length === 0) return { memoryTier: to, audit: { action: 'server.resized', data: resized } }
+  return { draft, memoryTier: to, audit: { action: 'server.settings_changed', data: { changes, resized } } }
+}
+
 interface Plan {
   /** A new revision to boot; absent when only the size changes. */
   draft?: RevisionDraft
@@ -147,28 +179,24 @@ export class RevisionService {
     this.#refresh = deps.refresh
   }
 
+  /**
+   * The game settings, and with `partySize` the size the settings page picked for them: one
+   * revision and one restart, so a server moved up to keep up with longer distances never runs a
+   * moment on the size that couldn't. Max players is checked against the size it moves to, and the
+   * size against the plan, as `resize` checks it.
+   */
   async changeSettings(
     actor: Actor,
     serverId: string,
     game: GameSettings,
     requestId: string,
-    options: ChangeOptions = {},
+    options: ChangeOptions & { partySize?: PartySize } = {},
   ) {
     let shown = false
-    const done = this.#change(actor, serverId, requestId, 'apply', options, async (_tx, server, desired) => {
-      // A page from before the setting left it out: the server keeps what it had.
-      const keepInventory = game.keepInventory ?? desired.settings.keepInventory
-      const settings: ServerSettings = {
-        ...game,
-        ...(keepInventory === undefined ? {} : { keepInventory }),
-        motd: game.motd.trim(),
-        onlineMode: desired.settings.onlineMode,
-        ...(desired.settings.otherVersions === undefined
-          ? {}
-          : { otherVersions: desired.settings.otherVersions }),
-        ...(desired.settings.bedrock === undefined ? {} : { bedrock: desired.settings.bedrock }),
-      }
-      const problems = settingsProblems(settings, playerCapacity(server.memoryTier))
+    const done = this.#change(actor, serverId, requestId, 'apply', options, async (tx, server, desired) => {
+      const memoryTier = await this.#movesTo(tx, server, options.partySize)
+      const settings = gameOnto(desired.settings, game)
+      const problems = settingsProblems(settings, playerCapacity(memoryTier ?? server.memoryTier))
       if (problems.length > 0) throw new AppError('invalid_settings', problems.join(' '))
       const draft: RevisionDraft = {
         ...draftOf(desired),
@@ -177,14 +205,21 @@ export class RevisionService {
         basedOnRevisionId: desired.id,
       }
       const changes = describeChanges(desired, draft)
-      if (changes.length === 0) return null
       // A new message shows at once on a server asleep, which starts in the background for it.
       shown = settings.motd !== desired.settings.motd
-      return { draft, audit: { action: 'server.settings_changed', data: { changes } } }
+      return settingsPlan(draft, changes, server.memoryTier, memoryTier)
     })
     const saved = await done
     if (shown) await this.#refresh(serverId)
     return saved
+  }
+
+  /** The size a settings change moves the server to, checked against the plan; none when it stays. */
+  async #movesTo(tx: Tx, server: MinecraftServer, partySize: PartySize | undefined) {
+    const asked = partySize === undefined ? undefined : PARTY[partySize].tier
+    if (asked === undefined || asked === server.memoryTier) return undefined
+    await this.#policy.require(tx, server.ownerId, { kind: 'resize_server', memoryTier: asked })
+    return asked
   }
 
   /**

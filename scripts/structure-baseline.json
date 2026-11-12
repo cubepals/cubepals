@@ -1605,7 +1605,6 @@
       "apps/web/src/app/(app)/servers/[id]/page.tsx",
       "apps/web/src/app/(app)/servers/[id]/players/page.tsx",
       "apps/web/src/app/(app)/servers/[id]/settings/advanced.tsx",
-      "apps/web/src/app/(app)/servers/[id]/settings/game.tsx",
       "apps/web/src/app/(app)/servers/[id]/settings/history.tsx",
       "apps/web/src/app/(app)/servers/[id]/settings/identity.tsx",
       "apps/web/src/app/(app)/servers/[id]/settings/location.tsx",

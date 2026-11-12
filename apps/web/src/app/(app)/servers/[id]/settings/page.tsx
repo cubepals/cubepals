@@ -4,7 +4,6 @@
 
 'use client'
 
-import type { PartySize } from '@blockly/contracts'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { Trash2 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
@@ -33,14 +32,12 @@ import { Location } from './location'
 import { OtherVersionsSetting } from './other-versions'
 import { ChangeState } from './shared'
 import { TellingPlayers } from './telling-players'
-import { SizeSettings, VersionSettings } from './version'
+import { VersionSettings } from './version'
 
 export default function SettingsPage() {
   const server = useServer()
   const trpc = useTRPC()
   const options = useQuery(trpc.servers.settingsOptions.queryOptions({ serverId: server.id }))
-  // A size the game section asked for: the size section takes it, with when, so asking twice moves again.
-  const [askedSize, askSize] = useState<{ size: PartySize; at: number } | null>(null)
   if (server.isPending) return <PageSkeleton title="Settings" sections={[2, 4]} />
   if (server.isError) return <LoadFailed error={messageOf(server.error)} onRetry={() => server.refetch()} />
   const view = server.data
@@ -65,15 +62,10 @@ export default function SettingsPage() {
         <Skeleton width="100%" height={240} />
       ) : (
         <>
-          <GameSettings
-            view={view}
-            options={options.data}
-            onAskSize={(size) => askSize({ size, at: Date.now() })}
-          />
+          <GameSettings view={view} options={options.data} />
           <VersionSettings view={view} options={options.data} />
           <OtherVersionsSetting view={view} />
           <BedrockSetting view={view} />
-          <SizeSettings view={view} options={options.data} asked={askedSize} onTaken={() => askSize(null)} />
         </>
       )}
 

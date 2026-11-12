@@ -57,11 +57,15 @@ export function onRunning(
     : `Nobody is sent away. ${later}`.trim()
 }
 
-/** Each number's bounds as the page offers them: what the plan and the size allow. */
+/**
+ * Each number's bounds as the page offers them: what the plan and the size allow. `holds` is
+ * what the size this change saves with holds, which may be bigger than the server's own.
+ */
 export const numberBounds = (
   options: SettingsOptions,
+  holds = options.bounds.maxPlayers,
 ): Record<NumberSetting, { min: number; max: number }> => ({
-  maxPlayers: { min: 1, max: options.bounds.maxPlayers },
+  maxPlayers: { min: 1, max: holds },
   viewDistance: options.bounds.viewDistance,
   simulationDistance: options.bounds.simulationDistance,
   spawnProtection: options.bounds.spawnProtection,
@@ -71,8 +75,9 @@ export const numberBounds = (
 export function numberProblems(
   draft: ServerSettingsView,
   options: SettingsOptions,
+  holds?: number,
 ): Record<NumberSetting, string | null> {
-  const bounds = numberBounds(options)
+  const bounds = numberBounds(options, holds)
   return Object.fromEntries(
     (Object.keys(bounds) as NumberSetting[]).map((key) => {
       const { min, max } = bounds[key]
