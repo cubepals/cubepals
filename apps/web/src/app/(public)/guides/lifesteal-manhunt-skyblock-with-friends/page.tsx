@@ -98,8 +98,8 @@ export default async function Guide() {
         <Shot
           src={`${PICTURES}/operators.png`}
           width={560}
-          height={236}
-          alt="The Operators card on the Players page: Operators can use every command in the game and join even when the server is full. A Make someone an operator field and an Add button."
+          height={248}
+          alt="The Operators card on the Players page: Operators can use every command in the game and join even when the server is full. A Make someone an operator field and an Add button, and under it: For a Bedrock player, a dot and their gamertag."
         />
         <p>Then, in the game:</p>
         <ol>

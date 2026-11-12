@@ -53,7 +53,8 @@ export default async function Guide() {
         </p>
         <ol>
           <li>
-            <strong>What to play.</strong> Survival, Creative or Hardcore, or open{' '}
+            <strong>What to play.</strong> Survival, Creative or Hardcore,{' '}
+            <GuideLink to="move-a-minecraft-world-to-a-server">your own world</GuideLink>, or open{' '}
             <strong>More ways to play</strong> for the rest: Smoother survival, game modes, and modpacks. Pick
             one and the Minecraft version, the server software and its settings are chosen to match. The game
             modes include{' '}
@@ -64,7 +65,7 @@ export default async function Guide() {
           </li>
           <li>
             <strong>Who’s playing.</strong> How many friends play at once. Bigger groups get a bigger server.
-            On the free trial there’s one size, so this question doesn’t appear.
+            On a plan with one size, such as the free trial, this question doesn’t appear.
           </li>
           <li>
             <strong>Name it.</strong> Type a server name. Under it you’ll see the address your friends will
@@ -78,14 +79,14 @@ export default async function Guide() {
         <Shot
           src={`${PICTURES}/what-to-play.png`}
           width={680}
-          height={284}
-          alt="The “What to play” question on the create page, with Survival picked, next to Creative and Hardcore. The fourth card, More ways to play, opens Lifesteal, OneBlock, modpacks and more."
+          height={440}
+          alt="The “What to play” question on the create page, with Survival picked, next to Creative, Hardcore, Your own world and More ways to play, which opens Lifesteal, OneBlock, modpacks and more. Under them: Cubepals picked Minecraft 26.2, the newest Bedrock friends can join. Players on Minecraft 1.9 or newer can join."
         />
         <Shot
           src={`${PICTURES}/name-it.png`}
           width={680}
-          height={278}
-          alt="The “Name it” question with the server name Maple Hollow typed in. Under it: Friends join at maple-hollow.play.cubepals.com. The bar below says Survival, Minecraft 26.3, Europe, closest to you, and Up to 5 players, and has the Create server button."
+          height={368}
+          alt="The “Name it” question with the server name Maple Hollow typed in. Under it: Friends join at maple-hollow.play.cubepals.com, and a Just for a day switch. The bar below says Survival, Minecraft 26.2, Java and Bedrock, Europe, closest to you, and how many play, and has the Create server button."
           caption="The bar at the bottom says what’s being made, and holds the one button."
         />
       </Part>
@@ -94,8 +95,8 @@ export default async function Guide() {
         <p>
           Send them the address. In Minecraft: Java Edition they open <strong>Multiplayer</strong>, then{' '}
           <strong>Add Server</strong>, and paste it in. There’s no port to type and no number to remember.
-          Their game needs to be on the same Minecraft version as the server, and the server’s page says which
-          one that is.
+          Their game needs a Minecraft version the server takes, and the server’s page says which: a plain
+          server takes older and newer versions too, and a modded one needs its own.
         </p>
         <p>
           They join like any server. A sleeping server is usually back in a couple of seconds. The first
@@ -104,9 +105,9 @@ export default async function Guide() {
         </p>
         <Shot
           src={`${PICTURES}/address.png`}
-          width={576}
-          height={202}
-          alt="A server’s page showing it Online, its address maple-hollow.play.cubepals.com with a Copy address button, and the line: In Minecraft: Java Edition 26.3, open Multiplayer, then Add Server, and paste it. Consoles and phones can’t join."
+          width={560}
+          height={196}
+          alt="The address on a server’s Players page, maple-hollow.play.cubepals.com, with a Copy address button, and the line: In Minecraft: Java Edition 1.9 or newer, open Multiplayer, Add Server and paste it. On a phone or tablet: Play, Servers, Add Server, and type the same address. Consoles can’t join."
         />
         <p>
           For friends who are new to it,{' '}
@@ -132,9 +133,9 @@ export default async function Guide() {
         </p>
         <Shot
           src={`${PICTURES}/who-can-join.png`}
-          width={576}
-          height={374}
-          alt="The Who can join card on the Players page, with Only people I add can join turned on and a field to add a player by their Minecraft name."
+          width={572}
+          height={370}
+          alt="The Who can join card on the Players page, with Only people I add can join turned on and a field to add a player by their Minecraft name, or a Bedrock player by a dot and their gamertag."
         />
         <p>
           Someone who isn’t on the list is turned away by the game itself, with “You are not whitelisted on

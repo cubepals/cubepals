@@ -30,15 +30,75 @@ export function guideMetadata(slug: string): Metadata {
   return listed(guide) ? own : { ...own, robots: UNLISTED }
 }
 
-/** The plans a guide's numbers come from, as the pricing page states them (`pricedPlans`). */
-export async function guidePlans(): Promise<{ free?: PublicPlan; paid?: PublicPlan }> {
+/**
+ * The plans a guide's numbers come from, as the pricing page states them (`pricedPlans`): the free
+ * trial, every paid plan, cheapest first, and the one with mods, plugins and bigger groups.
+ */
+export async function guidePlans(): Promise<{
+  free?: PublicPlan
+  paidPlans: PublicPlan[]
+  paid?: PublicPlan
+}> {
   // The table kept five minutes, as the landing page keeps it: it seldom changes.
   const plans = await pricedPlans(300)
   return {
     free: plans.find((plan) => plan.monthlyPriceCents === 0),
-    // The plan the guides talk about is the one with mods, plugins and bigger groups.
+    paidPlans: plans.filter((plan) => plan.monthlyPriceCents > 0),
     paid: plans.find((plan) => plan.mods),
   }
+}
+
+/** Plan names in a sentence: "Core and Plus". */
+const namesSaid = (plans: readonly PublicPlan[]): string => {
+  const names = plans.map((plan) => plan.name)
+  return names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names.at(-1)}` : (names[0] ?? '')
+}
+
+/**
+ * Where the paid plans differ from the trial in one figure, said in brackets: " (15 on Core and
+ * Plus)". Empty where none differs.
+ */
+export function onPaidSaid(
+  free: PublicPlan,
+  paidPlans: readonly PublicPlan[],
+  figure: (plan: PublicPlan) => number | null,
+  said: (value: number) => string,
+): string {
+  const values = [...new Set(paidPlans.map(figure))].filter(
+    (value): value is number => value !== null && value !== figure(free),
+  )
+  const parts = values.map(
+    (value) => `${said(value)} on ${namesSaid(paidPlans.filter((plan) => figure(plan) === value))}`,
+  )
+  return parts.length > 0 ? ` (${parts.join(', ')})` : ''
+}
+
+const TIMES: Record<number, string> = { 2: 'two', 3: 'three', 4: 'four' }
+
+/**
+ * Which groups run on a server that counts more than an hour for each hour it runs, from the plan's
+ * own sizes: "groups of more than 10 run on a large server, which counts two hours for each hour it
+ * runs, and groups of more than 50 on the largest, which counts four". Null where none does.
+ */
+export function bigGroupsSaid(plan: PublicPlan | undefined): string | null {
+  const sizes = plan?.sizes ?? []
+  const parts = sizes.flatMap((size, i) => {
+    const before = sizes[i - 1]
+    if (size.hoursAnHour <= 1 || before === undefined) return []
+    const times = TIMES[size.hoursAnHour] ?? String(size.hoursAnHour)
+    const last = i === sizes.length - 1
+    return [{ over: before.maxPlayers, times, last }]
+  })
+  const [first, ...rest] = parts
+  if (first === undefined) return null
+  const more = rest.map(
+    (part) =>
+      `groups of more than ${part.over} on ${part.last ? 'the largest' : 'a larger one'}, which counts ${part.times}`,
+  )
+  return [
+    `groups of more than ${first.over} run on ${first.last ? 'the largest server' : 'a large server'}, which counts ${first.times} hours for each hour it runs`,
+    ...more,
+  ].join(', and ')
 }
 
 /** A date as people read it: "7 October 2026". */

@@ -124,15 +124,15 @@ function OneServer() {
         <Shot
           src={`${PICTURES}/what-to-play.png`}
           width={680}
-          height={340}
-          alt="The “What to play” question on the create page, with Survival picked, next to Creative, Hardcore and More ways to play. Under them: Cubepals picked Minecraft 26.2, the newest Bedrock friends can join. Players on Minecraft 1.9 or newer can join."
+          height={440}
+          alt="The “What to play” question on the create page, with Survival picked, next to Creative, Hardcore, Your own world and More ways to play. Under them: Cubepals picked Minecraft 26.2, the newest Bedrock friends can join. Players on Minecraft 1.9 or newer can join."
           caption="Cubepals picks the Minecraft Bedrock friends can join."
         />
         <Shot
           src={`${PICTURES}/name-it.png`}
           width={680}
-          height={278}
-          alt="The “Name it” question with the server name Copper Cove typed in. Under it: Friends join at copper-cove.play.cubepals.com. The bar below says Survival, Minecraft 26.2, Europe, and Up to 5 players, and has the Create server button."
+          height={368}
+          alt="The “Name it” question with the server name Copper Cove typed in. Under it: Friends join at copper-cove.play.cubepals.com, and a Just for a day switch. The bar below says Survival, Minecraft 26.2, Java and Bedrock, Europe, closest to you, and how many play, and has the Create server button."
         />
       </Part>
 

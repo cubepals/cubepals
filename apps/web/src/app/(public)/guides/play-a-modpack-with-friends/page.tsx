@@ -32,7 +32,8 @@ export default async function Guide() {
         <ul>
           <li>
             <strong>The same pack and version for everyone.</strong> Each friend’s game needs the pack the
-            server runs, at the same version, on the same Minecraft version.
+            server runs, at the same version, on the same Minecraft version. A pack that runs on the server
+            alone is the exception: friends join it with plain Minecraft, and the create page says so.
           </li>
           <li>
             <strong>A mod loader.</strong> Packs are built on one, such as NeoForge, Forge or Fabric, and the
@@ -76,8 +77,8 @@ export default async function Guide() {
         <Shot
           src={`${PICTURES}/create.png`}
           width={680}
-          height={458}
-          alt="The game modes under More ways to play, with Create picked: Machines, gears and contraptions, with the Create mod ready to go."
+          height={556}
+          alt="The game modes under More ways to play: Smoother survival, Lifesteal, Manhunt, Skyblock, OneBlock, RPG survival, Duels, Arcade, and Create, picked: Machines, gears and contraptions, with the Create mod ready to go."
         />
       </Part>
 
@@ -129,7 +130,7 @@ export default async function Guide() {
           {
             question: 'Can friends join without the pack?',
             answer:
-              'Not to a modded server. Each of them needs the same pack, at the same version, in their own game.',
+              'Not to most. Each of them needs the same pack, at the same version, in their own game. A pack that runs on the server alone takes plain Minecraft, and the create page says which a pack is.',
           },
           {
             question: 'Can I add mods myself?',

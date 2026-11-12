@@ -15,11 +15,13 @@ import { dollars, EXTRA_HOUR_CENTS } from '../../../../legal/figures'
 import { daysSaid, hoursAgainSaid, hoursSaid } from '../../../../lib/plans'
 import { PLAY_HABITS, planPoints, priceOf } from '../../../../ui'
 import {
+  bigGroupsSaid,
   FactTable,
   GuideArticle,
   GuideLink,
   guideMetadata,
   guidePlans,
+  onPaidSaid,
   Part,
   Questions,
   Shot,
@@ -50,8 +52,9 @@ function howFar(plan: PublicPlan): string {
 export const generateMetadata = (): Metadata => guideMetadata(SLUG)
 
 export default async function Guide() {
-  const { free, paid } = await guidePlans()
-  const plans = [free, paid].filter((plan) => plan !== undefined)
+  const { free, paidPlans, paid } = await guidePlans()
+  const plans = [free, ...paidPlans].filter((plan) => plan !== undefined)
+  const big = bigGroupsSaid(paid)
   return (
     <GuideArticle slug={SLUG}>
       <p className="type-body">
@@ -59,8 +62,8 @@ export default async function Guide() {
         Cubepals starts with{' '}
         {free ? `a free trial of ${hoursSaid(free)}, with no card` : 'a free trial, with no card'}. A server
         that’s there when you aren’t costs money after that
-        {paid
-          ? `: ${paid.name} is ${priceOf(paid.monthlyPriceCents)} with ${paid.includedHours} hours of play`
+        {paidPlans.length > 0
+          ? `: ${paidPlans.map((plan) => `${plan.name} is ${priceOf(plan.monthlyPriceCents)} with ${plan.includedHours} hours of play`).join(', and ')}`
           : ''}
         . What you pay comes down to how much you play, how many of you there are, and whether you want mods.
         This guide is for Minecraft: Java Edition.
@@ -80,7 +83,9 @@ export default async function Guide() {
           {free
             ? ` There’s a free trial of ${hoursSaid(free)}, with no card, and nothing is charged when it ends.`
             : ' There’s a free trial, with no card.'}
-          {paid ? ` ${paid.name} is ${priceOf(paid.monthlyPriceCents)}, and you can cancel any time.` : ''}{' '}
+          {paidPlans.length > 0
+            ? ` ${paidPlans.map((plan) => `${plan.name} is ${priceOf(plan.monthlyPriceCents)}`).join(' and ')}, and you can cancel any time.`
+            : ''}{' '}
           Here’s what each one includes:
         </p>
         {plans.length > 0 && (
@@ -92,11 +97,12 @@ export default async function Guide() {
         <p>
           An hour is an hour your server is running, shared by everyone on it.
           {free?.sleepsAfterMinutes
-            ? ` It sleeps ${free.sleepsAfterMinutes} minutes after everyone leaves${
-                paid?.sleepsAfterMinutes && paid.sleepsAfterMinutes !== free.sleepsAfterMinutes
-                  ? ` (${paid.sleepsAfterMinutes} on ${paid.name})`
-                  : ''
-              }, and a start that fails never uses your hours.`
+            ? ` It sleeps ${free.sleepsAfterMinutes} minutes after everyone leaves${onPaidSaid(
+                free,
+                paidPlans,
+                (plan) => plan.sleepsAfterMinutes,
+                String,
+              )}, and a start that fails never uses your hours.`
             : ''}
         </p>
         <p>
@@ -120,9 +126,12 @@ export default async function Guide() {
             <>
               <p>How much a group plays in a month, roughly:</p>
               <ul>
-                {PLAY_HABITS.map((habit) => (
+                {PLAY_HABITS.map((habit, i) => (
                   <li key={habit.hours}>
-                    {habit.said}: {habit.hours === 90 ? '90 hours or more' : `about ${habit.hours} hours`}
+                    {habit.said}:{' '}
+                    {i === PLAY_HABITS.length - 1
+                      ? `${habit.hours} hours or more`
+                      : `about ${habit.hours} hours`}
                   </li>
                 ))}
               </ul>
@@ -161,10 +170,11 @@ export default async function Guide() {
             question: 'What if a big modpack needs more?',
             answer: (
               <>
-                Big modpacks and groups of 20 or more run on a large server, which counts two hours for each
-                hour it runs, and groups of more than 50 on the largest, which counts four. You never pick its
-                size: <GuideLink to="minecraft-server-ram">how much memory a server needs</GuideLink> explains
-                why.
+                {big
+                  ? `Big modpacks and ${big}.`
+                  : 'Big modpacks run on a large server, which counts more than an hour for each hour it runs.'}{' '}
+                You never pick its size:{' '}
+                <GuideLink to="minecraft-server-ram">how much memory a server needs</GuideLink> explains why.
               </>
             ),
           },

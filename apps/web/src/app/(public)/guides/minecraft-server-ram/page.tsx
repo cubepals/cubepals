@@ -11,25 +11,27 @@ import type { PartySize } from '@blockly/contracts'
 import type { Metadata } from 'next'
 import { publicSizes } from '../../../../lib/plans'
 import { OutLink } from '../../../../ui/out-link'
-import { FactTable, GuideArticle, GuideLink, guideMetadata, Part, Questions, Shot } from '../article'
+import {
+  bigGroupsSaid,
+  FactTable,
+  GuideArticle,
+  GuideLink,
+  guideMetadata,
+  guidePlans,
+  Part,
+  Questions,
+  Shot,
+} from '../article'
 
 const SLUG = 'minecraft-server-ram'
 const PICTURES = `/guides/${SLUG}`
 
 export const generateMetadata = (): Metadata => guideMetadata(SLUG)
 
-/** "Who's playing" as the create page says each answer. */
-const ASKED: Record<PartySize, string> = {
-  '5': 'Up to 5',
-  '10': 'Up to 10',
-  '20': 'Up to 20',
-  '50': 'Up to 50',
-  more: 'Up to 100',
-}
-
 export default async function Guide() {
   // Kept five minutes, as the plans are: the sizes seldom change.
   const sizes = await publicSizes(300)
+  const big = bigGroupsSaid((await guidePlans()).paid)
   const memoryFor = (party: PartySize) => sizes.find((size) => size.party === party)?.memory
   return (
     <GuideArticle slug={SLUG}>
@@ -86,16 +88,17 @@ export default async function Guide() {
         </p>
         <Shot
           src={`${PICTURES}/size.png`}
-          width={576}
-          height={425}
-          alt="The Size card in a server’s settings: How many play at the same time. Bigger servers keep up with more players and bigger builds. Choices Up to 5, Up to 10, Up to 20, Up to 50 and Up to 100, and a Change size button."
+          width={572}
+          height={377}
+          alt="The Size card in a server’s settings: How many play at the same time. Bigger servers keep up with more players and bigger builds. A choice for each size, the server’s own picked, and a Change size button."
         />
       </Part>
 
       <Part id="big-modpacks" title="Big modpacks">
         <p>
-          Big modpacks and groups of 20 or more run on a large server, which counts two hours for each hour it
-          runs, and groups of more than 50 on the largest, which counts four.{' '}
+          {big
+            ? `Big modpacks and ${big}.`
+            : 'Big modpacks run on a large server, which counts more than an hour for each hour it runs.'}{' '}
           <GuideLink to="minecraft-server-cost">What a server costs</GuideLink> explains how hours work, and{' '}
           <GuideLink to="play-a-modpack-with-friends">playing a modpack with friends</GuideLink> covers the
           rest.
@@ -106,8 +109,8 @@ export default async function Guide() {
         <Part id="what-cubepals-runs" title="What Cubepals actually runs">
           <p>For anyone curious, these are the sizes behind each answer to Who’s playing:</p>
           <FactTable
-            head={['Who’s playing', 'Players at once', 'Memory']}
-            rows={sizes.map((size) => [ASKED[size.party], `Up to ${size.maxPlayers}`, size.memory])}
+            head={['Who’s playing', 'Memory']}
+            rows={sizes.map((size) => [`Up to ${size.maxPlayers}`, size.memory])}
           />
         </Part>
       )}
