@@ -9,7 +9,7 @@ Nothing in the code names a deployment, a domain or a port.
 | Environment | Where the values come from |
 |---|---|
 | Local | `.env` at the repository root, a copy of `.env.example` as it is ([local development](local-development.md): what stands in there for outside services) |
-| Staging, production | Fly secrets on each app, set by Terraform (`infra/terraform`), plus each app's `infra/fly/*.toml` `[env]`; the web app's values with each deploy of its Cloudflare Worker (`scripts/lib/web-worker.ts`). Until Blockly has its domain, staging is made by `scripts/staging.ts` instead ([below](#staging-on-the-providers-own-addresses)) |
+| Staging, production | Fly secrets on each app, set by Terraform (`infra/terraform`), plus each app's `infra/fly/*.toml` `[env]`; the web app's values with each deploy of its Cloudflare Worker (`scripts/lib/web-worker.ts`). Staging is made by `scripts/staging.ts`, not Terraform ([below](#staging-on-the-providers-own-addresses)) |
 
 For staging and production, what the deployment decides is in
 `infra/terraform/environments/<name>/config.auto.tfvars.json` (`settings`). Git ignores that file:
@@ -99,9 +99,9 @@ Terraform stack.
 |---|---|---|---|---|---|
 | `DEPLOYMENT_ID` | `local` | `staging` | `prod` | tf | 2–16 of `a-z0-9-`. Names apps (`bly-<id>-…`) and provider resources, prefixes cookies, is the realtime ticket audience. Changing it strands everything named after the old one |
 | `ROLES` | `api,worker,realtime` | per process group | per process group | toml | `api`, `worker`, `realtime`, comma-separated. Staging and production run `api` and `worker` as process groups of the control app and `realtime` as its own app |
-| `DATABASE_URL` | compose Postgres | Fly Managed Postgres, pooled | Fly Managed Postgres, pooled | secret | Queries go through it (Managed Postgres's PgBouncer URL) |
-| `DATABASE_DIRECT_URL` | — (`DATABASE_URL`) | Fly Managed Postgres, direct | Fly Managed Postgres, direct | secret | Past the pooler: the live-update listener's `LISTEN` and the release command's migrations. The pooler closes a client idle for ten minutes and breaks `LISTEN` in transaction mode (docs.fly.io/postgres) |
-| `DATABASE_POOL_MAX` | `10` | `10` | `10` | toml | Connections each of a process's two pools (queries, the job queue's) may hold. A session-mode pooler such as Supabase's gives each one a server connection, and every process shares its limit, so a deployment on one sizes it down. The pooler must be session mode: advisory locks hold a connection's session for the length of the work |
+| `DATABASE_URL` | compose Postgres | its own Postgres machine, `bly-staging-db` (`staging.ts`) | Supabase's session pooler | secret | Queries go through it |
+| `DATABASE_DIRECT_URL` | — (`DATABASE_URL`) | — (`DATABASE_URL`) | the same session pooler URL | secret | The live-update listener's `LISTEN` and the release command's migrations. A transaction-mode pooler breaks `LISTEN`, so it must be a session of its own: past a pooler, or a session-mode one. Unset, it is `DATABASE_URL` |
+| `DATABASE_POOL_MAX` | default `10` | `5` (`staging.ts`) | default | — | Connections each of a process's two pools (queries, the job queue's) may hold. A session-mode pooler such as Supabase's gives each one a server connection, and every process shares its limit, so a deployment on one sizes it down. The pooler must be session mode: advisory locks hold a connection's session for the length of the work |
 | `SERVER_OPERATIONS_CONCURRENCY` | default `32` | default | default | — | Server operations each worker process runs at once, starts and wakes first. An operation spends nearly all its time waiting on the provider and a boot, holding no database connection while it waits; new Fly apps go out at one a second (`infra/fly/client.ts`). Each worker machine runs this many, so a rolling deploy briefly runs twice as many |
 | `SERVER_WAKES_CONCURRENCY` | default `8` | default | default | — | Starts and wakes each worker runs at once on top of the above, on a lane of their own, so a queue of new servers never delays a player joining. They still wait for what their own server queued first |
 
@@ -163,8 +163,8 @@ restart.
 | `PLAY_IPV4` | — | empty | empty | tf | The IPv4 the play names' A records hold, for an address allocated outside Terraform. Empty, they hold the edge's anycast IPv4, which reaches the nearest edge. Set, every IPv4 join enters Fly where that address is announced, such as one region's (`fly ips allocate-v4 --app <edge app> --region <region>`; `fly ips release <address> --app <edge app>` once the setting is empty again and applied); a server in another region is reached through it unless `PLAY_IPV4_BY_REGION` gives that region an address of its own. Terraform's alone: the control plane isn't given it. AAAA records keep the edge's own IPv6 |
 | `PLAY_IPV4_BY_REGION` | — | empty | empty | tf | Regions with an IPv4 of their own, `region:IPv4` pairs (`us:203.0.113.9`), keyed as `REGIONS` is. A server in a region it names gets an A record at that address for each name the edge routes to it, on every play domain, so its players enter Fly in its region rather than where the wildcard's address is announced. The worker's `play-records` job keeps them every minute: a server just made, renamed, moved or restored is reached through the wildcard until its pass. A stored server keeps its records, since a join wakes it at the same name; one in the trash loses them. A region it doesn't name is reached through the wildcard. The address is the edge's, announced from the Fly region that `RUNTIME_REGION_MAP` places the region in, which `edge_regions` must list: `fly ips allocate-v4 --app <edge app> --region <fly region>`. A name with a record of its own no longer takes the wildcard's answers (RFC 4592), AAAA included, so it is reached over IPv4. Each record counts toward the zone's record quota. Needs `CLOUDFLARE_DNS_API_TOKEN` and `CLOUDFLARE_ZONE_ID`; only records the deployment marked as its own are changed, never the wildcard. To stop, take the region out and apply: the next pass removes its records, and then the address is released (`fly ips release <address> --app <edge app>`) |
 | `PLAY_PORT` | `25565` | `25565` | `25565` | tf | |
-| `REGIONS` | `eu:Europe,us:North America` | `eu:Europe,us:North America` | same | tf | The regions people choose from, `key:Label`; exactly one on Docker, which runs everything on one machine, except in local development |
-| `RUNTIME_REGION_MAP` | `eu:local,us:local` | `eu:fra,us:iad` | same | tf | Each region's placement on the default runtime; every region needs one. The default's own `<NAME>_REGION_MAP` (`FLY_REGION_MAP`) stands in for it. No other runtime reads it: each needs its own `<NAME>_REGION_MAP` (`FLEET_REGION_MAP`, `BOAT_REGION_MAP`), and places only the regions that names; the start is refused without one ([runtimes.md](runtimes.md)) |
+| `REGIONS` | `local:This computer` | `eu:Europe,us:North America` | same | tf | The regions people choose from, `key:Label`; exactly one on Docker, which runs everything on one machine, except in local development |
+| `RUNTIME_REGION_MAP` | `local:local,eu:local,us:local` | `eu:fra,us:iad` | same | tf | Each region's placement on the default runtime; every region needs one. The default's own `<NAME>_REGION_MAP` (`FLY_REGION_MAP`) stands in for it. No other runtime reads it: each needs its own `<NAME>_REGION_MAP` (`FLEET_REGION_MAP`, `BOAT_REGION_MAP`), and places only the regions that names; the start is refused without one ([runtimes.md](runtimes.md)) |
 
 ### Runtime
 
@@ -414,8 +414,8 @@ when the value does (a date works), so Terraform re-sends it: Fly returns only a
 | `RUNTIME_SECRETS_KEY` | random, `version:key` | A version bump, with the old key kept as `RUNTIME_SECRETS_PREVIOUS_KEYS` until nothing runs on it ([below](#rotating-the-runtime-key)) |
 | `AUTH_OAUTH_PROXY_SECRET` | random (staging) | A sign-in in flight fails |
 | `WEB_PROXY_SECRET` | random, shared by the control plane and the web app | Set both in one apply, which deploys the control app and the website with it. Until both run on it, sign-in counts the web tier's address for everyone |
-| `DATABASE_URL` | Fly Managed Postgres, pooled | Restart both apps |
-| `DATABASE_DIRECT_URL` | Fly Managed Postgres, direct | Restart both apps |
+| `DATABASE_URL` | Supabase's session pooler | Restart both apps |
+| `DATABASE_DIRECT_URL` | the same URL | Restart both apps |
 | `FLY_API_TOKEN` | `fly tokens create org` | Restart the control app |
 | `SMTP_URL` | mail provider | Next email |
 | `ARCHIVE_S3_ACCESS_KEY_ID`, `ARCHIVE_S3_SECRET_ACCESS_KEY` | R2 API token | Next request |
@@ -485,10 +485,8 @@ Production does all of this with `bun scripts/production.ts apply`, from one fil
 
 Terraform owns the apps, their addresses and secrets, DNS, the archive bucket, production's
 database dumps bucket ([production.md](production.md#database-dumps)) and the website's Worker,
-cache bucket and routes; `fly deploy` owns machines and releases, and wrangler the Worker's versions. Fly's Terraform provider (`ampbase-io/fly`)
-has no Managed Postgres resource, so the database is made once with `fly mpg create`; its pooled
-URL (`pgbouncer.<cluster>.flympg.net`) becomes the `DATABASE_URL` secret and its direct one
-(`direct.<cluster>.flympg.net`) `DATABASE_DIRECT_URL`.
+cache bucket and routes; `fly deploy` owns machines and releases, and wrangler the Worker's versions. The production database is a Supabase project made by hand, outside Terraform; its session-pooler
+URL is both `DATABASE_URL` and `DATABASE_DIRECT_URL` ([production.md](production.md)).
 
 1. Tokens in the environment: `FLY_API_TOKEN` (an org token for the environment's org),
    `CLOUDFLARE_API_TOKEN` (DNS and Workers Routes edit on the zone, R2 and Workers Scripts edit

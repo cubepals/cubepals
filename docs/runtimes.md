@@ -235,7 +235,8 @@ allocated share is therefore a snapshot of what runs as the report is made. *Run
 **What it can't see yet:**
 
 - Bandwidth: nothing counts bytes.
-- Per-server memory and CPU in use: machines report theirs, servers don't.
+- Per-server CPU, and memory outside the JVM heap: servers with the join reporter report their heap
+  used and its most each minute (`server_vitals`), the rest only their ticks.
 - Hours on a runtime a server has since left: counted, but not priced, since only the current
   handle can be.
 

@@ -25,4 +25,5 @@ require that run to be the Nightly, and `--format json` to read the commit and r
   away, and deploys build on Fly's builders, which do not run in GitHub Actions. Once an image is
   pushed from a workflow, its job adds the same step with `subject-name`, `subject-digest` and
   `push-to-registry: true`, and `gh attestation verify oci://<image>@<digest>` checks it.
-- **Not yet:** the production releases `scripts/production.ts` makes from the operator's machine.
+- **Not yet:** the production releases (`vX.Y.Z`) that `scripts/production.ts apply` makes in the
+  Deploy production workflow: they carry no archive and no attestation.

@@ -51,8 +51,8 @@ documents. The boot was then given its full waits before anything else happened:
 ## The ladder
 
 Each rung has a bound. The player is never left in silence: the edge's waiting room holds the join
-for up to 3 minutes and asks again every few seconds, the server list says "Starting up · try again
-in a moment", and a plain message ends the hold.
+for up to 3 minutes and asks again every few seconds, the server list says "Waking your world" with about how long is left (`apps/edge/waking-line.ts`),
+and a plain message ends the hold: "Still starting · join again in a moment".
 
 1. **Resume.** Minecraft status pings run alongside the provider state wait. A valid game answer
    ends that wait immediately and cancels the outstanding observation; a provider status update

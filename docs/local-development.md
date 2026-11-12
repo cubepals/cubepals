@@ -24,7 +24,7 @@ with fresh ones instead.
 bun run dev:accounts    # with `bun run dev` running
 ```
 
-makes one account per plan, `<plan>@blockly.localhost` (today `free@` and `plus@`), each signed
+makes one account per plan, `<plan>@blockly.localhost` (today `free@`, `core@` and `plus@`), each signed
 up with the Terms agreed and confirmed through Mailpit, and each paid one put on its plan through
 the local checkout below. With `LOCAL_BILLING=polar`, paid accounts stay on Free and it says so:
 Polar's checkout is a person's to go through. Run again, it resets them: the same passwords,

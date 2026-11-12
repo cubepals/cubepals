@@ -24,8 +24,9 @@ Each of these needs an account or a card, so nothing here does them.
 
 1. **Fly.** `fly orgs create blockly-prod`, and a card on it. Ask Fly support to set its machine
    limit to what `fly_machine_limit` says.
-2. **Database.** `fly mpg create --org blockly-prod --region fra --name bly-prod-db`, choosing
-   the plan it offers. Terraform can't make it: Fly's provider has no Managed Postgres.
+2. **Database.** A Supabase project, `cubepals prod`, with a role `blockly` owning a database
+   `blockly`; its session pooler is `DATABASE_URL` and `DATABASE_DIRECT_URL` (below). Terraform
+   doesn't make it.
 3. **Cloudflare.** R2 turned on for the account (it asks for a card even on the free tier), a
    bucket named `blockly-terraform-state` for Terraform's state, and the Workers Paid plan, which
    the website's server rendering needs (the free plan allows 10 ms of CPU a request).
@@ -48,7 +49,7 @@ bun scripts/production.ts init
 
 writes `local/production/production.env` (never committed, readable only by you). It already holds
 the random secrets (`AUTH_SECRET`, `WEB_PROXY_SECRET`, `REALTIME_TICKET_SECRET`, `EDGE_TOKEN`,
-`FLOODGATE_KEY`, `OPERATOR_TOKEN`, `RUNTIME_SECRETS_KEY`). Run again, it makes any random one the file doesn't hold
+`OPERATOR_TOKEN`, `RUNTIME_SECRETS_KEY`). Run again, it makes any random one the file doesn't hold
 yet and keeps the rest. Above each empty value it says where to get it. The same list:
 
 | Value | Where to get it | Where it goes |
@@ -58,7 +59,7 @@ yet and keeps the rest. Above each empty value it says where to get it. The same
 | `CLOUDFLARE_WORKERS_API_TOKEN` | The same page, another custom token: Account · Workers Scripts · Edit and Account · Workers R2 Storage · Edit | The website's deploys and rollbacks (wrangler) only |
 | `TF_STATE_ACCESS_KEY_ID`, `TF_STATE_SECRET_ACCESS_KEY` | Cloudflare → R2 → Manage API tokens → Create Account API token: Object Read & Write, `blockly-terraform-state` only | Terraform's state backend only |
 | `FLY_API_TOKEN` | `fly tokens create org blockly-prod` | Terraform's Fly provider, `fly deploy`, and the control plane, which makes servers' machines with it |
-| `DATABASE_URL`, `DATABASE_DIRECT_URL` | Supabase → cubepals prod → Connect → Session pooler (port 5432), as the role `blockly` on the database `blockly`: the same URL for both, since session mode carries `LISTEN`, migrations and `pg_dump` | Control plane |
+| `DATABASE_URL`, `DATABASE_DIRECT_URL` | Supabase → cubepals prod → Connect → Session pooler (port 5432), as the role `blockly` on the database `blockly`, with `?sslmode=verify-full&sslrootcert=/app/packages/db/certs/supabase-root-2021.crt` (the root the control image carries): the same URL for both, since session mode carries `LISTEN`, migrations and `pg_dump` | Control plane |
 | `AUTH_GOOGLE_CLIENT_ID`, `AUTH_GOOGLE_CLIENT_SECRET` | Google Auth Platform → Clients → Create client → Web application. Origin `https://cubepals.com`; redirect `https://cubepals.com/api/auth/callback/google` | Control plane |
 | `SMTP_URL` | The mail provider, as `smtps://user:password@host:465` | Control plane |
 | `CLOUDFLARE_DNS_API_TOKEN` | Cloudflare → My Profile → API Tokens → Create Token → "Edit zone DNS" template, zone cubepals.com | Realtime role: it proves `rt.cubepals.com` to Let's Encrypt. Worker: it keeps the play names' own records (`PLAY_IPV4_BY_REGION`) |
@@ -72,13 +73,15 @@ Optional, and left out at launch: `POLAR_*` ([below](#billing-later)) and
 `AUTH_GITHUB_CLIENT_ID`/`_SECRET` (a GitHub OAuth app, callback
 `https://cubepals.com/api/auth/callback/github`). Optional too: `ADMIN_ALERT_EMAILS`, where admin
 mail (platform alerts, the spend watchdog) goes when the inbox you read isn't the address you sign
-in with; left out, it goes to each admin's own email.
-`ECONOMICS_TUNING`, `OFFICIAL_SERVER_FILES` and `STOP_CHEATERS` come from the private records, one
+in with; left out, it goes to each admin's own email. `FLOODGATE_KEY` (16 random bytes as base64, the edge's too) only
+to let Bedrock players in; left out, no server is given Floodgate. `JOIN_REPORTER` (`official` or
+`all`), which Paper servers get the join reporter at their next full boot; left out, none.
+`ECONOMICS_TUNING`, `OFFICIAL_SERVER_FILES`, `STOP_CHEATERS` and `SIGNALS` come from the private records, one
 line of JSON each ([tuning](configuration.md#private-tuning),
 [files](configuration.md#files-for-official-servers-optional),
 [Stop cheaters](configuration.md#stop-cheaters-optional)); left out, the economics report leaves
-fees and margin out, official servers start with the public defaults, and Stop cheaters only alerts
-and logs.
+fees and margin out, official servers start with the public defaults, Stop cheaters only alerts
+and logs, and no signal is raised.
 
 ```sh
 bun scripts/production.ts check
@@ -292,7 +295,7 @@ matches in `scripts/production-route.ts`. Both sides of a rename count. The rule
 | `infra/terraform/`, `.github/workflows/`, `scripts/`, `apps/web/wrangler.jsonc` | full |
 | What a Fly image is built from, as its Dockerfile copies it, with its Dockerfile and Fly config | control (control and realtime), edge, or full when it reaches both |
 | The rest of `apps/web/` | website |
-| Prose: `docs/`, `brand/`, `LICENSES/`, `*.md`, `REUSE.toml`, `CITATION.cff`, `.github/settings/` and the issue and pull request templates | none |
+| Prose: `docs/`, `brand/`, `LICENSES/`, `*.md`, `REUSE.toml`, `CITATION.cff`, `.github/settings/`, `CODEOWNERS`, `dependabot.yml` and the issue and pull request templates | none |
 | Anything else | full |
 
 A change whose paths are all `none` is the `none` route; one whose other paths share one area takes
@@ -323,7 +326,7 @@ production runs is more than the website's.
 Production doesn't run the preview's build itself. A build has its environment written into it
 (the `/api` rewrite's target, `robots.txt`, which environment PostHog counts it in), so production
 builds the same tree with its own values. `deployChecked` then asks `cubepals.com` for its pages
-and puts the previous version back if they fail. After every route, the workflow asks production
+and puts the previous version back if they fail. After every route that deploys, the workflow asks production
 for `/`, `/pricing`, `/sign-in`, `/browse` and `/api/health`. `rollback website` undoes the route,
 as it undoes any website deploy: each version is tagged with its commit.
 

@@ -8,7 +8,7 @@ Blockly does about it. A resume that hangs, and the fallbacks for it, are
 ## A sleep, over hours and days
 
 1. **Asleep, with its memory.** A server nobody is on sleeps after its plan's idle time (Free 10
-   minutes, Plus 15), or after the 5-minute probation for a run a connection woke and nobody
+   minutes, Core and Plus 15), or after the 5-minute probation for a run a connection woke and nobody
    joined (`domain/server/idle.ts`). Where the suspend switch is on
    (`app/platform/suspend-switch.ts`, `FLY_SUSPEND`), Fly keeps its memory, once the world is
    saved, nobody is on, and its files are written through (`dozeRefusal`,
@@ -25,7 +25,10 @@ Blockly does about it. A resume that hangs, and the fallbacks for it, are
    (`changed:drift:image`, `changed:drift:env.DIFFICULTY`), or `changed:compat`,
    `changed:stopCheaters`, `changed:ownFiles`, `changed:identity`. `changed:unknown` means the
    boot before it kept no parts to compare with (`app/servers/resume-parts.ts`; each boot keeps
-   them in `server_runtimes.applied`).
+   them in `server_runtimes.applied`). A start that boots although the server slept with its
+   memory raises the `wake_booted` signal, except a `stale-sleep` refresh, which boots so that a
+   player's wake doesn't (docs/diagnosis.md). One server's operations, joins and signals in time
+   order are `bun scripts/ops.ts timeline <server>`.
 2. **Stopped.** Nothing in Blockly turns a suspended machine into a stopped one after a while. The
    memory goes when:
    - Fly drops it: a host migration, maintenance, a lost snapshot. Fly promises no resume and

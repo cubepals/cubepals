@@ -139,8 +139,9 @@ interval, and at the end a transfer or a configuration disconnect where `speakWh
 a dialog, with the waking line read through `WakingLine.waking`. It is written and works: run as
 a child process against a stand-in control plane, a join to a booting server has its login
 finished at 4 s, hears the dialog and is transferred to the address it dialled, and one to a
-server that resumes in half a second is passed on as before (`held-dialog.test.ts`). It can't
-merge as it is: **`agent.ts` is at 796 of its 800 lines**, and the wiring takes it to 812. The
+server that resumes in half a second is passed on as before (its test, `held-dialog.test.ts`, is
+not merged yet). It can't merge as it is: **`agent.ts` is at 799 of its 800 lines**, and the wiring
+takes it past 800. The
 waiting room moves out of the agent first, into a module of its own, in a `Move:` change; the
 wiring follows once the staging proof below has passed.
 
