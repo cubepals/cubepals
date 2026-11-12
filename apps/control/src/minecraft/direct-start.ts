@@ -34,7 +34,10 @@
  *
  * A record is used once: the boot that starts from it takes it away first, and puts it back only
  * when the server has stayed up. One that fell over, or a record that won't read, is then started
- * by the scripts the next time, as if there had been no record.
+ * by the scripts the next time, as if there had been no record. And a boot that goes through the
+ * scripts takes away whatever record it found before they run, so the only record there can be is
+ * the one the last scripts wrote: an older one would start the server with what those scripts
+ * have since changed, the password it is stopped with among it.
  *
  * Not for what the scripts skip while they do run (`wake-step.ts`), or for a resume from memory,
  * which starts nothing.
@@ -77,11 +80,13 @@ const RUNNER_LINES = [
  * What reads the record, as the volume's own user, line by line. `check` says whether a start
  * from it would hold: its key is this boot's, its lines read as they were written, every jar its
  * command names is there. `run` takes the record away, then starts the server from it; whatever
- * fails after that leaves no record, so the next boot is the scripts'.
+ * fails after that leaves no record, so the next boot is the scripts'. `forget` takes it away for
+ * a boot the scripts are about to run.
  */
 const STARTER_LINES = [
   '#!/bin/sh',
   `record=${RECORD}; mode=$1`,
+  'if [ "$mode" = forget ]; then rm -f $record $record.last; exit 0; fi',
   '[ "$(sed -n 1p $record 2>/dev/null)" = "$BLOCKLY_START_KEY" ] || exit 1',
   'if [ "$mode" = run ]; then mv -f $record $record.last || exit 1; record=$record.last; fi',
   '{ read -r key; read -r dir; read -r added; case "$added" in ""|*[!0-9]*) exit 1;; esac',
@@ -117,4 +122,6 @@ export const DIRECT_START_STEP = [
   'echo "[init] Starting the Minecraft server at once: nothing changed since the last start";',
   'exec $direct run;',
   'fi;',
+  // Left to the scripts: no record from before them outlives this boot.
+  'if [ -n "$direct" ]; then $direct forget; fi;',
 ].join(' ')

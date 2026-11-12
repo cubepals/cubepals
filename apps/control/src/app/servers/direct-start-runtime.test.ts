@@ -149,6 +149,19 @@ describe('a boot that changed something', () => {
     expect(boot()).toEqual(SCRIPTED)
   })
 
+  test('leaves no older record behind, whatever its scripts then write down or don’t', () => {
+    boot()
+    const older = readFileSync(record(), 'utf8')
+    // A boot the scripts take, whose scripts add a value that can't be written down: the record
+    // from before them is gone, not kept for a later boot to start from.
+    const exported = 'export RCON_PASSWORD=another-password; export NOTE="one\ntwo";'
+    boot({ DIFFICULTY: 'peaceful' }, exported)
+    expect(existsSync(record())).toBe(false)
+    expect(older).toContain('RCON_PASSWORD=made-by-the-scripts')
+    // So the first setting again goes through the scripts, not from what was written before.
+    expect(boot()).toEqual(SCRIPTED)
+  })
+
   test('is not written down where the scripts added a value over several lines', () => {
     const exported = 'export RCON_PASSWORD=made-by-the-scripts; export NOTE="one\ntwo";'
     expect(boot({}, exported)).toEqual(SCRIPTED)
