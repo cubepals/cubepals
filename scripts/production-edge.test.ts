@@ -22,6 +22,7 @@ import {
   type RegionSteps,
   regionsToRoll,
   rollEdge,
+  rolledLines,
   sumPlayers,
   waitForPlayers,
   whyNotReady,
@@ -178,7 +179,7 @@ const roll = (
   steps: RegionSteps,
   say: (line: string) => void,
   clock: Clock,
-  options = { cordon: true },
+  options: { cordon: boolean; cut?: boolean } = { cordon: true },
 ) => rollEdge(regions, steps, say, clock, options)
 
 describe('restarting the edge without cutting a player', () => {
@@ -212,7 +213,7 @@ describe('restarting the edge without cutting a player', () => {
     expect(w.time()).toBeGreaterThanOrEqual(EDGE_DRAIN_LIMIT_MS)
   })
 
-  test('goes ahead at the limit, and says how many it cuts', async () => {
+  test('the wait ends at the limit, with the count still connected', async () => {
     const w = world()
     const wait = await waitForPlayers(async () => 4, w.said, w.clock)
     expect(wait.left).toBe(4)
@@ -264,18 +265,71 @@ describe('restarting the edge without cutting a player', () => {
     expect(w.log).toEqual(['cordon fra', 'deploy fra', 'uncordon fra'])
     expect(w.time()).toBeGreaterThanOrEqual(EDGE_READY_LIMIT_MS)
   })
+})
 
-  test('counts the players cut across regions', async () => {
+describe('an edge its players are still on', () => {
+  test('a region its players are still on at the limit is left as it is, and the next goes on', async () => {
     const w = world()
     const said: string[] = []
-    const { cut } = await roll(
+    const result = await rollEdge(
       ['fra', 'iad'],
       steps(w.log, { players: async (r) => (r === 'fra' ? 2 : 0) }),
       (line) => said.push(line),
       w.clock,
     )
-    expect(cut).toBe(2)
+    expect(result).toEqual({ cut: 0, uncounted: [], left: ['fra'] })
+    // Never deployed, so nobody on it was cut; the other region is.
+    expect(w.log).toEqual(['deploy iad', 'ready iad'])
+    expect(w.time()).toBeGreaterThanOrEqual(EDGE_DRAIN_LIMIT_MS)
+    expect(said).toContain(
+      'fra: 2 players still connected after 10 min; left on its release, for the next deploy',
+    )
+    expect(rolledLines(result)).toEqual([
+      'edge: fra still had players connected and was left on the release it runs; the next deploy takes it.',
+      'edge: no player was cut.',
+    ])
+  })
+
+  test('a region left while cordoned takes joins again', async () => {
+    const w = world()
+    const result = await roll(['fra', 'iad'], steps(w.log, { players: async () => 1 }), () => {}, w.clock)
+    expect(result.left).toEqual(['fra', 'iad'])
+    expect(w.log).toEqual(['cordon fra', 'uncordon fra', 'cordon iad', 'uncordon iad'])
+  })
+
+  test('a region left that can’t take joins again stops the roll before the next is cordoned', async () => {
+    const w = world()
+    const stuck = steps(w.log, {
+      players: async () => 1,
+      uncordon: async (r) => {
+        w.log.push(`uncordon ${r}`)
+        throw new Error('fly down')
+      },
+    })
+    await expect(roll(['fra', 'iad'], stuck, () => {}, w.clock)).rejects.toThrow(
+      'fra: is still cordoned and takes no joins: fly down',
+    )
+    // Nothing of iad was touched, so one region still takes joins.
+    expect(w.log.filter((line) => line.endsWith('iad'))).toEqual([])
+    expect(w.log).not.toContain('deploy fra')
+  })
+
+  test('a deploy that can’t wait restarts it, and counts the players cut across regions', async () => {
+    const w = world()
+    const said: string[] = []
+    const result = await roll(
+      ['fra', 'iad'],
+      steps(w.log, { players: async (r) => (r === 'fra' ? 2 : 0) }),
+      (line) => said.push(line),
+      w.clock,
+      { cordon: true, cut: true },
+    )
+    expect(result).toEqual({ cut: 2, uncounted: [], left: [] })
+    expect(w.log).toContain('deploy fra')
     expect(said).toContain('fra: restarting with 2 players still connected after 10 min; they are cut')
+    expect(rolledLines(result)).toEqual([
+      'edge: restarted with 2 counted players still connected; they were cut.',
+    ])
   })
 })
 
@@ -339,7 +393,7 @@ describe('restarting the edge when a region can’t be cordoned or fails', () =>
       (line) => said.push(line),
       w.clock,
     )
-    expect(result).toEqual({ cut: 0, uncounted: ['fra'] })
+    expect(result).toEqual({ cut: 0, uncounted: ['fra'], left: [] })
     expect(said).toContain("fra: it can't say how many players are connected, so none was waited for")
     expect(w.time()).toBe(0)
   })

@@ -62,6 +62,7 @@ import {
   edgeSourceGaps,
   type FlyAddress,
   regionsToRoll,
+  rolledLines,
 } from './production-edge.ts'
 import { buildEdgeImage, machinesOf, rollEdgeApp } from './production-edge-deploy.ts'
 import { missing, type Part, REQUIREMENTS, whyNot } from './production-guard.ts'
@@ -187,7 +188,8 @@ async function deployApp(
       'image' in from
         ? from.image
         : buildEdgeImage('bly-prod-edge', config[1] as string, DOCKERFILES.edge, from.label, env)
-    const { cut, uncounted } = await rollEdgeApp(
+    // A rollback puts the edge back at once, whoever is on it; a deploy leaves a region its players are on.
+    const rolled = await rollEdgeApp(
       'bly-prod-edge',
       config[1] as string,
       image,
@@ -195,13 +197,9 @@ async function deployApp(
       env,
       say,
       'image' in from ? hasDrainPort(from.image) : true,
+      'image' in from,
     )
-    if (uncounted.length > 0)
-      say(
-        `edge: ${uncounted.join(', ')} couldn’t say how many players were connected, so the players cut there are unknown.`,
-      )
-    if (cut > 0) say(`edge: restarted with ${cut} counted players still connected; they were cut.`)
-    else if (uncounted.length === 0) say('edge: no player was cut.')
+    for (const line of rolledLines(rolled)) say(line)
   } else run('fly', ['deploy', ...source, ...config, '--yes', '--ha=false'], env)
   if (app === 'edge') placeEdge(env)
 }

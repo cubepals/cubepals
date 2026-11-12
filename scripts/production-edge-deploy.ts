@@ -19,6 +19,7 @@ import {
   type Machine,
   machinesIn,
   type RegionSteps,
+  type Rolled,
   rollEdge,
   sumPlayers,
   whyNotReady,
@@ -104,8 +105,11 @@ export function buildEdgeImage(
 }
 
 /**
- * Puts `image` on the app's machines one region at a time, in the order of `regions`; how many
- * players were cut. `drains` is whether the image answers on the drain port. Every machine in each of `regions` is asked and deployed (production-edge.ts).
+ * Puts `image` on the app's machines one region at a time, in the order of `regions`; how it went.
+ * `drains` is whether the image answers on the drain port. Every machine in each of `regions` is
+ * asked and deployed, except in a region whose players are still connected when the wait for them
+ * ends: that one is left, unless `cut` or `EDGE_CUT=1` says this deploy can't wait
+ * (production-edge.ts).
  */
 export async function rollEdgeApp(
   app: string,
@@ -115,7 +119,8 @@ export async function rollEdgeApp(
   env: NodeJS.ProcessEnv,
   say: (line: string) => void,
   drains = true,
-): Promise<{ cut: number; uncounted: string[] }> {
+  cut = false,
+): Promise<Rolled> {
   const idsIn = (region: string): string[] => {
     const ids = machinesIn(machinesOf(app, env), region)
     if (ids.length === 0) throw new Error(`The edge has no machine in ${region}`)
@@ -156,5 +161,8 @@ export async function rollEdgeApp(
       return true
     },
   }
-  return rollEdge(regions, steps, say, clock, { cordon: process.env.EDGE_CORDON === '1' })
+  return rollEdge(regions, steps, say, clock, {
+    cordon: process.env.EDGE_CORDON === '1',
+    cut: cut || process.env.EDGE_CUT === '1',
+  })
 }
