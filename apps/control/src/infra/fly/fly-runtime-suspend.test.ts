@@ -152,7 +152,8 @@ describe('FlyRuntime with a server asleep: waking it, or stopping it', () => {
     const woken = await runtime.ensureProvisioned(KEY, { regionKey: 'eu-central' }, spec, progress)
     expect(woken).toBe(handle)
     expect(steps).toEqual(['resuming'])
-    expect(marks).toEqual([])
+    // What Fly answered the start: it had the machine asleep, and didn't move it.
+    expect(marks).toEqual(['started_from:suspended'])
     expect(fake.startedFrom).toEqual(['suspended'])
     expect(machine.state).toBe('started')
     // Only the listing that found it asleep, and the start: no secrets, app, address or update.
@@ -200,6 +201,15 @@ describe('FlyRuntime with a server asleep: waking it, or stopping it', () => {
     await runtime.start(handle)
     expect(machine.state).toBe('started')
     expect(fake.refusedStarts).toBe(2)
+  })
+
+  test('a resume Fly moved to another host for says so, beside the state Fly had it in', async () => {
+    const { fake, runtime, steps, marks, progress, sleep } = await running()
+    await sleep()
+    fake.movesOnStart = true
+    await runtime.ensureProvisioned(KEY, { regionKey: 'eu-central' }, spec, progress)
+    expect(steps).toEqual(['resuming'])
+    expect(marks).toEqual(['moved_host', 'started_from:suspended'])
   })
 
   test('a wake on a new configuration drops the memory it kept and boots that configuration', async () => {

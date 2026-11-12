@@ -139,9 +139,11 @@ type RuntimeStep = 'allocating' | 'waiting_for_room' | 'storage' | 'compute' | '
 /**
  * Why a start boots rather than resumes, where a runtime can tell: `not_asleep`, its compute
  * stopped rather than asleep with its memory; `other_spec`, asleep on another spec than the one
- * asked for; `no_compute`, nothing there to start yet.
+ * asked for; `no_compute`, nothing there to start yet. And what the provider said of the start
+ * itself, where it says: `moved_host`, started on another host than it slept on; and, for a
+ * resume, `started_from:<state>`, the state the provider had it in when asked.
  */
-export type RuntimeMark = 'not_asleep' | 'other_spec' | 'no_compute'
+export type RuntimeMark = 'not_asleep' | 'other_spec' | 'no_compute' | 'moved_host' | `started_from:${string}`
 
 export interface ProgressSink {
   step(name: RuntimeStep): Promise<void>

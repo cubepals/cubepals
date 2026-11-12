@@ -79,6 +79,7 @@ import {
   readMachine,
   sleepMachine,
   startMachine,
+  startMarks,
   stopMachine,
   untilStarted,
   updateMachine,
@@ -260,7 +261,9 @@ export class FlyRuntime implements MinecraftRuntime {
     await progress.handle(handle)
 
     await startStep(progress, existing, asleep)
-    await this.start(handle)
+    // What Fly says of the start is kept: whether it moved the machine, and what it took it for.
+    const answer = await startMachine(this.#fly, app, idOf(machine, 'a machine'))
+    for (const mark of startMarks(answer, asleep !== null)) await progress.mark?.(mark)
     return handle
   }
 

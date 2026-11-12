@@ -11,7 +11,7 @@
 import { setTimeout as delay } from 'node:timers/promises'
 import { SECOND_MS } from '@blockly/contracts/durations'
 import { z } from 'zod'
-import type { ExecResult } from '../../../app/ports/runtime.ts'
+import type { ExecResult, RuntimeMark } from '../../../app/ports/runtime.ts'
 import type { FlyClient, FlySchemas } from '../client.ts'
 import { META } from '../machine-config.ts'
 import { saysClaimed, saysNotRunning, saysNotYet, saysReplacing } from '../refusals.ts'
@@ -344,26 +344,61 @@ async function withLease<T>(
  * Started once Fly has settled it, and asked again while Fly refuses only because it hasn't yet. A
  * refused start used to fail the operation, whose retries backed off well past the moment it was
  * ready (on staging, 40 s of a first start spent waiting on nothing, and a start straight after a
- * stop came up 123 s later). One already started or starting is left as it is.
+ * stop came up 123 s later). One already started or starting is left as it is, and says nothing:
+ * otherwise what Fly answered the start that took (`StartAnswer`).
  */
-export async function startMachine(fly: FlyClient, app: string, machineId: string): Promise<void> {
+export async function startMachine(
+  fly: FlyClient,
+  app: string,
+  machineId: string,
+): Promise<StartAnswer | null> {
   const deadline = Date.now() + SETTLE_SECONDS * 1000
   for (;;) {
     const machine = await settled(fly, app, machineId)
     if (machine === null) throw new Error('The machine is gone')
-    if (machine.state === 'started' || machine.state === 'starting') return
+    if (machine.state === 'started' || machine.state === 'starting') return null
     const started = await fly.POST('/v1/apps/{app_name}/machines/{machine_id}/start', {
       params: { path: { app_name: app, machine_id: machineId } },
     })
     // A start straight after a suspend is refused 409 while Fly still writes its memory out.
     const refused = started.response.status === 412 || started.response.status === 409
     const notYet = refused && saysNotYet(started.error)
-    if (!notYet || Date.now() > deadline) {
-      launched(started, 'starting the machine', true)
-      return
-    }
+    if (!notYet || Date.now() > deadline) return startAnswer(launched(started, 'starting the machine', true))
     await sleep(1000)
   }
+}
+
+/**
+ * What Fly says of a machine it started: the state it had it in, and whether it moved it to
+ * another host to start it. These are `previous_state` and `migrated` of `StartMachineResponse` in
+ * Fly's Machines API reference (docs.fly.io/api/machines/models); the OpenAPI document this
+ * client is generated from leaves the start's answer untyped.
+ */
+export interface StartAnswer {
+  previousState: string | null
+  moved: boolean
+}
+
+function startAnswer(body: unknown): StartAnswer {
+  const said = (body ?? {}) as { previous_state?: unknown; migrated?: unknown }
+  return {
+    previousState: typeof said.previous_state === 'string' ? said.previous_state : null,
+    moved: said.migrated === true,
+  }
+}
+
+/**
+ * What an operation's record keeps of Fly's answer to a start (`RuntimeMark`): `moved_host` where
+ * Fly started the machine on another host, which never brings the memory it kept; and, for a
+ * resume, the state Fly had it in (`started_from:suspended` where it still counted it asleep). A
+ * resume that then boots from its disk (`resume_booted`) with `started_from:suspended` and no
+ * `moved_host` lost its memory where it was.
+ */
+export function startMarks(answer: StartAnswer | null, resuming: boolean): RuntimeMark[] {
+  if (answer === null) return []
+  const marks: RuntimeMark[] = answer.moved ? ['moved_host'] : []
+  if (resuming && answer.previousState !== null) marks.push(`started_from:${answer.previousState}`)
+  return marks
 }
 
 /** The machine once Fly has finished preparing it, or stopping it. */

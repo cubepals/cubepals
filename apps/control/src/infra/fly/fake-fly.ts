@@ -143,6 +143,8 @@ export class FakeFly {
   suspendedStarts = 0
   /** The state each start found its machine in: `suspended` is a resume, anything else a boot. */
   readonly startedFrom: string[] = []
+  /** Whether a start says Fly moved the machine to another host for it (`migrated`). */
+  movesOnStart = false
   /**
    * Requests that see a destroyed machine still being destroyed, its volume still bound to it; and
    * the deletes of that volume refused meanwhile.
@@ -531,14 +533,15 @@ export class FakeFly {
     }
     const refused = this.#refusedStart(machine)
     if (refused) return Response.json(refused, { status: 412 })
-    this.startedFrom.push(machine.state)
+    const previous = machine.state
+    this.startedFrom.push(previous)
     machine.state = 'started'
     if (this.startingReads > 0) {
       machine.state = 'starting'
       machine.startReadsLeft = this.startingReads
     }
     machine.updated_at = new Date().toISOString()
-    return Response.json({ previous_state: 'stopped' })
+    return Response.json({ previous_state: previous, migrated: this.movesOnStart, new_host: '' })
   }
 
   /** A command, which Fly runs only in a machine it counts as running. */
