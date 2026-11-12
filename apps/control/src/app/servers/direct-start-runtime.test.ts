@@ -5,14 +5,29 @@
 /**
  * The step that starts the server without the image's scripts, run in a real shell against
  * folders standing in for the volume, the machine's disk and the image, with stand-ins for the
- * image's runner and for `gosu` that say how they were called.
+ * image's runner and for `gosu` that say how they were called. Run as root, the volume is given
+ * to another user, as a server's is, and the step has to go through `gosu`; run as anyone else,
+ * the volume is the runner's own.
  */
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  chmodSync,
+  chownSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { DIRECT_START_STEP } from './direct-start.ts'
-import { bootMilestone } from './logs.ts'
+import { DIRECT_START_STEP } from '../../minecraft/direct-start.ts'
+import { bootMilestone } from '../../minecraft/logs.ts'
+
+const AS_ROOT = process.getuid?.() === 0
+/** The user a server's volume belongs to, where this runs as root. */
+const SERVER_USER = 1000
 
 let root = ''
 const record = () => join(root, 'data/.blockly-start')
@@ -20,12 +35,16 @@ const tool = (name: string, lines: string[]) => {
   writeFileSync(join(root, 'bin', name), `#!/bin/sh\n${lines.join('\n')}\n`)
   chmodSync(join(root, 'bin', name), 0o755)
 }
+const handedOver = () =>
+  existsSync(join(root, 'gosu.log')) ? readFileSync(join(root, 'gosu.log'), 'utf8').trim().split('\n') : []
 
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), 'blockly-direct-'))
+  chmodSync(root, 0o755)
   for (const dir of ['data', 'shim', 'bin', 'image']) mkdirSync(join(root, dir), { recursive: true })
   writeFileSync(join(root, 'image/start-finalExec'), 'the scripts of one image\n')
   writeFileSync(join(root, 'data/server.jar'), 'jar')
+  if (AS_ROOT) chownSync(join(root, 'data'), SERVER_USER, SERVER_USER)
   // The runner says where it ran, with which words, and the password it would stop the server
   // with. How long the server stays up is read from a file: a variable would be a changed boot.
   tool('mc-server-runner', [
@@ -33,15 +52,16 @@ beforeEach(() => {
     'echo "ran in $(pwd): $* (password $password)"',
     'sleep "$(cat "$STAYS_UP_FILE" 2>/dev/null || echo 0)"',
   ])
-  tool('gosu', ['echo "as $1"', 'shift', 'exec "$@"'])
+  // gosu, which only writes down whom it was asked to run what as.
+  tool('gosu', [`echo "$1 $(basename "$2") $3" >> ${join(root, 'gosu.log')}`, 'shift', 'exec "$@"'])
 })
 afterEach(() => rmSync(root, { recursive: true, force: true }))
 
 /** The server's command as the image's scripts end on it. */
 const COMMAND = '--stop-duration 60s -- java -Xmx1996M -jar ./server.jar'
 const DIRECT = '[init] Starting the Minecraft server at once: nothing changed since the last start'
-const ran = (password = 'made-by-the-scripts') => `ran in {data}: ${COMMAND} (password ${password})`
-const SCRIPTED = ['scripts with 0 words', ran()]
+const RAN = `ran in {data}: ${COMMAND} (password made-by-the-scripts)`
+const SCRIPTED = ['scripts with 0 words', RAN]
 
 /**
  * One boot: the step, then what stands for the image's scripts, which say they ran, export what
@@ -81,9 +101,8 @@ function boot(
 describe('a boot that changed nothing', () => {
   test('goes through the scripts the first time, which leaves what they ran written down', () => {
     expect(boot()).toEqual(SCRIPTED)
-    const [key, as, dir, added, variable, ...words] = readFileSync(record(), 'utf8').trimEnd().split('\n')
+    const [key, dir, added, variable, ...words] = readFileSync(record(), 'utf8').trimEnd().split('\n')
     expect(key).toMatch(/^[0-9a-f]{64}$/)
-    expect(as).toBe(`${process.getuid?.()}:${process.getgid?.()}`)
     expect(dir).toBe(join(root, 'data'))
     // What the scripts added to the environment, and nothing the entrypoint was given.
     expect([added, variable]).toEqual(['1', 'RCON_PASSWORD=made-by-the-scripts'])
@@ -93,12 +112,10 @@ describe('a boot that changed nothing', () => {
   test('then starts the server at once: the same words, directory and variables', () => {
     boot()
     writeFileSync(join(root, 'stays-up'), '1')
-    expect(boot()).toEqual([DIRECT, ran()])
+    expect(boot()).toEqual([DIRECT, RAN])
     // It stayed up, so the record is there for the boot after.
     expect(existsSync(record())).toBe(true)
-  })
-
-  test('says so as the image says its hand-over to Java, which a start’s progress reads', () => {
+    // Said as the image says its hand-over to Java, which a start's progress reads.
     expect(bootMilestone(DIRECT)).toBe('starting')
   })
 
@@ -137,13 +154,35 @@ describe('a boot that changed something', () => {
     expect(boot({}, exported)).toEqual(SCRIPTED)
     expect(existsSync(record())).toBe(false)
   })
+})
 
-  test('runs as the user the scripts chose: itself, through gosu as root, or not at all', () => {
+describe('a record on a volume the server can write', () => {
+  test('is read and run as the volume’s user, never as root', () => {
     boot()
-    const lines = readFileSync(record(), 'utf8').split('\n')
-    writeFileSync(record(), [lines[0], '1000:1000', ...lines.slice(2)].join('\n'))
-    // Root hands over to that user; anyone else who isn't that user leaves it to the scripts.
-    if (process.getuid?.() === 0) expect(boot()).toEqual([DIRECT, 'as 1000:1000', ran()])
-    else if (process.getuid?.() !== 1000) expect(boot()).toEqual(SCRIPTED)
+    rmSync(join(root, 'gosu.log'), { force: true })
+    expect(boot()[0]).toBe(DIRECT)
+    // Root asked that user whether it holds, and handed the start over to them.
+    const as = `${SERVER_USER}:${SERVER_USER}`
+    expect(handedOver()).toEqual(AS_ROOT ? [`${as} direct-start check`, `${as} direct-start run`] : [])
+  })
+
+  test('that doesn’t read as it was written is left to the scripts, and can’t stop a boot', () => {
+    boot()
+    const [key, dir, , , ...words] = readFileSync(record(), 'utf8').trimEnd().split('\n')
+    // A line that isn't a variable where one was counted.
+    writeFileSync(record(), [key, dir, '1', 'not a variable', ...words, ''].join('\n'))
+    expect(boot()).toEqual(SCRIPTED)
+    // No words at all.
+    writeFileSync(record(), [key, dir, '0', ''].join('\n'))
+    expect(boot()).toEqual(SCRIPTED)
+  })
+
+  test('is left alone where the volume is root’s: nothing starts at once as root', () => {
+    if (!AS_ROOT) return
+    boot()
+    rmSync(join(root, 'gosu.log'), { force: true })
+    chownSync(join(root, 'data'), 0, 0)
+    expect(boot()).toEqual(SCRIPTED)
+    expect(handedOver()).toEqual([])
   })
 })
