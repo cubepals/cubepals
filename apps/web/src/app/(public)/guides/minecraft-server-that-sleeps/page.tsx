@@ -21,7 +21,16 @@ import Link from 'next/link'
 import { bedrockLive } from '../../../../lib/bedrock'
 import { daysSaid, hoursSaid } from '../../../../lib/plans'
 import { OutLink } from '../../../../ui/out-link'
-import { GuideArticle, GuideLink, guideMetadata, guidePlans, Part, Questions, Shot } from '../article'
+import {
+  GuideArticle,
+  GuideLink,
+  guideMetadata,
+  guidePlans,
+  onPaidSaid,
+  Part,
+  Questions,
+  Shot,
+} from '../article'
 
 const SLUG = 'minecraft-server-that-sleeps'
 const PICTURES = `/guides/${SLUG}`
@@ -32,7 +41,7 @@ const ASLEEP_LINE = 'Sleeping · join to wake it up'
 export const generateMetadata = (): Metadata => guideMetadata(SLUG)
 
 export default async function Guide() {
-  const { free, paid } = await guidePlans()
+  const { free, paidPlans } = await guidePlans()
   return (
     <GuideArticle slug={SLUG}>
       <p className="type-body">
@@ -66,11 +75,12 @@ export default async function Guide() {
       <Part id="when" title="When does it go back to sleep?">
         <p>
           {free?.sleepsAfterMinutes
-            ? `${free.sleepsAfterMinutes} minutes after everyone leaves${
-                paid?.sleepsAfterMinutes && paid.sleepsAfterMinutes !== free.sleepsAfterMinutes
-                  ? ` (${paid.sleepsAfterMinutes} on ${paid.name})`
-                  : ''
-              }, so someone who pops out for a minute comes back to it still running.`
+            ? `${free.sleepsAfterMinutes} minutes after everyone leaves${onPaidSaid(
+                free,
+                paidPlans,
+                (plan) => plan.sleepsAfterMinutes,
+                String,
+              )}, so someone who pops out for a minute comes back to it still running.`
             : 'A few minutes after everyone leaves.'}{' '}
           It saves the world before it stops.
         </p>
@@ -130,9 +140,12 @@ export default async function Guide() {
         <p>
           It sleeps as soon as everyone leaves.
           {free
-            ? ` After ${daysSaid(free.restsAfterDays)} without play${
-                paid ? ` (${daysSaid(paid.restsAfterDays)} on ${paid.name})` : ''
-              } it rests in storage: joining still wakes it, it just takes a couple of minutes.`
+            ? ` After ${daysSaid(free.restsAfterDays)} without play${onPaidSaid(
+                free,
+                paidPlans,
+                (plan) => plan.restsAfterDays,
+                daysSaid,
+              )} it rests in storage: joining still wakes it, it just takes a couple of minutes.`
             : ' After a while without play it rests in storage: joining still wakes it, it just takes a couple of minutes.'}
           {free?.deletedAfterDays
             ? ` On the trial, a world nobody has played for ${daysSaid(free.deletedAfterDays)} is deleted, and you’re emailed twice before, with a way to keep it and a download.`

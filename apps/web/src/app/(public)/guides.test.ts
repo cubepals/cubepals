@@ -5,14 +5,15 @@
 /**
  * Tests for the review step each guide goes through: an unapproved one
  * is a 404 in production, noindex elsewhere, and left out of the index and the footers. And every
- * guide's pictures, which it has whether approved or not.
+ * guide's pictures, which it has whether approved or not, and what a guide says from the plans.
  */
 import { afterEach, describe, expect, test } from 'bun:test'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import type { PublicPlan } from '@blockly/contracts'
 import { canonicalOrigin, UNLISTED } from '../../lib/site.ts'
 import sitemap from '../sitemap.ts'
-import { guideMetadata } from './guides/article.tsx'
+import { bigGroupsSaid, guideMetadata, onPaidSaid } from './guides/article.tsx'
 import {
   draftGuides,
   footerGuides,
@@ -216,4 +217,39 @@ describe('every guide’s pictures', () => {
         expect(sizeOf(readFileSync(file))).toEqual({ width: shot.width, height: shot.height })
       }
     })
+})
+
+describe('what a guide says from the plans', () => {
+  const plan = (over: Partial<PublicPlan>): PublicPlan =>
+    ({ name: 'Free trial', sleepsAfterMinutes: 10, sizes: [], ...over }) as PublicPlan
+  const free = plan({})
+  const core = plan({ name: 'Core', sleepsAfterMinutes: 15 })
+  const plus = plan({
+    name: 'Plus',
+    sleepsAfterMinutes: 15,
+    sizes: [
+      { gb: 3, maxPlayers: 5, hoursAnHour: 1 },
+      { gb: 4, maxPlayers: 10, hoursAnHour: 1 },
+      { gb: 8, maxPlayers: 50, hoursAnHour: 2 },
+      { gb: 16, maxPlayers: 100, hoursAnHour: 4 },
+    ],
+  })
+
+  test('names every paid plan that differs from the trial, once per figure', () => {
+    expect(onPaidSaid(free, [core, plus], (p) => p.sleepsAfterMinutes, String)).toBe(' (15 on Core and Plus)')
+    expect(
+      onPaidSaid(free, [core, { ...plus, sleepsAfterMinutes: 20 }], (p) => p.sleepsAfterMinutes, String),
+    ).toBe(' (15 on Core, 20 on Plus)')
+    expect(onPaidSaid(free, [{ ...core, sleepsAfterMinutes: 10 }], (p) => p.sleepsAfterMinutes, String)).toBe(
+      '',
+    )
+  })
+
+  test('says which groups count more than an hour from the plan’s own sizes', () => {
+    expect(bigGroupsSaid(plus)).toBe(
+      'groups of more than 10 run on a large server, which counts two hours for each hour it runs, and groups of more than 50 on the largest, which counts four',
+    )
+    expect(bigGroupsSaid(core)).toBeNull()
+    expect(bigGroupsSaid(undefined)).toBeNull()
+  })
 })

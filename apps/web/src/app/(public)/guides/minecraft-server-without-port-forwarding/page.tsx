@@ -72,10 +72,10 @@ export default function Guide() {
           wakes it, usually in a couple of seconds.
         </p>
         <Shot
-          src="/guides/minecraft-server-for-friends/address.png"
-          width={576}
-          height={202}
-          alt="A Cubepals server’s page showing its address, maple-hollow.play.cubepals.com, with a Copy address button. There is no port number in it."
+          src="/guides/minecraft-server-without-port-forwarding/address.png"
+          width={560}
+          height={196}
+          alt="A Cubepals server’s address, maple-hollow.play.cubepals.com, with a Copy address button. There is no port number in it."
         />
         <p>
           <GuideLink to="minecraft-server-for-friends">Making a server for friends</GuideLink> shows the whole
@@ -94,9 +94,9 @@ export default function Guide() {
                 {bedrockLive()
                   ? 'Are they on a console? Xbox, PlayStation and Switch can’t add a server, so they can’t join. Phones, tablets and Windows on Bedrock can, once the server lets Bedrock in. A server with mods can’t let them in yet.'
                   : 'Are they on Java Edition? Bedrock players, on phones and consoles, can’t join a Java server.'}{' '}
-                Is their game on the same Minecraft version as the server? Did they paste the whole address,
-                with nothing missing? If the server is on your own computer, is the port forwarded, and is
-                your provider using CGNAT?
+                Is their game on a Minecraft version the server takes? Did they paste the whole address, with
+                nothing missing? If the server is on your own computer, is the port forwarded, and is your
+                provider using CGNAT?
               </>
             ),
           },

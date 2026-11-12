@@ -65,10 +65,10 @@ export default function Guide() {
           <strong>Multiplayer</strong>, then <strong>Add Server</strong>, and paste the address.
         </p>
         <Shot
-          src="/guides/minecraft-server-for-friends/address.png"
-          width={576}
-          height={202}
-          alt="A Cubepals server’s page showing its address, maple-hollow.play.cubepals.com, with a Copy address button and the line: In Minecraft: Java Edition 26.3, open Multiplayer, then Add Server, and paste it."
+          src="/guides/play-minecraft-java-with-friends/address.png"
+          width={560}
+          height={196}
+          alt="A Cubepals server’s address, maple-hollow.play.cubepals.com, with a Copy address button and the line: In Minecraft: Java Edition 1.9 or newer, open Multiplayer, Add Server and paste it."
         />
       </Part>
 
@@ -115,7 +115,7 @@ export default function Guide() {
           {
             question: 'Do we all need the same version?',
             answer:
-              'Yes. Your game has to be on the same Minecraft version as the server or the world you’re joining.',
+              'Not on a plain server: it takes older and newer versions too, and its page says which. A modded server, or a world opened to LAN, needs the same version as yours.',
           },
           {
             question: 'What about modded?',
