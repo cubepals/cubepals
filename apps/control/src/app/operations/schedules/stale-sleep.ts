@@ -15,10 +15,12 @@
  * machines), and the key its last boot recorded (`applied.resumesOn`). A third covers what neither
  * can read: memory the provider dropped while its machine still reads asleep, which only a start
  * finds out. So memory kept for `KEPT_MS` is no longer counted on, and its server is refreshed
- * too, after those whose wake is known to boot.
+ * too, after those whose wake is known to boot. A server someone played within `PLAYED_MS` is the
+ * one a player is likeliest to come back to, so its memory is counted on for `KEPT_PLAYED_MS` only.
  *
  * A server with an operation in flight, asleep for less than `settledMs` (its sleep's restore
- * point may still be writing), or refreshed within `AGAIN_MS` is left for a later pass. A player
+ * point may still be writing), or refreshed within `AGAIN_MS` (within `KEPT_PLAYED_MS` where it was
+ * played lately) is left for a later pass. A player
  * who joins while it refreshes is let in as at any start. It decides only what to refresh; why a
  * wake booted is recorded on the wake itself (`changed:*`, `servers/resume-parts.ts`).
  */
@@ -30,7 +32,7 @@ import { type RuntimeKey, type RuntimeSpec, runtimeKey } from '../../ports/runti
 import type { Runtimes } from '../../runtimes/router.ts'
 import { listByStatus } from '../../servers/persistence.ts'
 import type { RuntimeSpecs } from '../../servers/specs.ts'
-import { REFRESH_KEY } from '../../servers/usage.ts'
+import { lastActivity, REFRESH_KEY } from '../../servers/usage.ts'
 import { activeOperation } from '../persistence.ts'
 
 /** How long a server has been asleep before a pass looks at it: its sleep's restore point is done by then. */
@@ -46,6 +48,13 @@ export const AGAIN_MS = 6 * HOUR_MS
  * asleep again on memory just kept.
  */
 export const KEPT_MS = DAY_MS
+/** How lately someone played a server for its memory to be counted on for less: its players come back. */
+export const PLAYED_MS = 2 * DAY_MS
+/**
+ * How long memory kept for a server played that lately is counted on. Fly kept none of production's
+ * for 4.5 hours or more where measured (2026-11), and every one for 1.3 hours or less.
+ */
+export const KEPT_PLAYED_MS = HOUR_MS
 
 const runtimes = schema.serverRuntimes
 const operations = schema.serverOperations
@@ -99,6 +108,16 @@ async function refreshedSince(db: Db, serverId: string, since: Date): Promise<bo
   return row !== undefined
 }
 
+/**
+ * How long the server's kept memory is counted on, and how soon after a refresh it may have
+ * another: less of both where someone played it lately.
+ */
+async function boundsOf(db: Db, serverId: string, now: Date): Promise<{ again: number; kept: number }> {
+  const played = await lastActivity(db, serverId)
+  const lately = played !== null && played.getTime() > now.getTime() - PLAYED_MS
+  return lately ? { again: KEPT_PLAYED_MS, kept: KEPT_PLAYED_MS } : { again: AGAIN_MS, kept: KEPT_MS }
+}
+
 export function staleSleepers(deps: {
   db: Db
   runtime: Pick<Runtimes, 'wakesWouldBoot'>
@@ -112,17 +131,20 @@ export function staleSleepers(deps: {
     const specOf = new Map<RuntimeKey, RuntimeSpec>()
     const recorded = new Map<RuntimeKey, string | null>()
     const keptSince = new Map<RuntimeKey, Date>()
+    const countedOn = new Map<RuntimeKey, number>()
     for (const { server, resumesOn, keptAt } of asleep) {
       if ((await activeOperation(db, server.id)) !== null) continue
-      if (await refreshedSince(db, server.id, new Date(now.getTime() - AGAIN_MS))) continue
+      const { again, kept } = await boundsOf(db, server.id, now)
+      if (await refreshedSince(db, server.id, new Date(now.getTime() - again))) continue
       // A spec that can't be built now is its own start's to report, not this pass's.
       const desired = await specs.desired(db, server).catch(() => null)
       if (desired === null) continue
       specOf.set(runtimeKey(server.id), desired.spec)
       recorded.set(runtimeKey(server.id), resumesOn)
       keptSince.set(runtimeKey(server.id), keptAt)
+      countedOn.set(runtimeKey(server.id), kept)
     }
-    return { specOf, recorded, keptSince }
+    return { specOf, recorded, keptSince, countedOn }
   }
 
   /**
@@ -133,7 +155,7 @@ export function staleSleepers(deps: {
   return async (options: { limit?: number; settledMs?: number; now?: Date } = {}): Promise<number> => {
     const now = options.now ?? new Date()
     const asleep = await asleepSince(db, new Date(now.getTime() - (options.settledMs ?? SETTLED_MS)))
-    const { specOf, recorded, keptSince } = await wouldRun(asleep, now)
+    const { specOf, recorded, keptSince, countedOn } = await wouldRun(asleep, now)
     if (specOf.size === 0) return 0
     const said = await runtime.wakesWouldBoot(specOf).catch((error: unknown) => {
       console.warn(`stale-sleep: the runtime couldn't say which wakes would boot: ${String(error)}`)
@@ -145,7 +167,9 @@ export function staleSleepers(deps: {
     }
     const keptAt = (key: RuntimeKey) => keptSince.get(key)?.getTime() ?? now.getTime()
     const keptLong = [...specOf]
-      .filter((entry) => !boots(entry) && keptAt(entry[0]) <= now.getTime() - KEPT_MS)
+      .filter(
+        (entry) => !boots(entry) && keptAt(entry[0]) <= now.getTime() - (countedOn.get(entry[0]) ?? KEPT_MS),
+      )
       .sort(([a], [b]) => keptAt(a) - keptAt(b))
     const stale = [...[...specOf].filter(boots), ...keptLong]
     let refreshed = 0

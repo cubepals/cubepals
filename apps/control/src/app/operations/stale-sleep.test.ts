@@ -17,7 +17,7 @@ import { and, desc, eq } from 'drizzle-orm'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
 import type { UserActor } from '../actor.ts'
 import { loadRevision } from '../servers/persistence.ts'
-import { AGAIN_MS, KEPT_MS } from './schedules/stale-sleep.ts'
+import { AGAIN_MS, KEPT_MS, KEPT_PLAYED_MS, PLAYED_MS } from './schedules/stale-sleep.ts'
 import { IDLE_GRACE_MS, WAKE_PROBATION_MS } from './schedules.ts'
 
 const operations = schema.serverOperations
@@ -159,6 +159,30 @@ describe.skipIf(!hasDatabase)('stale-sleep', () => {
     await h.settled(id)
   }, 90_000)
 
+  test('a player who joins while it refreshes plays, and it stays up for them', async () => {
+    const { owner, id, slug } = await running()
+    await asleep(owner, id)
+    await harder(owner, id)
+    h.minecraft.bootTakes(1_500)
+    try {
+      expect(await pass()).toBe(1)
+      // The player's wake finds it on its way up, and is let in when it is.
+      await h.app.edge.wake(`${slug}.play.test`)
+      await h.until(id, 'running', 10_000)
+    } finally {
+      h.minecraft.bootTakes(0)
+    }
+    await h.settled(id)
+    const uuid = randomUUID()
+    h.minecraft.join(id, { uuid, name: 'Alex' })
+    await h.app.schedules.presenceSync()
+    const late = new Date(Date.now() + IDLE_GRACE_MS + WAKE_PROBATION_MS + 1_000)
+    expect(await h.app.schedules.evaluateIdle(await h.server(id), late)).not.toBe('nobody_joined')
+    expect((await h.server(id)).lifecycle.status).toBe('running')
+  }, 60_000)
+})
+
+describe.skipIf(!hasDatabase)('stale-sleep, for memory kept too long to count on', () => {
   test('memory kept past a day isn’t counted on: dropped unseen, it is found before the player’s wake', async () => {
     const { owner, id } = await running()
     await asleep(owner, id)
@@ -205,25 +229,39 @@ describe.skipIf(!hasDatabase)('stale-sleep', () => {
     expect(resumed(await wake(owner, id))).toBe(true)
   }, 90_000)
 
-  test('a player who joins while it refreshes plays, and it stays up for them', async () => {
-    const { owner, id, slug } = await running()
+  test('one played lately has its memory counted on for an hour: its players come back', async () => {
+    const { owner, id } = await running()
     await asleep(owner, id)
-    await harder(owner, id)
-    h.minecraft.bootTakes(1_500)
-    try {
-      expect(await pass()).toBe(1)
-      // The player's wake finds it on its way up, and is let in when it is.
-      await h.app.edge.wake(`${slug}.play.test`)
-      await h.until(id, 'running', 10_000)
-    } finally {
-      h.minecraft.bootTakes(0)
-    }
+    const refreshed = async () => (await lastStart(id)).key.startsWith('start:refresh:')
+    const playedAt = (at: Date) =>
+      h.db
+        .insert(schema.serverActivity)
+        .values({ serverId: id, lastPlayerAt: at })
+        .onConflictDoUpdate({ target: schema.serverActivity.serverId, set: { lastPlayerAt: at } })
+
+    // Last played longer ago than counts: its memory is counted on for the day, as anyone's.
+    await playedAt(new Date(Date.now() - PLAYED_MS - HOUR_MS))
+    await pass({ limit: 50, now: new Date(Date.now() + 2 * KEPT_PLAYED_MS) })
+    expect(await refreshed()).toBe(false)
+
+    await playedAt(new Date())
+    // Kept for less than the hour: still counted on.
+    await pass({ limit: 50, now: new Date(Date.now() + KEPT_PLAYED_MS / 2) })
+    expect(await refreshed()).toBe(false)
+    expect(await pass({ limit: 50, now: new Date(Date.now() + 2 * KEPT_PLAYED_MS) })).toBeGreaterThan(0)
+    await h.until(id, 'running')
     await h.settled(id)
-    const uuid = randomUUID()
-    h.minecraft.join(id, { uuid, name: 'Alex' })
-    await h.app.schedules.presenceSync()
-    const late = new Date(Date.now() + IDLE_GRACE_MS + WAKE_PROBATION_MS + 1_000)
-    expect(await h.app.schedules.evaluateIdle(await h.server(id), late)).not.toBe('nobody_joined')
-    expect((await h.server(id)).lifecycle.status).toBe('running')
-  }, 60_000)
+    expect(await refreshed()).toBe(true)
+    expect(resumed((await lastStart(id)).steps)).toBe(true)
+
+    // Asleep again on memory just kept, and refreshed within the hour: left until that is an hour old too.
+    await sleepsUnjoined(id)
+    const before = (await lastStart(id)).key
+    await pass({ limit: 50, now: new Date(Date.now() + KEPT_PLAYED_MS / 2) })
+    expect((await lastStart(id)).key).toBe(before)
+    await pass({ limit: 50, now: new Date(Date.now() + 2 * KEPT_PLAYED_MS) })
+    expect((await lastStart(id)).key).not.toBe(before)
+    await h.until(id, 'running')
+    await h.settled(id)
+  }, 120_000)
 })

@@ -117,7 +117,8 @@ and a plain message ends the hold: "Still starting · join again in a moment".
 
 - Nothing reads whether a suspended machine still has its snapshot: Fly reports it `suspended`
   either way, and the start that finds it gone launches the machine afresh. What bounds it is
-  time: `stale-sleep` refreshes a server whose memory has been kept for a day
+  time: `stale-sleep` refreshes a server whose memory has been kept for a day, or for an hour
+  where someone played it in the last two
   ([waking.md](waking.md#a-sleep-over-hours-and-days)), so a snapshot dropped before that is
   found with nobody waiting. One dropped since the last refresh is still the joining player's
   boot (rung 2).
