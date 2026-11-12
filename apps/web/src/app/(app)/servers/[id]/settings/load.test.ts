@@ -2,10 +2,15 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
+/**
+ * The load estimate the settings page's meter shows (`load.ts`): its levels, its blocks, its words,
+ * and which size it offers when the work is past comfortable.
+ */
+
 import { expect, test } from 'bun:test'
 import { DEFAULT_DISTANCE } from '@blockly/contracts/game-defaults'
 import { METER } from '@blockly/contracts/meter'
-import { blocksLit, levelOf, loadLine, workload } from './load'
+import { blocksLit, levelOf, loadLine, sizeThatFits, workload } from './load'
 
 const at = (players: number, view: number, simulation: number, holds = 5) =>
   workload({ players, holds, view, simulation })
@@ -38,12 +43,34 @@ test('the meter lights at least one block and never past the end', () => {
   expect(blocksLit(at(5, 32, 32))).toBe(METER.blocks)
 })
 
-test('the line says who it counts, and offers a bigger size only where there is one', () => {
-  expect(loadLine('light', 1, true).line).toBe('With one player on, your server has room to spare.')
-  expect(loadLine('heavy', 5, true).line).toBe(
-    'With all 5 on at once, expect lag. Shorten the distances, or pick a bigger size below.',
-  )
-  expect(loadLine('heavy', 100, false).line).toBe(
-    'With all 100 on at once, expect lag. Shorten the distances.',
-  )
+test('the line says who it counts', () => {
+  expect(loadLine('light', 1).line).toBe('With one player on, your server has room to spare.')
+  expect(loadLine('light', 2).line).toBe('With both on at once, your server has room to spare.')
+  expect(loadLine('heavy', 5).line).toBe('With all 5 on at once, expect lag.')
+})
+
+const [five, ten, twenty, fifty] = [
+  { value: '5', maxPlayers: 5, allowed: true },
+  { value: '10', maxPlayers: 10, allowed: true },
+  { value: '20', maxPlayers: 20, allowed: false },
+  { value: '50', maxPlayers: 50, allowed: false },
+] as const
+const SIZES = [five, ten, twenty, fifty]
+
+test('past comfortable, the smallest bigger size that keeps up easily is offered', () => {
+  // Five on at 12 chunks is busy on a size for five; a size for ten halves it.
+  expect(sizeThatFits({ players: 5, holds: 5, view: 12, simulation: 12 }, SIZES)).toEqual({
+    size: ten,
+    fits: true,
+  })
+  // At 32 chunks only a size the plan doesn't have keeps up: it is offered, for the page to show its plan.
+  expect(sizeThatFits({ players: 5, holds: 5, view: 32, simulation: 32 }, SIZES)?.size.value).toBe('50')
+})
+
+test('when no bigger size keeps up, the biggest is offered as easing it; none, when none is bigger', () => {
+  expect(sizeThatFits({ players: 50, holds: 10, view: 32, simulation: 32 }, SIZES)).toEqual({
+    size: fifty,
+    fits: false,
+  })
+  expect(sizeThatFits({ players: 50, holds: 50, view: 32, simulation: 32 }, SIZES)).toBeNull()
 })

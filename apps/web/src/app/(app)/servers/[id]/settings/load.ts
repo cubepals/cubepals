@@ -44,10 +44,13 @@ export function workload({ players, holds, view, simulation }: Load): number {
 
 export type Level = 'light' | 'comfortable' | 'busy' | 'heavy'
 
+/** Up to here the server keeps up easily: light or comfortable. */
+const EASY = 1.25
+
 /** Where each level ends; past the last, heavy. */
 const LEVELS: [Level, number][] = [
   ['light', 0.6],
-  ['comfortable', 1.25],
+  ['comfortable', EASY],
   ['busy', 2],
 ]
 
@@ -60,11 +63,8 @@ const FULL = 2.5
 export const blocksLit = (work: number): number =>
   Math.max(1, Math.min(METER.blocks, Math.ceil((work / FULL) * METER.blocks)))
 
-/**
- * The meter's word and line for a level, with `players` on at once; `bigger`, when the size
- * section below lists a size that holds more.
- */
-export function loadLine(level: Level, players: number, bigger: boolean): { word: string; line: string } {
+/** The meter's word and line for a level, with `players` on at once. */
+export function loadLine(level: Level, players: number): { word: string; line: string } {
   const all =
     players === 1
       ? 'With one player on'
@@ -79,9 +79,30 @@ export function loadLine(level: Level, players: number, bigger: boolean): { word
     case 'busy':
       return { word: 'Busy', line: `${all}, your server works hard and may slow down now and then.` }
     case 'heavy':
-      return {
-        word: 'Heavy',
-        line: `${all}, expect lag. Shorten the distances${bigger ? ', or pick a bigger size below' : ''}.`,
-      }
+      return { word: 'Heavy', line: `${all}, expect lag.` }
   }
+}
+
+/** A size as the settings page lists it: how many it holds, and whether this plan has it. */
+export interface Size {
+  value: string
+  maxPlayers: number
+  allowed: boolean
+}
+
+/**
+ * The size to offer when the work is past comfortable: the smallest bigger one that keeps up
+ * easily with the same players and distances, else the biggest there is (`fits` false). Null when
+ * none is bigger. A size the plan doesn't have is offered too: the page then shows the plan that
+ * has it, as the size section does.
+ */
+export function sizeThatFits(load: Load, sizes: readonly Size[]): { size: Size; fits: boolean } | null {
+  const bigger = sizes
+    .filter((size) => size.maxPlayers > load.holds)
+    .sort((a, b) => a.maxPlayers - b.maxPlayers)
+  const easy = (size: Size) => workload({ ...load, holds: size.maxPlayers }) <= EASY
+  const fitting = bigger.find(easy)
+  if (fitting) return { size: fitting, fits: true }
+  const biggest = bigger.at(-1)
+  return biggest ? { size: biggest, fits: false } : null
 }

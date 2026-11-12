@@ -10,8 +10,9 @@
  * for all of it (`load-meter.tsx`). It holds no state; the form keeps the draft and saves it.
  */
 
-import type { ServerSettingsView, SettingsOptions } from '@blockly/contracts'
+import type { PartySize, ServerSettingsView, SettingsOptions } from '@blockly/contracts'
 import { DEFAULT_DISTANCE } from '@blockly/contracts/game-defaults'
+import type { ReactNode } from 'react'
 import { settingLabel } from '../../../../../lib/present'
 import { type NumberSetting, numberBounds } from './game-fields'
 import { LoadMeter } from './load-meter'
@@ -31,20 +32,25 @@ export function GameNumbers({
   options,
   problems,
   onChange,
+  onAskSize,
 }: {
   draft: ServerSettingsView
   options: SettingsOptions
   problems: Record<NumberSetting, string | null>
   onChange: (next: ServerSettingsView) => void
+  /** Take the owner to the size section with this size chosen. */
+  onAskSize: (size: PartySize) => void
 }) {
   const bounds = numberBounds(options)
   const holds = options.bounds.maxPlayers
-  // The size section lists one that holds more, whether this plan has it or names the plan that does.
-  const bigger = options.partySizes.some((size) => size.maxPlayers > holds)
+  // The next size that holds more, whether this plan has it or the size section names the plan that does.
+  const next = options.partySizes
+    .filter((size) => size.maxPlayers > holds)
+    .sort((a, b) => a.maxPlayers - b.maxPlayers)[0]
   const slider = (
     key: NumberSetting,
     said: (value: number) => string,
-    help: string,
+    help: ReactNode,
     mark?: { value: number; label: string },
   ) => (
     <RangeField
@@ -70,7 +76,7 @@ export function GameNumbers({
         {slider(
           'simulationDistance',
           chunks,
-          'How far the world keeps moving: crops grow, mobs wander, redstone runs.',
+          'How far the world keeps moving: crops grow, mobs wander, redstone runs. Never past what players see.',
           DEFAULT_MARK,
         )}
       </div>
@@ -78,12 +84,20 @@ export function GameNumbers({
         {slider(
           'maxPlayers',
           players,
-          `This size holds up to ${holds}.${bigger ? ' Pick a bigger size below for more.' : ''}`,
+          <>
+            This size holds up to {holds}.{' '}
+            {next && (
+              <button type="button" className="bk-linkbutton" onClick={() => onAskSize(next.value)}>
+                Choose up to {next.maxPlayers}
+              </button>
+            )}
+          </>,
         )}
         {slider('spawnProtection', protection, 'Blocks around spawn only operators can change.')}
       </div>
       <LoadMeter
-        bigger={bigger}
+        sizes={options.partySizes}
+        onAskSize={onAskSize}
         load={{
           players: draft.maxPlayers,
           holds,

@@ -15,7 +15,8 @@ import styles from './range-field.module.css'
 /**
  * A whole number chosen on a slider: the label and the value read big on one line, a thin Ink
  * track filled to a square thumb, and its ends and one mark (Minecraft's own value) measured under
- * it. The keyboard's arrows step by one, as the native slider does. A value the bounds no longer
+ * it. The keyboard's arrows step by one, as the native slider does. The value's room is the
+ * widest it can be, in the monospaced face, so neither it nor the label moves while it slides. A value the bounds no longer
  * allow (a plan's cap after a change of plan) still reads as it is, with the error under it.
  */
 export function RangeField({
@@ -52,7 +53,11 @@ export function RangeField({
         <label className="bk-field__label" htmlFor={id}>
           {label}
         </label>
-        <output htmlFor={id} className={`${styles.value} bk-num`}>
+        <output
+          htmlFor={id}
+          className={`${styles.value} bk-num`}
+          style={{ minInlineSize: `${Math.max(said(min).length, said(max).length, said(value).length)}ch` }}
+        >
           {said(value)}
         </output>
       </div>

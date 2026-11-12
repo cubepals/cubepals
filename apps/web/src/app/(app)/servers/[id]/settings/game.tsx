@@ -7,6 +7,7 @@
 import {
   DIFFICULTIES,
   GAME_MODES,
+  type PartySize,
   type RestartWhen,
   type ServerSettingsView,
   type ServerView,
@@ -41,9 +42,26 @@ const MODE_LABELS: Record<(typeof GAME_MODES)[number], string> = {
  * How the game plays. Changes become a new revision; `key` resets the form when that lands, and
  * how the save went is kept here, above it, so "Saved" outlives the reset.
  */
-export function GameSettings({ view, options }: { view: ServerView; options: SettingsOptions }) {
+export function GameSettings({
+  view,
+  options,
+  onAskSize,
+}: {
+  view: ServerView
+  options: SettingsOptions
+  /** Take the owner to the size section with a size chosen, when the game asks for more room. */
+  onAskSize: (size: PartySize) => void
+}) {
   const outcome = useOutcome(view)
-  return <GameForm key={JSON.stringify(view.settings)} view={view} options={options} outcome={outcome} />
+  return (
+    <GameForm
+      key={JSON.stringify(view.settings)}
+      view={view}
+      options={options}
+      outcome={outcome}
+      onAskSize={onAskSize}
+    />
+  )
 }
 
 /** The settings change as the API takes it, with when it restarts the server and any jars run anyway. */
@@ -57,10 +75,12 @@ function GameForm({
   view,
   options,
   outcome,
+  onAskSize,
 }: {
   view: ServerView
   options: SettingsOptions
   outcome: Outcome
+  onAskSize: (size: PartySize) => void
 }) {
   const trpc = useTRPC()
   const changed = useChanged(view.id)
@@ -146,7 +166,13 @@ function GameForm({
           problem={motdProblem}
           onChange={(motd) => setDraft({ ...draft, motd })}
         />
-        <GameNumbers draft={draft} options={options} problems={problems} onChange={setDraft} />
+        <GameNumbers
+          draft={draft}
+          options={options}
+          problems={problems}
+          onChange={setDraft}
+          onAskSize={onAskSize}
+        />
       </FormSection>
       <ConfirmChange
         view={restarts ? view : undefined}

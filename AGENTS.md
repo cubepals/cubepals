@@ -13,6 +13,7 @@ Every new capability should first be designed as something Blockly can infer, au
 - **Automation is visible and can be undone.** When Blockly infers or fixes something, it says what it did and leaves a way back.
 - **"Genuinely needs to decide" has a clear line.** It covers what only the player knows (the name, what to play, who plays), anything destructive or one-way (deleting a server, moving a world to a newer Minecraft), money (spending past the included hours), and who can reach their server (public or private, the whitelist). Everything else, Blockly decides.
 - **Advanced stays out of the way.** Very technical users can be given options, but out of regular players' way; Blockly isn't built around them. Whether someone is building the next Hypixel or a server for their friends, they can do whatever they want through the simplest UI and UX possible.
+- **Show what a choice does, where it is made.** A setting whose effect isn't plain from its name is drawn beside its control, and the drawing moves as the control does: what it changes and what it costs, as the distance map and the load meter do on a server's game settings. When the answer lies elsewhere on the page, the page takes the player there with the choice already made. It never says "below" and leaves them to look.
 - **The same thing works the same way.** Before deciding how something behaves, find where Blockly already handles the same situation and do it that way, rather than inventing a second way ([CLAUDE.md](CLAUDE.md)).
 
 ## The name

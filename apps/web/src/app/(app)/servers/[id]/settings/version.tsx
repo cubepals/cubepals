@@ -214,19 +214,46 @@ function VersionForm({
 }
 
 /** Size, chosen the way people choose it: by how many play at once. */
-export function SizeSettings({ view, options }: { view: ServerView; options: SettingsOptions }) {
+/** A size another section asked for, with when, so asking for the same one again moves again. */
+type Asked = { size: PartySize; at: number } | null
+
+export function SizeSettings({
+  view,
+  options,
+  asked,
+  onTaken,
+}: {
+  view: ServerView
+  options: SettingsOptions
+  asked: Asked
+  /** The asked size was chosen and shown: forgotten, so a later remount doesn't move the page again. */
+  onTaken: () => void
+}) {
   const outcome = useOutcome(view)
-  return <SizeForm key={view.partySize} view={view} options={options} outcome={outcome} />
+  return (
+    <SizeForm
+      key={view.partySize}
+      view={view}
+      options={options}
+      outcome={outcome}
+      asked={asked}
+      onTaken={onTaken}
+    />
+  )
 }
 
 function SizeForm({
   view,
   options,
   outcome,
+  asked,
+  onTaken,
 }: {
   view: ServerView
   options: SettingsOptions
   outcome: Outcome
+  asked: Asked
+  onTaken: () => void
 }) {
   const trpc = useTRPC()
   const changed = useChanged(view.id)
@@ -250,6 +277,7 @@ function SizeForm({
   useEffect(() => {
     if (window.location.hash === '#size') document.getElementById('size')?.scrollIntoView({ block: 'start' })
   }, [])
+  useAskedSize(asked, options, setPartySize, onTaken)
 
   const submit = (event: SubmitEvent) => {
     event.preventDefault()
@@ -265,6 +293,7 @@ function SizeForm({
           <Button
             type="submit"
             variant="primary"
+            id="size-submit"
             busy={busyFor(outcome, view)}
             {...said(outcome, { done: 'Resized', failed: 'Didn’t resize' })}
             disabled={!dirty || !allowed.ok}
@@ -336,4 +365,28 @@ function SizeForm({
       </ConfirmChange>
     </form>
   )
+}
+
+/**
+ * The game section's "Choose up to 10": the size is chosen here, the page moves to it, and focus
+ * lands on Change size, which still asks before anything changes. A size the plan doesn't have
+ * isn't chosen; the page moves to the plan that has it.
+ */
+function useAskedSize(
+  asked: Asked,
+  options: SettingsOptions,
+  choose: (size: PartySize) => void,
+  taken: () => void,
+) {
+  useEffect(() => {
+    if (asked === null) return
+    taken()
+    const size = options.partySizes.find((s) => s.value === asked.size)
+    if (size?.allowed) choose(asked.size)
+    const still = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    document.getElementById('size')?.scrollIntoView({ block: 'start', behavior: still ? 'auto' : 'smooth' })
+    // Change size is enabled once the choice renders, so focus waits a frame for it.
+    if (size?.allowed)
+      requestAnimationFrame(() => document.getElementById('size-submit')?.focus({ preventScroll: true }))
+  }, [asked, options, choose, taken])
 }
