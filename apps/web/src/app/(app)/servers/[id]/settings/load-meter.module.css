@@ -1,0 +1,61 @@
+/*
+ * SPDX-FileCopyrightText: 2026 The Cubepals Authors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+/*
+ * The load meter (load-meter.tsx): the site's ten blocks (meter.css), Sand with an Ink edge and
+ * lit in Ink, on a sunken card. Heavy lights them in the danger colour; nothing else is coloured.
+ * Each block lights with a short ease as the sliders move. On a phone the blocks shrink and stay
+ * square, so all ten fit on one line.
+ */
+
+.card {
+  display: grid;
+  gap: var(--space-12);
+  padding: var(--space-20);
+  border: 1.5px solid var(--border-strong);
+  background: var(--surface);
+}
+
+.head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-12);
+}
+
+.word {
+  color: var(--ink);
+}
+.card[data-level="heavy"] .word {
+  color: var(--danger);
+}
+
+.blocks {
+  display: grid;
+  grid-template-columns: repeat(var(--blocks), minmax(0, 26px));
+  gap: 4px;
+}
+
+.block {
+  box-sizing: border-box;
+  aspect-ratio: 1;
+  border: 2px solid var(--border-strong);
+  background: var(--surface-sand);
+  transition: background-color 160ms cubic-bezier(0.25, 1, 0.5, 1);
+}
+.block[data-lit] {
+  background: var(--ink);
+}
+.card[data-level="heavy"] .block[data-lit] {
+  border-color: var(--danger);
+  background: var(--danger);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .block {
+    transition: none;
+  }
+}

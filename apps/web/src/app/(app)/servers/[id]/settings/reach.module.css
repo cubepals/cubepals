@@ -1,0 +1,66 @@
+/*
+ * SPDX-FileCopyrightText: 2026 The Cubepals Authors
+ *
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+/*
+ * The distance map (reach-map.tsx): the map with its legend beside it, or under it where the
+ * page is too narrow for both. Paper ground, faint chunk lines, the squares in a
+ * dither of Ink with a thin Ink edge, and the player's chunk in solid Ink.
+ */
+
+.figure {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-16) var(--space-24);
+  margin: 0;
+}
+
+.map {
+  display: block;
+  max-inline-size: 100%;
+  block-size: auto;
+}
+
+.ground {
+  fill: var(--surface);
+  stroke: var(--border);
+  stroke-width: 1;
+}
+
+.grid line {
+  stroke: var(--border);
+  stroke-width: 1;
+  opacity: 0.6;
+}
+
+.ink {
+  fill: var(--ink);
+}
+
+.edge {
+  stroke: var(--ink);
+  stroke-width: 1.5;
+}
+
+.player {
+  fill: var(--ink);
+}
+
+.legend {
+  display: grid;
+  gap: var(--space-8);
+  color: var(--ink-muted);
+}
+
+.title {
+  color: var(--ink);
+}
+
+.key {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+}
