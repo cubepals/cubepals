@@ -88,7 +88,8 @@ The `signals` job also reads operations, for the kinds `SIGNALS` turns on
 
 - `wake_booted`: a start that booted although its server slept with its memory, with the runtime's
   `reasons` (`other_spec`, `memory_lost`, `resume_booted`, `resume_hung`) and what `changed` since
-  it went to sleep (the wake's `changed:*` marks, [waking.md](waking.md)).
+  it went to sleep (the wake's `changed:*` marks, [waking.md](waking.md)). A refresh (`stale-sleep`),
+  which boots so that a player's wake doesn't, never raises it.
 - `slow_operation`: an operation past its kind's figure in seconds (`byKindS`), finished or
   still `running`, with the step it is on; a start that resumed is held to `resumeS`.
 - `retried_operation`: an operation that took more than one attempt, with its last error.

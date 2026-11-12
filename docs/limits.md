@@ -7,8 +7,9 @@ Paths are from the repository root; `control/` is `apps/control/src/`.
 
 ## Server operations
 
-Starting, stopping, creating and restoring a server are operations a worker runs a few at a time
-(`control/main.node.ts`). The rest wait their turn. Pack imports, world downloads and curation have
+Starting, stopping, creating and restoring a server are operations each worker runs a set number at a time, with
+starts and wakes on a lane of their own (`SERVER_OPERATIONS_CONCURRENCY`, `SERVER_WAKES_CONCURRENCY`;
+`control/config/load.ts`, `control/infra/pg/jobs.ts`). The rest wait their turn. Pack imports, world downloads and curation have
 a queue of their own each (`control/infra/pg/jobs.ts`).
 
 A wake from the edge waits for its server to run, up to a limit set in `control/main.node.ts`, and
@@ -54,7 +55,7 @@ that changed are sent on to mc-router, one at a time through its API (`apps/edge
 
 Each process opens a query pool and a job-queue pool, sized by `DATABASE_POOL_MAX`
 (`packages/db/src/index.ts`, `control/config/load.ts`). Hot queries have indexes
-(`control/app/servers/hot-path-indexes.test.ts` plans the real ones).
+(`control/infra/pg/hot-path-indexes.test.ts` plans the real ones).
 
 ## Sweeps
 

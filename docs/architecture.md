@@ -353,7 +353,7 @@ billing webhook sync. `Entitlements` are derived from it, falling back to the fr
 - `includedUnits` (hours of play a month, a large size counting two; or none), `totalUnits` (hours
   of play once, to play on any day, counting only runs started on the plan, `power_intervals.plan`;
   or none), `mayBuyMore`
-  (extra hours past them; off until billing meters them end to end), `idleShutdownAfter` (or `never`)
+  (extra hours past them; off until billing meters them end to end), `idleShutdownAfterMinutes` (or none)
 - `playerIdleKickMinutes` (Minecraft's own AFK kick), `mayChooseAfkKick`, `maxSessionMinutes`
   (null on every plan; an admin override only), `worldRadius` (the world border's largest radius)
 - `allowedLoaders`, `mayUseMods`, `settingCaps { maxPlayers, viewDistance, simulationDistance }`
@@ -539,7 +539,7 @@ export const publicListings = pgTable('public_listings', {
 }, (t) => [index('listings_browse').on(t.updatedAt).where(sql`${t.visibility} = 'published' and ${t.moderation} = 'clear' and ${t.eligible}`)])
 
 // ── presence: derived, disposable ───────────────────────────────────────────
-// UNLOGGED: fast, not crash-safe, rebuilt from RCON `list` by reconciliation.
+// UNLOGGED: fast, not crash-safe, rebuilt from `list uuids` over the console by reconciliation.
 // CREATE UNLOGGED TABLE server_presence (server_id uuid, player_uuid uuid, player_name text,
 //   source text /* edge|rcon */, seen_at timestamptz, PRIMARY KEY (server_id, player_uuid));
 // CREATE UNLOGGED TABLE server_activity (server_id uuid PRIMARY KEY, last_player_at timestamptz);
@@ -627,7 +627,7 @@ tRPC procedure (parse input, get actor, call ONE method, return)
 | `RevisionService` | `changeSettings`, `changeAuthentication`, `changeVersion`, `changeMods`, `changePack`, `resize`, `rollback` (each refuses taken-down artifacts without an explicit acknowledgement, §15.3) |
 | `WorldService` | `createWorld`, `switchWorld`, `freshStart`, `deleteWorld` (its directories go by `prune_worlds`) |
 | `AccessService` | `add`, `remove` (a whitelist, operator or ban entry), `setWhitelistEnabled`, `refresh` (persist pending + enqueue `access_sync`; never a revision, never a restart) |
-| `BackupService` | `createBackup`, `restoreBackup`, `archiveBackup`, `downloadArchive`, `deleteBackup`, `beginWorldUpload` / `finishWorldUpload` and `imports` (a world brought in, §15.5) (archive methods need the archives capability) |
+| `BackupService` | `createBackup`, `restoreBackup`, `archiveBackup`, `deleteBackup`, `beginWorldUpload` / `finishWorldUpload` and `imports` (a world brought in, §15.5) (archive methods need the archives capability) |
 | `ConsoleService` | `run` (synchronous, audited, via `ServerConsole`; refuses `ban-ip`/`pardon-ip`, §15.1) |
 | `ListingService` | `setPublic`, `setCopyable`, `report`, `moderate`, `dismissReport`, `trustProject` / `untrustProject` (the allowlist), `catalogMoved`, `sweep`, `reevaluate(serverIds)` (materializes the read model); browsing is `ListingQueries.browse` |
 | `SharingService` | `joinThroughInvite` (§15.6); the pages themselves are `SharingQueries` |
@@ -635,8 +635,10 @@ tRPC procedure (parse input, get actor, call ONE method, return)
 | `ArtifactService` | `preflight(revision)`, `pinned`, `mirror(sha512)`, `locate(serverId, sha512, token)` (runtime-facing), `source`, `refresh`, `collectGarbage` |
 | `CatalogSync` | `refresh()` (bulk state poll → transitions → eligibility re-evaluation), `recordObserved(states)` (write-through from resolution) |
 | `PackCuration` | `queueDue`, `ingest` (fetch, verify, judge licences, keep a copy where allowed), `publish` / `withdraw` / `retry` (admins), `offered`, `releaseFor`, `newerFor`, `compatibility` (admins: versions Cubepals tested, templates that lag) |
-| `EdgeService` | `routes`, `wake`, `idleHint`, `recordSession` (the edge protocol's application side) |
+| `EdgeService` | `routes`, `listed`, `wake`, `pingWake`, `idleHint`, `recordSession`, `forgetAddresses` (`known-addresses`) (the edge protocol's application side) |
 | `AfkKick` | The owner's `set` for one server; plan-gated, audited and applied at its next start |
+| `PlayerService` | one player's page (`app/players/`): `view`, `act` (a trip, a game mode, items, levels, an emptied inventory), `putBack` (an inventory kept before it was emptied), `cancel`; an ask for a player who is away waits for their next join and can be taken back, and `presence-sync` delivers it (`deliverWaiting`); `snapshot` keeps what a running server's players carry. Audited and counted like an access change |
+| `VitalsService` | servers' tick health by the minute (`server_vitals`, from the reporter or the console): `record`, `ofServer`, `worst` (operators), `sweep` (`vitals-sweep`, 7 days) |
 | `AccountService` | `suspend`, `reinstate`, `terminate`, `setRestrictions`, `setPlan`, `setLimits`, `grantAdmin`, `revokeAdmin` (admin actors only; each audited); the owner's own `allowExtraPlay`, `recordSource`; `enforce` (`standing-sweep`) |
 | `BillingService` | `startCheckout`, `customerPortal`, `refresh`, `receiveWebhook` → `syncSubscription` |
 | `PlatformControlsService` | `view`, `set` (kill switches and caps), `refreshCatalog` (admin) |
@@ -748,7 +750,7 @@ infra/fly | infra/docker | infra/boat | infra/fleet | infra/fake   ← provider-
     jar the image already installed starts as `PAPER_CUSTOM_JAR`, with no call to Paper's API (one
     hung a wake on Boat, 2026-10-04); on any other type, `<level>_nether/DIM-1` and
     `<level>_the_end/DIM1` move back into the level directory where a Paper run left them and the
-    world has none of its own. Drift doesn't compare that step (`withoutFilesStep`), so it reaches
+    world has none of its own. Drift doesn't compare that step (`withoutOwnSteps`), so it reaches
     a server at its next start.
   - Mods: `MODS=<artifactUrl(a) for each pinned mod>` (`PLUGINS` on Paper).
     - Always emitted, even empty, for loaders with a mods/plugins directory. When `MODS` is
@@ -986,7 +988,8 @@ waitRunning
   upload. It is tried once more after a failure, then its owner is told it couldn't be read
   (docs/modpack-system.md).
 
-**Schedules** (in `infra/pg/jobs.ts` and `ticker.ts`; no queue of their own). Each worker takes the
+**Schedules** (when each runs in `infra/pg/cron.ts`, what each does in `app/scheduled-jobs.ts`, how a
+pass is claimed and run in `infra/pg/jobs.ts` and `ticker.ts`; no queue of their own). Each worker takes the
 passes due as every minute comes with one statement on `job_health` (`claimed_at`, `claimed_until`):
 a pass is run by whichever worker takes it, once, and is not taken again while it runs or within the
 minute. A script's `runScheduledNow` leaves a request there that the next minute's claim takes.
@@ -1003,8 +1006,14 @@ Outcomes are written down in `job_health`, the successes of a minute together:
 - `orphans`: `inventory()` hourly; what a purged server left, and what a move left on a runtime
   its server isn't bound to, gets `destroy`. Compute whose server the database doesn't know is
   kept and logged for an operator: after a restore from a backup, that is every server made since.
-- `presence-sync`: RCON `list` for running servers every minute.
-- `idle-check`: running servers with no players for longer than `entitlements.idleShutdownAfter` → `stop{idle}`.
+- `presence-sync`: every minute, `list uuids` over each running server's console. On the same
+  connection it reads `tick query` where the reporter plugin hasn't sampled the server lately
+  (`server_vitals`, source `console`), delivers the access changes and player-page actions waiting
+  for someone who just joined (§15.1), and says an operator's account notice in game.
+- `stale-sleep`: every 10 minutes. Servers asleep with their memory whose wake would boot, then
+  those whose memory has been kept a day, are refreshed in the background a few a pass, so the
+  player's wake resumes (`app/operations/schedules/stale-sleep.ts`, docs/waking.md).
+- `idle-check`: running servers with no players for longer than `entitlements.idleShutdownAfterMinutes` → `stop{idle}`.
   While running room is tight, a free server's idle time is shorter (`CAPACITY_TUNING`); a paid one's never is.
 - `creates-room`: closes creates by themselves when there is no room, and reopens them once there is.
 - `session-check`: a running server is told in game 10 and 2 minutes before its current run ends,
@@ -1050,9 +1059,22 @@ Outcomes are written down in `job_health`, the successes of a minute together:
 - `retention-sweep`: daily. Warns, then deletes Free worlds unplayed for a year (§15.5 retention).
 - `joins-sweep`: every 10 minutes. Deletes joins and signals older than 35 days, and clears a
   join's `source` once it is 50 minutes old (§5 Joins).
-- `signals`: every minute. Judges the joins, wakes and boot reports of the last hours against
-  `SIGNALS` and raises each signal once; one left open a day closes as expired. Unset, nothing runs
+- `signals`: every minute. Judges the joins, wakes, operations (`operation-signals.ts`) and boot
+  reports of the last hours against `SIGNALS` and raises each signal once, emailing the kinds the
+  setting lists for it (`signal-mail.ts`); one left open a day closes as expired. Unset, nothing runs
   (`app/joins/signals.ts`).
+- `diagnostics-sweep`: hourly. Forgets slow or failed records past their 14 days (`app/diagnostics/`).
+- `vitals-sweep`: hourly. Forgets servers' ticks past their 7 days (`app/vitals/`).
+- `extra-play-report`: every minute. Extra play is counted, play hours chipped in for drawn first,
+  and sent to be billed (`app/billing/extra-usage.ts`).
+- `free-play-links`: every 5 minutes. Free accounts the same players play on are linked, to share
+  one group's free hours (`app/accounts/free-play-guard.ts`).
+- `known-addresses`: hourly. Networks that no longer wake a server with a ping are forgotten.
+- `spend-watchdog`: every 10 minutes. The day's spend against its limit; past it, starts and
+  creation turn off. Machines running with no server behind them are stopped at once.
+- `insight-send`: every minute. Funnel events kept as they happened go to PostHog.
+- `worker-heartbeat`: every minute. Does nothing: its pass says the worker is working its
+  schedules (`/api/health`).
 - `catalog-refresh`: hourly bulk state poll of the tracked set (§15.3).
 - `pack-checks`: hourly, and as a worker starts. The default modpack list's packs with no
   verdict from the last day are checked the way picking them would be (§15.6).
@@ -1200,7 +1222,9 @@ export const DeploymentConfig = z.object({
     ]),
     ticketSecret: Secret,
   }),
-  play: z.object({ domain: Hostname, aliases: z.array(Hostname), port }),
+  play: z.object({ domain: Hostname, aliases: z.array(Hostname), port,
+                   regionIpv4,                              // PLAY_IPV4_BY_REGION: a region's own IPv4
+                   records: { apiToken, zoneId }.nullable() }), // where a server's own A records are kept
   regions: z.array(z.object({ key, label })).min(1),        // product region catalog
   auth: z.object({
     secret: Secret, cookiePrefix,                           // blockly-<deploymentId>
@@ -1271,7 +1295,7 @@ Env-var mapping (`config/load.ts`; every variable is in [configuration.md](confi
 | Transport.io | implicit host | `realtime.publicUrl` from config; `authorize` checks `Origin` ∈ web origins and ticket audience = `deploymentId` |
 | Web bundle | would have held `NEXT_PUBLIC_API_URL` | holds no origins. It uses relative `/api` and asks the API for `realtime.connectInfo` |
 | Internal edge endpoints | `blockly-control.internal` implied | the edge agent's `CONTROL_URL` is config; the control plane's internal listener address is config |
-| DNS | a fixed `*.play.` domain in docs | Terraform variable per environment: wildcard A/AAAA for each of `play.domain` + aliases → edge IPs |
+| DNS | a fixed `*.play.` domain in docs | Terraform variable per environment: wildcard A/AAAA for each of `play.domain` + aliases → the edge's addresses (the A record at `PLAY_IPV4` where set); a server in a region `PLAY_IPV4_BY_REGION` names gets A records of its own from the control plane (`play-records`) |
 | Fly app names | `bly-<id8>` | `bly-<deploymentId>-<key>`, inside `infra/fly` only |
 
 **Changing domains** (e.g. moving the root domain):
@@ -1288,28 +1312,37 @@ hostname was used).
 
 ## 12. Edge routing, wake, idle and presence
 
-### The edge protocol: generic, versioned, in `packages/contracts/edge.ts`
+### The edge protocol: generic, versioned, in `packages/contracts/src/edge.ts`
 
 ```ts
 // GET  {CONTROL_INTERNAL_URL}/edge/v1/routes           → EdgeRoutes   (ETag; 304 when unchanged)
 export interface EdgeRoutes {
   routes: {
     hostname: string
+    aliasOf?: string // a kept address Cubepals points at one of its own servers: that server's slug
     destination: string /* host:port */
     state?: 'asleep' | 'restarting' // absent while it runs
     trialOver?: true // asleep, and its owner's free trial is played: no join wakes it
+    name?: string // the server's name, where the edge says whose server a join reached
     waking?: true // asleep, and on its way up: woken by a join or a ping
+    wakeSeconds?: number // asleep: about how long its wake takes, told to a ping while it wakes
     motd?: string // asleep: the owner's own message, section-sign codes; absent while it is the welcome
+    notice?: string // an operator's notice on the owner, shown to a ping in place of the message
     icon?: string // asleep: a link to the owner's picture, a 64 square PNG; new link, new picture
+    proxyProtocol?: true // the server reads a PROXY protocol header in the run it is in
+    joins?: { release: string; protocol: number; oldest: number; newest?: number } // games it takes
   }[]
+  releases?: { name: string; protocol: number }[] // newest first: how the edge names a player's game
 }
 
-// POST /edge/v1/wake      { hostname }                 → WakeResult (blocks up to 25 s)
+// POST /edge/v1/wake      { hostname, understands?, name?, address? } → WakeResult (blocks up to 25 s)
 export type WakeResult =
-  | { outcome: 'ready'; destination: string }
-  | { outcome: 'starting' }                              // still booting when the wait ran out
+  | { outcome: 'ready'; destination: string; proxyProtocol?: true; wakeOperationId?: string }
+  | { outcome: 'starting'; behind?: 'rest' | 'stop' | 'backup'; wakeOperationId?: string } // still booting
   | { outcome: 'restarting' }                            // still on its way back from a restart
-  | { outcome: 'denied'; reason: 'unknown' | 'suspended' | 'paused' | 'quota' | 'deleted' }
+  | { outcome: 'asleep' }                                // left asleep: this join starts nothing now
+  | { outcome: 'denied'; reason: 'unknown' | 'suspended' | 'paused' | 'quota' | 'deleted' | 'failed' | 'broken'
+      trialOver?: true; name?: string }
 
 // POST /edge/v1/ping-wake { hostname }                 → { waking: boolean } (at once; may start it)
 // POST /edge/v1/idle      { hostname }                 → 204      (a hint; the control plane decides)
@@ -1378,7 +1411,7 @@ the control plane's **internal listener**: 6PN on Fly, loopback or the compose n
   just the earliest possible moment.
 - **`recordSession`.** Upserts presence with `source = 'edge'` and bumps
   `server_activity.last_player_at`. This identity is **client-claimed**, so it's used for
-  display and activity only, never for authorization. `presence-sync` (RCON `list`) is
+  display and activity only, never for authorization. `presence-sync` (`list uuids` over the console) is
   authoritative and overwrites it. A disconnect carries the client's address: its network becomes
   one the server's pings may wake it from where the server's own reading had that player on
   (`known-addresses.ts`), kept only as a hash keyed to the server.
@@ -1932,7 +1965,7 @@ directory.
   - A mirror makes it guaranteed.
   - Installed jars also live on the volume and in every snapshot.
 
-**A second inbound route: joins.** Game runtimes reach the control plane one more way: a Paper
+**A second inbound route: joins.** Game runtimes reach the control plane two more ways. One is a Paper
 server's join reporter (`apps/reporter`), which Cubepals places beside its plugins where
 `JOIN_REPORTER` says, posts its players' steps of joining to
 `POST /runtime/v1/servers/{serverId}/joins?t={token}`, with the same token as its jar links
@@ -1942,7 +1975,9 @@ into the control plane's image, stored by its SHA-512 as the control plane start
 (`app/artifacts/reporter.ts`), never collected as unused, and placed at a full boot only: it is
 left out of drift and of what a sleeping server compares as it wakes, so it never turns a wake
 from memory into a boot. The control plane puts each server's events together with the edge's
-visits into one row per join (`app/joins/`).
+visits into one row per join (`app/joins/`). The other is the same reporter's tick health, once a
+minute, to `POST /runtime/v1/servers/{serverId}/vitals` (`app/vitals/`, `server_vitals`); a server
+without the reporter has its ticks read over its console by `presence-sync` instead.
 
 **A second catalog: Hangar.** Some Paper plugins are published on Hangar (hangar.papermc.io),
 PaperMC's catalog, and not on Modrinth: OldCombatMechanics and VaultUnlocked among them.
@@ -2105,6 +2140,10 @@ becomes `absent`:
 export interface DeploymentCapabilities {
   readonly archives: ArchiveStore | null      // present iff config.archive is set
   readonly billing: BillingProvider | null    // present iff config.billing is set
+  readonly insight?: Insight | null           // PostHog: funnel events, feedback and errors
+  readonly malware?: MalwareLists | null      // the lists uploads are checked against
+  readonly bedrock?: { floodgateKey; geyser } | null  // what lets Bedrock players in
+  readonly playRecords?: { records; regionIpv4 } | null // present iff PLAY_IPV4_BY_REGION and a DNS zone
 }
 export type DeploymentCapability = keyof DeploymentCapabilities
 
@@ -2417,7 +2456,11 @@ reason, and `account.plan_changed`.
   longer matches what it should run (a key rotation, a new pinned image) gets an `apply`, only
   while nobody is online and at most 5 a pass, so a deploy that moves every spec never restarts
   the platform under its players. The digest it compares (`driftDigest`) leaves out the plan's
-  limits, the disk size, and the server's icon and MOTD, which wait for the next start.
+  limits, the disk size, the server's icon and MOTD, Paper's reading a PROXY header, the join
+  reporter's URLs, whether RCON's commands show in operators' chat, and Blockly's own steps before
+  the image starts, all of which wait for the next start (`withoutPlanLimits`, `servers/specs.ts`).
+  A sleeping server is started in the background at once to show a new icon or message
+  (`servers/refresh.ts`).
 - `orphans` destroys inventory items of purged servers, and those a move left on a runtime the
   server isn't bound to. Items whose server the database doesn't know are kept and logged, never
   destroyed: destroying is one-way. Inventory is scoped by deployment id.
@@ -2659,7 +2702,7 @@ known share one count. A refusal says Blockly is busy for a moment, and the stat
 |---|---|---|---|
 | Web | `next dev` on `http://localhost:3000`, rewrites `/api/*` → `http://localhost:4000` | Worker `blockly-web-staging` at `staging.cubepals.com`, and each pull request's preview version of it on `workers.dev`; rewrites → staging control | Worker `blockly-web` at `cubepals.com`; rewrites → prod control |
 | Control plane | host process, all roles in one: `:4000` api, `127.0.0.1:4001` internal, `127.0.0.1:7443` realtime (`:7444` WebSocket fallback) | Fly org `…-staging`: a control app with process groups api/worker, and a realtime app from the same image (`infra/fly/`) | Fly org `…-prod`, same shape; one machine a role (api, worker, realtime, edge; `scripts/production.ts` deploys with `--ha=false`) |
-| Postgres | compose service | Fly Managed Postgres (staging) | Fly Managed Postgres (prod) |
+| Postgres | compose service | a Postgres machine on Fly, `bly-staging-db` (staging) | Supabase, through its session pooler (prod) |
 | Runtime | `docker` (`DockerRuntime` via the Docker socket; game containers on their own network `blockly-games`, which only the edge also joins) | `fly` (a private network per game app) | `fly` (same) |
 | Artifact links (`runtimeFacingUrl`) | `http://host.docker.internal:4000` | staging control plane's public origin | prod control plane's public origin (game networks have no route to the default 6PN) |
 | Tests | `fake` runtime + real Postgres | — | — |
@@ -2755,8 +2798,10 @@ blockly/
         trpc/                    routers (parse → actor → one service call)
         http/                    the api role's HTTP app, the public status API and link pictures (§15.6)
         edge/                    edge protocol handlers (internal listener)
-        runtime/                 artifact endpoint: the only inbound path from game runtimes (public listener, token auth)
-        operator/                the operators' runtimes API (internal listener, operator token)
+        runtime/                 artifacts, Blockly's own icons, joins and vitals: the inbound paths from game
+                                       runtimes (public listener, token auth)
+        operator/                the operators' API: runtimes, and `/ops/v1` (diagnose, vitals, notices, joins)
+                                       (internal listener, operator token)
         billing/                 webhook handler
         realtime/                Transport.io server (realtime role)
       config/                    schema.ts, load.ts, play-addressing.ts (ConfiguredPlayAddressing and the region
@@ -2765,8 +2810,7 @@ blockly/
       main.node.ts               composition root, per ROLES
     edge/                        Dockerfile, agent.ts (the only mc-router-aware code: it runs mc-router with
                                        its flags), mappings.ts, notice.ts
-    blocklyd/                    Rust: the node daemon the fleet runtime drives (its own Cargo package,
-                                       CI workflow and supply-chain policy; docs/protocol.md)
+    reporter/                    the Paper join reporter: joins and tick health (§ A second inbound route)
     devtools/                    the local inspector (`bun run devtools`): loopback only, never deployed
   packages/
     contracts/                   tRPC input schemas, view types, realtime contract, edge protocol v1

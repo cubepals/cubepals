@@ -89,9 +89,9 @@ always at the top of the same comment.
 
 `main` takes no force pushes and keeps a linear history.
 
-**Production** is the `production` branch, which only moves forward: a maintainer's
-`bun scripts/production.ts apply` pushes the commit being deployed to it, and cubepals.com is built
-from there.
+**Production** is named by the `production` branch: each deploy (the Deploy production workflow,
+or `scripts/production.ts`) moves it to the commit now live, and a rollback moves it back
+([docs/production.md](docs/production.md)).
 
 ## Staging
 
@@ -99,8 +99,9 @@ Changes that touch providers are checked on staging (`bun scripts/staging.ts`, r
 [AGENTS.md](AGENTS.md#staging)). It needs a maintainer's access; ask in your pull request.
 
 Every night, the Nightly workflow deploys main to staging, runs `scripts/staging-check.ts` and stops
-staging again. A commit that passes is tagged `v<next>-nightly.<date>.<run>`. Production deploys only
-such a commit, as the next `vX.Y.Z` (`scripts/versions.ts`).
+staging again. A commit that passes is tagged `v<next>-nightly.<date>.<run>`. `apply` deploys only
+such a commit, as the next `vX.Y.Z` (`scripts/versions.ts`); a change to the website alone, or one
+that can't wait, can go without one ([docs/production.md](docs/production.md#routes)).
 
 ## Conduct and security
 

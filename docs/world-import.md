@@ -89,8 +89,7 @@ Before the plan:
   its owner's own jars kept as their uploads, and those only players' games run left out. Restoring
   it with them (`withMods`) moves the server to that loader with them (§ Mods and plugins).
 - **The guide is published,** `guides/move-a-minecraft-world-to-a-server`: from single-player, from
-  another host or a server's folder, with mods, and into a server someone has. Its pictures wait for
-  a run on a local stack.
+  another host or a server's folder, with mods, and into a server someone has, with a picture of each step.
 
 ## What it does
 
