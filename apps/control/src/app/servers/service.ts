@@ -422,9 +422,9 @@ export class MinecraftServerService {
     return changeIdentity(deps, actor, serverId, identity)
   }
 
-  /** A server asleep, started in the background to show a new icon or message (`refresh.ts`). */
-  refreshAsleep(serverId: string): Promise<boolean> {
-    return refreshAsleep({ db: this.#db, start: (...args) => this.start(...args) }, serverId)
+  /** A server asleep, started in the background to show a new icon or message, or to keep it ready (`refresh.ts`). */
+  refreshAsleep(serverId: string, why: 'changed' | 'ready' = 'changed'): Promise<boolean> {
+    return refreshAsleep({ db: this.#db, start: (...args) => this.start(...args) }, serverId, why)
   }
 
   /**

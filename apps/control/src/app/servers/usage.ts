@@ -360,9 +360,20 @@ export const PING_WAKE_KEY = 'ping-wake:'
 /** The same for the starts that show what its owner changed while a server slept (`refresh.ts`). */
 export const REFRESH_KEY = 'refresh:'
 
+/**
+ * The same for the refreshes nothing of its owner's asked for: the ones that keep a sleeping server
+ * ready (`operations/schedules/stale-sleep.ts`). It begins as every refresh's does, so what holds
+ * for a refresh holds for these.
+ */
+export const READY_KEY = `${REFRESH_KEY}ready:`
+
 /** Whether an operation is a start that shows what its owner changed while the server slept, by its key. */
 export const refreshes = (op: { idempotencyKey: string }): boolean =>
   op.idempotencyKey.startsWith(`start:${REFRESH_KEY}`)
+
+/** Whether an operation is a refresh that keeps a sleeping server ready, by its key. */
+export const keepsReady = (op: { idempotencyKey: string }): boolean =>
+  op.idempotencyKey.startsWith(`start:${READY_KEY}`)
 
 /**
  * Whether an operation is a start nobody waits for, by its key: a server-list ping's, or a

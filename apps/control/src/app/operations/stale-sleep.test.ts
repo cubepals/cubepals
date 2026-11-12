@@ -113,7 +113,8 @@ describe.skipIf(!hasDatabase)('stale-sleep', () => {
     await h.until(id, 'running')
     await h.settled(id)
     const refresh = await lastStart(id)
-    expect(refresh.key).toStartWith('start:refresh:')
+    // A refresh, and one nothing of its owner's asked for: its page says it is kept ready.
+    expect(refresh.key).toStartWith('start:refresh:ready:')
     expect(refresh.steps).toContain('changed:drift:env.DIFFICULTY')
     expect(h.minecraft.playing(id).difficulty).toBe('hard')
 
@@ -198,6 +199,12 @@ describe.skipIf(!hasDatabase)('stale-sleep, for memory kept too long to count on
     h.minecraft.bootTakes(11_000)
     try {
       expect(await pass({ limit: 50, now: new Date(Date.now() + KEPT_MS + HOUR_MS) })).toBeGreaterThan(0)
+      // While it boots, its page is told what the start is: a refresh that keeps it ready.
+      expect((await h.app.queries.get(owner, id)).activeOperation).toMatchObject({
+        kind: 'start',
+        refresh: true,
+        keepsReady: true,
+      })
       await h.until(id, 'running', 30_000)
     } finally {
       h.minecraft.bootTakes(0)
