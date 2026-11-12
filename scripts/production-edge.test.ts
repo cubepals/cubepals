@@ -297,6 +297,23 @@ describe('an edge its players are still on', () => {
     expect(w.log).toEqual(['cordon fra', 'uncordon fra', 'cordon iad', 'uncordon iad'])
   })
 
+  test('a region left that can’t take joins again stops the roll before the next is cordoned', async () => {
+    const w = world()
+    const stuck = steps(w.log, {
+      players: async () => 1,
+      uncordon: async (r) => {
+        w.log.push(`uncordon ${r}`)
+        throw new Error('fly down')
+      },
+    })
+    await expect(roll(['fra', 'iad'], stuck, () => {}, w.clock)).rejects.toThrow(
+      'fra: is still cordoned and takes no joins: fly down',
+    )
+    // Nothing of iad was touched, so one region still takes joins.
+    expect(w.log.filter((line) => line.endsWith('iad'))).toEqual([])
+    expect(w.log).not.toContain('deploy fra')
+  })
+
   test('a deploy that can’t wait restarts it, and counts the players cut across regions', async () => {
     const w = world()
     const said: string[] = []

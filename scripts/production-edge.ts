@@ -214,20 +214,23 @@ export async function rollEdge(
   for (const region of regions) {
     const cordoned = options.cordon && regions.length > 1 && (await steps.othersReady(region))
     say(`${region}: ${cordoned ? 'taking no new joins, ' : ''}waiting for its players to leave`)
-    let restarted = false
+    // Whether the region's turn ended without an error: restarted, or left with its players on.
+    let done = false
     try {
       if (cordoned) await steps.cordon(region)
       const said = (line: string) => say(`${region}: ${line}`)
       const wait = await restartRegion(region, cordoned, steps, said, clock, options.cut === true)
-      restarted = wait.restarted
+      done = true
       cut += tally(region, wait, uncounted, left)
     } finally {
-      // Taking joins again is never skipped. Its failure ends the roll; where another error already
-      // does, that one is thrown and this one is said, since the region stays cordoned.
+      // Taking joins again is never skipped. Its failure ends the roll, after a region that was
+      // left as much as after one restarted: the next region must not be cordoned while this one
+      // takes no joins. Where another error already ends it, that one is thrown and this one is
+      // said, since the region stays cordoned.
       if (cordoned)
         await uncordonAgain(region, steps, clock).catch((error) => {
           const stuck = `${region}: is still cordoned and takes no joins: ${error instanceof Error ? error.message : error}`
-          if (restarted) throw new Error(stuck)
+          if (done) throw new Error(stuck)
           say(stuck)
         })
     }
