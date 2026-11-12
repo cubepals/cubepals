@@ -103,8 +103,11 @@ whole life and an image pull onto the volume's host.
   - the ping comes from a network one of the server's own players joined it from, within
     `AbuseLimits.knownAddressDays` (`app/edge/known-addresses.ts`). Every other ping hears it
     sleeps, and a join from anywhere wakes it as always;
-  - its wake is a boot from a sleep: one whose sleep stopped it. One that kept its memory resumes
-    about as fast as the click, and a world at rest never comes back for a ping (below);
+  - it sleeps, whether its sleep stopped it or kept its memory. Kept memory is woken too because
+    the provider can drop it unseen and nothing says so before the start
+    ([resume-fallback.md](resume-fallback.md)): where it is gone, the boot is under way before
+    the click, and where it is there, the server is up before it. A world at rest never comes
+    back for a ping (below);
   - its owner can start it now, through the same checks as a join's wake;
   - it is under the hourly cap on wakes from connections;
   - its owner has included hours left;

@@ -175,11 +175,18 @@ describe.skipIf(!hasDatabase)('a ping wakes a server early', () => {
     expect(await pingWakes(h, id)).toHaveLength(1)
   }, 30_000)
 
-  test('a server that kept its memory is left to the join, which resumes it as fast', async () => {
+  test('a server asleep on kept memory is woken too, since that memory can be gone unseen', async () => {
     const { id, hostname } = await sleeping(h, true)
-    expect(await h.app.edge.pingWake(hostname, PLAYER)).toEqual({ waking: false })
-    expect((await h.server(id)).lifecycle.status).toBe('stopped')
+    // A stranger's ping wakes it no more than one whose sleep stopped it.
+    expect(await h.app.edge.pingWake(hostname, STRANGER)).toEqual({ waking: false })
     expect(await pingWakes(h, id)).toHaveLength(0)
+
+    expect(await h.app.edge.pingWake(hostname, PLAYER)).toEqual({ waking: true })
+    await h.until(id, 'running')
+    await h.settled(id)
+    expect(await pingWakes(h, id)).toHaveLength(1)
+    // A woken run, as any ping's: the probation puts it back to sleep where nobody joins.
+    expect(await lastRunWoken(h, id)).toBe(true)
   }, 30_000)
 
   test('after a ping wake nobody joined, pings leave the server asleep until the hold is over, or someone plays', async () => {
