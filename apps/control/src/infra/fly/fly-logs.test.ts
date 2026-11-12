@@ -147,6 +147,27 @@ describe('Fly log history', () => {
     expect(starts).not.toContain(`${ns(NOW - 1440 * MINUTE_MS)}`)
   })
 
+  test('what the proxy said of the deployment’s edge between two moments, and nothing else', async () => {
+    const said =
+      '[PP03] could not proxy TCP data to/from instance: failed to copy (direction=client->server, op=read, error=fly-proxy-p2p/tls/tcp-backhaul: connection reset)'
+    const at = NOW - 2 * MINUTE_MS
+    const { fetch, requests } = history([
+      { at: at - 90_000, provider: 'proxy', message: 'an earlier failure', instance: 'edge1' },
+      { at: at - 1_000, provider: 'app', message: 'Closed connection to backend', instance: 'edge1' },
+      { at, provider: 'proxy', message: said, instance: 'edge1' },
+      { at: at + 1_000, provider: 'runner', message: 'machine exec', instance: 'edge2' },
+      { at: at + 90_000, provider: 'proxy', message: 'a later failure', instance: 'edge2' },
+    ])
+    const lines = await source(fetch).edgeSaid(handleFor('m1'), new Date(at - 30_000), new Date(at + 30_000))
+    expect(lines).toEqual([{ at: new Date(at), text: said }])
+    // The edge app of the handle's deployment, whichever machine wrote it, from the window's start.
+    expect(requests[0]?.pathname).toBe('/api/v1/apps/bly-dev-edge/logs')
+    expect(requests[0]?.searchParams.get('instance')).toBeNull()
+    expect(requests[0]?.searchParams.get('next_token')).toBe(`${ns(at - 30_000)}`)
+    // The line past the window ended the read: no page was asked for after it.
+    expect(requests.length).toBeLessThanOrEqual(2)
+  })
+
   test('a decommissioned server has no machine and no history', async () => {
     const fake = history([{ at: NOW - MINUTE_MS, provider: 'app', message: 'x' }])
     expect(await source(fake.fetch).recent(handleFor(null), 50)).toEqual([])

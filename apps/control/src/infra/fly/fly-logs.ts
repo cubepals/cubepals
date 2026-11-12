@@ -8,6 +8,7 @@ import { z } from 'zod'
 import type { LogLine, LogSource } from '../../app/ports/platform.ts'
 import type { RuntimeHandle } from '../../app/ports/runtime.ts'
 import { FlyApiError } from './client.ts'
+import { edgeApp } from './fly-runtime/apps.ts'
 import { decodeHandle } from './handle.ts'
 import { type FlyCredentials, flyCredentials } from './token.ts'
 
@@ -25,6 +26,10 @@ const FLY_WEB_API = 'https://api.fly.io'
 const HISTORY_WINDOWS_MINUTES = [10, 120, 1440] as const
 const MAX_HISTORY_PAGES = 20
 const WORKLOAD = 'app'
+/** Fly's proxy, which writes a line with an error code when it can't carry a connection. */
+const PROXY = 'proxy'
+/** The most of the proxy's lines read for one window: it writes few, one a failure. */
+const PROXY_LINES = 20
 
 // flyctl's natsLog (logs/entry.go): the fields read here.
 const LiveEntry = z.object({
@@ -85,6 +90,17 @@ export class FlyLogSource implements LogSource {
     return lines
   }
 
+  /**
+   * What Fly's proxy wrote, between two moments, about the edge app of the deployment this handle
+   * belongs to, on any of its machines: its error lines, each opening with its code (`[PP03] could
+   * not proxy TCP data …`). The same history a machine's own output is read from, kept about
+   * seven days (docs.fly.io/monitoring/logs-api-options).
+   */
+  edgeSaid(handle: RuntimeHandle, from: Date, to: Date): Promise<LogLine[]> {
+    const edge = edgeApp(decodeHandle(handle).deployment)
+    return this.#history(edge, null, from.getTime(), PROXY_LINES, { provider: PROXY, untilMs: to.getTime() })
+  }
+
   async *tail(handle: RuntimeHandle, signal: AbortSignal): AsyncIterable<LogLine> {
     const { app, machineId } = decodeHandle(handle)
     if (machineId === null) return
@@ -133,7 +149,19 @@ export class FlyLogSource implements LogSource {
     return pending
   }
 
-  async #history(app: string, machineId: string, fromMs: number, limit: number): Promise<LogLine[]> {
+  /**
+   * The lines one provider wrote (the machine's own output unless `of` says another) from `fromMs`
+   * on, the newest `limit` of them: one machine's, or the whole app's for `machineId` null, and
+   * none past `of.untilMs`.
+   */
+  async #history(
+    app: string,
+    machineId: string | null,
+    fromMs: number,
+    limit: number,
+    of: { provider: string; untilMs?: number } = { provider: WORKLOAD },
+  ): Promise<LogLine[]> {
+    const until = of.untilMs ?? Number.POSITIVE_INFINITY
     const kept: LogLine[] = []
     // The cursor is the last entry's time in nanoseconds (observed 2026-09-19), so a window can
     // start at any moment; an empty one starts a day back.
@@ -141,22 +169,38 @@ export class FlyLogSource implements LogSource {
     for (let page = 0; page < MAX_HISTORY_PAGES; page++) {
       const url = new URL(`/api/v1/apps/${encodeURIComponent(app)}/logs`, this.#apiUrl)
       url.searchParams.set('next_token', cursor)
-      url.searchParams.set('instance', machineId)
+      if (machineId !== null) url.searchParams.set('instance', machineId)
       const response = await this.#fetch(url, { headers: { Authorization: this.#credentials.authorization } })
       if (!response.ok) throw new FlyApiError(response.status, `reading ${app}'s logs`, await response.text())
       const body = HistoryPage.parse(await response.json())
-      for (const { attributes } of body.data) {
-        const entry = HistoryEntry.safeParse(attributes)
-        if (entry.success && entry.data.meta.event.provider === WORKLOAD)
-          kept.push(lineOf(entry.data.timestamp, entry.data.message))
-      }
+      const past = keepPage(kept, body.data, of.provider, until)
       if (kept.length > limit) kept.splice(0, kept.length - limit)
       const next = body.meta.next_token
-      if (body.data.length === 0 || next === '' || next === cursor) break
+      if (past || body.data.length === 0 || next === '' || next === cursor) break
       cursor = next
     }
     return kept
   }
+}
+
+/**
+ * Adds a page's lines of one provider to `kept`, up to `until`; whether the page went past it.
+ * A page is ascending, so the first line past the window ends the read.
+ */
+function keepPage(
+  kept: LogLine[],
+  page: { attributes: unknown }[],
+  provider: string,
+  until: number,
+): boolean {
+  for (const { attributes } of page) {
+    const entry = HistoryEntry.safeParse(attributes)
+    if (!entry.success) continue
+    if (Date.parse(entry.data.timestamp) > until) return true
+    if (entry.data.meta.event.provider === provider)
+      kept.push(lineOf(entry.data.timestamp, entry.data.message))
+  }
+  return false
 }
 
 /**

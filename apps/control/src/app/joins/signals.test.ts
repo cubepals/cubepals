@@ -5,7 +5,8 @@
 /**
  * The `signals` job (`signals.ts`) on a real database, with a setting of the tests' own: nothing
  * without one, each signal raised once, the kinds that read wakes, the platform's hour and boot
- * reports, and a signal open a day closed as expired.
+ * reports, a drop keeping what the provider's proxy said around it, and a signal open a day closed
+ * as expired.
  */
 import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test'
 import { randomUUID } from 'node:crypto'
@@ -14,7 +15,10 @@ import type { SignalsConfig } from '@blockly/contracts/join-records'
 import { schema } from '@blockly/db'
 import { eq } from 'drizzle-orm'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
+import type { LogLine, Mailer } from '../ports/platform.ts'
 import { installTuning, tuning } from '../tuning.ts'
+import { tellSignals, type Written } from './signal-mail.ts'
+import { raiseSignals } from './signals.ts'
 
 /** A nine-hour session that ended a minute before `now` with its player cut off, as the edge tells of one. */
 async function longSession(h: Harness, serverId: string, now: Date): Promise<string> {
@@ -160,4 +164,94 @@ describe.skipIf(!hasDatabase)('the signals job', () => {
     expect(old).toMatchObject({ closedBy: 'system:expired', closedAt: now })
     expect(fresh?.closedAt).toBeNull()
   })
+})
+
+describe.skipIf(!hasDatabase)('a drop and the provider’s proxy', () => {
+  let h: Harness
+  let serverId: string
+  const deployed = tuning()
+  const setting = (signals: unknown) => installTuning({ ...deployed, joins: { reporter: 'off', signals } })
+  const now = new Date()
+
+  beforeAll(async () => {
+    h = await startHarness()
+    serverId = (await h.create(await h.user(), { name: 'Signalled' })).id
+    await h.until(serverId, 'running')
+  }, 30_000)
+
+  afterEach(async () => {
+    installTuning(deployed)
+    await h.db.delete(schema.signals)
+  })
+
+  afterAll(async () => {
+    await h.close()
+  })
+
+  test('a drop keeps what the provider’s proxy said around it, asked once, and its email says it', async () => {
+    setting({ dropped: { quietS: 5 }, notify: ['dropped'] })
+    const id = await longSession(h, serverId, now)
+    const asked: Date[][] = []
+    const said: LogLine = {
+      at: new Date(now.getTime() - MINUTE_MS + 4 * SECOND_MS),
+      text: '[PP03] could not proxy TCP data to/from instance for 203.0.113.7:52555 (tcp-backhaul: connection reset)',
+    }
+    const logs = {
+      edgeSaid: async (_handle: unknown, from: Date, to: Date) => {
+        asked.push([from, to])
+        return [said]
+      },
+    }
+    const sent: string[] = []
+    const mailer: Mailer = { send: async (message) => void sent.push(message.text) }
+    const tell = (config: SignalsConfig, written: Written[]) =>
+      tellSignals(
+        { db: h.db, mailer, inbox: ['ops@blockly.test'], origin: 'https://blockly.test' },
+        config.notify,
+        written,
+      )
+    expect(await raiseSignals(h.db, now, tell, logs)).toBe(1)
+    const kept = [{ at: said.at.toISOString(), said: said.text.replace('203.0.113.7', '<address>') }]
+    const [signal] = await h.db
+      .select()
+      .from(schema.signals)
+      .where(eq(schema.signals.key, `dropped:${id}`))
+    expect(signal?.detail.provider).toEqual(kept)
+    // Read around the session's end, a minute before now.
+    expect(asked).toHaveLength(1)
+    expect(asked[0]?.[1]).toEqual(new Date(now.getTime() - MINUTE_MS + 30 * SECOND_MS))
+    expect(sent).toHaveLength(1)
+    expect(sent[0]).toContain('the provider’s proxy said: [PP03] could not proxy TCP data')
+    expect(sent[0]).not.toContain('203.0.113.7')
+    // Raised once, so asked once.
+    expect(await raiseSignals(h.db, now, tell, logs)).toBe(0)
+    expect(asked).toHaveLength(1)
+    await h.db.delete(schema.joins).where(eq(schema.joins.id, id))
+  }, 60_000)
+
+  test('a drop is raised as the edge told it where the provider’s proxy can’t be read, or there is none', async () => {
+    setting({ dropped: { quietS: 5 } })
+    const id = await longSession(h, serverId, now)
+    const failing = {
+      edgeSaid: async (): Promise<LogLine[]> => {
+        throw new Error('Fly: reading logs failed with 503')
+      },
+    }
+    expect(await raiseSignals(h.db, now, undefined, failing)).toBe(1)
+    const [unread] = await h.db
+      .select()
+      .from(schema.signals)
+      .where(eq(schema.signals.key, `dropped:${id}`))
+    expect(unread?.detail).toMatchObject({ why: 'player_silent' })
+    expect(unread?.detail.provider).toBeUndefined()
+    await h.db.delete(schema.signals)
+    // A provider with no proxy in front of the edge says null: nothing is kept, not an empty list.
+    expect(await raiseSignals(h.db, now, undefined, { edgeSaid: async () => null })).toBe(1)
+    const [none] = await h.db
+      .select()
+      .from(schema.signals)
+      .where(eq(schema.signals.key, `dropped:${id}`))
+    expect(none?.detail.provider).toBeUndefined()
+    await h.db.delete(schema.joins).where(eq(schema.joins.id, id))
+  }, 60_000)
 })

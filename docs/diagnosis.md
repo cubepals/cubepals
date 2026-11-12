@@ -81,6 +81,15 @@ server closing first, happened between the player and the edge, not in Cubepals'
 it points to. The edge sends a join's end two minutes after the player leaves, so a join read
 sooner shows no leaving yet.
 
+On Fly, the `dropped` signal such a session raises also keeps what Fly's own proxy wrote about the
+edge around it (`detail.provider`, `app/joins/provider-said.ts`): its lines from five seconds before
+the player's side went quiet to thirty after the session ended, read once from Fly's log history
+(`FlyLogSource.edgeSaid`), with the addresses taken out. Each opens with one of Fly's proxy error
+codes (docs.fly.io/monitoring/error-codes). An empty list is an answer too: the proxy carried the
+connection and wrote nothing while the player's side was quiet, so the break was in front of it. The
+signal's email says the last line, or that the proxy said nothing. Where the proxy can't be read the
+signal is raised without it.
+
 ## How wakes and operations went
 
 The `signals` job also reads operations, for the kinds `SIGNALS` turns on

@@ -47,6 +47,15 @@ export interface LogLine {
 export interface LogSource {
   recent(handle: RuntimeHandle, limit: number): Promise<LogLine[]>
   tail(handle: RuntimeHandle, signal: AbortSignal): AsyncIterable<LogLine>
+  /**
+   * What the provider's own proxy said, between two moments, of the edge that carries this
+   * workload's players in, where the provider has one: the lines it writes when it can't carry a
+   * connection (on Fly, its `[P…]` error codes, docs.fly.io/monitoring/error-codes). Read when a
+   * session is cut off between a player and the edge, so the provider's account of it is kept
+   * beside the edge's (`joins/provider-said.ts`). Absent, or null, where a provider carries no
+   * joins in: nothing there could have said anything.
+   */
+  edgeSaid?(handle: RuntimeHandle, from: Date, to: Date): Promise<LogLine[] | null>
 }
 
 export interface Mailer {
