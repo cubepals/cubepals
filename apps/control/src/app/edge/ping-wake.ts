@@ -4,9 +4,10 @@
 
 /**
  * A wake a server-list ping starts, before anyone joins. A player who has a server saved sees it
- * in their list a moment before they click it, and a server whose start is a boot rather than a
- * resume takes long enough that this moment matters: one whose sleep stopped it. One whose memory
- * was kept resumes in about as long as the click takes, and is left to the join.
+ * in their list a moment before they click it, and a boot takes long enough that this moment
+ * matters. A server asleep on kept memory is woken too: the provider can drop that memory unseen,
+ * and nothing says so before the start, so its wake may be a boot as well; where the memory is
+ * there, it is up before the click.
  *
  * Anything on the internet can ping, scanners and sites that list servers included, so a ping wakes
  * a server only from a network its own players joined it from lately (`known-addresses.ts`); every
@@ -34,7 +35,7 @@ import { AppError } from '../errors.ts'
 import { openOfKinds } from '../operations/persistence.ts'
 import type { PlayAddressing } from '../ports/platform.ts'
 import type { SecretKeyring } from '../secrets.ts'
-import { findLiveBySlug, memoryKept } from '../servers/persistence.ts'
+import { findLiveBySlug } from '../servers/persistence.ts'
 import type { MinecraftServerService } from '../servers/service.ts'
 import { lastActivity, lastPingWake, PING_WAKE_KEY, unjoinedWakes } from '../servers/usage.ts'
 import { tuning } from '../tuning.ts'
@@ -83,8 +84,8 @@ export async function pingWake(
 }
 
 /**
- * Whether a ping from `address` may wake `server` now: its start is a boot, from a sleep rather than
- * a rest, the ping comes from its own players' network, and nothing above says no.
+ * Whether a ping from `address` may wake `server` now: it sleeps rather than rests, the ping comes
+ * from its own players' network, and nothing above says no.
  */
 async function worthWaking(
   { db, keyring }: { db: Db; keyring: SecretKeyring },
@@ -92,7 +93,7 @@ async function worthWaking(
   address: string | undefined,
   now: Date,
 ): Promise<boolean> {
-  if (server.lifecycle.status !== 'stopped' || (await memoryKept(db, server.id))) return false
+  if (server.lifecycle.status !== 'stopped') return false
   if (!(await knownAddress(db, keyring, server.id, address, now))) return false
   const limits = tuning().abuse
   if ((await unjoinedWakes(db, server.id, now)) >= limits.wakesPerHour) return false
