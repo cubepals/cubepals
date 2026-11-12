@@ -309,6 +309,11 @@ export interface OperationView {
    * its owner changed while it slept; it goes back to sleep after, if nobody joins.
    */
   refresh?: true
+  /**
+   * Present with `refresh` where its owner changed nothing: Cubepals started it to keep it ready,
+   * on what it should run now and on memory just kept, so the next join is let in quickly.
+   */
+  keepsReady?: true
   status: 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled'
   step: OperationStep | null
   error: string | null

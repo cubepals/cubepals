@@ -85,7 +85,15 @@ import { loadChangeFacts, loadRevisionCard, loadRevisionFields, revisionHistory 
 import type { MinecraftServerService } from './service.ts'
 import { serverSettingsView } from './settings-view.ts'
 import { lastsOnceRestored } from './temporary.ts'
-import { knownPlayers, lastActivity, openIntervalStart, openRun, presenceFor, refreshes } from './usage.ts'
+import {
+  keepsReady,
+  knownPlayers,
+  lastActivity,
+  openIntervalStart,
+  openRun,
+  presenceFor,
+  refreshes,
+} from './usage.ts'
 import { waitingChanges } from './waiting.ts'
 
 /** Who is on a running server, as presence has it; null while it isn't running. */
@@ -723,6 +731,7 @@ function operationView(
     worldBytes,
     broughtWorld,
     ...(refreshes(op) ? { refresh: true as const } : {}),
+    ...(keepsReady(op) ? { keepsReady: true as const } : {}),
     status: op.status,
     step: (op.step as OperationView['step']) ?? null,
     error: op.error,

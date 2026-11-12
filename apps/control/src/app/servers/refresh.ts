@@ -23,12 +23,17 @@ import { meteredMonth } from '../billing/chip-in-meter.ts'
 import { AppError } from '../errors.ts'
 import { tuning } from '../tuning.ts'
 import { findServer, memoryKept } from './persistence.ts'
-import { REFRESH_KEY, unjoinedWakes } from './usage.ts'
+import { READY_KEY, REFRESH_KEY, unjoinedWakes } from './usage.ts'
 
-/** Starts the server asleep to show what its owner just changed of it, where that is worth it; says whether it did. */
+/**
+ * Starts the server asleep where that is worth it, and says whether it did: to show what its owner
+ * just changed of it (`changed`), or with nothing of theirs asking, to keep it ready for its next
+ * join (`ready`). The two differ only in what the server's page says of the start.
+ */
 export async function refreshAsleep(
   deps: { db: Db; start: (actor: Actor, serverId: string, requestId: string) => Promise<unknown> },
   serverId: string,
+  why: 'changed' | 'ready' = 'changed',
 ): Promise<boolean> {
   const { db } = deps
   const server = await findServer(db, serverId)
@@ -40,7 +45,8 @@ export async function refreshAsleep(
   if (month !== null && month.units >= month.included + month.carried) return false
   try {
     // Asked as a wake, so its run is a woken one, and sleeps unjoined after the probation.
-    await deps.start({ kind: 'system', reason: 'wake' }, serverId, `${REFRESH_KEY}${crypto.randomUUID()}`)
+    const key = why === 'ready' ? READY_KEY : REFRESH_KEY
+    await deps.start({ kind: 'system', reason: 'wake' }, serverId, `${key}${crypto.randomUUID()}`)
   } catch (error) {
     // Refused by the same checks as any start: its owner can't start it now.
     if (error instanceof AppError) return false
