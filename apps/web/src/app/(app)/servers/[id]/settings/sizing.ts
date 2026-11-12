@@ -16,14 +16,21 @@ export interface SizeChoice {
   value: PartySize
   label: string
   maxPlayers: number
+  /** The most players its machine takes on this plan: the load is measured against it. */
+  holds: number
   allowed: boolean
   reason?: string
 }
 
-/** The server as it is: its size, and how many that size holds on this plan. */
+/**
+ * A size to measure from: the server's own as it is, or the one the owner picked. `holds` is how
+ * far max players goes on it, and `capacity` what its machine takes; the server's own size has
+ * both from the page's bounds.
+ */
 export interface Current {
   size: PartySize
   holds: number
+  capacity: number
 }
 
 /** What a game asks of a size: everyone on at once, at these distances. */
@@ -33,9 +40,16 @@ export interface Want {
   simulation: number
 }
 
-/** How many a size holds: the server's own size what the page's bounds say, another its group. */
+/**
+ * How far max players goes on a size: the one measured from what it says, another its group, so a
+ * size picked for thirty players reads "Up to 50", never "Up to 20".
+ */
 export const holdsOf = (size: SizeChoice, current: Current): number =>
   size.value === current.size ? current.holds : size.maxPlayers
+
+/** What a size's machine takes: the load is measured against it, not against its group. */
+export const capacityOf = (size: SizeChoice, current: Current): number =>
+  size.value === current.size ? current.capacity : size.holds
 
 /** The sizes from the server's own upward, smallest first; all of them when its own isn't listed. */
 function fromCurrent(sizes: readonly SizeChoice[], current: Current): SizeChoice[] {
@@ -46,7 +60,7 @@ function fromCurrent(sizes: readonly SizeChoice[], current: Current): SizeChoice
 
 /** Whether a size holds everyone and keeps up easily with them. */
 const keepsUp = (size: SizeChoice, want: Want, current: Current): boolean =>
-  want.players <= holdsOf(size, current) && workload({ ...want, holds: holdsOf(size, current) }) <= EASY
+  want.players <= holdsOf(size, current) && workload({ ...want, holds: capacityOf(size, current) }) <= EASY
 
 /**
  * The size a game needs: the smallest the plan has, from the server's own up, that keeps up;

@@ -37,8 +37,9 @@ function noteFor(sizing: Sizing, level: Level) {
   const { want, size, holds, current, sizes } = sizing
   const chosen = sizes.find((s) => s.value === size)
   const own = sizes.find((s) => s.value === current.size)
-  const better = sizes.find((s) => s.value === neededSize(want, sizes, { size, holds }))
-  const locked = lockedFit(want, sizes, { size, holds })
+  const from = { size, holds, capacity: sizing.capacity }
+  const better = sizes.find((s) => s.value === neededSize(want, sizes, from))
+  const locked = lockedFit(want, sizes, from)
   const easy = level === 'light' || level === 'comfortable'
   const strained: Note = better && better.value !== size ? 'offer' : locked ? 'plan' : 'none'
   const moved = compareSizes(chosen, own)
@@ -57,7 +58,7 @@ export function LoadMeter({
 }) {
   const title = useId()
   const { want, size, holds, current, sizes } = sizing
-  const work = workload({ ...want, holds })
+  const work = workload({ ...want, holds: sizing.capacity })
   const level = levelOf(work)
   const lit = blocksLit(work)
   const { note, chosen, own, better, locked } = noteFor(sizing, level)

@@ -37,30 +37,35 @@
       "value": "5",
       "label": "Up to 5",
       "maxPlayers": 5,
+      "holds": 5,
       "allowed": true
     },
     {
       "value": "10",
       "label": "Up to 10",
       "maxPlayers": 10,
+      "holds": 10,
       "allowed": true
     },
     {
       "value": "20",
       "label": "Up to 20",
       "maxPlayers": 20,
+      "holds": 50,
       "allowed": true
     },
     {
       "value": "50",
       "label": "Up to 50",
       "maxPlayers": 50,
+      "holds": 50,
       "allowed": true
     },
     {
       "value": "more",
       "label": "Up to 100",
       "maxPlayers": 100,
+      "holds": 100,
       "allowed": true
     }
   ],

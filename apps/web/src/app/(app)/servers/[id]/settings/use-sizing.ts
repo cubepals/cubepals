@@ -10,7 +10,15 @@
  */
 import type { PartySize, ServerSettingsView, ServerView, SettingsOptions } from '@blockly/contracts'
 import { useState } from 'react'
-import { type Current, holdsOf, mostPlayers, neededSize, type SizeChoice, type Want } from './sizing'
+import {
+  type Current,
+  capacityOf,
+  holdsOf,
+  mostPlayers,
+  neededSize,
+  type SizeChoice,
+  type Want,
+} from './sizing'
 
 export interface Sizing {
   /** The server as it is. */
@@ -18,8 +26,10 @@ export interface Sizing {
   sizes: readonly SizeChoice[]
   /** The size this change saves with. */
   size: PartySize
-  /** How many it holds. */
+  /** How far max players goes on it. */
   holds: number
+  /** What its machine takes, which the load is measured against. */
+  capacity: number
   /** Cubepals picked it, bigger than the server's own, for what the owner slid. */
   raised: boolean
   /** The most players any size the plan has holds: how far the players slider goes. */
@@ -40,12 +50,20 @@ export function useSizing(
   setDraft: (next: ServerSettingsView) => void,
 ): Sizing {
   const [chosen, setChosen] = useState<PartySize | null>(null)
-  const current: Current = { size: view.partySize, holds: options.bounds.maxPlayers }
+  const current: Current = {
+    size: view.partySize,
+    holds: options.bounds.maxPlayers,
+    capacity: options.bounds.maxPlayers,
+  }
   const sizes = options.partySizes
   const choiceOf = (value: PartySize) => sizes.find((size) => size.value === value)
   const holdsFor = (value: PartySize) => {
     const choice = choiceOf(value)
     return choice ? holdsOf(choice, current) : current.holds
+  }
+  const capacityFor = (value: PartySize) => {
+    const choice = choiceOf(value)
+    return choice ? capacityOf(choice, current) : current.capacity
   }
   const want: Want = {
     players: draft.maxPlayers,
@@ -62,6 +80,7 @@ export function useSizing(
     sizes,
     size,
     holds: holdsFor(size),
+    capacity: capacityFor(size),
     raised: chosen === null && size !== current.size,
     most: mostPlayers(sizes, current),
     want,
