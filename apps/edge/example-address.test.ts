@@ -93,9 +93,10 @@ describe.skipIf(ROUTER_BIN === '')('a real mc-router', () => {
 
   beforeAll(async () => {
     router = await startRouter()
-    // As the edge runs it: an address no route names goes to the default route, with no backend.
+    // An address no route names goes to the default route, here with no backend: the edge's goes
+    // to its waiting room, which leaves a ping unanswered all the same (`unrouted-joins.test.ts`).
     routes = new RouterRoutes(router.api)
-    await routes.ready(10_000)
+    await routes.ready(10_000, '')
     notice = createServer((socket) => {
       const talk = sleepingNotice(new Set())
       socket.on('error', () => socket.destroy())

@@ -37,7 +37,8 @@ describe.skipIf(ROUTER_BIN === '')('a real mc-router', () => {
   beforeAll(async () => {
     router = await startRouter()
     routes = new RouterRoutes(router.api)
-    await routes.ready(10_000)
+    // No backend for a hostname without a route: a removed route's ping is answered by nothing.
+    await routes.ready(10_000, '')
   })
 
   afterAll(async () => {

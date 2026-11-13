@@ -502,9 +502,9 @@ function sourceOf(header: Uint8Array | null): string | null {
 
 /**
  * Tells a ping at `address` that its server sleeps, and hands a join to the waiting room, with the
- * PROXY header it came with, if any.
+ * PROXY header it came with, if any. Without `pings`, as the waiting room, a ping is not answered.
  */
-function asleepAt(address: string): void {
+function asleepAt(address: string, pings = true): void {
   createServer((client) => {
     const notice = new Notice((dialled) => exampleAt(dialled, hostnames) ?? asleep(dialled))
     const unwrap = new Unwrap()
@@ -524,6 +524,7 @@ function asleepAt(address: string): void {
     /** The handshake is whole: a ping is answered once its server may have been woken, in order. */
     const greeted = (ping: string | null, sent: Uint8Array) => {
       held = null
+      if (ping !== null && !pings) return void client.destroy()
       if (ping === null) return answer(sent)
       client.pause()
       void pinged(hostnameOf({ address: ping }), sourceOf(unwrap.header)).finally(() => {
@@ -548,8 +549,8 @@ asleepAt(SLEEPING)
 
 // ─── The waiting room ────────────────────────────────────────────────────────────────────────
 
-// Every join to a server that isn't running comes here: at once (`wake`), or through the sleeping
-// notice when it arrives while another join's wake is under way. It wakes the server and
+// Every join to a server that isn't running comes here: at once (`wake`), through the sleeping notice
+// or as mc-router's default route (`router.ts`) while another join's ask is under way. It wakes it and
 // holds the player meanwhile, speaking to their client every few seconds so it keeps waiting, then
 // connects them as if they had just dialled it. A player's first join after a sleep gets in; only
 // one that can't is turned away, with why.
@@ -687,7 +688,7 @@ function whyNot(result: WakeResult | null): keyof typeof TURNED_AWAY {
   return result.outcome === 'restarting' ? 'restarting' : 'starting'
 }
 
-asleepAt(WAITING)
+asleepAt(WAITING, false)
 
 // ─── A play address opened in a browser ─────────────────────────────────────────────────────
 
@@ -778,7 +779,7 @@ const door: FrontOptions = {
   notice: (name) => runningNotice(routes.find((r) => r.hostname === name)),
 }
 front(door)
-await router.ready(30_000)
+await router.ready(30_000, WAITING)
 while (!(await syncRoutes())) await Bun.sleep(POLL_MS)
 void pollRoutes()
 

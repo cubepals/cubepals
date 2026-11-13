@@ -47,10 +47,12 @@ export class RouterRoutes {
 
   /**
    * Waits for mc-router's API to answer, then gives a hostname it holds no route for to the
-   * default route with no backend, as its routes file did: mc-router then asks the wake webhook
-   * about it, with no address.
+   * default route, whose backend is `unrouted`: mc-router asks the wake webhook about such a join,
+   * with no address, and dials `unrouted` for one that comes while another such join's ask counts
+   * as under way, which it does until that join's connection closes. With no backend there, that
+   * join was closed at once with nothing said.
    */
-  async ready(timeoutMs: number): Promise<void> {
+  async ready(timeoutMs: number, unrouted: string): Promise<void> {
     const deadline = Date.now() + timeoutMs
     for (;;) {
       const answered = await fetch(`${this.#api}/routes`).then(
@@ -61,7 +63,7 @@ export class RouterRoutes {
       if (Date.now() >= deadline) throw new Error('mc-router’s API never answered')
       await Bun.sleep(100)
     }
-    await this.#send('POST', '/defaultRoute', { backend: '' })
+    await this.#send('POST', '/defaultRoute', { backend: unrouted })
   }
 
   /**
