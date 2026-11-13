@@ -7,7 +7,8 @@
  * for it, and the plugins whose jar goes in a folder of their own. The image has a place for
  * neither on Paper (its `PLUGINS` all land in `plugins/`, and a pack's `overrides/` only install
  * with a pack), so a short step of the entrypoint does both (docs/modpack-system.md § Carried
- * files). Not for pack servers: a pack carries its own files and the image installs them.
+ * files). Not for pack servers: a pack carries its own files and the image installs them. There
+ * the step, where it runs, places nothing and only takes away what an earlier start placed.
  *
  * A carried file replaces the one on disk at every start, the first included: what the server
  * reads is always what its revision says, a plugin finding its file there keeps it rather than
@@ -133,8 +134,8 @@ const compatName = (artifact: ModArtifact) => `${COMPAT_PREFIX}${diskName(artifa
 
 /**
  * The variables the step reads, each file as it reads on `levelName`, the world the server runs,
- * and with the Via plugins Cubepals places beside the revision's own (`compat`). With them, the
- * step runs though nothing is placed, so what an earlier start placed goes. Throws on a path
+ * and with the jars Cubepals places beside the revision's own (`compat`). With them, even none,
+ * the step runs though nothing is placed, so what an earlier start placed goes. Throws on a path
  * Cubepals may not write: every carried file and folder is Cubepals' own, so one is a mistake in a
  * template, never something to skip quietly.
  */
@@ -145,17 +146,19 @@ export function carriedEnv(
   compat?: readonly PinnedMod[],
 ): Record<string, string> {
   if (compat === undefined && !placesFiles(revision)) return {}
+  // A pack's files and jars are the pack's, which the image installs: none of them is carried.
+  const own = revision.modpack === null ? revision : { mods: [], files: [] }
   const jar = (mod: PinnedMod & { dir: string }, name: string) => ({
     path: `${mod.dir}/${name}`,
     sha512: mod.artifact.sha512,
     url: artifactUrl(mod.artifact),
   })
   const jars = [
-    ...placedMods(revision.mods).map((mod) => jar(mod, diskName(mod.artifact))),
+    ...placedMods(own.mods).map((mod) => jar(mod, diskName(mod.artifact))),
     ...placedMods(compat ?? []).map((mod) => jar(mod, compatName(mod.artifact))),
   ]
   // A path is judged as it is written, with the running world's name in it.
-  const files = revision.files.map((file) => onLevel(file, levelName))
+  const files = own.files.map((file) => onLevel(file, levelName))
   const wrong = [...jars, ...files]
     .filter((entry) => !placeablePath(entry.path) || ('url' in entry && /\s/.test(entry.url)))
     .map((entry) => entry.path)

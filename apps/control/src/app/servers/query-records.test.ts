@@ -280,6 +280,7 @@ function runningView(
     gameVersion: DEFAULT_GAME_VERSION,
     joins: { oldest: DEFAULT_GAME_VERSION, newer: false, otherVersions: null },
     bedrock: false,
+    performanceMods: null,
     loader: 'vanilla',
     loaderVersion: null,
     maxPlayers: 5,

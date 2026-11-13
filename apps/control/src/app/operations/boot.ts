@@ -115,6 +115,26 @@ const stoppedAnswering = (error: unknown) =>
 export const notUpHere = (error: unknown): boolean =>
   error instanceof Stuck || error instanceof NotReady || error instanceof Unreadable
 
+/** What of a revision says whether Cubepals' own performance mods are placed on its server. */
+type OwnModsRevision = Pick<ServerRevision, 'gameVersion' | 'loader' | 'modpack' | 'mods'>
+
+/**
+ * Cubepals' own performance mods on a server (`app/compat/performance.ts`), as a start that fails
+ * with them needs them: whether its start placed any, turning them off, and taking that back where
+ * it still stands (an owner's choice made meanwhile is kept).
+ */
+export interface OwnMods {
+  placed(serverId: string, revision: OwnModsRevision): Promise<boolean>
+  turnOff(serverId: string): Promise<void>
+  turnOn(serverId: string): Promise<void>
+}
+
+/** A boot's revision as `OwnMods` reads it: one booted without its pack named plays none. */
+const ownModsOn = (
+  revision: Pick<ServerRevision, 'gameVersion' | 'loader' | 'mods'> &
+    Partial<Pick<ServerRevision, 'modpack'>>,
+): OwnModsRevision => ({ ...revision, modpack: revision.modpack ?? null })
+
 /** How many of its mods one start of a pack server may learn about before it gives up. */
 const LEARNED_PER_START = 3
 
@@ -143,6 +163,7 @@ export class BootSequence {
   readonly #console: ServerConsole
   readonly #passwords: (serverId: string) => string[]
   readonly #notLoaded: (serverId: string, names: string[]) => Promise<void>
+  readonly #ownMods: OwnMods | null
 
   constructor(deps: {
     runtime: Runtimes
@@ -162,6 +183,8 @@ export class BootSequence {
     rconPasswords: (serverId: string) => string[]
     /** Keeps what a start that came up left out of what it was told to load, by name. */
     notLoaded?: (serverId: string, names: string[]) => Promise<void>
+    /** Cubepals' own performance mods, for a start that fails with them; absent, none are placed. */
+    ownMods?: OwnMods
   }) {
     this.#runtime = deps.runtime
     this.#probe = deps.probe
@@ -174,6 +197,7 @@ export class BootSequence {
     this.#console = deps.console
     this.#passwords = deps.rconPasswords
     this.#notLoaded = deps.notLoaded ?? (async () => undefined)
+    this.#ownMods = deps.ownMods ?? null
   }
 
   /**
@@ -227,10 +251,10 @@ export class BootSequence {
     }
 
     const heard: string[] = []
-    try {
-      handle = await this.#upLearning(
+    const up = (from: RuntimeHandle) =>
+      this.#upLearning(
         ctx,
-        handle,
+        from,
         proxyProtocol,
         heard,
         leftOut,
@@ -238,6 +262,8 @@ export class BootSequence {
         reprovision,
         options.startAgainOnHang ?? true,
       )
+    try {
+      handle = await this.#upWithoutOwn(ctx, server.id, ownModsOn(revision), up, handle, reprovision, heard)
     } catch (error) {
       // One that hung was started again already or said why it can't be, one whose answer can't be
       // read reads the same after, and one whose server moved on is over.
@@ -348,6 +374,54 @@ export class BootSequence {
   /** Where the server's status ping goes, and whether it opens with a PROXY protocol header. */
   #game(handle: RuntimeHandle, proxyProtocol: boolean): GameEndpoint {
     return { ...this.#runtime.endpoint(handle, PORT_NAMES.game, 'control'), proxyProtocol }
+  }
+
+  /**
+   * Up; and where a start fails on a server Cubepals placed its own performance mods on, once more
+   * without them: they are turned off for the server and it is started again on that. One that
+   * comes up stays without them, which its settings page says, and its owner can turn them back
+   * on. One that fails the same has them back: they were not why. A start with no way to be put
+   * in place again here (a restore, a wake from storage, a move) can't be tried without them, so
+   * they are left off for its next start, which then isn't stopped by them. Not for a start that
+   * stopped answering, which is started again as it is.
+   *
+   * Whether they were placed is read before the start, not after it failed: its owner may turn
+   * them off while it starts, and the start that failed still had them.
+   */
+  async #upWithoutOwn(
+    ctx: OperationContext,
+    serverId: string,
+    revision: OwnModsRevision,
+    up: (from: RuntimeHandle) => Promise<RuntimeHandle>,
+    first: RuntimeHandle,
+    reprovision: (() => Promise<RuntimeHandle>) | undefined,
+    heard: string[],
+  ): Promise<RuntimeHandle> {
+    const own = this.#ownMods
+    const placed = own !== null && (await own.placed(serverId, revision))
+    try {
+      return await up(first)
+    } catch (error) {
+      const asItIs =
+        stoppedAnswering(error) || error instanceof Unreadable || error instanceof NoLongerApplies
+      if (own === null || !placed || asItIs) throw error
+      await own.turnOff(serverId)
+      const said = `operation ${ctx.op.kind} ${ctx.op.id}: didn't start with Cubepals' own mods`
+      if (reprovision === undefined) {
+        console.warn(`${said}, its next start is without them (${inFull(error)})`)
+        throw error
+      }
+      console.warn(`${said}, starting it without them (${inFull(error)})`)
+      heard.length = 0
+      try {
+        const handle = await up(await reprovision())
+        await ctx.mark('own_mods_off')
+        return handle
+      } catch {
+        await own.turnOn(serverId)
+        throw error
+      }
+    }
   }
 
   /**

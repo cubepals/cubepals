@@ -34,6 +34,7 @@ import type { BuiltPack } from '../artifacts/brand-pack.ts'
 import type { ArtifactLinks } from '../artifacts/links.ts'
 import { reporterPin } from '../artifacts/reporter.ts'
 import type { DeploymentCapabilities } from '../capabilities.ts'
+import { performanceFor } from '../compat/performance.ts'
 import { compatFor, projectsOf } from '../compat/service.ts'
 import { PermanentFailure } from '../errors.ts'
 import { loadListing } from '../listings/persistence.ts'
@@ -205,6 +206,8 @@ export class RuntimeSpecs {
     const placed = (await compatFor(q, revision)).filter(
       (mod) => this.#floodgateKey !== null || !runsPlugin([mod], FLOODGATE),
     )
+    // On Fabric, the performance mods Cubepals adds, unless its owner or a start turned them off.
+    const tuned = await performanceFor(q, server.id, revision)
     // Stop cheaters where it is on: Grim, unless the owner runs their own, and its punishments
     // file, an official server's own where its files name one (`stop-cheaters/start.ts`).
     const officialFiles = official ? this.#official.forStart(server) : []
@@ -228,7 +231,7 @@ export class RuntimeSpecs {
     const built = toRuntimeSpec({
       ...input,
       revision: starting,
-      compat: [...placed, ...reporter, ...(stop.placed?.jar ? [stop.placed.jar] : [])],
+      compat: [...placed, ...tuned, ...reporter, ...(stop.placed?.jar ? [stop.placed.jar] : [])],
       floodgateKey: this.#floodgateKey,
     })
     // With the punishments file its step writes (`minecraft/stop-cheaters.ts`) where it runs.
@@ -245,7 +248,7 @@ export class RuntimeSpecs {
     // which come, left waiting for everyone to leave, drift brings by its revision (`waiting.ts`).
     const drifting = withoutPlanLimits(label(toRuntimeSpec(input)))
     const driftDigest = specDigest(drifting)
-    const compat = projectsOf(placed)
+    const compat = projectsOf([...placed, ...tuned])
     // What drift leaves for the next start, a machine asleep can leave too: it wakes as it slept.
     // But not without the Via plugins it should have, or with ones turned off: a sleeping server
     // may never stop, so its wake boots once to place them. A newer pin of the same ones waits

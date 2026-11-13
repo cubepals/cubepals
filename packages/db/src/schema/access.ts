@@ -123,6 +123,23 @@ export const serverStopCheaters = pgTable('server_stop_cheaters', {
   takeOver: boolean('take_over').notNull().default(false),
 })
 
+// ─── Performance mods ────────────────────────────────────────────────────────────────────────
+
+/**
+ * The servers that run without the performance mods Cubepals adds to a Fabric server
+ * (`app/compat/performance.ts`): kept beside the server rather than in a revision, as Stop
+ * cheaters is, so its owner's switch and a start that turned them off change it without a new
+ * revision. A server with no row runs them.
+ */
+export const serverPerformanceOff = pgTable('server_performance_off', {
+  serverId: uuid('server_id')
+    .primaryKey()
+    .references(() => minecraftServers.id),
+  /** `owner`: its owner's switch. `clash`: a start that failed with them and came up without. */
+  reason: text('reason').$type<'owner' | 'clash'>().notNull(),
+  createdAt: createdAt(),
+})
+
 /** Each player Stop cheaters removed from a server, as the server's reporter told it. */
 export const serverRemovals = pgTable(
   'server_removals',

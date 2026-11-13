@@ -52,6 +52,7 @@ import { loadControls, loadStanding } from '../accounts/persistence.ts'
 import { playTotal, totalView } from '../accounts/play-total.ts'
 import { type Actor, authorize } from '../actor.ts'
 import { loadBackup } from '../backups/persistence.ts'
+import { performanceModsView } from '../compat/performance-view.ts'
 import type { PackCuration } from '../curation/service.ts'
 import { type Shown, shownOf } from '../edge/routed.ts'
 import { cameByView } from '../edge/turned-away.ts'
@@ -81,7 +82,13 @@ import {
   readyBackupCounts,
 } from './persistence.ts'
 import { partySizesFor, planFit, usableFirst } from './plan-fit.ts'
-import { loadChangeFacts, loadRevisionCard, loadRevisionFields, revisionHistory } from './revision-reads.ts'
+import {
+  loadChangeFacts,
+  loadRevisionCard,
+  loadRevisionFields,
+  type RevisionCard,
+  revisionHistory,
+} from './revision-reads.ts'
 import type { MinecraftServerService } from './service.ts'
 import { serverSettingsView } from './settings-view.ts'
 import { lastsOnceRestored } from './temporary.ts'
@@ -663,7 +670,7 @@ export class ServerQueries {
         : null,
       notLoaded: [...server.notLoaded],
       gameVersion: revision.gameVersion,
-      ...(await this.#setups.compat.joins(this.#db, revision, { running, applied })),
+      ...(await addedAtStart(this.#db, this.#setups.compat, server.id, revision, { running, applied })),
       loader: revision.loader,
       loaderVersion: revision.loaderVersion,
       maxPlayers: revision.settings.maxPlayers,
@@ -705,6 +712,24 @@ export class ServerQueries {
           }
         : null,
     }
+  }
+}
+
+/**
+ * What Cubepals adds to a server as it starts, as its page says it: which players' games join it
+ * and whether Bedrock players do (`compat/service.ts`), and its performance mods
+ * (`compat/performance-view.ts`).
+ */
+async function addedAtStart(
+  db: Db,
+  compat: SetupService['compat'],
+  serverId: string,
+  revision: RevisionCard,
+  run: Parameters<SetupService['compat']['joins']>[2],
+) {
+  return {
+    ...(await compat.joins(db, revision, run)),
+    performanceMods: await performanceModsView(db, serverId, revision),
   }
 }
 

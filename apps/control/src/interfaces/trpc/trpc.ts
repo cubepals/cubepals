@@ -16,6 +16,7 @@ import type { BuiltPack } from '../../app/artifacts/brand-pack.ts'
 import type { BackupQueries } from '../../app/backups/queries.ts'
 import type { BackupService } from '../../app/backups/service.ts'
 import type { BillingService } from '../../app/billing/service.ts'
+import type { PerformanceSwitch } from '../../app/compat/performance-switch.ts'
 import type { ConsoleService } from '../../app/console/service.ts'
 import type { PackCuration } from '../../app/curation/service.ts'
 import { within } from '../../app/diagnostics/context.ts'
@@ -57,7 +58,11 @@ import type { WorldService } from '../../app/worlds/service.ts'
 
 /** What procedures may call. Each procedure calls exactly one of these methods. */
 export interface Services {
-  servers: MinecraftServerService & { afkKick: AfkKick; tellPlayers: TellPlayers }
+  servers: MinecraftServerService & {
+    afkKick: AfkKick
+    tellPlayers: TellPlayers
+    performanceMods: PerformanceSwitch
+  }
   /** A new address goes through here, so its owner hears when someone else gave it. */
   notices: OwnerNotices
   accounts: AccountService

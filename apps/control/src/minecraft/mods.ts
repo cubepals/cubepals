@@ -107,15 +107,35 @@ export const VIABACKWARDS = 'NpvuJQoq'
 /** ViaRewind on Modrinth (GPL-3.0-or-later): ViaBackwards' addon for players on 1.8 and 1.7. */
 export const VIAREWIND = 'TbHIxhx5'
 
-/** The Via plugins' names, by their Modrinth projects: the same plugin from Hangar or an upload. */
-const VIA_NAMES: Readonly<Record<string, string>> = {
+/**
+ * Lithium on Modrinth (LGPL-3.0-only): a Fabric mod that makes the game's own logic cheaper to
+ * run, without changing what it does. It asks nothing of a player's game.
+ */
+export const LITHIUM = 'gvQqBUqZ'
+/** FerriteCore on Modrinth (MIT): a Fabric mod that makes the game hold less memory. */
+export const FERRITECORE = 'uXXizFIs'
+
+/**
+ * The performance mods Cubepals adds to a Fabric server as it starts (`app/compat/performance.ts`).
+ * They are Cubepals', never among the owner's mods, and none asks anything of a player's game.
+ * Only mods that leave the game's networking as it is: a connection is not theirs to change.
+ */
+export const PERFORMANCE: readonly string[] = [LITHIUM, FERRITECORE]
+
+/**
+ * The names of what Cubepals adds, by their Modrinth projects: the same plugin or mod from
+ * another catalog or an upload.
+ */
+const OWN_NAMES: Readonly<Record<string, string>> = {
   [VIAVERSION]: 'viaversion',
   [VIABACKWARDS]: 'viabackwards',
   [VIAREWIND]: 'viarewind',
   floodgate: 'floodgate',
+  [LITHIUM]: 'lithium',
+  [FERRITECORE]: 'ferritecore',
 }
 
-/** Whether `mods` hold the Via plugin that is Modrinth's `projectId`, from wherever it came. */
+/** Whether `mods` hold what is Modrinth's `projectId`, of those Cubepals adds, from wherever it came. */
 export const runsPlugin = (
   mods: ReadonlyArray<Pick<PinnedMod, 'source' | 'name'>>,
   projectId: string,
@@ -123,7 +143,7 @@ export const runsPlugin = (
   mods.some(
     (mod) =>
       ('projectId' in mod.source && mod.source.projectId === projectId) ||
-      mod.name.toLowerCase() === VIA_NAMES[projectId],
+      mod.name.toLowerCase() === OWN_NAMES[projectId],
   )
 
 /**

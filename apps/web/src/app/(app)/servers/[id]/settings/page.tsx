@@ -30,6 +30,7 @@ import { Identity } from './identity'
 import { IdlePlayers } from './idle-players'
 import { Location } from './location'
 import { OtherVersionsSetting } from './other-versions'
+import { PerformanceModsSetting } from './performance-mods'
 import { ChangeState } from './shared'
 import { TellingPlayers } from './telling-players'
 import { VersionSettings } from './version'
@@ -65,6 +66,7 @@ export default function SettingsPage() {
           <GameSettings view={view} options={options.data} />
           <VersionSettings view={view} options={options.data} />
           <OtherVersionsSetting view={view} />
+          <PerformanceModsSetting view={view} />
           <BedrockSetting view={view} />
         </>
       )}

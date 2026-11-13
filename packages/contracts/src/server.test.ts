@@ -395,3 +395,25 @@ test('settling waiting changes requires a deliberate request, the version seen a
         .success,
     ).toBe(false)
 })
+
+test('the performance mods switch takes a server and on or off, and nothing a restart would need', () => {
+  for (const on of [true, false])
+    expect(server.SetPerformanceModsInput.parse({ serverId, on })).toEqual({ serverId, on })
+  // A page that sends what a restarting change carries is still understood, and none of it is kept.
+  expect(server.SetPerformanceModsInput.parse({ ...base, when: 'empty', on: true })).toEqual({
+    serverId,
+    on: true,
+  })
+  for (const patch of [{ serverId: 'bad' }, { serverId: undefined }, { on: 'yes' }, { on: undefined }])
+    expect(server.SetPerformanceModsInput.safeParse({ serverId, on: true, ...patch }).success).toBe(false)
+})
+
+test('a server view says who turned the performance mods off, or that it has none to say of', () => {
+  const shown: server.ServerView['performanceMods'][] = [
+    null,
+    { on: true, turnedOff: null, mods: ['Lithium', 'FerriteCore'] },
+    { on: false, turnedOff: 'owner', mods: ['Lithium'] },
+    { on: false, turnedOff: 'clash', mods: [] },
+  ]
+  expect(shown.map((view) => view?.turnedOff ?? null)).toEqual([null, null, 'owner', 'clash'])
+})
