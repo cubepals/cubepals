@@ -331,6 +331,20 @@ describe.skipIf(!hasDatabase)('a server whose Java records its start', () => {
     await h.settled(id)
   }, 90_000)
 
+  test('its owner’s own stop is a sleep as ever: it stays as they left it, and nothing starts it', async () => {
+    const { owner, id } = await running()
+    cacheIs(id, 'recording')
+    await h.app.servers.stop(owner, id, randomUUID())
+    await h.until(id, 'stopped')
+    await h.settled(id)
+    expect(h.runtime.machine(id)?.state).toBe('suspended')
+    expect((await last(id, 'stop')).steps).toContain('slept')
+    expect(await followed(id)).toBe(false)
+    // The sleep nobody asked for, after its next run, is the one that lets the recording be written.
+    expect(resumed(await wake(owner, id))).toBe(true)
+    await stoppedRecording(owner, id)
+  }, 90_000)
+
   test('a start its owner or a player asks first is theirs, and nothing follows it', async () => {
     const { owner, id } = await running()
     await stoppedRecording(owner, id)
