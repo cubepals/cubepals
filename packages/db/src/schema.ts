@@ -31,6 +31,7 @@
  * - `audit.ts`: the platform's audit log.
  * - `insight.ts`: funnel events kept once before they are sent, and good-moment questions.
  * - `placement.ts`: where servers run when a deployment has several runtimes.
+ * - `hosts.ts`: the hosts servers booted on, and the CPU read on each.
  * - `realtime.ts`: the realtime endpoint's pinned certificate.
  * - `fleet.ts`: the fleet runtime's own state.
  * - `edge.ts`: the edges that route players, and how far each one's routes go.
@@ -53,6 +54,7 @@ export * from './schema/edge.ts'
 export * from './schema/fleet.ts'
 export * from './schema/free-play.ts'
 export * from './schema/gifts.ts'
+export * from './schema/hosts.ts'
 export * from './schema/insight.ts'
 export * from './schema/jar-checks.ts'
 export * from './schema/joins.ts'

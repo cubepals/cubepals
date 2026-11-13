@@ -66,6 +66,8 @@ interface FakeVolume {
   snapshot_id?: string
   source_volume_id?: string
   attached_machine_id?: string
+  /** The host it is on, where a test puts the fake on hosts (`fake-fly-hosts.ts`). */
+  zone?: string
 }
 
 /**

@@ -43,6 +43,7 @@ import {
 import type { LogLine, LogSource } from '../ports/platform.ts'
 import type { RuntimeHandle } from '../ports/runtime.ts'
 import type { Runtimes } from '../runtimes/router.ts'
+import { type HostNotes, noteHostCpu } from './host-cpu.ts'
 import { Resume } from './resume.ts'
 import { NoLongerApplies, type OperationContext } from './runner.ts'
 
@@ -164,6 +165,7 @@ export class BootSequence {
   readonly #passwords: (serverId: string) => string[]
   readonly #notLoaded: (serverId: string, names: string[]) => Promise<void>
   readonly #ownMods: OwnMods | null
+  readonly #hostSeen: HostNotes['seen']
 
   constructor(deps: {
     runtime: Runtimes
@@ -185,6 +187,8 @@ export class BootSequence {
     notLoaded?: (serverId: string, names: string[]) => Promise<void>
     /** Cubepals' own performance mods, for a start that fails with them; absent, none are placed. */
     ownMods?: OwnMods
+    /** Keeps what a boot read of its host beside every other reading of it (`HostNotes`). */
+    hostSeen?: HostNotes['seen']
   }) {
     this.#runtime = deps.runtime
     this.#probe = deps.probe
@@ -198,6 +202,7 @@ export class BootSequence {
     this.#passwords = deps.rconPasswords
     this.#notLoaded = deps.notLoaded ?? (async () => undefined)
     this.#ownMods = deps.ownMods ?? null
+    this.#hostSeen = deps.hostSeen
   }
 
   /**
@@ -238,6 +243,8 @@ export class BootSequence {
     )
       return this.#letIn(ctx, server, started, revision, proxyProtocol, [])
     let handle = started
+    // Read while it boots, so no start waits on it; a start again runs on the same host.
+    const hostNoted = noteHostCpu({ runtime: this.#runtime, seen: this.#hostSeen }, ctx, started)
     const check = installCheck(revision)
     const pack = await this.#packCheckFor(revision.modpack ?? null)
     let downloadedAgain = false
@@ -317,6 +324,7 @@ export class BootSequence {
         )
     }
 
+    await hostNoted
     await this.#letIn(ctx, server, handle, revision, proxyProtocol, leftOut)
     // Kept on the record: what follows is the platform's own reading, and its time is the boot's.
     await ctx.mark('let_in')

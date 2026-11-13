@@ -16,6 +16,7 @@
  * - `room.ts`: waiting for a machine while the organization is at its machine limit.
  * - `apps.ts`: a server's Fly app, its name, its Flycast address and its secrets.
  * - `volumes.ts`: the volumes a server's world lives on.
+ * - `host-cpu.ts`: the host a machine runs on: its CPU, and which host it is.
  * - `snapshots.ts`: a volume's snapshots, taken and accounted for.
  * - `exports.ts`: a snapshot's world packed into the archive store.
  * - `machines.ts`: Fly machines read, changed under their lease, and waited on.
@@ -33,6 +34,7 @@ import type {
   Endpoint,
   ExecResult,
   HeldStorage,
+  HostCpu,
   InstallSeed,
   MinecraftRuntime,
   Placement,
@@ -63,6 +65,7 @@ import { changedSince, inventory } from './fly-runtime/discovery.ts'
 import { exportSnapshot } from './fly-runtime/exports.ts'
 import { restoreJob } from './fly-runtime/helper-jobs.ts'
 import { helperJob } from './fly-runtime/helper-machine.ts'
+import { readHostCpu } from './fly-runtime/host-cpu.ts'
 import {
   afterReplace,
   createMachine,
@@ -588,6 +591,13 @@ export class FlyRuntime implements MinecraftRuntime {
     // Never another deployment's app, whatever a caller passes.
     requireOwnApp(app, this.#deployment)
     await deleteApp(this.#fly, app)
+  }
+
+  /** From the machine's own `/proc/cpuinfo` and its volume's zone; null without a machine, or unread. */
+  async hostCpu(handle: RuntimeHandle): Promise<HostCpu | null> {
+    const ref = decodeHandle(handle)
+    if (ref.machineId === null) return null
+    return readHostCpu(this.#fly, ref.app, ref.machineId, ref.volumeId).catch(() => null)
   }
 
   async observe(handle: RuntimeHandle): Promise<RuntimeObservation> {

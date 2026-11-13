@@ -40,7 +40,14 @@ Blockly does about it. A resume that hangs, and the fallbacks for it, are
    still counted it asleep), and `moved_host` where Fly started it on another host, which never
    brings the memory along (`startMarks`, `infra/fly/fly-runtime/machines.ts`). A resume that boots
    (`resume_booted`) with `started_from:suspended` and no `moved_host` lost its memory on the host
-   it slept on. A start that boots although the server slept with its
+   it slept on. Every boot keeps the host it ran on, read while the server boots
+   (`app/operations/host-cpu.ts`): its CPU, `host_cpu:<model>@<MHz>`, from the machine's own
+   `/proc/cpuinfo`, and which host it is, `host:<region>/<zone>`, from the zone of its volume.
+   Fly's hosts in one region are of several speeds, and a server boots and ticks slower on a slow
+   one. Each reading is also kept by host in `runtime_hosts` (`app/runtimes/hosts.ts`): the clock
+   as last read and the least and the most ever read there, the model, how many readings, and
+   when the first and the last were. A
+   start that boots although the server slept with its
    memory raises the `wake_booted` signal, except a `stale-sleep` refresh, which boots so that a
    player's wake doesn't (docs/diagnosis.md). One server's operations, joins and signals in time
    order are `bun scripts/ops.ts timeline <server>`.

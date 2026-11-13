@@ -277,9 +277,14 @@ record here with an `error` of 5xx and a `request_id` is the same failure as the
 Each finished operation is sent as `operation_finished` (`app/insight/operations.ts`), with the
 account as `distinct_id`, as the funnel's events are: `kind`, `status`, `seconds` from being asked,
 `way` (`resumed` or `booted` for a start), `attempts`, `marks` (the steps that say why, such as
-`other_spec,changed:drift:image` or `slept`) and `server_id`. A test account's are never sent. How
-wakes go, resume rate and wake time by day, is a trend of `operation_finished` where `kind` is
-`start`, broken down by `way`.
+`other_spec,changed:drift:image` or `slept`), `host_cpu` (the CPU of the host a boot ran on, as
+`AMD EPYC@3000`: its model and clock in MHz), `host` (which host, as `fra/a1b2`: Fly's region and
+the zone of the volume; both empty for a resume, and where the runtime reads none) and
+`server_id`. A test account's are never sent. How wakes go, resume rate and wake time by day, is
+a trend of `operation_finished` where `kind` is `start`, broken down by `way`; how long a boot
+takes on each kind of host is the same trend's `seconds`, broken down by `host_cpu`. One server's
+hosts, boot by boot, are in `ops.ts timeline <server>`, and every host a server booted on, with
+what was read there, is a row of `runtime_hosts`.
 
 ## What this doesn't see
 

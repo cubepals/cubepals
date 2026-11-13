@@ -12,7 +12,7 @@ import { DiagnosedFailure, PermanentFailure } from '../errors.ts'
 import type { PackContents } from '../packs/contents.ts'
 import { AnswerUnreadable } from '../ports/minecraft.ts'
 import type { LogLine } from '../ports/platform.ts'
-import type { RuntimeHandle } from '../ports/runtime.ts'
+import type { HostCpu, RuntimeHandle } from '../ports/runtime.ts'
 import type { Runtimes } from '../runtimes/router.ts'
 import { BootSequence, followBoot, notUpHere, stoppedWhile, stuckWhile } from './boot.ts'
 import type { OperationRecord } from './persistence.ts'
@@ -118,6 +118,8 @@ function machine(options: {
   resumed?: { runs: boolean; afterMs?: number }
   /** No stop or kill ends it, as a machine wedged by a resume that hung. */
   wedged?: boolean
+  /** What its runtime reads of its host's CPU; a runtime that reads none by default. */
+  hostCpu?: () => Promise<HostCpu | null>
 }) {
   const seen = { process: 1, stops: 0, forceStops: 0, reprovisions: 0, marks: [] as string[] }
   const waiting = { cancelled: false }
@@ -153,6 +155,8 @@ function machine(options: {
     start: async () => {
       seen.process++
     },
+    hostCpu: options.hostCpu ?? (async () => null),
+    providerOf: () => 'fake',
   } as unknown as Runtimes
   // As every adapter's: a stop, forced where it won't, then a start on the same compute.
   runtime.restart = async (handle) => {
@@ -214,6 +218,57 @@ describe('a start that says it is done', () => {
     await boot.run(ctx, server, handle, vanilla)
     // Its next turn was two seconds after the ping that found it not yet listening.
     expect(Date.now() - asked).toBeLessThan(1_500)
+  })
+})
+
+describe('the CPU of the host a boot runs on', () => {
+  test('is kept on the boot’s record, before its players are let in', async () => {
+    const hostCpu = async () => ({ model: 'AMD EPYC', mhz: 2500, host: { region: 'fra', id: 'a1b2' } })
+    const { boot, ctx, seen } = machine({ answers: () => true, hostCpu })
+    await boot.run(ctx, server, handle, vanilla)
+    expect(seen.marks).toEqual(['host_cpu:AMD EPYC@2500', 'host:fra/a1b2', 'let_in'])
+  })
+
+  test('is read while the server boots: a read as long as the boot adds nothing to it', async () => {
+    const readyAt = Date.now() + 1_000
+    async function* tail(): AsyncIterable<LogLine> {
+      await Bun.sleep(readyAt - Date.now())
+      yield { at: new Date(), text: '[03:31:02 INFO]: Done (21.542s)! For help, type "help"' }
+    }
+    const hostCpu = async () => {
+      await Bun.sleep(1_000)
+      return { model: 'AMD EPYC', mhz: 3000, host: null }
+    }
+    const { boot, ctx, seen } = machine({
+      answers: () => Date.now() >= readyAt,
+      tail,
+      hostCpu,
+      readyMs: 10_000,
+    })
+    const asked = Date.now()
+    await boot.run(ctx, server, handle, vanilla)
+    expect(seen.marks).toEqual(['host_cpu:AMD EPYC@3000', 'let_in'])
+    // One second for both, where one after the other would be two.
+    expect(Date.now() - asked).toBeLessThan(1_700)
+  })
+
+  test('says nothing where the runtime reads none, or can’t: the boot goes on as it does', async () => {
+    const none = machine({ answers: () => true })
+    await none.boot.run(none.ctx, server, handle, vanilla)
+    const failing = machine({ answers: () => true, hostCpu: () => Promise.reject(new Error('refused')) })
+    await failing.boot.run(failing.ctx, server, handle, vanilla)
+    expect([none.seen.marks, failing.seen.marks]).toEqual([['let_in'], ['let_in']])
+  })
+
+  test('is not read for a server that resumed, which runs where it slept', async () => {
+    let reads = 0
+    const hostCpu = async () => {
+      reads++
+      return { model: 'AMD EPYC', mhz: 3000, host: null }
+    }
+    const { boot, ctx } = machine({ answers: () => true, resumed: { runs: true }, hostCpu })
+    await boot.run(ctx, server, handle, vanilla)
+    expect(reads).toBe(0)
   })
 })
 
