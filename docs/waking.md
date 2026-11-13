@@ -89,7 +89,11 @@ A plain server has no plugins to start; a Paper server adds its own patching and
 `minecraft/wake-step.ts` measured.
 
 Nearly all of a cold boot is the game starting on one CPU. The image's scripts were cut from 18 s
-to 4 s before (`minecraft/wake-step.ts`). A class data archive saved under 2 s of the same wake
+to 4 s before (`minecraft/wake-step.ts`), and a boot that changed nothing since the last one runs
+none of them: it starts the server with the command, the user and the variables the scripts ended
+on last time, kept on the volume under a key for everything they decide by
+(`minecraft/direct-start.ts`). On a Fabric server with eleven mods that is Java starting 2 s after
+the machine instead of 11 s. A changed setting, jar list, icon or image goes through the scripts. A class data archive saved under 2 s of the same wake
 and put 127 MB on every volume, backup and rest, so it isn't used. A rest adds a helper machine's
 whole life and an image pull onto the volume's host.
 
