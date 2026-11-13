@@ -75,6 +75,16 @@ describe('noting a boot’s host', () => {
     expect(Date.now() - asked).toBeLessThan(1_000)
   })
 
+  test('gives up on a mark, or a reading, that won’t write, as on a read that won’t come', async () => {
+    const cpu = { model: 'AMD EPYC', mhz: 3000, host: fra }
+    const runtime = { hostCpu: async () => cpu, providerOf: () => 'fly' }
+    const never = () => new Promise<void>(() => {})
+    const asked = Date.now()
+    await noteHostCpu({ runtime }, { mark: never }, handle, 50)
+    await noteHostCpu({ runtime, seen: never }, { mark: async () => {} }, handle, 50)
+    expect(Date.now() - asked).toBeLessThan(1_000)
+  })
+
   test('never fails for a mark, or a reading, that can’t be kept', async () => {
     const cpu = { model: 'AMD EPYC', mhz: 3000, host: fra }
     const runtime = { hostCpu: async () => cpu, providerOf: () => 'fly' }

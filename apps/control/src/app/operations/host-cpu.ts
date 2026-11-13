@@ -65,7 +65,10 @@ export interface HostNotes {
 
 /**
  * Reads the host `handle`'s compute runs on, marks it on the operation and keeps the reading.
- * Never rejects, and settles within `withinMs`: `READ_MS`, unless a test shortens it.
+ * Never rejects, and settles within `withinMs`: `READ_MS`, unless a test shortens it. The whole of
+ * it is held to that, the keeping as much as the reading: a start waits on this before it lets
+ * players in, and a record that won't write must not hold one that is ready. Whatever is still
+ * under way when the time is up goes on by itself and is kept if it ends.
  */
 export async function noteHostCpu(
   { runtime, seen }: HostNotes,
@@ -73,19 +76,16 @@ export async function noteHostCpu(
   handle: RuntimeHandle,
   withinMs = READ_MS,
 ): Promise<void> {
-  const waited = new AbortController()
-  try {
-    const cpu = await Promise.race([
-      runtime.hostCpu(handle),
-      delay(withinMs, null, { signal: waited.signal }),
-    ])
+  const noted = (async () => {
+    const cpu = await runtime.hostCpu(handle)
     if (cpu === null) return
     for (const mark of hostMarks(cpu)) await ctx.mark(mark)
     const provider = runtime.providerOf(handle)
     if (provider !== null) await seen?.(provider, cpu)
-  } catch {
+  })().catch(() => {
     // A host that couldn't be read, or kept, says nothing about the start.
-  } finally {
-    waited.abort()
-  }
+  })
+  const waited = new AbortController()
+  await Promise.race([noted, delay(withinMs, undefined, { signal: waited.signal }).catch(() => undefined)])
+  waited.abort()
 }
