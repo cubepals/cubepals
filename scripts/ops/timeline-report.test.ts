@@ -98,6 +98,39 @@ describe('a server’s timeline', () => {
     expect(lines[4]).toContain('18:18:00  signal wake_booted  reasons=other_spec changed=drift:image')
   })
 
+  test('a join says how far it got only as far as someone saw', () => {
+    const at = { connectedAt: '2026-11-07T08:33:29.000Z', leftAt: '2026-11-07T08:33:30.000Z' }
+    const handed = { ...at, path: 'direct', handedAt: '2026-11-07T08:33:29.100Z' } as const
+    const lines = timelineReport({
+      server: SERVER,
+      operations: [],
+      signals: [],
+      joins: [
+        // On a server with no reporter, in the world for a while: nobody told of its login.
+        join({ ...handed, playerName: 'played', serverSide: 'not_reported', bytesDown: 141_043_597 }),
+        // The same server, and the game closed the login.
+        join({ ...handed, playerName: 'kept-out', serverSide: 'not_reported', bytesDown: 182 }),
+        // A server whose reporter told of no login.
+        join({ ...handed, playerName: 'silent', serverSide: 'reported', bytesDown: 0 }),
+        // The edge's router connected it to nothing.
+        join({
+          ...at,
+          playerName: 'dropped',
+          path: 'refused',
+          handedAt: null,
+          leftReason: 'refused:missing-backend',
+          serverSide: 'not_reported',
+          bytesDown: 0,
+        }),
+      ],
+    }).split('\n')
+    const said = (who: string) => lines.find((line) => line.includes(`join   ${who}  `)) ?? ''
+    expect(said('played')).toContain('handed to the server, which reports no login, 141043597 bytes back;')
+    expect(said('kept-out')).toContain('handed to the server, which reports no login, 182 bytes back;')
+    expect(said('silent')).toContain('never logged in;')
+    expect(said('dropped')).toContain('not handed to the server; left 08:33:30 (refused:missing-backend)')
+  })
+
   test('says when there is nothing in the window', () => {
     expect(timelineReport({ server: SERVER, operations: [], joins: [], signals: [] })).toContain(
       'nothing in this window',

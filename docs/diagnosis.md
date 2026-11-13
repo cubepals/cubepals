@@ -55,6 +55,36 @@ The same records answer all three; only the filter changes.
   p95, max and how many failed, the most frequent first. The metrics answer the same without
   naming anyone ([metrics.md](metrics.md)), and are where a trend over weeks is.
 
+## How far a join got
+
+A join's row says how far it got, each step by whoever saw it (`ops.ts join <id>`,
+`ops.ts timeline <server>`):
+
+- **It reached no server**: `handed_at` is null, and `left_reason` says why once it is known.
+  `refused:` and a word of the edge's (`wrong_game`, `busy`, `restarting`, a wake's refusal such as
+  `starting` or `quota`) is a join the edge turned away, telling the player why.
+  `refused:missing-backend` and `refused:failed-backend-connection` are mc-router's own statuses
+  for a join it connected to nothing and closed with nothing said: it held no backend for the
+  address, or the server didn't take its connection (`apps/edge/router-session.ts`). Its `path` is
+  `refused`, whatever its route said. `gave_up_waiting` is a player who left the waiting room.
+- **It was handed to its server**: `handed_at` is set, and `path` is `direct` or `held`.
+- **It logged in, configured and was in the world**: `login_at` to `in_world_at`, which only the
+  server's own reporter tells, a Paper plugin (`apps/reporter`), placed where `JOIN_REPORTER` says
+  on a Paper server that plays no modpack, and wherever Stop cheaters runs, from its next full
+  boot. Its rows read `server_side = 'reported'`.
+
+A vanilla, Fabric, Forge or NeoForge server, a modpack, and a Paper server without the plugin
+report nothing: `server_side` stays `not_reported`, and `login_at` and `in_world_at` stay null on a
+join that got in as on one the game refused. What the edge relayed is all that was seen of such a
+join: `bytes_down`, how long it lasted (`handed_at` to `left_at`), and which side closed first
+(`detail.session`, below). A login the game refused ends within seconds, closed by the server,
+with little sent back; a join that got in is sent its world. The edge can't read which: a server
+that checks accounts has the client encrypt the connection before the login ends, and what follows
+is unreadable to it. Where the game refused a join for a ban or its whitelist, the row says so from
+the server's lists (`refused:banned`, `refused:whitelist`, `app/joins/refusals.ts`).
+`ops.ts timeline` prints such a join as handed to a server that reports no login, with the bytes
+that came back.
+
 ## How a session ended
 
 When a player's connection through the edge closes, its join keeps how the session went, as
