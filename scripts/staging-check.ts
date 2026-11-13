@@ -54,6 +54,7 @@ import { runScheduledNow } from '../apps/control/src/infra/pg/jobs.ts'
 import { GAME_PORT } from '../apps/control/src/minecraft/ports.ts'
 import { bringsWorldIn } from './lib/brought-world.ts'
 import { Progress, type StepResult, seconds, summaryTable } from './lib/check-progress.ts'
+import { onceMoreIfDropped } from './lib/dropped-connection.ts'
 import { fly } from './lib/fly-async.ts'
 import { type Edge, join, login } from './lib/minecraft.ts'
 import { ownGameJoins } from './lib/own-game-joins.ts'
@@ -338,8 +339,11 @@ class Journey {
    */
   async begin(template?: string): Promise<boolean> {
     await this.step('signs up on staging and confirms through its mail catcher', async () => {
-      const email = `check-${this.name}-${Date.now()}@${CHECK_DOMAIN}`
-      const them = await people(WEB, 'http://127.0.0.1:18025').person(email)
+      // Staging's API can reset a request as a machine of it wakes: such a sign-up is made anew.
+      const them = await onceMoreIfDropped(() =>
+        people(WEB, 'http://127.0.0.1:18025').person(`check-${this.name}-${Date.now()}@${CHECK_DOMAIN}`),
+      )
+      const email = them.email
       // Cubepals' own test account, so the check takes none of staging's free places.
       await sql(
         `update account_standing set test_account = true where user_id = (select id from users where email = '${email}')`,
