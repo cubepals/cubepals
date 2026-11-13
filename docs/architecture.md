@@ -2575,7 +2575,8 @@ came from (`domain/setup/setup.ts`). Every server begins as one, turned into its
   Modrinth `gvQqBUqZ`) and FerriteCore (MIT, `uXXizFIs`):
   they make the game cheaper to run and ask nothing of a player's game
   (`app/compat/performance.ts`). They ride the same layer as the Via plugins: pinned per release
-  (`compat_plugins`, `compat-pins`), placed in `mods/` by Cubepals' own start step under its own
+  (`compat_plugins`, `compat-pins`), but only as the exact releases and file hashes
+  `minecraft/performance-pins.ts` names, never the newest a project publishes, placed in `mods/` by Cubepals' own start step under its own
   names, in no revision, counted by no plan rule, never in the mod list, arriving at a boot and
   never through drift, and part of what a machine asleep may wake on (`resumesOn`), so a sleeping
   Fabric server boots once in the background to have them. One the owner runs as their own mod is

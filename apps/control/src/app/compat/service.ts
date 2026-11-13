@@ -18,7 +18,8 @@
  * server's Stop cheaters is on (`app/stop-cheaters/`), on plain Minecraft run on Paper too.
  *
  * The performance mods a Fabric server starts with are pinned by the same job and kept in the same
- * table; which server gets them is `performance.ts`'s.
+ * table, but only as the exact releases `minecraft/performance-pins.ts` names, never the newest a
+ * project publishes; which server gets them is `performance.ts`'s.
  *
  * Each release's jars are pinned once from the catalog (`refresh`, a scheduled job), so every
  * server on it starts with the same ones, and a start never waits on the catalog. A release with
@@ -40,6 +41,7 @@ import {
 import { bedrockAvailable, bedrockPlugins, FLOODGATE } from '../../minecraft/bedrock.ts'
 import { joinsOf } from '../../minecraft/clients.ts'
 import { COMPAT, PERFORMANCE, runsPlugin, VIABACKWARDS, VIAREWIND, VIAVERSION } from '../../minecraft/mods.ts'
+import { PERFORMANCE_PINS, type PerformancePins } from '../../minecraft/performance-pins.ts'
 import { GRIM, runsOwnGrim } from '../../minecraft/stop-cheaters.ts'
 import { offeredVersions, supports } from '../../minecraft/versions.ts'
 import type { ModService } from '../mods/service.ts'
@@ -111,30 +113,42 @@ export class CompatPlugins {
       }
       if (via || grim?.kind === 'ok' || floodgate !== null) pinned++
     }
-    await this.#pinPerformance()
+    await this.pinPerformance()
     return pinned
   }
 
   /**
-   * The performance mods a Fabric server starts with (`performance.ts`), pinned again for each
-   * release Cubepals offers Fabric on and each one a Fabric server runs: each mod by itself, so a
-   * release one of them has no build for still gets the others.
+   * The performance mods a Fabric server starts with (`performance.ts`), pinned as `pins` names
+   * them and no other way: the exact release of each, whose file hashes to the one written there
+   * (`minecraft/performance-pins.ts`). A pin kept from before that `pins` doesn't name goes first,
+   * so nothing stays placed that isn't named. One already kept isn't asked for again; one the
+   * catalog can't give just now, or gives with another file, waits for the next refresh.
    */
-  async #pinPerformance(): Promise<void> {
-    const running = await this.#db
-      .selectDistinct({ gameVersion: revisions.gameVersion })
-      .from(revisions)
-      .innerJoin(servers, eq(servers.desiredRevisionId, revisions.id))
-      .where(and(eq(revisions.loader, 'fabric'), isNull(servers.deletedAt)))
-    const offered = offeredVersions()
-      .map((version) => version.id)
-      .filter((id) => supports(id, 'fabric'))
-    for (const gameVersion of new Set([...offered, ...running.map((row) => row.gameVersion)])) {
-      for (const projectId of PERFORMANCE) {
-        const plan = await this.#mods
-          .resolveNew({ gameVersion, loader: 'fabric' }, [{ projectId }])
-          .catch(() => null)
-        if (plan?.kind === 'ok') await this.#pin(gameVersion, plan.mods, [projectId])
+  async pinPerformance(pins: PerformancePins = PERFORMANCE_PINS): Promise<void> {
+    const named = (gameVersion: string, mod: PinnedMod) =>
+      (pins[gameVersion] ?? []).some(
+        (pin) =>
+          'versionId' in mod.source &&
+          mod.source.projectId === pin.projectId &&
+          mod.source.versionId === pin.versionId &&
+          mod.artifact.sha512 === pin.sha512,
+      )
+    const kept = await this.#db
+      .select()
+      .from(compatPlugins)
+      .where(inArray(compatPlugins.projectId, [...PERFORMANCE]))
+    for (const row of kept.filter((row) => !named(row.gameVersion, row.pinned as PinnedMod)))
+      await this.#pin(row.gameVersion, [], [row.projectId])
+    const have = new Set(
+      kept
+        .filter((row) => named(row.gameVersion, row.pinned as PinnedMod))
+        .map((row) => `${row.gameVersion} ${row.projectId}`),
+    )
+    for (const [gameVersion, chosen] of Object.entries(pins)) {
+      for (const pin of chosen.filter((pin) => !have.has(`${gameVersion} ${pin.projectId}`))) {
+        const plan = await this.#mods.resolveNew({ gameVersion, loader: 'fabric' }, [pin]).catch(() => null)
+        const mod = plan?.kind === 'ok' ? plan.mods.find((mod) => named(gameVersion, mod)) : undefined
+        if (mod !== undefined) await this.#pin(gameVersion, [mod], [pin.projectId])
       }
     }
   }

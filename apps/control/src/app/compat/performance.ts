@@ -5,7 +5,7 @@
 /**
  * The performance mods Cubepals adds to every Fabric server as it starts: Lithium and FerriteCore
  * (`minecraft/mods.ts`), as pinned for its release beside the Via plugins
- * (`service.ts`'s `compat-pins`). They make the game cheaper to run and ask nothing of a player's
+ * (`service.ts`'s `compat-pins`), in the exact releases `minecraft/performance-pins.ts` names. They make the game cheaper to run and ask nothing of a player's
  * game. Like the Via plugins they are Cubepals' own layer, never the owner's mods: they are not in
  * the server's revision, no plan or limit counts them, and the owner's mod list doesn't show them.
  * The settings page says which run, and its switch is the way back.

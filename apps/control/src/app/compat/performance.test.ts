@@ -13,6 +13,7 @@ import { existsSync, readdirSync } from 'node:fs'
 import { schema } from '@blockly/db'
 import { and, desc, eq } from 'drizzle-orm'
 import { FERRITECORE, LITHIUM } from '../../minecraft/mods.ts'
+import type { PerformancePin, PerformancePins } from '../../minecraft/performance-pins.ts'
 import { offeredVersions } from '../../minecraft/versions.ts'
 import { Cdn } from '../../testing/cdn.ts'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
@@ -25,7 +26,8 @@ const cdn = new Cdn()
 const operations = schema.serverOperations
 
 /** One of the mods on the catalog, under its real project id, for every release Cubepals offers. */
-const published = (projectId: string, name: string) =>
+const published = (projectId: string, name: string) => {
+  const file = cdn.file(`${projectId}-1`)
   h.catalog.publish(
     {
       projectId,
@@ -47,19 +49,39 @@ const published = (projectId: string, name: string) =>
         loaders: ['fabric'],
         gameVersions: offeredVersions().map((offered) => offered.id),
         publishedAt: new Date(Date.UTC(2026, 0, 1)),
-        file: cdn.file(`${projectId}-1`),
+        file,
+        dependencies: [],
+      },
+      // A newer release than the one Cubepals names: never taken because it is newer.
+      {
+        versionId: `${projectId}-2`,
+        projectId,
+        versionLabel: '2.0',
+        channel: 'release',
+        state: 'listed',
+        environment: 'server_only',
+        loaders: ['fabric'],
+        gameVersions: offeredVersions().map((offered) => offered.id),
+        publishedAt: new Date(Date.UTC(2026, 5, 1)),
+        file: cdn.file(`${projectId}-2`),
         dependencies: [],
       },
     ],
   )
+  return { projectId, versionId: `${projectId}-1`, sha512: file.sha512 }
+}
+
+/** The releases named for every release Cubepals offers, as `minecraft/performance-pins.ts` names real ones. */
+const namedFor = (pins: PerformancePin[]): PerformancePins =>
+  Object.fromEntries(offeredVersions().map((offered) => [offered.id, pins]))
+let named: PerformancePin[] = []
 
 beforeAll(async () => {
   if (!hasDatabase) return
   await cdn.start()
   h = await startHarness()
-  published(LITHIUM, 'Lithium')
-  published(FERRITECORE, 'FerriteCore')
-  await h.app.setups.compat.refresh()
+  named = [published(LITHIUM, 'Lithium'), published(FERRITECORE, 'FerriteCore')]
+  await h.app.setups.compat.pinPerformance(namedFor(named))
 }, 30_000)
 
 afterEach(() => {
@@ -248,4 +270,29 @@ describe.skipIf(!hasDatabase)('a start that fails with Cubepals’ own mods', ()
     expect((await stepsOf(id, 'restart')).status).toBe('failed')
     expect(await performanceOff(h.db, id)).toBe('owner')
   }, 120_000)
+})
+
+describe.skipIf(!hasDatabase)('which releases of them are pinned', () => {
+  const pinsOf = async () =>
+    (await h.db.select().from(schema.compatPlugins))
+      .filter((row) => [LITHIUM, FERRITECORE].includes(row.projectId))
+      .map((row) => (row.pinned as { source: { versionId: string } }).source.versionId)
+
+  test('only the release named, though its project published a newer one', async () => {
+    expect(new Set(await pinsOf())).toEqual(new Set([`${LITHIUM}-1`, `${FERRITECORE}-1`]))
+  })
+
+  test('none whose file is not the one named, and one no longer named goes', async () => {
+    const [lithium, ferrite] = named
+    if (lithium === undefined || ferrite === undefined) throw new Error('Nothing was named')
+    // The same release with another file than the one written down: not pinned, and the one kept goes.
+    await h.app.setups.compat.pinPerformance(namedFor([{ ...lithium, sha512: 'f'.repeat(128) }, ferrite]))
+    expect(new Set(await pinsOf())).toEqual(new Set([`${FERRITECORE}-1`]))
+    // Named again as it is published, it is pinned again; nothing named, nothing stays.
+    await h.app.setups.compat.pinPerformance(namedFor(named))
+    expect(new Set(await pinsOf())).toEqual(new Set([`${LITHIUM}-1`, `${FERRITECORE}-1`]))
+    await h.app.setups.compat.pinPerformance({})
+    expect(await pinsOf()).toEqual([])
+    await h.app.setups.compat.pinPerformance(namedFor(named))
+  }, 60_000)
 })
