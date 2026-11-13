@@ -2572,7 +2572,7 @@ came from (`domain/setup/setup.ts`). Every server begins as one, turned into its
   join") with the switch, and a second one for 1.8 and 1.7; turned off, the step takes the jars
   away at the next boot.
 - **Performance mods.** Every Fabric server playing no pack starts with Lithium (LGPL-3.0-only,
-  Modrinth `gvQqBUqZ`), FerriteCore (MIT, `uXXizFIs`) and Krypton (LGPL-3.0-only, `fQEb0iXm`):
+  Modrinth `gvQqBUqZ`) and FerriteCore (MIT, `uXXizFIs`):
   they make the game cheaper to run and ask nothing of a player's game
   (`app/compat/performance.ts`). They ride the same layer as the Via plugins: pinned per release
   (`compat_plugins`, `compat-pins`), placed in `mods/` by Cubepals' own start step under its own

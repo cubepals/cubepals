@@ -114,14 +114,13 @@ export const VIAREWIND = 'TbHIxhx5'
 export const LITHIUM = 'gvQqBUqZ'
 /** FerriteCore on Modrinth (MIT): a Fabric mod that makes the game hold less memory. */
 export const FERRITECORE = 'uXXizFIs'
-/** Krypton on Modrinth (LGPL-3.0-only): a Fabric mod that makes the game's networking cheaper. */
-export const KRYPTON = 'fQEb0iXm'
 
 /**
  * The performance mods Cubepals adds to a Fabric server as it starts (`app/compat/performance.ts`).
  * They are Cubepals', never among the owner's mods, and none asks anything of a player's game.
+ * Only mods that leave the game's networking as it is: a connection is not theirs to change.
  */
-export const PERFORMANCE: readonly string[] = [LITHIUM, FERRITECORE, KRYPTON]
+export const PERFORMANCE: readonly string[] = [LITHIUM, FERRITECORE]
 
 /**
  * The names of what Cubepals adds, by their Modrinth projects: the same plugin or mod from
@@ -134,7 +133,6 @@ const OWN_NAMES: Readonly<Record<string, string>> = {
   floodgate: 'floodgate',
   [LITHIUM]: 'lithium',
   [FERRITECORE]: 'ferritecore',
-  [KRYPTON]: 'krypton',
 }
 
 /** Whether `mods` hold what is Modrinth's `projectId`, of those Cubepals adds, from wherever it came. */

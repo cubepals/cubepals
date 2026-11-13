@@ -3,8 +3,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * The performance mods Cubepals adds to every Fabric server as it starts: Lithium, FerriteCore and
- * Krypton (`minecraft/mods.ts`), as pinned for its release beside the Via plugins
+ * The performance mods Cubepals adds to every Fabric server as it starts: Lithium and FerriteCore
+ * (`minecraft/mods.ts`), as pinned for its release beside the Via plugins
  * (`service.ts`'s `compat-pins`). They make the game cheaper to run and ask nothing of a player's
  * game. Like the Via plugins they are Cubepals' own layer, never the owner's mods: they are not in
  * the server's revision, no plan or limit counts them, and the owner's mod list doesn't show them.
@@ -64,14 +64,14 @@ export async function setPerformance(
 }
 
 /**
- * The performance mods a start of the server places, in its mods folder by Cubepals' own step:
- * those pinned for its release, but any its owner runs already. None where they are off, on a
- * release with none pinned yet, or on a server they are not for.
+ * The ones a start of the server places while they are on: those pinned for its release, but any
+ * its owner runs already, in `PERFORMANCE`'s order. None on a release with none pinned yet, or on a
+ * server they are not for.
  */
-export async function performanceFor(q: Queryable, serverId: string, revision: Tuned): Promise<PinnedMod[]> {
+export async function performanceIfOn(q: Queryable, revision: Tuned): Promise<PinnedMod[]> {
   if (!takesPerformance(revision)) return []
   const wanted = PERFORMANCE.filter((id) => !runsPlugin(revision.mods, id))
-  if (wanted.length === 0 || (await performanceOff(q, serverId)) !== null) return []
+  if (wanted.length === 0) return []
   const rows = await q
     .select({ projectId: compatPlugins.projectId, pinned: compatPlugins.pinned })
     .from(compatPlugins)
@@ -82,3 +82,23 @@ export async function performanceFor(q: Queryable, serverId: string, revision: T
       .map((row) => ({ ...(row.pinned as PinnedMod), dir: MODS_DIR })),
   )
 }
+
+/**
+ * The performance mods a start of the server places, in its mods folder by Cubepals' own step:
+ * `performanceIfOn`'s, and none where they are off.
+ */
+export async function performanceFor(q: Queryable, serverId: string, revision: Tuned): Promise<PinnedMod[]> {
+  const mods = await performanceIfOn(q, revision)
+  return mods.length === 0 || (await performanceOff(q, serverId)) !== null ? [] : mods
+}
+
+/**
+ * What a start asks of them (`operations/boot.ts`'s `OwnMods`): whether it placed any, and the way
+ * to start once without them and back.
+ */
+export const ownModsOf = (q: Queryable) => ({
+  placed: async (serverId: string, revision: Tuned) =>
+    (await performanceFor(q, serverId, revision)).length > 0,
+  turnOff: (serverId: string) => setPerformance(q, serverId, false, 'clash'),
+  turnOn: (serverId: string) => setPerformance(q, serverId, true),
+})

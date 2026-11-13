@@ -16,11 +16,11 @@ const does = 'They make it run smoother and ask nothing of your players.'
 
 describe('the Performance section', () => {
   test('names the mods a start places, however many', () => {
-    expect(performanceLine({ on: true, mods: ['Lithium', 'FerriteCore', 'Krypton'] })).toBe(
-      `Cubepals adds Lithium, FerriteCore and Krypton to this server. ${does}`,
+    expect(performanceLine({ on: true, mods: ['Lithium', 'FerriteCore', 'Third'] })).toBe(
+      `Cubepals adds Lithium, FerriteCore and Third to this server. ${does}`,
     )
-    expect(performanceLine({ on: true, mods: ['Lithium', 'Krypton'] })).toBe(
-      `Cubepals adds Lithium and Krypton to this server. ${does}`,
+    expect(performanceLine({ on: true, mods: ['Lithium', 'Third'] })).toBe(
+      `Cubepals adds Lithium and Third to this server. ${does}`,
     )
     expect(performanceLine({ on: true, mods: ['FerriteCore'] })).toBe(
       'Cubepals adds FerriteCore to this server. It makes the server run smoother and asks nothing of your players.',
@@ -28,8 +28,8 @@ describe('the Performance section', () => {
   })
 
   test('turned off, says what turning them on would bring', () => {
-    expect(performanceLine({ on: false, mods: ['Lithium', 'FerriteCore', 'Krypton'] })).toBe(
-      `Cubepals can add Lithium, FerriteCore and Krypton to this server. ${does}`,
+    expect(performanceLine({ on: false, mods: ['Lithium', 'FerriteCore', 'Third'] })).toBe(
+      `Cubepals can add Lithium, FerriteCore and Third to this server. ${does}`,
     )
   })
 

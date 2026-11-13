@@ -17,7 +17,7 @@ import { BackupService } from './backups/service.ts'
 import { BillingService } from './billing/service.ts'
 import type { DeploymentCapabilities } from './capabilities.ts'
 import { CatalogSync } from './catalog/sync.ts'
-import { performanceFor, setPerformance } from './compat/performance.ts'
+import { ownModsOf } from './compat/performance.ts'
 import { PerformanceSwitch } from './compat/performance-switch.ts'
 import { ConsoleFeed } from './console/feed.ts'
 import { ConsoleService } from './console/service.ts'
@@ -162,6 +162,11 @@ export interface ControlPlaneSettings {
   room?: { wakeReserve: number; createWaitSeconds: number }
 }
 
+/** What a start does about mods as it boots: marks the owner's that didn't load, and starts once without Cubepals' own. */
+const modsAtBoot = (db: Db) => ({
+  notLoaded: (serverId: string, names: string[]) => markNotLoaded(db, serverId, names),
+  ownMods: ownModsOf(db),
+})
 /**
  * The application, built once from its ports. The composition root builds it with real
  * adapters; the operation tests build the same thing with fakes, so what they exercise is the
@@ -311,12 +316,7 @@ export function composeControlPlane(ports: ControlPlanePorts, settings: ControlP
     packs: contents,
     console: ports.console,
     rconPasswords: (serverId) => specs.rconPasswords(serverId),
-    notLoaded: (serverId, names) => markNotLoaded(db, serverId, names),
-    ownMods: {
-      placed: async (serverId, revision) => (await performanceFor(db, serverId, revision)).length > 0,
-      turnOff: (serverId) => setPerformance(db, serverId, false, 'clash'),
-      turnOn: (serverId) => setPerformance(db, serverId, true),
-    },
+    ...modsAtBoot(db),
   })
   const runner = new OperationRunner(
     { db, transitions, events },

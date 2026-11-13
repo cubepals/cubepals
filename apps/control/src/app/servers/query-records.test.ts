@@ -126,7 +126,7 @@ test.skipIf(!hasDatabase)(
       loaderLabel: 'Vanilla',
       joins: { oldest: '1.9', newer: true },
       bedrock: false,
-            mods: [],
+      mods: [],
       modpack: null,
       size: { label: '3 GB', allowed: true },
     })

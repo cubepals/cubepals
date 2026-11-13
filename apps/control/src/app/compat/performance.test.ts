@@ -12,7 +12,7 @@ import { randomUUID } from 'node:crypto'
 import { existsSync, readdirSync } from 'node:fs'
 import { schema } from '@blockly/db'
 import { and, desc, eq } from 'drizzle-orm'
-import { FERRITECORE, KRYPTON, LITHIUM } from '../../minecraft/mods.ts'
+import { FERRITECORE, LITHIUM } from '../../minecraft/mods.ts'
 import { offeredVersions } from '../../minecraft/versions.ts'
 import { Cdn } from '../../testing/cdn.ts'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
@@ -58,7 +58,6 @@ beforeAll(async () => {
   h = await startHarness()
   published(LITHIUM, 'Lithium')
   published(FERRITECORE, 'FerriteCore')
-  published(KRYPTON, 'Krypton')
   await h.app.setups.compat.refresh()
 }, 30_000)
 
@@ -115,18 +114,18 @@ const restart = async (owner: Awaited<ReturnType<typeof fabric>>['owner'], id: s
 }
 
 describe.skipIf(!hasDatabase)('the performance mods every Fabric server starts with', () => {
-  test('a Fabric server gets all three, which are not its owner’s mods', async () => {
+  test('a Fabric server gets both, which are not its owner’s mods', async () => {
     const { owner, id } = await fabric('Ash')
     const server = await h.server(id)
     const revision = await loadRevision(h.db, server.desiredRevisionId)
     expect(revision.loader).toBe('fabric')
     expect(revision.mods).toEqual([])
     const own = (await placed(id)).filter((path) => OWN.test(path))
-    expect(own).toHaveLength(3)
-    for (const projectId of [LITHIUM, FERRITECORE, KRYPTON])
+    expect(own).toHaveLength(2)
+    for (const projectId of [LITHIUM, FERRITECORE])
       expect(own.some((path) => path.includes(projectId))).toBe(true)
     // On the server's disk, placed as it started, and nowhere in what its owner chose.
-    expect(onDisk(id)).toHaveLength(3)
+    expect(onDisk(id)).toHaveLength(2)
     expect((await h.app.specs.desired(h.db, server)).spec.env.MODS ?? '').toBe('')
     expect((await h.app.accountQueries.overview(owner)).plan.key).toBe('plus')
   }, 60_000)
@@ -149,11 +148,11 @@ describe.skipIf(!hasDatabase)('the performance mods every Fabric server starts w
     if (lithium === undefined) throw new Error('Lithium was not pinned')
     const { dir: _dir, ...theirs } = lithium
     const beside = await performanceFor(h.db, id, { ...revision, mods: [theirs] })
-    expect(beside.map((mod) => mod.name).sort()).toEqual(['FerriteCore', 'Krypton'])
+    expect(beside.map((mod) => mod.name)).toEqual(['FerriteCore'])
     // The same mod from an upload, known only by its name.
     const uploaded = { ...theirs, name: 'lithium', source: { catalog: 'upload' } as never }
     const besideUpload = await performanceFor(h.db, id, { ...revision, mods: [uploaded] })
-    expect(besideUpload.map((mod) => mod.name).sort()).toEqual(['FerriteCore', 'Krypton'])
+    expect(besideUpload.map((mod) => mod.name)).toEqual(['FerriteCore'])
     // A pack is tested as it is.
     const pack = { ...revision, modpack: {} as never }
     expect(await performanceFor(h.db, id, pack)).toEqual([])
@@ -161,18 +160,18 @@ describe.skipIf(!hasDatabase)('the performance mods every Fabric server starts w
 
   test('turned off, the next start takes them away, and turned on, puts them back', async () => {
     const { owner, id } = await fabric('Dune')
-    expect(onDisk(id)).toHaveLength(3)
+    expect(onDisk(id)).toHaveLength(2)
     await setPerformance(h.db, id, false)
     expect(await performanceOff(h.db, id)).toBe('owner')
     expect((await placed(id)).filter((path) => OWN.test(path))).toEqual([])
     // Nothing restarts for it: they go at its next start.
-    expect(onDisk(id)).toHaveLength(3)
+    expect(onDisk(id)).toHaveLength(2)
     await restart(owner, id)
     expect(onDisk(id)).toEqual([])
     await setPerformance(h.db, id, true)
     expect(await performanceOff(h.db, id)).toBeNull()
     await restart(owner, id)
-    expect(onDisk(id)).toHaveLength(3)
+    expect(onDisk(id)).toHaveLength(2)
   }, 90_000)
 })
 

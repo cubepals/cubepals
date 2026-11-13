@@ -45,8 +45,8 @@ function PerformanceModsForm({ view, shown }: { view: ServerView; shown: Perform
       />
       {shown.turnedOff === 'clash' && (
         <p className="bk-field__help">
-          Cubepals turned these off because the server didn’t start with them. You can turn them back on
-          after changing your mods.
+          Cubepals turned these off because the server didn’t start with them. You can turn them back on after
+          changing your mods.
         </p>
       )}
       {save.isError && <Note tone="danger">{messageOf(save.error)}</Note>}

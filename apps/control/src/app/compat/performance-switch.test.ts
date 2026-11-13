@@ -10,7 +10,7 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { schema } from '@blockly/db'
 import { asc, eq } from 'drizzle-orm'
-import { FERRITECORE, KRYPTON, LITHIUM } from '../../minecraft/mods.ts'
+import { FERRITECORE, LITHIUM } from '../../minecraft/mods.ts'
 import { Cdn } from '../../testing/cdn.ts'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
 import { requestedBy } from '../actor.ts'
@@ -36,7 +36,7 @@ afterAll(async () => {
   }
 })
 
-const ALL = ['Lithium', 'FerriteCore', 'Krypton']
+const ALL = ['Lithium', 'FerriteCore']
 
 /** One of the mods as the pins job keeps it for a release, under its real project id. */
 const pin = async (gameVersion: string, projectId: string, name: string) => {
@@ -49,7 +49,7 @@ const pin = async (gameVersion: string, projectId: string, name: string) => {
   })
 }
 
-/** A running Fabric server with no mods of its owner's, on a release with all three pinned. */
+/** A running Fabric server with no mods of its owner's, on a release with both pinned. */
 const fabric = async (name: string) => {
   const owner = await h.user(name, 'plus')
   const { id } = await h.create(owner, { loader: 'fabric' })
@@ -63,7 +63,6 @@ const fabric = async (name: string) => {
   for (const [projectId, mod] of [
     [LITHIUM, 'Lithium'],
     [FERRITECORE, 'FerriteCore'],
-    [KRYPTON, 'Krypton'],
   ] as const)
     if (!pinned.some((row) => row.projectId === projectId)) await pin(revision.gameVersion, projectId, mod)
   return { owner, id, revision }
@@ -160,7 +159,7 @@ describe.skipIf(!hasDatabase)('the owner’s switch for the performance mods', (
     if (lithium === undefined) throw new Error('Lithium was not pinned')
     const { dir: _dir, ...theirs } = lithium
     const withTheirs = { ...revision, mods: [theirs] }
-    const rest = ['FerriteCore', 'Krypton']
+    const rest = ['FerriteCore']
     expect(await performanceModsView(h.db, id, withTheirs)).toEqual({ on: true, turnedOff: null, mods: rest })
     const unpinned = { ...revision, gameVersion: '0.0.1' }
     expect(await performanceModsView(h.db, id, unpinned)).toEqual({ on: true, turnedOff: null, mods: [] })
