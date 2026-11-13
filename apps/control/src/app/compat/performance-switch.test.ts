@@ -100,18 +100,18 @@ const standing = async (id: string) => {
 describe.skipIf(!hasDatabase)('the owner’s switch for the performance mods', () => {
   test('its owner turns them off and on, and the server’s view says so', async () => {
     const { owner, id } = await fabric('Alder')
-    expect(await shown(owner, id)).toEqual({ on: true, turnedOff: null, mods: ALL })
+    expect(await shown(owner, id)).toEqual({ on: true, turnedOff: null, mods: ALL, runs: ALL })
     const { version } = await h.server(id)
 
     await h.app.servers.performanceMods.set(owner, id, false)
     expect(await performanceOff(h.db, id)).toBe('owner')
     // Off, it still names the ones the switch would bring back.
-    expect(await shown(owner, id)).toEqual({ on: false, turnedOff: 'owner', mods: ALL })
+    expect(await shown(owner, id)).toEqual({ on: false, turnedOff: 'owner', mods: ALL, runs: ALL })
     expect((await h.server(id)).version).toBe(version + 1)
 
     await h.app.servers.performanceMods.set(owner, id, true)
     expect(await performanceOff(h.db, id)).toBeNull()
-    expect(await shown(owner, id)).toEqual({ on: true, turnedOff: null, mods: ALL })
+    expect(await shown(owner, id)).toEqual({ on: true, turnedOff: null, mods: ALL, runs: ALL })
     expect(await audited(id)).toEqual(
       ['server.performance_mods_off', 'server.performance_mods_on'].map((action) => ({
         actor: requestedBy(owner),
@@ -144,30 +144,50 @@ describe.skipIf(!hasDatabase)('the owner’s switch for the performance mods', (
   test('turning them on is the way back from a start that turned them off', async () => {
     const { owner, id } = await fabric('Dogwood')
     await setPerformance(h.db, id, false, 'clash')
-    expect(await shown(owner, id)).toEqual({ on: false, turnedOff: 'clash', mods: ALL })
+    expect(await shown(owner, id)).toEqual({ on: false, turnedOff: 'clash', mods: ALL, runs: ALL })
     // The owner's own off takes the place of Cubepals'.
     await h.app.servers.performanceMods.set(owner, id, false)
     expect((await shown(owner, id))?.turnedOff).toBe('owner')
     await setPerformance(h.db, id, false, 'clash')
     await h.app.servers.performanceMods.set(owner, id, true)
-    expect(await shown(owner, id)).toEqual({ on: true, turnedOff: null, mods: ALL })
+    expect(await shown(owner, id)).toEqual({ on: true, turnedOff: null, mods: ALL, runs: ALL })
   }, 60_000)
 
-  test('it names what a start places: not one its owner runs, and none not pinned yet', async () => {
+  test('it names what a start places, and with them the ones its owner runs as their own', async () => {
     const { id, revision } = await fabric('Elder')
-    const [lithium] = await performanceFor(h.db, id, revision)
-    if (lithium === undefined) throw new Error('Lithium was not pinned')
-    const { dir: _dir, ...theirs } = lithium
-    const withTheirs = { ...revision, mods: [theirs] }
-    const rest = ['FerriteCore']
-    expect(await performanceModsView(h.db, id, withTheirs)).toEqual({ on: true, turnedOff: null, mods: rest })
+    const [lithium, ferritecore] = await performanceFor(h.db, id, revision)
+    if (lithium === undefined || ferritecore === undefined) throw new Error('both were not pinned')
+    /** The same mod as its owner's own: in the revision, with no folder of Cubepals' step. */
+    const asTheirs = ({ dir: _dir, ...mod }: typeof lithium) => mod
+    const view = (shown: Parameters<typeof performanceModsView>[2]) => performanceModsView(h.db, id, shown)
+    const on = { on: true, turnedOff: null }
+
+    // The owner runs one: a start places the other, and the server runs both.
+    const withOne = { ...revision, mods: [asTheirs(lithium)] }
+    expect(await view(withOne)).toEqual({ ...on, mods: ['FerriteCore'], runs: ALL })
+    const withOther = { ...revision, mods: [asTheirs(ferritecore)] }
+    expect(await view(withOther)).toEqual({ ...on, mods: ['Lithium'], runs: ALL })
+    // Theirs however it reached them: an upload is known by its name alone, and named as the mod is.
+    const uploaded = { ...asTheirs(lithium), name: 'lithium', source: { catalog: 'upload' } as never }
+    expect(await view({ ...revision, mods: [uploaded] })).toEqual({ ...on, mods: ['FerriteCore'], runs: ALL })
+    // The owner runs both: a start places none, and the server runs both all the same.
+    const withBoth = { ...revision, mods: [asTheirs(ferritecore), asTheirs(lithium)] }
+    expect(await view(withBoth)).toEqual({ ...on, mods: [], runs: ALL })
+    // No release pinned for its Minecraft: none to place and none to name.
     const unpinned = { ...revision, gameVersion: '0.0.1' }
-    expect(await performanceModsView(h.db, id, unpinned)).toEqual({ on: true, turnedOff: null, mods: [] })
+    expect(await view(unpinned)).toEqual({ ...on, mods: [], runs: [] })
+    // Even there, one its owner runs is on the server.
+    const theirsAlone = { ...unpinned, mods: [asTheirs(lithium)] }
+    expect(await view(theirsAlone)).toEqual({ ...on, mods: [], runs: ['Lithium'] })
+
+    // Off, it names what turning them on would have on the server.
     await setPerformance(h.db, id, false)
-    expect((await performanceModsView(h.db, id, withTheirs))?.mods).toEqual(rest)
-    expect((await performanceModsView(h.db, id, unpinned))?.mods).toEqual([])
+    const off = { on: false, turnedOff: 'owner' as const }
+    expect(await view(withOne)).toEqual({ ...off, mods: ['FerriteCore'], runs: ALL })
+    expect(await view(withBoth)).toEqual({ ...off, mods: [], runs: ALL })
+    expect(await view(unpinned)).toEqual({ ...off, mods: [], runs: [] })
     // A server playing a pack is tested as it is: there is nothing to show.
-    expect(await performanceModsView(h.db, id, { ...revision, modpack: {} as never })).toBeNull()
+    expect(await view({ ...revision, modpack: {} as never })).toBeNull()
   }, 60_000)
 
   test('nobody else changes it, and whoever runs the platform can', async () => {
