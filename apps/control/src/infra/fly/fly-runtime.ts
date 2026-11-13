@@ -113,6 +113,10 @@ import {
   isFlyHandle,
   isFlySnapshot,
   locationOf,
+  machineOf,
+  requireMachine,
+  requireVolume,
+  volumesOf,
 } from './handle.ts'
 import { asleepOn, heldTags, META, machineConfig, portsOf, startStep } from './machine-config.ts'
 
@@ -757,30 +761,4 @@ export class FlyRuntime implements MinecraftRuntime {
     if (wasRunning) await this.start(next)
     return next
   }
-}
-
-// ─── pure helpers ─────────────────────────────────────────────────────────────────────────────
-
-function requireMachine(ref: FlyRef): string {
-  if (ref.machineId === null) throw new Error('This server has no machine; it was decommissioned')
-  return ref.machineId
-}
-
-/** The machine the storage a server holds names, by id: its handle's. */
-function machineOf(storage: HeldStorage): string | null {
-  return storage.held != null && isFlyHandle(storage.held) ? decodeHandle(storage.held).machineId : null
-}
-
-/** The volumes the storage a server holds names, by id: what its handle names, and what is kept. */
-function volumesOf(storage: HeldStorage): { held: string | null; kept: string[] } {
-  const volume = (handle: RuntimeHandle) => (isFlyHandle(handle) ? decodeHandle(handle).volumeId : null)
-  return {
-    held: storage.held == null ? null : volume(storage.held),
-    kept: (storage.kept ?? []).flatMap((handle) => volume(handle) ?? []),
-  }
-}
-
-function requireVolume(ref: FlyRef): string {
-  if (ref.volumeId === null) throw new Error('This server has no volume')
-  return ref.volumeId
 }
