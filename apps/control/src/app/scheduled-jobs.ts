@@ -39,7 +39,14 @@ function schedules(
     },
     { job: 'relocations', run: () => app.schedules.relocations(), says: (n) => `moved ${n}` },
     { job: 'presence-sync', run: () => app.schedules.presenceSync() },
-    { job: 'idle-check', run: () => app.schedules.idleCheck() },
+    {
+      job: 'idle-check',
+      // The stop a pass makes for a server's recording is followed by its start at the next.
+      run: async () => {
+        await app.schedules.idleCheck()
+        await app.schedules.recordedStarts()
+      },
+    },
     { job: 'creates-room', run: () => app.policy.room.settle() },
     {
       job: 'session-check',

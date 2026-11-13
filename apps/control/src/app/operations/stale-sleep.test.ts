@@ -270,48 +270,74 @@ describe.skipIf(!hasDatabase)('stale-sleep, for memory kept too long to count on
   }, 120_000)
 })
 
-describe.skipIf(!hasDatabase)('stale-sleep, for a server whose Java records its start', () => {
+describe.skipIf(!hasDatabase)('a server whose Java records its start', () => {
   /** What the startup cache's script left on the server's volume: how far its cache got. */
   const cacheIs = (id: string, phase: 'recording' | 'made') => {
     const state = join(h.runtime.machine(id)?.dir ?? '', CACHE_STATE.replace(`${DATA_DIR}/`, ''))
     mkdirSync(dirname(state), { recursive: true })
     writeFileSync(state, `made-for\n${phase}\n`)
   }
-
-  test('its sleep is a stop for once, and a start nobody waits for puts it back to sleep with its memory', async () => {
-    const { owner, id } = await running()
+  /** Asleep by a stop for its recording: stopped, and the stop says why. */
+  const stoppedRecording = async (owner: UserActor, id: string) => {
     cacheIs(id, 'recording')
     await h.app.servers.stop(owner, id, randomUUID(), 'idle')
     await h.until(id, 'stopped')
     await h.settled(id)
-    // Stopped, so that its Java exits and writes what it recorded; the stop says why.
     expect(h.runtime.machine(id)?.state).toBe('stopped')
     expect((await last(id, 'stop')).steps).toContain('recording')
+  }
+  /** One pass of the schedule, and whether the server's newest start is the one that follows a recording. */
+  const followed = async (id: string) => {
+    await h.app.schedules.recordedStarts(new Date(), 50)
+    return (await lastStart(id)).key.startsWith('start:refresh:ready:recorded:')
+  }
 
-    expect(await pass()).toBe(1)
+  test('its sleep is a stop for once, and a start nobody waits for puts it back to sleep with its memory', async () => {
+    const { owner, id } = await running()
+    // Stopped, so that its Java exits and writes what it recorded.
+    await stoppedRecording(owner, id)
+
+    expect(await followed(id)).toBe(true)
     await h.until(id, 'running')
     await h.settled(id)
-    const start = await lastStart(id)
-    expect(start.key).toStartWith('start:refresh:ready:recorded:')
-    expect(start.steps).toContain('booting')
+    expect((await lastStart(id)).steps).toContain('booting')
 
     // The run that start began sleeps as ever, whatever its volume still says: one stop a recording.
     await sleepsUnjoined(id)
     expect((await last(id, 'stop')).steps).toContain('slept')
-    expect(await pass()).toBe(0)
+    const before = (await lastStart(id)).key
+    await h.app.schedules.recordedStarts(new Date(), 50)
+    expect((await lastStart(id)).key).toBe(before)
     expect(resumed(await wake(owner, id))).toBe(true)
   }, 120_000)
 
+  test('its start waits for the restore point its sleep is writing: the copy is of the server as it stopped', async () => {
+    const { owner, id } = await running()
+    await stoppedRecording(owner, id)
+    const backup = randomUUID()
+    await h.db.insert(operations).values({
+      id: backup,
+      serverId: id,
+      kind: 'backup',
+      status: 'running',
+      input: { trigger: 'sleep' },
+      requestedBy: 'system:sleep',
+      idempotencyKey: `backup:sleep:${backup}`,
+    })
+    expect(await followed(id)).toBe(false)
+    await h.db.update(operations).set({ status: 'succeeded' }).where(eq(operations.id, backup))
+    expect(await followed(id)).toBe(true)
+    await h.until(id, 'running')
+    await h.settled(id)
+  }, 90_000)
+
   test('a start its owner or a player asks first is theirs, and nothing follows it', async () => {
     const { owner, id } = await running()
-    cacheIs(id, 'recording')
-    await h.app.servers.stop(owner, id, randomUUID(), 'idle')
-    await h.until(id, 'stopped')
-    await h.settled(id)
+    await stoppedRecording(owner, id)
     cacheIs(id, 'made')
     expect(await wake(owner, id)).toContain('booting')
     await asleep(owner, id)
-    expect(await pass()).toBe(0)
+    expect(await followed(id)).toBe(false)
   }, 90_000)
 
   test('one whose Java reads its cache, or has none, sleeps as ever', async () => {
@@ -321,6 +347,6 @@ describe.skipIf(!hasDatabase)('stale-sleep, for a server whose Java records its 
     expect(resumed(await wake(owner, id))).toBe(true)
     cacheIs(id, 'made')
     await asleep(owner, id)
-    expect(await pass()).toBe(0)
+    expect(await followed(id)).toBe(false)
   }, 90_000)
 })
