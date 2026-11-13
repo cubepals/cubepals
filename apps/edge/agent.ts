@@ -35,7 +35,7 @@ import { PingWakes } from './ping-wake.ts'
 import { RoutesPoll } from './poll.ts'
 import { RESTING_STATUS, restingJoin } from './resting.ts'
 import { RouterRoutes } from './router.ts'
-import type { RouterSession } from './router-session.ts'
+import { droppedFor, ROUTER_STATUS, type RouterSession } from './router-session.ts'
 import { VisitReporter } from './visit-reporter.ts'
 import { sourceKey, VISIT_TIMES, Visits } from './visits.ts'
 import { wakingLine } from './waking-line.ts'
@@ -359,7 +359,7 @@ async function session(body: RouterSession): Promise<void> {
   if (body.event === 'connect' && body.backend) void check(body.backend)
   const event = body.event === 'connect' || body.event === 'disconnect' ? body.event : null
   if (event === null || !body.server || !body.player?.name || !body.player.uuid) return
-  if (event === 'connect' && body.status !== 'success') return
+  if (event === 'connect' && body.status !== ROUTER_STATUS.connected) return
   const payload: SessionEvent = {
     edgeId: EDGE_ID,
     hostname: body.server,
@@ -373,7 +373,8 @@ async function session(body: RouterSession): Promise<void> {
 
 /**
  * What mc-router says of a join goes on its visit: who it is, and, sent straight to a running
- * server, that it was handed over then. The waiting room tells of the joins it holds itself.
+ * server, that it was handed over then; or, where mc-router connected it to nothing and closed it,
+ * that it reached no server, and why. The waiting room tells of the joins it holds itself.
  */
 function visited(body: RouterSession): void {
   const { host, port } = body.client ?? {}
@@ -382,9 +383,11 @@ function visited(body: RouterSession): void {
   const player = { name: body.player.name, ...(body.player.uuid ? { uuid: body.player.uuid } : {}) }
   const at = body.timestamp ? new Date(body.timestamp).toISOString() : new Date().toISOString()
   visits.update(source, { player })
-  if (body.backend === WAITING) return
-  const told = body.backend === NOTICE ? { path: 'refused' as const, leftReason: 'refused:restarting' } : null
-  visits.update(source, told ?? { path: 'direct', handedAt: at })
+  const dropped = droppedFor(body)
+  if (dropped === null && body.backend === WAITING) return
+  const why = dropped ?? (body.backend === NOTICE ? 'refused:restarting' : null)
+  if (why === null) visits.update(source, { path: 'direct', handedAt: at })
+  else visits.update(source, { path: 'refused', leftReason: why })
   visits.open(source)
 }
 

@@ -40,8 +40,14 @@ export const VisitReport = z.object({
   wakeAskedAt: At.optional(),
   wakeOperationId: z.uuid().optional(),
   readyAt: At.optional(),
+  /** When it was handed to the server; never, for a join that reached none. */
   handedAt: At.optional(),
   leftAt: At.optional(),
+  /**
+   * Why it ended, where the edge knows: `refused:` and why, for a join that reached no server (the
+   * edge turned it away, or its router could connect it to no backend and names its own status),
+   * or `gave_up_waiting`.
+   */
   leftReason: z.string().max(200).optional(),
   /** A ping from the same address within a moment of leaving: the player looked again. */
   pingedAfterAt: At.optional(),
