@@ -40,7 +40,7 @@
  * knows none of this.
  *
  * A server that only sleeps and wakes never exits, so its recording would never be written: a
- * sleep that finds its Java recording is a stop for once (`CACHE_STATE`,
+ * sleep nobody asked for that finds its Java recording is a stop for once (`CACHE_STATE`,
  * `app/operations/handlers/winding-down.ts`), and the server is then started in the background,
  * which makes the cache with nobody waiting, and sleeps as ever
  * (`app/operations/schedules/recorded-starts.ts`). Only a command of the shape `java … -jar …` is

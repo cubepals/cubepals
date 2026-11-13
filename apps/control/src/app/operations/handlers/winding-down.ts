@@ -74,20 +74,25 @@ async function sleepOrStop(
   await ctx.mark(kept ? 'slept' : 'runtime_stopped')
 }
 
+/** The stop a handler runs, as far as what it was asked for goes: whose server, and why. */
+type StopAsked = Pick<OperationContext['op'], 'serverId' | 'input'>
+
 /**
  * Whether a server about to sleep is stopped for once instead: its Java is recording its start
  * for a startup cache, as the cache's own state on its volume says, and the recording is only
  * written as Java exits (`minecraft/start-cache.ts`). The idle check's next pass then starts it
  * in the background (`schedules/recorded-starts.ts`), which makes the cache, and it sleeps as
  * ever. Not in the run that start began: one stop a recording, so one that is never written costs
- * a boot once, not after every sleep.
+ * a boot once, not after every sleep. And only a sleep nobody asked for (`idle`): a server its
+ * owner stopped stays as they left it, asleep, and isn't started again a minute later.
  */
 async function recordingRefusal(
   deps: { db: Db; runtime: Pick<Runtimes, 'exec'> },
-  serverId: string,
+  stop: StopAsked,
   handle: RuntimeHandle,
 ): Promise<SleepMark | null> {
-  const began = await latestOfKind(deps.db, serverId, 'start')
+  if (stop.input.reason !== ('idle' satisfies StopReason)) return null
+  const began = await latestOfKind(deps.db, stop.serverId, 'start')
   if (began !== null && followsRecording(began)) return null
   const state = await deps.runtime.exec(handle, ['sed', '-n', '2p', CACHE_STATE], 30).catch(() => null)
   return state?.exitCode === 0 && state.stdout.trim() === RECORDS ? 'recording' : null
@@ -176,10 +181,10 @@ export function windingDown(deps: {
    * provider may drop the memory it kept and boot from there, and its Java not recording its
    * start (`recordingRefusal`).
    */
-  const dozeRefusal = async (id: string, handle: RuntimeHandle, booted: AppliedConfigJson | null) => {
+  const dozeRefusal = async (stop: StopAsked, handle: RuntimeHandle, booted: AppliedConfigJson | null) => {
     if ((await playersOn(deps.probe, gameOf(runtime, handle, booted))) !== 0) return 'players_on' as const
     const synced = await runtime.exec(handle, ['sync'], 60).catch(() => null)
-    return synced?.exitCode === 0 ? recordingRefusal(deps, id, handle) : ('unsynced' as const)
+    return synced?.exitCode === 0 ? recordingRefusal(deps, stop, handle) : ('unsynced' as const)
   }
 
   const stop: OperationHandler = {
@@ -202,7 +207,7 @@ export function windingDown(deps: {
         await ctx.step('stopping')
         // Asleep only once the world is saved: unsaved, a stop saves it on the way down.
         const refused = refusedAtOnce(reason, runtime.sleeps(handle), saved)
-        const refusal = refused ?? (await dozeRefusal(server.id, handle, applied))
+        const refusal = refused ?? (await dozeRefusal(ctx.op, handle, applied))
         await sleepOrStop(ctx, { db, runtime }, handle, refusal)
       }
       await db.transaction(async (tx) => {

@@ -102,8 +102,9 @@ Java's own part of the start is kept too, in a startup cache each server makes o
 25.2 s with it in place of 27.9 to 33.5 s, on Paper at 48 s in place of 53 to 55 s. A start with
 no cache records what Java loads, which Java writes down as it exits; the start after makes the
 cache from that, 5 to 16 s once, and every start after reads it. A server that only sleeps and
-wakes never exits, so the sleep that finds its Java recording is a stop for once (its record says
-`recording`), and the idle check's next pass, a minute on, starts it again in the background
+wakes never exits, so a sleep nobody asked for (an idle one) that finds its Java recording is a
+stop for once (its record says `recording`); a server its owner stopped sleeps as ever and stays
+as they left it. The idle check's next pass, a minute on, starts it again in the background
 (`schedules/recorded-starts.ts`), once its restore point is written: that start makes the cache
 with nobody waiting, counts toward no hours, and the server sleeps with its memory as it would
 have. A player who joins in between boots it, as after any stop. The cache is some 127 MB in a
