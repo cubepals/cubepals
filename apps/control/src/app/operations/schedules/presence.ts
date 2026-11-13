@@ -56,11 +56,13 @@ async function readConsole(
 }
 
 /**
- * Tells the joins what the list just read said of their players (`joins/player-list.ts`). It is a
- * record for operators, so a failure to keep it is only logged, and the pass goes on.
+ * Tells the joins what the list read at `readAt` said of their players (`joins/player-list.ts`),
+ * by when the server answered and not by when the pass got round to saying it: a player who left
+ * in between was still seen, and a mark timed after their leaving would be taken back as late. It
+ * is a record for operators, so a failure to keep it is only logged, and the pass goes on.
  */
-async function tellJoins(db: Db, serverId: string, reading: ListReading): Promise<void> {
-  await noteListed(db, serverId, reading, new Date()).catch((error: unknown) =>
+async function tellJoins(db: Db, serverId: string, reading: ListReading, readAt: Date): Promise<void> {
+  await noteListed(db, serverId, reading, readAt).catch((error: unknown) =>
     console.warn('listed joins', serverId, error instanceof Error ? error.message : error),
   )
 }
@@ -118,6 +120,7 @@ export function readingPresence(deps: {
         passwords: specs.rconPasswords(server.id),
       }
       const { output, tick } = await readConsole(deps.console, target, !sampled.has(server.id))
+      const readAt = new Date()
       if (output === null && observed?.detail !== HOST_LOST) {
         // A console that stopped answering may be a lost host, which the provider's list doesn't
         // say: this one machine is asked.
@@ -164,7 +167,7 @@ export function readingPresence(deps: {
             idempotencyKey: `access_join:${Math.floor(now.getTime() / MINUTE_MS)}`,
           })
       })
-      await tellJoins(db, server.id, reading)
+      await tellJoins(db, server.id, reading, readAt)
       await deliverWaiting(server, handle, reading.players)
       const notice = notices.get(server.ownerId)
       await sayNotice({ db, console: deps.console }, { id: server.id, target }, notice, reading.players)
