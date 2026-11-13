@@ -4,7 +4,8 @@
 
 // The edge agent: the only code that knows mc-router exists. It turns the control plane's edge
 // protocol (routes, wake, idle, sessions) into mc-router's routes (router.ts) and webhooks, and
-// supervises mc-router itself. Replacing mc-router means rewriting this file and router.ts.
+// supervises mc-router itself. Replacing mc-router means rewriting this file, router.ts and
+// router-session.ts.
 
 import { connect, createServer, type Socket } from 'node:net'
 import { hostname } from 'node:os'
@@ -34,6 +35,7 @@ import { PingWakes } from './ping-wake.ts'
 import { RoutesPoll } from './poll.ts'
 import { RESTING_STATUS, restingJoin } from './resting.ts'
 import { RouterRoutes } from './router.ts'
+import type { RouterSession } from './router-session.ts'
 import { VisitReporter } from './visit-reporter.ts'
 import { sourceKey, VISIT_TIMES, Visits } from './visits.ts'
 import { wakingLine } from './waking-line.ts'
@@ -347,17 +349,6 @@ async function wakeOnce(hostname: string, said: WakeClaim = {}): Promise<WakeRes
     .finally(() => waking.delete(hostname))
   waking.set(hostname, { said: key, asked })
   return asked
-}
-
-interface RouterSession {
-  event?: string
-  timestamp?: string
-  status?: string
-  server?: string
-  player?: { name?: string; uuid?: string }
-  /** Where the client connected from: the front door's PROXY header, which mc-router trusts. */
-  client?: { host?: string; port?: number }
-  backend?: string
 }
 
 async function session(body: RouterSession): Promise<void> {
