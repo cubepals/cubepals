@@ -266,3 +266,25 @@ test('a join turned away in the waiting room isn’t read as dropped', () => {
   expect(report).not.toContain('## How the session ended')
   expect(report).not.toContain('Dropped.')
 })
+
+test('a join the edge’s router closed is one never handed to a server, with the router’s reason', () => {
+  const session = { closedFirst: 'server', how: 'closed', quietAtEndMs: 1, downQuietAtEndMs: 1 }
+  const dropped: JoinView = {
+    ...JOIN,
+    path: 'refused',
+    handedAt: null,
+    loginAt: null,
+    inWorldAt: null,
+    leftAt: '2026-10-20T15:43:21.002Z',
+    leftReason: 'refused:failed-backend-connection',
+    bytesDown: 0,
+    serverSide: 'not_reported',
+    detail: { session },
+  }
+  const report = joinReport({ ...VIEW, signals: [], join: dropped }).join('\n')
+  expect(report).toContain('- Path: never handed to a server')
+  expect(report).toContain('| edge | Left: refused:failed-backend-connection |')
+  expect(report).not.toContain('Handed to the server')
+  expect(report).not.toContain('## How the session ended')
+  expect(joinLine(dropped)).toEndWith('· refused · refused:failed-backend-connection')
+})

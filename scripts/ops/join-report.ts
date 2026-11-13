@@ -315,5 +315,6 @@ function lookedWrong(view: JoinDetailView): string[] {
 const PATHS: Record<string, string> = {
   direct: 'straight to the running server',
   held: 'through the waiting room, while the server woke',
-  refused: 'turned away at the door',
+  // Turned away by the edge, which told the player why; or closed by its router with nothing said.
+  refused: 'never handed to a server',
 }
