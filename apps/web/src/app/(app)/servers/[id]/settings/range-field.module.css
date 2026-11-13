@@ -18,10 +18,25 @@
   min-inline-size: 0;
 }
 
+/*
+ * Side by side in a two-column grid, a field shares its four rows with its neighbour: the label,
+ * the slider, the scale and the help line up across both, whichever label wraps. The head sits at
+ * the bottom of its row, so a one-line label waits on the line a two-line one ends.
+ */
+@supports (grid-template-rows: subgrid) {
+  :global(.bk-grid) > .field {
+    grid-row: span 4;
+    grid-template-rows: subgrid;
+    row-gap: var(--space-8);
+  }
+}
+
 .head {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  align-items: baseline;
+  /* The value on the label's last line, so values line up when one label wraps. */
+  align-items: last baseline;
+  align-self: end;
   gap: var(--space-12);
 }
 
