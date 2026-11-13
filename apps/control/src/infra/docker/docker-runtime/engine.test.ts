@@ -479,7 +479,7 @@ test('an export larger than one PUT goes in parts, and the volume it waited in g
   expect(pack?.Cmd).toEqual([
     'sh',
     '-c',
-    'tar -czf /out/world.tar.gz -C /from . && sha256sum /out/world.tar.gz && stat -c %s /out/world.tar.gz && if [ "$(stat -c %s /out/world.tar.gz)" -gt "$MOST" ]; then echo parts; else curl -sS --fail --connect-timeout 20 --speed-limit 1024 --speed-time 60 --retry 5 --retry-delay 2 -o /dev/null -X PUT -T /out/world.tar.gz "$@" "$TARGET" && echo put; fi',
+    'tar -czf /out/world.tar.gz --exclude=./.blockly-remade -C /from . && sha256sum /out/world.tar.gz && stat -c %s /out/world.tar.gz && if [ "$(stat -c %s /out/world.tar.gz)" -gt "$MOST" ]; then echo parts; else curl -sS --fail --connect-timeout 20 --speed-limit 1024 --speed-time 60 --retry 5 --retry-delay 2 -o /dev/null -X PUT -T /out/world.tar.gz "$@" "$TARGET" && echo put; fi',
     'export',
     '-H',
     'x-a: 1',

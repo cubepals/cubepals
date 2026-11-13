@@ -13,7 +13,10 @@
  *
  * Bounded as a server-list ping's wake is (`edge/ping-wake.ts`): its owner must be able to start it,
  * the hourly cap on wakes nobody joined counts it, and none starts once the owner's included hours
- * are used. Not for a server stopped without its memory, whose next start boots anyway.
+ * are used. Not for a server stopped without its memory, whose next start boots anyway, but one:
+ * a server stopped for once so that its Java could write the recording of its start
+ * (`minecraft/start-cache.ts`) is started the same way (`recorded`), which makes its startup cache
+ * with nobody waiting and leaves it asleep with its memory, as it would have been.
  */
 import type { Db } from '@blockly/db'
 import { entitlementsOf } from '../../domain/account/entitlements.ts'
@@ -23,21 +26,23 @@ import { meteredMonth } from '../billing/chip-in-meter.ts'
 import { AppError } from '../errors.ts'
 import { tuning } from '../tuning.ts'
 import { findServer, memoryKept } from './persistence.ts'
-import { READY_KEY, REFRESH_KEY, unjoinedWakes } from './usage.ts'
+import { READY_KEY, RECORDED_KEY, REFRESH_KEY, unjoinedWakes } from './usage.ts'
 
 /**
  * Starts the server asleep where that is worth it, and says whether it did: to show what its owner
  * just changed of it (`changed`), or with nothing of theirs asking, to keep it ready for its next
- * join (`ready`). The two differ only in what the server's page says of the start.
+ * join (`ready`), or after the stop that let it write its start's recording (`recorded`). They
+ * differ in what the server's page says of the start, and in that the last has no memory kept.
  */
 export async function refreshAsleep(
   deps: { db: Db; start: (actor: Actor, serverId: string, requestId: string) => Promise<unknown> },
   serverId: string,
-  why: 'changed' | 'ready' = 'changed',
+  why: 'changed' | 'ready' | 'recorded' = 'changed',
 ): Promise<boolean> {
   const { db } = deps
   const server = await findServer(db, serverId)
-  if (server?.lifecycle.status !== 'stopped' || !(await memoryKept(db, serverId))) return false
+  if (server?.lifecycle.status !== 'stopped') return false
+  if (why !== 'recorded' && !(await memoryKept(db, serverId))) return false
   const now = new Date()
   if ((await unjoinedWakes(db, serverId, now)) >= tuning().abuse.wakesPerHour) return false
   const standing = await loadStanding(db, server.ownerId)
@@ -45,7 +50,7 @@ export async function refreshAsleep(
   if (month !== null && month.units >= month.included + month.carried) return false
   try {
     // Asked as a wake, so its run is a woken one, and sleeps unjoined after the probation.
-    const key = why === 'ready' ? READY_KEY : REFRESH_KEY
+    const key = { changed: REFRESH_KEY, ready: READY_KEY, recorded: RECORDED_KEY }[why]
     await deps.start({ kind: 'system', reason: 'wake' }, serverId, `${key}${crypto.randomUUID()}`)
   } catch (error) {
     // Refused by the same checks as any start: its owner can't start it now.

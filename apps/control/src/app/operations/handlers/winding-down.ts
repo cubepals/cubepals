@@ -4,7 +4,8 @@
 
 /**
  * Takes a server down: stopped (its world saved and measured first), or asleep with its memory
- * kept where its runtime can and nothing is about to change, and a restore point of the session
+ * kept where its runtime can and nothing is about to change (but for the one stop that lets its
+ * Java write a startup cache's recording), and a restore point of the session
  * queued after a sleep; decommissioned into the trash with its storage kept; or purged for good. Each ends what the server is billed for and who is on it. Saving
  * through the console is `game-console.ts`'s; when a server is purged is the purge sweep's
  * (`schedules.ts`).
@@ -16,13 +17,14 @@ import type { StopReason } from '../../../domain/server/lifecycle.ts'
 import type { MinecraftServer } from '../../../domain/server/server.ts'
 import { DATA_DIR } from '../../../minecraft/jars.ts'
 import { PORT_NAMES } from '../../../minecraft/runtime-spec.ts'
+import { CACHE_STATE, RECORDS } from '../../../minecraft/start-cache.ts'
 import { loadStanding } from '../../accounts/persistence.ts'
 import { requestedBy } from '../../actor.ts'
 import { latestRestorePoint } from '../../backups/persistence.ts'
 import { forgetPlayers } from '../../players/persistence.ts'
 import type { PlayerService } from '../../players/service.ts'
 import type { ReadinessProbe } from '../../ports/minecraft.ts'
-import { type RuntimeHandle, runtimeKey } from '../../ports/runtime.ts'
+import { NOT_ARCHIVED, type RuntimeHandle, runtimeKey } from '../../ports/runtime.ts'
 import type { Runtimes } from '../../runtimes/router.ts'
 import {
   grownStorage,
@@ -32,7 +34,8 @@ import {
   saveMemoryKept,
 } from '../../servers/persistence.ts'
 import type { ServerTransitions } from '../../servers/transitions.ts'
-import { clearPresence, closeInterval, lastActivity } from '../../servers/usage.ts'
+import { clearPresence, closeInterval, followsRecording, lastActivity } from '../../servers/usage.ts'
+import { latestOfKind } from '../persistence.ts'
 import type { OperationContext, OperationHandler, OperationResult, SleepMark } from '../runner.ts'
 import type { ServerBinding } from './binding.ts'
 import type { GameConsole } from './game-console.ts'
@@ -70,6 +73,27 @@ async function sleepOrStop(
   await saveMemoryKept(deps.db, ctx.server.id, kept)
   await ctx.mark(kept ? 'slept' : 'runtime_stopped')
 }
+
+/**
+ * Whether a server about to sleep is stopped for once instead: its Java is recording its start
+ * for a startup cache, as the cache's own state on its volume says, and the recording is only
+ * written as Java exits (`minecraft/start-cache.ts`). `stale-sleep` then starts it in the
+ * background, which makes the cache, and it sleeps as ever. Not in the run that start began: one
+ * stop a recording, so one that is never written costs a boot once, not after every sleep.
+ */
+async function recordingRefusal(
+  deps: { db: Db; runtime: Pick<Runtimes, 'exec'> },
+  serverId: string,
+  handle: RuntimeHandle,
+): Promise<SleepMark | null> {
+  const began = await latestOfKind(deps.db, serverId, 'start')
+  if (began !== null && followsRecording(began)) return null
+  const state = await deps.runtime.exec(handle, ['sed', '-n', '2p', CACHE_STATE], 30).catch(() => null)
+  return state?.exitCode === 0 && state.stdout.trim() === RECORDS ? 'recording' : null
+}
+
+/** What a server's folder takes, as `du` says it, without what no archive of it holds. */
+const MEASURE = ['du', '-sk', ...NOT_ARCHIVED.map((name) => `--exclude=${name}`), DATA_DIR]
 
 /** Who the idle check's stops are requested by. */
 const IDLE_ACTOR = requestedBy({ kind: 'system', reason: 'idle' })
@@ -133,7 +157,7 @@ export function windingDown(deps: {
    * that won't answer stops all the same.
    */
   const measureDisk = async (server: MinecraftServer, handle: RuntimeHandle) => {
-    const read = await runtime.exec(handle, ['du', '-sk', DATA_DIR], 60).catch(() => null)
+    const read = await runtime.exec(handle, MEASURE, 60).catch(() => null)
     if (read === null || read.exitCode !== 0) return
     const kilobytes = Number.parseInt(read.stdout.trim().split(/\s+/)[0] ?? '', 10)
     if (!Number.isFinite(kilobytes)) return
@@ -147,13 +171,14 @@ export function windingDown(deps: {
   /**
    * Why a server just saved may not sleep with its memory kept, or null where it may: nobody on
    * it, as the game says now (one who joined since the stop was asked would be frozen with it,
-   * where a stop at least says goodbye), and its files written through to its storage, since the
-   * provider may drop the memory it kept and boot from there.
+   * where a stop at least says goodbye), its files written through to its storage, since the
+   * provider may drop the memory it kept and boot from there, and its Java not recording its
+   * start (`recordingRefusal`).
    */
-  const dozeRefusal = async (handle: RuntimeHandle, booted: AppliedConfigJson | null) => {
+  const dozeRefusal = async (id: string, handle: RuntimeHandle, booted: AppliedConfigJson | null) => {
     if ((await playersOn(deps.probe, gameOf(runtime, handle, booted))) !== 0) return 'players_on' as const
     const synced = await runtime.exec(handle, ['sync'], 60).catch(() => null)
-    return synced?.exitCode === 0 ? null : ('unsynced' as const)
+    return synced?.exitCode === 0 ? recordingRefusal(deps, id, handle) : ('unsynced' as const)
   }
 
   const stop: OperationHandler = {
@@ -176,7 +201,8 @@ export function windingDown(deps: {
         await ctx.step('stopping')
         // Asleep only once the world is saved: unsaved, a stop saves it on the way down.
         const refused = refusedAtOnce(reason, runtime.sleeps(handle), saved)
-        await sleepOrStop(ctx, { db, runtime }, handle, refused ?? (await dozeRefusal(handle, applied)))
+        const refusal = refused ?? (await dozeRefusal(server.id, handle, applied))
+        await sleepOrStop(ctx, { db, runtime }, handle, refusal)
       }
       await db.transaction(async (tx) => {
         const locked = await lockServer(tx, server.id)

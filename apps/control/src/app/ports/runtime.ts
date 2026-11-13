@@ -59,6 +59,13 @@ interface PortSpec {
   audience: readonly Audience[]
 }
 
+/**
+ * Names at the top of a server's storage that no archive of it holds, and no measure of it
+ * counts: what its workload makes again by itself, such as a startup cache. A runtime that
+ * archives the storage as files leaves them out; a copy of the whole disk has them.
+ */
+export const NOT_ARCHIVED = ['.blockly-remade'] as const
+
 export interface RuntimeSpec {
   image: string
   /** Replaces the image's own entrypoint; absent, the image starts as it was built to. */

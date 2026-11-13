@@ -24,6 +24,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DIRECT_START_STEP } from '../../minecraft/direct-start.ts'
 import { bootMilestone } from '../../minecraft/logs.ts'
+import { RECORDING } from '../../minecraft/start-cache.ts'
 
 const AS_ROOT = process.getuid?.() === 0
 /** The user a server's volume belongs to, where this runs as root. */
@@ -51,6 +52,12 @@ beforeEach(() => {
     'password=$RCON_PASSWORD; [ -n "$password" ] || password=none',
     'echo "ran in $(pwd): $* (password $password)"',
     'sleep "$(cat "$STAYS_UP_FILE" 2>/dev/null || echo 0)"',
+  ])
+  // No room on the volume for a Java startup cache, which has tests of its own
+  // (`start-cache-runtime.test.ts`): the command is run as it was written down.
+  tool('df', [
+    'echo "Filesystem 1024-blocks Used Available Capacity Mounted on"',
+    'echo "disk 1 1 0 100% /data"',
   ])
   // gosu, which only writes down whom it was asked to run what as.
   tool('gosu', [`echo "$1 $(basename "$2") $3" >> ${join(root, 'gosu.log')}`, 'shift', 'exec "$@"'])
@@ -117,6 +124,27 @@ describe('a boot that changed nothing', () => {
     expect(existsSync(record())).toBe(true)
     // Said as the image says its hand-over to Java, which a start's progress reads.
     expect(bootMilestone(DIRECT)).toBe('starting')
+  })
+
+  test('runs the command through the Java cache’s script either way, and writes it down without it', () => {
+    tool('df', [
+      'echo "Filesystem 1024-blocks Used Available Capacity Mounted on"',
+      'echo "disk 9 1 2999999 1% /data"',
+    ])
+    // On the Java the cache is for, which the image says by where its Java is.
+    writeFileSync(join(root, 'release'), 'JAVA_VERSION="25.0.4"\n')
+    const java = { JAVA_HOME: root }
+    const recording = `-- java -XX:AOTMode=record -XX:AOTConfiguration=${join(root, 'data/.blockly-remade/start.aot.conf')} -Xmx1996M`
+    const scripted = boot(java)
+    expect(scripted[1]).toBe(RECORDING)
+    expect(scripted[2]).toContain(recording)
+    expect(
+      readFileSync(record(), 'utf8').trimEnd().split('\n').slice(-COMMAND.split(' ').length).join(' '),
+    ).toBe(COMMAND)
+
+    const direct = boot(java)
+    expect(direct.slice(0, 2)).toEqual([DIRECT, RECORDING])
+    expect(direct[2]).toContain(recording)
   })
 
   test('uses a record once: a server that fell over is started by the scripts the next time', () => {

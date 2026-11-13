@@ -83,7 +83,9 @@ type MachineMark = `machine:${string}`
  * `slept`, with its memory kept; otherwise stopped, and why: `stop_reason`, a stop that is no
  * sleep; `unsaved`, its world not saved; `players_on`, someone on it as it went; `unsynced`, its
  * files not written through; `no_sleep`, a runtime that only stops; `runtime_stopped`, the runtime
- * stopped it instead (its switch off, or the provider wouldn't keep the memory).
+ * stopped it instead (its switch off, or the provider wouldn't keep the memory); `recording`, its
+ * Java was recording its start for a startup cache, which is written only as Java exits
+ * (`minecraft/start-cache.ts`).
  */
 export type SleepMark =
   | 'slept'
@@ -93,6 +95,7 @@ export type SleepMark =
   | 'unsynced'
   | 'no_sleep'
   | 'runtime_stopped'
+  | 'recording'
 
 export interface OperationContext {
   op: OperationRecord

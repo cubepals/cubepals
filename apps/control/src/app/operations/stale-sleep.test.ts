@@ -11,9 +11,13 @@
  */
 import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test'
 import { randomUUID } from 'node:crypto'
+import { mkdirSync, writeFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
 import { DAY_MS, HOUR_MS } from '@blockly/contracts/durations'
 import { schema } from '@blockly/db'
 import { and, desc, eq } from 'drizzle-orm'
+import { DATA_DIR } from '../../minecraft/jars.ts'
+import { CACHE_STATE } from '../../minecraft/start-cache.ts'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
 import type { UserActor } from '../actor.ts'
 import { loadRevision } from '../servers/persistence.ts'
@@ -37,16 +41,18 @@ afterAll(async () => {
   await h?.close()
 })
 
-/** The steps the server's last start went through, in order. */
-async function lastStart(id: string): Promise<{ steps: string[]; key: string }> {
+/** The steps the server's last operation of a kind went through, in order, and its key. */
+async function last(id: string, kind: 'start' | 'stop'): Promise<{ steps: string[]; key: string }> {
   const [row] = await h.db
     .select({ steps: operations.steps, key: operations.idempotencyKey })
     .from(operations)
-    .where(and(eq(operations.serverId, id), eq(operations.kind, 'start')))
+    .where(and(eq(operations.serverId, id), eq(operations.kind, kind)))
     .orderBy(desc(operations.createdAt))
     .limit(1)
   return { steps: (row?.steps ?? []).map((entry) => entry.step), key: row?.key ?? '' }
 }
+const lastStart = (id: string) => last(id, 'start')
+
 const running = async () => {
   const owner = await h.user(undefined, 'plus')
   const created = await h.create(owner)
@@ -262,4 +268,59 @@ describe.skipIf(!hasDatabase)('stale-sleep, for memory kept too long to count on
     await h.until(id, 'running')
     await h.settled(id)
   }, 120_000)
+})
+
+describe.skipIf(!hasDatabase)('stale-sleep, for a server whose Java records its start', () => {
+  /** What the startup cache's script left on the server's volume: how far its cache got. */
+  const cacheIs = (id: string, phase: 'recording' | 'made') => {
+    const state = join(h.runtime.machine(id)?.dir ?? '', CACHE_STATE.replace(`${DATA_DIR}/`, ''))
+    mkdirSync(dirname(state), { recursive: true })
+    writeFileSync(state, `made-for\n${phase}\n`)
+  }
+
+  test('its sleep is a stop for once, and a start nobody waits for puts it back to sleep with its memory', async () => {
+    const { owner, id } = await running()
+    cacheIs(id, 'recording')
+    await h.app.servers.stop(owner, id, randomUUID(), 'idle')
+    await h.until(id, 'stopped')
+    await h.settled(id)
+    // Stopped, so that its Java exits and writes what it recorded; the stop says why.
+    expect(h.runtime.machine(id)?.state).toBe('stopped')
+    expect((await last(id, 'stop')).steps).toContain('recording')
+
+    expect(await pass()).toBe(1)
+    await h.until(id, 'running')
+    await h.settled(id)
+    const start = await lastStart(id)
+    expect(start.key).toStartWith('start:refresh:ready:recorded:')
+    expect(start.steps).toContain('booting')
+
+    // The run that start began sleeps as ever, whatever its volume still says: one stop a recording.
+    await sleepsUnjoined(id)
+    expect((await last(id, 'stop')).steps).toContain('slept')
+    expect(await pass()).toBe(0)
+    expect(resumed(await wake(owner, id))).toBe(true)
+  }, 120_000)
+
+  test('a start its owner or a player asks first is theirs, and nothing follows it', async () => {
+    const { owner, id } = await running()
+    cacheIs(id, 'recording')
+    await h.app.servers.stop(owner, id, randomUUID(), 'idle')
+    await h.until(id, 'stopped')
+    await h.settled(id)
+    cacheIs(id, 'made')
+    expect(await wake(owner, id)).toContain('booting')
+    await asleep(owner, id)
+    expect(await pass()).toBe(0)
+  }, 90_000)
+
+  test('one whose Java reads its cache, or has none, sleeps as ever', async () => {
+    const { owner, id } = await running()
+    await asleep(owner, id)
+    expect((await last(id, 'stop')).steps).toContain('slept')
+    expect(resumed(await wake(owner, id))).toBe(true)
+    cacheIs(id, 'made')
+    await asleep(owner, id)
+    expect(await pass()).toBe(0)
+  }, 90_000)
 })

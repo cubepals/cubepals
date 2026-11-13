@@ -244,6 +244,35 @@ export async function latestOfKind(
 }
 
 /**
+ * The servers whose newest stop since `since` was made for their Java to write the recording of
+ * its start (`SleepMark`), with no start asked of them after it.
+ */
+export async function stoppedForRecording(q: Queryable, since: Date): Promise<string[]> {
+  const stops = await q
+    .select({ id: operations.id, serverId: operations.serverId })
+    .from(operations)
+    .where(
+      and(
+        eq(operations.kind, 'stop'),
+        gte(operations.createdAt, since),
+        sql`${operations.steps} @> '[{"step":"recording"}]'::jsonb`,
+      ),
+    )
+  const waiting: string[] = []
+  for (const stop of stops) {
+    // The newest start or stop asked of the server, which is that stop where nothing came after.
+    const [newest] = await q
+      .select({ id: operations.id })
+      .from(operations)
+      .where(and(eq(operations.serverId, stop.serverId), inArray(operations.kind, ['start', 'stop'])))
+      .orderBy(desc(operations.createdAt))
+      .limit(1)
+    if (newest?.id === stop.id) waiting.push(stop.serverId)
+  }
+  return waiting
+}
+
+/**
  * How a wake went: `resumed`, a server asleep with its memory kept coming back as it was, which its
  * steps say by `resuming` and no `booting` after it; or `booted`, every other, a provider that
  * dropped what it kept included. Wakes from before steps were kept booted.

@@ -11,7 +11,12 @@
  * by force the moment it has (`helperJob`), which drops whatever the kernel hadn't written yet.
  */
 
-import type { PartsUpload, PutPart, UploadTarget } from '../../../app/ports/runtime.ts'
+import {
+  NOT_ARCHIVED,
+  type PartsUpload,
+  type PutPart,
+  type UploadTarget,
+} from '../../../app/ports/runtime.ts'
 import { job } from './helper-machine.ts'
 
 /**
@@ -37,7 +42,7 @@ export function exportJob(target: UploadTarget, maxPutBytes: number): string {
     [
       '  cd /data &&',
       '  rm -f .blockly-export.tgz &&',
-      '  tar -czf .blockly-export.tgz --exclude=./.blockly-export.tgz . &&',
+      `  tar -czf .blockly-export.tgz --exclude=./.blockly-export.tgz ${NOT_ARCHIVED.map((name) => `--exclude=./${name}`).join(' ')} . &&`,
       '  sync &&',
       "  sha=$(sha256sum .blockly-export.tgz | cut -d' ' -f1) &&",
       '  size=$(stat -c %s .blockly-export.tgz) &&',
