@@ -10,18 +10,22 @@
  * Square, as everything on the site is; the colours are the theme's.
  */
 
+/* The field is the design system's `.bk-field`; this keeps it from overflowing its column. */
 .field {
-  display: grid;
-  /* A field stretched to its row's height keeps its parts together at the top. */
-  align-content: start;
-  gap: var(--space-8);
   min-inline-size: 0;
+}
+
+/* The slider and its scale: one control, as a field's middle row. */
+.control {
+  display: grid;
+  gap: var(--space-8);
 }
 
 .head {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  align-items: baseline;
+  /* The value on the label's last line, so values line up when one label wraps. */
+  align-items: last baseline;
   gap: var(--space-12);
 }
 

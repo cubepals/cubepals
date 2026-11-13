@@ -48,7 +48,8 @@ export function RangeField({
   const at = (v: number) => `${((Math.min(max, Math.max(min, v)) - min) / span) * 100}%`
   const marked = mark && mark.value > min && mark.value < max ? mark : undefined
   return (
-    <div className={styles.field} data-invalid={error ? true : undefined}>
+    // The design system's field (`.bk-field`): label, control, note, so it lines up beside others.
+    <div className={`bk-field ${styles.field}`} data-invalid={error ? true : undefined}>
       <div className={styles.head}>
         <label className="bk-field__label" htmlFor={id}>
           {label}
@@ -61,28 +62,30 @@ export function RangeField({
           {said(value)}
         </output>
       </div>
-      <input
-        id={id}
-        type="range"
-        className={styles.range}
-        style={{ '--fill': at(value) } as CSSProperties}
-        min={min}
-        max={max}
-        step={1}
-        value={Math.min(max, Math.max(min, value))}
-        aria-valuetext={said(value)}
-        aria-invalid={error ? true : undefined}
-        aria-describedby={error || help ? note : undefined}
-        onChange={(event) => onChange(Number(event.target.value))}
-      />
-      <div className={`${styles.scale} type-mono-sm`} aria-hidden>
-        <span className={styles.end}>{min}</span>
-        {marked && (
-          <span className={styles.mark} style={{ insetInlineStart: at(marked.value) }}>
-            {marked.label}
-          </span>
-        )}
-        <span className={styles.end}>{max}</span>
+      <div className={styles.control}>
+        <input
+          id={id}
+          type="range"
+          className={styles.range}
+          style={{ '--fill': at(value) } as CSSProperties}
+          min={min}
+          max={max}
+          step={1}
+          value={Math.min(max, Math.max(min, value))}
+          aria-valuetext={said(value)}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={error || help ? note : undefined}
+          onChange={(event) => onChange(Number(event.target.value))}
+        />
+        <div className={`${styles.scale} type-mono-sm`} aria-hidden>
+          <span className={styles.end}>{min}</span>
+          {marked && (
+            <span className={styles.mark} style={{ insetInlineStart: at(marked.value) }}>
+              {marked.label}
+            </span>
+          )}
+          <span className={styles.end}>{max}</span>
+        </div>
       </div>
       {error ? (
         <p id={note} className="bk-field__error" role="alert">

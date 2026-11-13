@@ -40,6 +40,13 @@ Nor does anything about a maintainer personally: their other work, their account
 
 Never put `@` before a name in a commit message or a PR body, not even inside backticks. Commits do not render markdown, and a squash merge copies the PR body into the commit, so `@s` becomes a mention of the GitHub user "s". Write "the s selector" or "the player" instead. In issues and comments, selectors, package scopes and emails go inside backticks closed on the same line.
 
+## The design system
+
+What a player sees is drawn from `apps/web/src/ui/`: its tokens, its components and `components.css`. How things line up, space out and read the same is the design system's to hold, once, so no page gets it right only when someone notices.
+
+- **A page draws from it.** A page uses the design system's field, button, card and grid rather than laying out its own. What a page needs twice goes into the design system, with its rule.
+- **Fields side by side line up.** A field is three rows: its label, its control and its note (help or error). Set side by side in a `.bk-grid`, fields share those rows, so labels, controls and notes each sit on one line across the row, whichever label wraps or note is missing. A new field keeps those three parts in a `.bk-field`, its label first, and fields go side by side only in a `.bk-grid` (`.bk-grid--two` keeps two columns on a phone), never in a `bk-row` or a grid of a page's own. `ui/fields.test.ts` holds every field to its parts and every page to the grid.
+
 ## Guides
 
 Every guide on the site shows the screens it walks through. A guide is written with its pictures, not before them, and isn't approved without them.
