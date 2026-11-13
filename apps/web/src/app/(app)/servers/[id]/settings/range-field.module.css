@@ -19,12 +19,13 @@
 }
 
 /*
- * Side by side in a two-column grid, a field shares its four rows with its neighbour: the label,
- * the slider, the scale and the help line up across both, whichever label wraps. The head sits at
- * the bottom of its row, so a one-line label waits on the line a two-line one ends.
+ * In a grid, a field takes four of its rows and shares them: side by side with another, the
+ * label, the slider, the scale and the help line up across both, whichever label wraps; alone in
+ * a column it reads as before. The head sits at the bottom of its row, so a one-line label waits
+ * on the line a two-line one ends. Outside a grid the rows are its own.
  */
 @supports (grid-template-rows: subgrid) {
-  :global(.bk-grid) > .field {
+  .field {
     grid-row: span 4;
     grid-template-rows: subgrid;
     row-gap: var(--space-8);
