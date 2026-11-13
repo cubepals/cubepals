@@ -38,14 +38,16 @@ Blockly does about it. A resume that hangs, and the fallbacks for it, are
    memory goes when:
    - Fly drops it: a host migration, maintenance, a lost snapshot. Fly promises no resume and
      names no time, and the machine goes on reading `suspended` until the start that boots it
-     from its disk, so nothing tells beforehand. So memory kept for a day isn't counted on:
-     `stale-sleep` refreshes a server asleep that long (`KEPT_MS`), after those below. Where the
-     memory is still there the refresh is a resume of a few seconds, where it is gone a boot, with
-     nobody waiting for either; it sleeps again after the probation, on memory just kept. The
-     refresh's own record says which it was (`resume_answered` or `resume_booted`). A server
-     someone played in the last two days (`PLAYED_MS`) is the one its players come back to, so
-     its memory is counted on for an hour only (`KEPT_PLAYED_MS`): it is refreshed each hour it
-     sleeps, a five-minute run nobody is billed for.
+     from its disk, so nothing tells beforehand. A server someone played in the last two days
+     (`PLAYED_MS`) is the one its players come back to, so its memory is counted on for an hour
+     only (`KEPT_PLAYED_MS`): `stale-sleep` refreshes it each hour it sleeps, after those below,
+     a five-minute run nobody is billed for. Where the memory is still there the refresh is a
+     resume of a few seconds, where it is gone a boot, with nobody waiting for either; it sleeps
+     again after the probation, on memory just kept. The refresh's own record says which it was
+     (`resume_answered` or `resume_booted`). A server nobody played that lately is left asleep:
+     Fly had dropped the memory of every one such by the next day where measured, so a refresh
+     would boot it for memory that is gone again before anyone comes, and its next player's start
+     boots either way.
    - The next start finds the machine on another spec, and updates it first, which drops it
      (`asleepOn`, `infra/fly/machine-config.ts`). That happens after a new image release, a key
      rotation, or a change saved while it slept. Plan limits don't count
