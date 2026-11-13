@@ -171,36 +171,39 @@ function Escalation({ serverId, ladder, own }: { serverId: string; ladder: Moder
             // biome-ignore lint/suspicious/noArrayIndexKey: a step is its place in the order.
             key={i}
             className="bk-row"
-            style={{ gap: 'var(--space-12)', flexWrap: 'wrap' }}
+            style={{ gap: 'var(--space-12)', alignItems: 'flex-end' }}
           >
-            <Select
-              label={i === steps.length - 1 ? `Offence ${i + 1} and after` : `Offence ${i + 1}`}
-              value={step.kind}
-              options={MODERATION_KINDS.map((kind) => ({ value: kind, label: KIND_LABELS[kind] }))}
-              onChange={(event) => {
-                const kind = event.target.value as ModerationKind
-                put(i, {
-                  kind,
-                  minutes: kind === 'warn' ? null : (step.minutes ?? MODERATION_LENGTHS[0] ?? null),
-                })
-              }}
-            />
-            {step.kind !== 'warn' && (
+            {/* The offence and its length side by side, lined up as the design system lines fields up. */}
+            <div className="bk-grid" style={{ gap: 'var(--space-12)', flex: 1, minInlineSize: 0 }}>
               <Select
-                label="For"
-                value={String(step.minutes)}
-                options={MODERATION_LENGTHS.map((minutes) => ({
-                  value: String(minutes),
-                  label: lengthLabel(minutes),
-                }))}
-                onChange={(event) =>
+                label={i === steps.length - 1 ? `Offence ${i + 1} and after` : `Offence ${i + 1}`}
+                value={step.kind}
+                options={MODERATION_KINDS.map((kind) => ({ value: kind, label: KIND_LABELS[kind] }))}
+                onChange={(event) => {
+                  const kind = event.target.value as ModerationKind
                   put(i, {
-                    ...step,
-                    minutes: event.target.value === 'null' ? null : Number(event.target.value),
+                    kind,
+                    minutes: kind === 'warn' ? null : (step.minutes ?? MODERATION_LENGTHS[0] ?? null),
                   })
-                }
+                }}
               />
-            )}
+              {step.kind !== 'warn' && (
+                <Select
+                  label="For"
+                  value={String(step.minutes)}
+                  options={MODERATION_LENGTHS.map((minutes) => ({
+                    value: String(minutes),
+                    label: lengthLabel(minutes),
+                  }))}
+                  onChange={(event) =>
+                    put(i, {
+                      ...step,
+                      minutes: event.target.value === 'null' ? null : Number(event.target.value),
+                    })
+                  }
+                />
+              )}
+            </div>
             {steps.length > 1 && (
               <Button variant="ghost" size="sm" onClick={() => setDraft(steps.filter((_, j) => j !== i))}>
                 Remove

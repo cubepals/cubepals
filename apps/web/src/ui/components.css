@@ -2337,6 +2337,10 @@ textarea.bk-input {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
+/* Two even columns at any width, for short fields that read as one set: a place's X, Y and Z. */
+.bk-grid--two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
 
 /*
  * Fields side by side line up. A field is three rows: its label, its control and its note (help

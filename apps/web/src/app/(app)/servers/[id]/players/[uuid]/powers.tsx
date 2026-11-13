@@ -220,14 +220,7 @@ function ToPlace(props: PowerProps) {
       }}
     >
       {/* Two even columns, so the world and the three numbers line up on any width. */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-          gap: 'var(--space-8)',
-          alignItems: 'start',
-        }}
-      >
+      <div className="bk-grid bk-grid--two" style={{ gap: 'var(--space-8)' }}>
         <Select
           label="World"
           options={WORLDS}
@@ -299,7 +292,7 @@ function GiveItem({ gameVersion, ...props }: PowerProps & { gameVersion: string 
         if (ready) power.run({ kind: 'give', item: id, count: n })
       }}
     >
-      <div className="bk-row" style={{ gap: 'var(--space-8)', flexWrap: 'wrap', alignItems: 'flex-start' }}>
+      <div className="bk-grid" style={{ gap: 'var(--space-8)' }}>
         <ItemField gameVersion={gameVersion} value={item} onChange={setItem} />
         <TextField
           label="How many"
