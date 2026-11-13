@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { z } from 'zod'
-import type { RuntimeHandle, RuntimeLocation, SnapshotHandle } from '../../app/ports/runtime.ts'
+import type { HeldStorage, RuntimeHandle, RuntimeLocation, SnapshotHandle } from '../../app/ports/runtime.ts'
 
 /** What a Fly handle names. Nothing outside infra/fly ever reads one. */
 const FlyRef = z.object({
@@ -70,4 +70,28 @@ export function locationOf(handle: RuntimeHandle): RuntimeLocation {
     ],
     link: `https://fly.io/apps/${ref.app}/machines`,
   }
+}
+
+export function requireMachine(ref: FlyRef): string {
+  if (ref.machineId === null) throw new Error('This server has no machine; it was decommissioned')
+  return ref.machineId
+}
+
+/** The machine the storage a server holds names, by id: its handle's. */
+export function machineOf(storage: HeldStorage): string | null {
+  return storage.held != null && isFlyHandle(storage.held) ? decodeHandle(storage.held).machineId : null
+}
+
+/** The volumes the storage a server holds names, by id: what its handle names, and what is kept. */
+export function volumesOf(storage: HeldStorage): { held: string | null; kept: string[] } {
+  const volume = (handle: RuntimeHandle) => (isFlyHandle(handle) ? decodeHandle(handle).volumeId : null)
+  return {
+    held: storage.held == null ? null : volume(storage.held),
+    kept: (storage.kept ?? []).flatMap((handle) => volume(handle) ?? []),
+  }
+}
+
+export function requireVolume(ref: FlyRef): string {
+  if (ref.volumeId === null) throw new Error('This server has no volume')
+  return ref.volumeId
 }
