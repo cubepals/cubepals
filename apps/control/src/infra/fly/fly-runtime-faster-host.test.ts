@@ -190,6 +190,17 @@ describe('a new server on Fly', () => {
     expect(asked).toEqual([])
   })
 
+  test('keeps its volume where the answer about its host doesn’t come', async () => {
+    const { fake, runtime, calls } = setup(hosts('z1', 'z2'), ['z1'])
+    const unanswered = watching(() => new Promise<boolean>(() => {}))
+    const asked = Date.now()
+    const handle = await runtime.ensureProvisioned(KEY, PLACE, spec, unanswered.progress)
+    expect(Date.now() - asked).toBeLessThan(4_000)
+    expect(zoneOf(fake, handle)).toBe('z1')
+    expect(calls(VOLUMES_MADE)).toHaveLength(1)
+    expect(calls(MACHINES_MADE)).toHaveLength(1)
+  }, 10_000)
+
   test('with nobody to ask which hosts are slow keeps whatever volume Fly makes', async () => {
     const { fake, runtime, progress, seen, calls } = setup(hosts('z1', 'z2'), ['z1'], { unasked: true })
     const handle = await runtime.ensureProvisioned(KEY, PLACE, spec, progress)

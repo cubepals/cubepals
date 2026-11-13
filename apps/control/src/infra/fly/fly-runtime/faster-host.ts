@@ -12,11 +12,14 @@
  *
  * Nothing is read or started here: what is known of a host comes from the boots that ran on it,
  * which the operation that provisions is asked for (`ProgressSink.slowHost`), and a host nothing is
- * known of is kept, to be read by the server's own boot. Only a volume `ensureProvisioned` made in the same call, for a server that held no storage,
- * comes here: never one that has held a world. Whatever fails leaves the server a volume to start
+ * known of, or whose answer doesn't come in time, is kept, to be read by the server's own boot.
+ * Only a volume `ensureProvisioned` made in the same call, for a server that held no storage, comes
+ * here: never one that has held a world. Whatever fails leaves the server a volume to start
  * on, as it would have had.
  */
 
+import { setTimeout as delay } from 'node:timers/promises'
+import { SECOND_MS } from '@blockly/contracts/durations'
 import type { ProgressSink } from '../../../app/ports/runtime.ts'
 import type { FlyClient, FlySchemas } from '../client.ts'
 import { hostOf } from './host-cpu.ts'
@@ -27,6 +30,11 @@ type Volume = FlySchemas['Volume']
 
 /** How many times a new server's volume is made again; after that it keeps the host it has. */
 const REMAKES = 3
+/**
+ * How long what is known of a host is waited for. A new server's start waits on the answer, so one
+ * that doesn't come in this time is taken as not known, and the volume is kept.
+ */
+const ASKED_MS = 2 * SECOND_MS
 
 /** What making a new server's volume again needs to know. */
 interface NewVolume {
@@ -60,8 +68,7 @@ export async function offSlowHost(
   let volume = first
   for (let times = 0; times < REMAKES; times++) {
     const host = hostOf(volume)
-    const slow = host !== null && (await progress.slowHost?.(how.provider, host).catch(() => false))
-    if (host === null || !slow) break
+    if (host === null || !(await knownSlow(progress, how.provider, host))) break
     const next = await another(fly, app, how)
     if (next === null) break
     const gone = await letGo(fly, app, idOf(volume, 'a volume'))
@@ -71,6 +78,24 @@ export async function offSlowHost(
     if (!gone) break
   }
   return volume
+}
+
+/**
+ * Whether `host` is known to be slow, as far as whoever is asked says in time: false where nobody
+ * is asked, where the asking fails, and where no answer comes within `ASKED_MS`.
+ */
+async function knownSlow(
+  progress: Pick<ProgressSink, 'slowHost'>,
+  provider: string,
+  host: NonNullable<ReturnType<typeof hostOf>>,
+): Promise<boolean> {
+  if (progress.slowHost === undefined) return false
+  const waited = new AbortController()
+  const answer = progress.slowHost(provider, host).catch(() => false)
+  const late = delay(ASKED_MS, false, { signal: waited.signal }).catch(() => false)
+  const slow = await Promise.race([answer, late])
+  waited.abort()
+  return slow
 }
 
 /**
