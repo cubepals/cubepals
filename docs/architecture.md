@@ -752,6 +752,14 @@ infra/fly | infra/docker | infra/boat | infra/fleet | infra/fake   ← provider-
     `<level>_the_end/DIM1` move back into the level directory where a Paper run left them and the
     world has none of its own. Drift doesn't compare that step (`withoutOwnSteps`), so it reaches
     a server at its next start.
+    - A server's first start on Paper also gives it two of Paper's own settings for how it runs,
+      in `config/paper-world-defaults.yml` (`minecraft/paper-defaults.ts`): fewer chunks saved in
+      one tick and, on a server made as Paper, explosions that keep what they looked up. Neither
+      changes a mechanic or what a player feels. The file is written only where the server has
+      none yet, and Paper fills out the rest with its defaults; a server that ran on Paper before
+      keeps the file it has. Plain Minecraft run on Paper gets the chunk setting only, in the file
+      its first start writes (`minecraft/vanilla-paper.ts`). A setup's carried file is placed
+      after and replaces the whole file.
   - Mods: `MODS=<artifactUrl(a) for each pinned mod>` (`PLUGINS` on Paper).
     - Always emitted, even empty, for loaders with a mods/plugins directory. When `MODS` is
       unset the image skips reconciliation; when it's empty the image removes every managed

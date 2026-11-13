@@ -10,8 +10,10 @@
 import { describe, expect, test } from 'bun:test'
 import { defaultSettings, type ServerRevision } from '../../domain/revision/revision.ts'
 import { CARRIED_STEP, FILES_VARIABLES } from '../../minecraft/carried.ts'
+import { PAPER_CHUNK_LINES, PAPER_DEFAULTS_STEP } from '../../minecraft/paper-defaults.ts'
 import { toRuntimeSpec } from '../../minecraft/runtime-spec.ts'
 import { readList } from '../../minecraft/step-lists.ts'
+import { resumeParts } from './resume-parts.ts'
 import { specDigest, withoutPlanLimits } from './specs.ts'
 
 const revision: ServerRevision = {
@@ -69,6 +71,35 @@ describe('the drift digest and the text of Blockly’s own steps', () => {
     })
     expect(drift(withScript((script) => script.replace(CARRIED_STEP, EARLIER_STEP)))).toBe(drift(now))
     expect(drift(withScript((script) => `echo a new step; ${script}`))).toBe(drift(now))
+  })
+
+  test('Paper’s settings for how it runs move neither the drift digest nor a part of the resume key', () => {
+    const plain = { ...revision, loader: 'vanilla' as const, files: [] }
+    const step = PAPER_DEFAULTS_STEP
+    for (const of of [revision, plain]) {
+      const now = toRuntimeSpec({ ...input, revision: of })
+      expect(now.entrypoint?.[2]).toContain(of === plain ? PAPER_CHUNK_LINES[0] : ` ${step} `)
+      // The same start as it read before the step, and a plain server's chunk lines, were in it.
+      const lines = PAPER_CHUNK_LINES.map((line) => ` '${line}'`).join('')
+      const before = {
+        ...now,
+        entrypoint: (now.entrypoint ?? []).map((part) => part.replace(` ${step} `, ' ').replace(lines, '')),
+      }
+      expect(before.entrypoint[2]).not.toContain('max-auto-save-chunks-per-tick')
+      expect(drift(before)).toBe(drift(now))
+      // The key a sleeping machine wakes on is made of that digest and of what only a start
+      // reads, each from the environment: every part of it is the same.
+      const parts = (spec: typeof now) =>
+        resumeParts({
+          drift: withoutPlanLimits(spec),
+          compat: [],
+          stopCheaters: [],
+          ownFiles: [],
+          identity: spec.env.MOTD ?? '',
+        })
+      expect(parts(before)).toEqual(parts(now))
+      expect(parts(now).drift.entrypoint).toBeUndefined()
+    }
   })
 
   test('a change to what a step acts on still moves it', () => {

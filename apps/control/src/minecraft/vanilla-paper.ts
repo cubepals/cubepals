@@ -16,16 +16,21 @@
  * it replaces any link on the way (`volume-links.ts`) and hands what it writes to the volume's owner.
  *
  * Not for the PROXY header or the connection throttle, which every Paper server has
- * (`runtime-spec.ts`), and which find these files already there.
+ * (`runtime-spec.ts`), and which find these files already there. Nor for the settings Cubepals
+ * gives every Paper server for how it runs (`paper-defaults.ts`): the chunk lines among them are
+ * written here with the rest of a plain server's file, and that step sets them on a plain server
+ * that already has its file.
  */
 import { DATA_DIR } from './jars.ts'
+import { PAPER_CHUNK_LINES } from './paper-defaults.ts'
 
 /**
  * The files, and what each holds, as YAML lines; none holds a single quote. Each setting is Paper's
  * own way back to Minecraft's behaviour, from its "Vanilla-like experience" page
  * (docs.papermc.io/paper/vanilla), less what that page changes only to stop crashes or spam
- * (item, book, packet and join limits), which a group playing never meets. A key an older Paper
- * doesn't have is left alone by it.
+ * (item, book, packet and join limits), which a group playing never meets. The chunk lines from
+ * `paper-defaults.ts` are the exception: they are for how the server runs, and change no mechanic.
+ * A key an older Paper doesn't have is left alone by it.
  */
 const SETTINGS: ReadonlyArray<{ path: string; lines: readonly string[] }> = [
   {
@@ -47,6 +52,7 @@ const SETTINGS: ReadonlyArray<{ path: string; lines: readonly string[] }> = [
     lines: [
       'chunks:',
       '  delay-chunk-unloads-by: 0s',
+      ...PAPER_CHUNK_LINES,
       'collisions:',
       '  allow-player-cramming-damage: true',
       '  max-entity-collisions: 2147483647',
