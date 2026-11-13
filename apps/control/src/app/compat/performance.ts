@@ -100,5 +100,8 @@ export const ownModsOf = (q: Queryable) => ({
   placed: async (serverId: string, revision: Tuned) =>
     (await performanceFor(q, serverId, revision)).length > 0,
   turnOff: (serverId: string) => setPerformance(q, serverId, false, 'clash'),
-  turnOn: (serverId: string) => setPerformance(q, serverId, true),
+  // Only the start's own turning off is taken back: an owner who turned them off since chose that.
+  turnOn: async (serverId: string) => {
+    await q.delete(off).where(and(eq(off.serverId, serverId), eq(off.reason, 'clash')))
+  },
 })

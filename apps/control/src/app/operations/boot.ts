@@ -120,7 +120,8 @@ type OwnModsRevision = Pick<ServerRevision, 'gameVersion' | 'loader' | 'modpack'
 
 /**
  * Cubepals' own performance mods on a server (`app/compat/performance.ts`), as a start that fails
- * with them needs them: whether its start placed any, and turning them off, or back on.
+ * with them needs them: whether its start placed any, turning them off, and taking that back where
+ * it still stands (an owner's choice made meanwhile is kept).
  */
 export interface OwnMods {
   placed(serverId: string, revision: OwnModsRevision): Promise<boolean>

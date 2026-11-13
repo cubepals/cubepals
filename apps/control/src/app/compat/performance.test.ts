@@ -17,7 +17,7 @@ import { offeredVersions } from '../../minecraft/versions.ts'
 import { Cdn } from '../../testing/cdn.ts'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
 import { loadRevision } from '../servers/persistence.ts'
-import { performanceFor, performanceOff, setPerformance } from './performance.ts'
+import { ownModsOf, performanceFor, performanceOff, setPerformance } from './performance.ts'
 
 let h: Harness
 const cdn = new Cdn()
@@ -200,6 +200,20 @@ describe.skipIf(!hasDatabase)('a start that fails with Cubepals’ own mods', ()
     expect((await stepsOf(id, 'restart')).steps).not.toContain('own_mods_off')
     expect(await performanceOff(h.db, id)).toBeNull()
   }, 120_000)
+
+  test('an owner who turned them off while it was tried without them keeps that choice', async () => {
+    const { id } = await fabric('Hazel')
+    const own = ownModsOf(h.db)
+    await own.turnOff(id)
+    await setPerformance(h.db, id, false)
+    await own.turnOn(id)
+    expect(await performanceOff(h.db, id)).toBe('owner')
+    // With no choice of theirs since, the start's own turning off is taken back.
+    await setPerformance(h.db, id, true)
+    await own.turnOff(id)
+    await own.turnOn(id)
+    expect(await performanceOff(h.db, id)).toBeNull()
+  }, 60_000)
 
   test('a server its owner turned them off for is started as it is', async () => {
     const { owner, id } = await fabric('Gorse')
