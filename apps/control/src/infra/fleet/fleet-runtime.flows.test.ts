@@ -672,7 +672,7 @@ describe.skipIf(!hasDatabase)('FleetRuntime flows, with blocklyd in memory', () 
     const objectKey = `fleet/test/${key}/${archive.id}.tar.gz`
     expect(calls[2]?.body).toEqual({
       quiesced: false,
-      exclude: ['libraries'],
+      exclude: ['libraries', '.blockly-remade'],
       url: expect.stringContaining(encodeURIComponent(objectKey)),
       headers: {},
     })

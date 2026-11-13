@@ -20,6 +20,11 @@
  * boot it for memory that is gone again before anyone comes, and its next player's start boots
  * either way.
  *
+ * One more kind of server is started here though it kept no memory: one whose last sleep was a
+ * stop, made so that its Java could write the recording of its start
+ * (`handlers/winding-down.ts`). Its start makes the startup cache with nobody waiting, and it
+ * sleeps with its memory after the probation, as it would have. These go first.
+ *
  * A server with an operation in flight, asleep for less than `settledMs` (its sleep's restore
  * point may still be writing), or refreshed within `AGAIN_MS` (within `KEPT_PLAYED_MS` where it was
  * played lately) is left for a later pass. A player
@@ -35,7 +40,7 @@ import type { Runtimes } from '../../runtimes/router.ts'
 import { listByStatus } from '../../servers/persistence.ts'
 import type { RuntimeSpecs } from '../../servers/specs.ts'
 import { lastActivity, REFRESH_KEY } from '../../servers/usage.ts'
-import { activeOperation } from '../persistence.ts'
+import { activeOperation, stoppedForRecording } from '../persistence.ts'
 
 /** How long a server has been asleep before a pass looks at it: its sleep's restore point is done by then. */
 const SETTLED_MS = 10 * MINUTE_MS
@@ -53,6 +58,9 @@ export const PLAYED_MS = 2 * DAY_MS
  * where it is gone, nobody waiting for either, and then asleep again on memory just kept.
  */
 export const KEPT_PLAYED_MS = HOUR_MS
+
+/** How long after a stop made for a recording its start is still tried: one refused all that time is left to its next player. */
+const RECORDED_MS = DAY_MS
 
 const runtimes = schema.serverRuntimes
 const operations = schema.serverOperations
@@ -125,7 +133,7 @@ export function staleSleepers(deps: {
   db: Db
   runtime: Pick<Runtimes, 'wakesWouldBoot'>
   specs: Pick<RuntimeSpecs, 'desired'>
-  refresh: (serverId: string) => Promise<boolean>
+  refresh: (serverId: string, why: 'ready' | 'recorded') => Promise<boolean>
 }) {
   const { db, runtime, specs, refresh } = deps
 
@@ -150,22 +158,31 @@ export function staleSleepers(deps: {
     return { specOf, recorded, keptSince, countedOn }
   }
 
+  /** The servers stopped for a recording since `since` and not started after, where nothing else is going on. */
+  const recorded = async (since: Date): Promise<string[]> => {
+    const stopped = new Set((await listByStatus(db, 'stopped')).map((server) => server.id))
+    const waiting: string[] = []
+    for (const id of await stoppedForRecording(db, since)) {
+      if (stopped.has(id) && (await activeOperation(db, id)) === null) waiting.push(id)
+    }
+    return waiting
+  }
+
   /**
-   * Refreshes up to `limit` servers whose wake would boot, then those played lately whose memory
-   * has been kept too long to count on, the longest kept first; how many it started. A runtime that can't be
+   * The sleeping servers to refresh: those whose wake would boot, then those played lately whose
+   * memory has been kept too long to count on, the longest kept first. A runtime that can't be
    * read this pass leaves only the recorded keys to go on.
    */
-  return async (options: { limit?: number; settledMs?: number; now?: Date } = {}): Promise<number> => {
-    const now = options.now ?? new Date()
-    const asleep = await asleepSince(db, new Date(now.getTime() - (options.settledMs ?? SETTLED_MS)))
-    const { specOf, recorded, keptSince, countedOn } = await wouldRun(asleep, now)
-    if (specOf.size === 0) return 0
+  const stale = async (now: Date, settledMs: number): Promise<RuntimeKey[]> => {
+    const asleep = await asleepSince(db, new Date(now.getTime() - settledMs))
+    const { specOf, recorded: sleptOn, keptSince, countedOn } = await wouldRun(asleep, now)
+    if (specOf.size === 0) return []
     const said = await runtime.wakesWouldBoot(specOf).catch((error: unknown) => {
       console.warn(`stale-sleep: the runtime couldn't say which wakes would boot: ${String(error)}`)
       return new Set<RuntimeKey>()
     })
     const boots = ([key, spec]: [RuntimeKey, RuntimeSpec]) => {
-      const slept = recorded.get(key)
+      const slept = sleptOn.get(key)
       return said.has(key) || (slept != null && spec.resumesOn !== undefined && slept !== spec.resumesOn)
     }
     const keptAt = (key: RuntimeKey) => keptSince.get(key)?.getTime() ?? now.getTime()
@@ -175,12 +192,28 @@ export function staleSleepers(deps: {
         return !boots(entry) && counted !== undefined && keptAt(entry[0]) <= now.getTime() - counted
       })
       .sort(([a], [b]) => keptAt(a) - keptAt(b))
-    const stale = [...[...specOf].filter(boots), ...keptLong]
-    let refreshed = 0
-    for (const [key] of stale) {
-      if (refreshed >= (options.limit ?? 3)) break
-      if (await refresh(key)) refreshed++
+    return [...[...specOf].filter(boots), ...keptLong].map(([key]) => key)
+  }
+
+  /**
+   * Starts up to `limit` servers, those stopped for a recording first, then the sleeping ones to
+   * refresh; how many it started.
+   */
+  return async (options: { limit?: number; settledMs?: number; now?: Date } = {}): Promise<number> => {
+    const now = options.now ?? new Date()
+    const waiting: Array<[string, 'recorded' | 'ready']> = [
+      ...(await recorded(new Date(now.getTime() - RECORDED_MS))).map(
+        (id) => [id, 'recorded'] as [string, 'recorded'],
+      ),
+      ...(await stale(now, options.settledMs ?? SETTLED_MS)).map(
+        (key) => [key, 'ready'] as [string, 'ready'],
+      ),
+    ]
+    let started = 0
+    for (const [id, why] of waiting) {
+      if (started >= (options.limit ?? 3)) break
+      if (await refresh(id, why)) started++
     }
-    return refreshed
+    return started
   }
 }

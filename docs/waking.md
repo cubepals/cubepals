@@ -95,9 +95,23 @@ to 4 s before (`minecraft/wake-step.ts`), and a boot that changed nothing since 
 none of them: it starts the server with the command, the user and the variables the scripts ended
 on last time, kept on the volume under a key for everything they decide by
 (`minecraft/direct-start.ts`). On a Fabric server with eleven mods that is Java starting 2 s after
-the machine instead of 11 s. A changed setting, jar list, icon or image goes through the scripts. A class data archive saved under 2 s of the same wake
-and put 127 MB on every volume, backup and rest, so it isn't used. A rest adds a helper machine's
-whole life and an image pull onto the volume's host.
+the machine instead of 11 s. A changed setting, jar list, icon or image goes through the scripts.
+
+Java's own part of the start is kept too, in a startup cache each server makes of itself
+(`minecraft/start-cache.ts`, the JDK's AOT cache): on that Fabric server `Done` came at 22.5 to
+25.2 s with it in place of 27.9 to 33.5 s, on Paper at 48 s in place of 53 to 55 s. A start with
+no cache records what Java loads, which Java writes down as it exits; the start after makes the
+cache from that, 5 to 16 s once, and every start after reads it. A server that only sleeps and
+wakes never exits, so the sleep that finds its Java recording is a stop for once (its record says
+`recording`), and `stale-sleep` starts it again in the background: that start makes the cache
+with nobody waiting, counts toward no hours, and the server sleeps with its memory as it would
+have. A player who joins in between boots it, as after any stop. The cache is some 127 MB in a
+folder of the volume that no archive holds and no measure of the server's size counts
+(`.blockly-remade`): a download, a rest and a move leave it behind, and the server makes it again.
+A copy of the whole disk has it. It gives way when the volume runs short. An earlier class data
+archive saved under 2 s of the same wake and went into every backup and rest, so it wasn't used.
+
+A rest adds a helper machine's whole life and an image pull onto the volume's host.
 
 ## What Blockly does about it
 

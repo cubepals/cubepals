@@ -423,7 +423,7 @@ export class MinecraftServerService {
   }
 
   /** A server asleep, started in the background to show a new icon or message, or to keep it ready (`refresh.ts`). */
-  refreshAsleep(serverId: string, why: 'changed' | 'ready' = 'changed'): Promise<boolean> {
+  refreshAsleep(serverId: string, why: 'changed' | 'ready' | 'recorded' = 'changed'): Promise<boolean> {
     return refreshAsleep({ db: this.#db, start: (...args) => this.start(...args) }, serverId, why)
   }
 

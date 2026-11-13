@@ -132,7 +132,7 @@ export class Schedules {
       db: deps.db,
       runtime: deps.runtime,
       specs: deps.specs,
-      refresh: (id) => deps.service.refreshAsleep(id, 'ready'),
+      refresh: (id, why) => deps.service.refreshAsleep(id, why),
     })
     this.#scheduledBackups = schedulingBackups({
       db: deps.db,

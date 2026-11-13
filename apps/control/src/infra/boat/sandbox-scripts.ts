@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { createHash } from 'node:crypto'
-import type { RuntimeSpec } from '../../app/ports/runtime.ts'
+import { NOT_ARCHIVED, type RuntimeSpec } from '../../app/ports/runtime.ts'
 
 /**
  * What runs inside a server's sandbox, as shell: one program, told what to do by a verb, run
@@ -182,7 +182,7 @@ snapshot() {
   # while they arrive, with what tar said kept for the failure.
   said=$(mktemp)
   for try in 1 2 3 4 5; do
-    if sudo -n tar -czf "$SNAPS/.$file" -C "$DATA" . 2>"$said"; then
+    if sudo -n tar -czf "$SNAPS/.$file" ${NOT_ARCHIVED.map((name) => `--exclude=./${name}`).join(' ')} -C "$DATA" . 2>"$said"; then
       rm -f "$said"
       sudo -n mv "$SNAPS/.$file" "$SNAPS/$file" || fail "keeping the snapshot"
       echo "ok $(sudo -n stat -c %s "$SNAPS/$file")"

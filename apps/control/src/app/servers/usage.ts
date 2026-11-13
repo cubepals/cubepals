@@ -367,6 +367,17 @@ export const REFRESH_KEY = 'refresh:'
  */
 export const READY_KEY = `${REFRESH_KEY}ready:`
 
+/**
+ * The same for the start that follows a stop made so that a server's Java could write the
+ * recording of its start (`operations/handlers/winding-down.ts`): the cache is made of it with
+ * nobody waiting. It begins as those that keep a server ready do, and is said as they are.
+ */
+export const RECORDED_KEY = `${READY_KEY}recorded:`
+
+/** Whether an operation is the start that follows a stop made for a recording, by its key. */
+export const followsRecording = (op: { idempotencyKey: string }): boolean =>
+  op.idempotencyKey.startsWith(`start:${RECORDED_KEY}`)
+
 /** Whether an operation is a start that shows what its owner changed while the server slept, by its key. */
 export const refreshes = (op: { idempotencyKey: string }): boolean =>
   op.idempotencyKey.startsWith(`start:${REFRESH_KEY}`)

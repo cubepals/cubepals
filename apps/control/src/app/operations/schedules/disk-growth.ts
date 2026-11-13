@@ -18,7 +18,7 @@ import { PORT_NAMES } from '../../../minecraft/runtime-spec.ts'
 import { loadStanding } from '../../accounts/persistence.ts'
 import type { Actor } from '../../actor.ts'
 import type { ServerConsole } from '../../ports/minecraft.ts'
-import type { RuntimeHandle } from '../../ports/runtime.ts'
+import { NOT_ARCHIVED, type RuntimeHandle } from '../../ports/runtime.ts'
 import type { Runtimes } from '../../runtimes/router.ts'
 import { grownStorage, listByStatus, loadRuntime, recordDisk } from '../../servers/persistence.ts'
 import type { MinecraftServerService } from '../../servers/service.ts'
@@ -54,7 +54,9 @@ export function growingDisks(deps: {
 
   /** What `du` says the server's folder takes, in bytes; null where it can't be read. */
   const usedBytes = async (handle: RuntimeHandle): Promise<number | null> => {
-    const read = await runtime.exec(handle, ['du', '-sk', DATA_DIR], 60).catch(() => null)
+    const read = await runtime
+      .exec(handle, ['du', '-sk', ...NOT_ARCHIVED.map((name) => `--exclude=${name}`), DATA_DIR], 60)
+      .catch(() => null)
     const kilobytes = Number.parseInt(read?.stdout.trim().split(/\s+/)[0] ?? '', 10)
     return read?.exitCode === 0 && Number.isFinite(kilobytes) ? kilobytes * KB : null
   }

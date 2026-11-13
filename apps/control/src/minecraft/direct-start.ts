@@ -39,11 +39,15 @@
  * the one the last scripts wrote: an older one would start the server with what those scripts
  * have since changed, the password it is stopped with among it.
  *
+ * Either way the server's command is run through `start-cache.ts`, which gives Java its startup
+ * cache and changes nothing else of it; what is written down is the command without it.
+ *
  * Not for what the scripts skip while they do run (`wake-step.ts`), or for a resume from memory,
  * which starts nothing.
  */
 
 import { DATA_DIR } from './jars.ts'
+import { CACHED_RUNNER, CACHED_RUNNER_LINES } from './start-cache.ts'
 import { SHIM_DIR } from './wake-step.ts'
 
 /**
@@ -65,7 +69,8 @@ const PASSING = 'FLY_.*|HOSTNAME|PWD|OLDPWD|SHLVL|_|TERM|BLOCKLY_START_KEY'
 const VARIABLE = '^[A-Za-z_][A-Za-z0-9_]*='
 
 /**
- * The stand-in, line by line: it writes down what it is asked to run, then runs it. Variables are
+ * The stand-in, line by line: it writes down what it is asked to run, then runs it (through the
+ * cache's own script, `start-cache.ts`). Variables are
  * read from awk's own table of them, which keeps a value whole whatever is in it; one that runs
  * over several lines is said as `!`, and nothing is written down.
  */
@@ -73,7 +78,7 @@ const RUNNER_LINES = [
   '#!/bin/sh',
   `added=$(awk "BEGIN { while ((getline name < \\"${GIVEN}\\") > 0) given[name]; for (name in ENVIRON) if (!(name in given) && name !~ /^(${PASSING})$/) { if (ENVIRON[name] ~ /\\n/) print \\"!\\"; else print name \\"=\\" ENVIRON[name] } }" | sort)`,
   `if [ -n "$BLOCKLY_START_KEY" ] && ! printf "%s\\n" "$added" | grep -q -x "!"; then { echo "$BLOCKLY_START_KEY"; pwd; printf "%s\\n" "$added" | grep -c .; printf "%s\\n" "$added" | grep .; for word; do printf "%s\\n" "$word"; done; } > ${RECORD}.new && mv -f ${RECORD}.new ${RECORD}; fi`,
-  'exec mc-server-runner "$@"',
+  `exec ${CACHED_RUNNER} "$@"`,
 ]
 
 /**
@@ -97,7 +102,7 @@ const STARTER_LINES = [
   'cd "$dir" || exit 1',
   '[ "$mode" = run ] || exit 0',
   `(sleep ${KEPT_AFTER_S}; kill -0 $$ 2>/dev/null && mv -f ${RECORD}.last ${RECORD}) >/dev/null 2>&1 &`,
-  'exec mc-server-runner "$@"',
+  `exec ${CACHED_RUNNER} "$@"`,
 ]
 
 const written = (path: string, lines: readonly string[]): string =>
@@ -106,10 +111,10 @@ const written = (path: string, lines: readonly string[]): string =>
 /**
  * The step, after every other of Blockly's and before the image's own entrypoint, which it leaves
  * to run wherever it doesn't hand the start over. Its lines hold no single quote but the two
- * files', so each of those is written as one argument per line.
+ * files' and the cache's, so each of those is written as one argument per line.
  */
 export const DIRECT_START_STEP = [
-  `${written(RUNNER, RUNNER_LINES)} && ${written(STARTER, STARTER_LINES)} && export SERVER_RUNNER=${RUNNER};`,
+  `${written(RUNNER, RUNNER_LINES)} && ${written(STARTER, STARTER_LINES)} && ${written(CACHED_RUNNER, CACHED_RUNNER_LINES)} && export SERVER_RUNNER=${RUNNER};`,
   `awk "BEGIN { for (name in ENVIRON) print name }" > ${GIVEN};`,
   `export BLOCKLY_START_KEY=$({ awk "BEGIN { for (name in ENVIRON) if (name !~ /^(${PASSING})$/) print name \\"=\\" ENVIRON[name] }" | sort; cat /image/scripts/start*; } 2>/dev/null | sha256sum | cut -c1-64);`,
   // Whose the volume is, which the image's own start makes the server's user; never root's.

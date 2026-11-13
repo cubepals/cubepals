@@ -10,7 +10,13 @@
  */
 
 import type Docker from 'dockerode'
-import type { ArchiveTarget, DownloadTarget, PartsUpload, PutPart } from '../../../app/ports/runtime.ts'
+import {
+  type ArchiveTarget,
+  type DownloadTarget,
+  NOT_ARCHIVED,
+  type PartsUpload,
+  type PutPart,
+} from '../../../app/ports/runtime.ts'
 import type { RunHelper } from './helper.ts'
 
 /** Archives go out and come back over HTTP: the helper needs curl, and this image is pinned in compose too. */
@@ -41,7 +47,7 @@ export async function exportArchive(
     [
       'sh',
       '-c',
-      `tar -czf /out/world.tar.gz -C /from . && sha256sum /out/world.tar.gz && stat -c %s /out/world.tar.gz && if [ "$(stat -c %s /out/world.tar.gz)" -gt "$MOST" ]; then echo parts; else ${CURL} -o /dev/null -X PUT -T /out/world.tar.gz "$@" "$TARGET" && echo put; fi`,
+      `tar -czf /out/world.tar.gz ${NOT_ARCHIVED.map((name) => `--exclude=./${name}`).join(' ')} -C /from . && sha256sum /out/world.tar.gz && stat -c %s /out/world.tar.gz && if [ "$(stat -c %s /out/world.tar.gz)" -gt "$MOST" ]; then echo parts; else ${CURL} -o /dev/null -X PUT -T /out/world.tar.gz "$@" "$TARGET" && echo put; fi`,
       'export',
       ...headerArgs(target.put.headers),
     ],
