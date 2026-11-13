@@ -99,7 +99,10 @@ export async function performanceFor(q: Queryable, serverId: string, revision: T
 export const ownModsOf = (q: Queryable) => ({
   placed: async (serverId: string, revision: Tuned) =>
     (await performanceFor(q, serverId, revision)).length > 0,
-  turnOff: (serverId: string) => setPerformance(q, serverId, false, 'clash'),
+  // Never over a choice already there: an owner who turned them off in the meantime keeps theirs.
+  turnOff: async (serverId: string) => {
+    await q.insert(off).values({ serverId, reason: 'clash' }).onConflictDoNothing()
+  },
   // Only the start's own turning off is taken back: an owner who turned them off since chose that.
   turnOn: async (serverId: string) => {
     await q.delete(off).where(and(eq(off.serverId, serverId), eq(off.reason, 'clash')))

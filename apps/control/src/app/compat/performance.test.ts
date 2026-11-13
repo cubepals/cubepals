@@ -213,6 +213,12 @@ describe.skipIf(!hasDatabase)('a start that fails with Cubepals’ own mods', ()
     await own.turnOff(id)
     await own.turnOn(id)
     expect(await performanceOff(h.db, id)).toBeNull()
+    // And one who turned them off just before the start did: theirs is not renamed, or taken back.
+    await setPerformance(h.db, id, false)
+    await own.turnOff(id)
+    expect(await performanceOff(h.db, id)).toBe('owner')
+    await own.turnOn(id)
+    expect(await performanceOff(h.db, id)).toBe('owner')
   }, 60_000)
 
   test('a server its owner turned them off for is started as it is', async () => {
