@@ -754,11 +754,11 @@ infra/fly | infra/docker | infra/boat | infra/fleet | infra/fake   ← provider-
     a server at its next start.
     - On Paper the same start then sets Paper's own settings for how the server runs, in
       `config/paper-world-defaults.yml` (`minecraft/paper-defaults.ts`): fewer chunks saved in one
-      tick, no moving into a chunk not loaded yet and, on a server made as Paper, explosions that
-      keep what they looked up. None changes a mechanic. A server with no file yet is given the
+      tick and, on a server made as Paper, explosions that keep what they looked up. Neither
+      changes a mechanic or what a player feels. A server with no file yet is given the
       settings alone, which Paper fills out with its defaults; one that has the file gets a line
       rewritten only while it still holds Paper's default, and any other value stays. Plain
-      Minecraft run on Paper gets the chunk settings only, in the file its first start writes
+      Minecraft run on Paper gets the chunk setting only, in the file its first start writes
       (`minecraft/vanilla-paper.ts`). A setup's carried file is placed after and replaces the
       whole file.
   - Mods: `MODS=<artifactUrl(a) for each pinned mod>` (`PLUGINS` on Paper).

@@ -64,7 +64,7 @@ const input = {
 
 /**
  * Part of the file Paper 1.21.11 writes with every setting at its default, as the image copies it
- * to a new server: its head, and the sections around the three settings, whole.
+ * to a new server: its head, and the sections around the settings, whole.
  */
 const STOCK = `# This is the world defaults configuration file for Paper.
 # File Reference: https://docs.papermc.io/paper/reference/world-configuration/
@@ -130,10 +130,6 @@ hopper:
 `
 
 const SAVES = ['  max-auto-save-chunks-per-tick: 24\n', '  max-auto-save-chunks-per-tick: 8\n'] as const
-const MOVES = [
-  '  prevent-moving-into-unloaded-chunks: false\n',
-  '  prevent-moving-into-unloaded-chunks: true\n',
-] as const
 const EXPLOSIONS = ['  optimize-explosions: false\n', '  optimize-explosions: true\n'] as const
 
 let data = ''
@@ -166,23 +162,21 @@ const read = () => readFileSync(file(), 'utf8')
 const configFolder = () => readdirSync(join(data, 'config')).sort()
 
 describe('a server with no world defaults yet', () => {
-  test('made as Paper, is given the three settings alone before Paper starts', () => {
+  test('made as Paper, is given the settings alone before Paper starts', () => {
     volume()
     start(paper)
     expect(read()).toBe(
-      'chunks:\n  max-auto-save-chunks-per-tick: 8\n  prevent-moving-into-unloaded-chunks: true\n' +
-        'environment:\n  optimize-explosions: true\n',
+      'chunks:\n  max-auto-save-chunks-per-tick: 8\nenvironment:\n  optimize-explosions: true\n',
     )
     expect(configFolder()).toEqual(['paper-global.yml', 'paper-world-defaults.yml'])
     expect(statSync(file()).uid).toBe(statSync(data).uid)
   })
 
-  test('plain Minecraft on Paper, has the two chunk settings beside its own, and Mojang’s explosions', () => {
+  test('plain Minecraft on Paper, has the chunk setting beside its own, and Mojang’s explosions', () => {
     volume()
     start(plain)
     expect(read()).toStartWith(
-      'chunks:\n  delay-chunk-unloads-by: 0s\n  max-auto-save-chunks-per-tick: 8\n' +
-        '  prevent-moving-into-unloaded-chunks: true\ncollisions:\n',
+      'chunks:\n  delay-chunk-unloads-by: 0s\n  max-auto-save-chunks-per-tick: 8\ncollisions:\n',
     )
     // Once each: the file is written by one step, and the other finds nothing to rewrite.
     expect(read().split('max-auto-save-chunks-per-tick')).toHaveLength(2)
@@ -196,9 +190,7 @@ describe('a server that ran on Paper before', () => {
   test('has the lines still at Paper’s default rewritten, nothing else, and only once', () => {
     volume(STOCK)
     start(paper)
-    const rewritten = STOCK.replace(...SAVES)
-      .replace(...MOVES)
-      .replace(...EXPLOSIONS)
+    const rewritten = STOCK.replace(...SAVES).replace(...EXPLOSIONS)
     expect(rewritten).not.toBe(STOCK)
     expect(read()).toBe(rewritten)
     expect(configFolder()).toEqual(['paper-global.yml', 'paper-world-defaults.yml'])
@@ -214,7 +206,7 @@ describe('a server that ran on Paper before', () => {
   test('as plain Minecraft, has the chunk lines rewritten and its explosions left Mojang’s', () => {
     volume(STOCK)
     start(plain)
-    expect(read()).toBe(STOCK.replace(...SAVES).replace(...MOVES))
+    expect(read()).toBe(STOCK.replace(...SAVES))
     expect(read()).toContain(EXPLOSIONS[0])
   })
 
@@ -222,16 +214,11 @@ describe('a server that ran on Paper before', () => {
     const saves = '  max-auto-save-chunks-per-tick: 48\n'
     volume(STOCK.replace(SAVES[0], saves))
     start(paper)
-    expect(read()).toBe(
-      STOCK.replace(SAVES[0], saves)
-        .replace(...MOVES)
-        .replace(...EXPLOSIONS),
-    )
+    expect(read()).toBe(STOCK.replace(SAVES[0], saves).replace(...EXPLOSIONS))
     rmSync(data, { recursive: true })
     // Every value chosen, one said with a note after it, and no line ending: a file left alone
     // isn't written again to give it one.
     const kept = STOCK.replace(SAVES[0], saves)
-      .replace(...MOVES)
       .replace(EXPLOSIONS[0], '  optimize-explosions: false # as Mojang has them\n')
       .trimEnd()
     volume(kept)
@@ -246,7 +233,7 @@ describe('a server that ran on Paper before', () => {
     // Not a file Paper writes: the same names where Paper has none, around the one real line.
     const elsewhere = (saves: string) =>
       `chunks:\n  entity-per-chunk-save-limit:\n    max-auto-save-chunks-per-tick: 24\n${saves}` +
-      'misc:\n  optimize-explosions: false\n  prevent-moving-into-unloaded-chunks: false\n' +
+      'misc:\n  optimize-explosions: false\n' +
       'max-auto-save-chunks-per-tick: 24\n'
     volume(elsewhere(SAVES[0]))
     start(paper)

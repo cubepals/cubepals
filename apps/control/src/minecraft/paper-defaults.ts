@@ -41,12 +41,12 @@ interface Setting {
  *
  * - `max-auto-save-chunks-per-tick`: the most chunks an autosave writes in one tick. Fewer spreads
  *   the same save over more ticks, so no single tick carries it.
- * - `prevent-moving-into-unloaded-chunks`: a player moving faster than chunks load is held at the
- *   last one loaded, rather than the move making the server load the next one at once.
+ *
+ * Not `prevent-moving-into-unloaded-chunks`: it holds a player who moves faster than chunks load
+ * at the last one loaded, which someone flying feels as being pulled back.
  */
 const CHUNKS: readonly Setting[] = [
   { section: 'chunks', key: 'max-auto-save-chunks-per-tick', stock: '24', value: '8' },
-  { section: 'chunks', key: 'prevent-moving-into-unloaded-chunks', stock: 'false', value: 'true' },
 ]
 
 /**
