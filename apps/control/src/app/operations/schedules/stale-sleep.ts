@@ -14,9 +14,11 @@
  * Two readings, either enough: the runtime's own, where it can say (`wakesWouldBoot`, Fly's
  * machines), and the key its last boot recorded (`applied.resumesOn`). A third covers what neither
  * can read: memory the provider dropped while its machine still reads asleep, which only a start
- * finds out. So memory kept for `KEPT_MS` is no longer counted on, and its server is refreshed
- * too, after those whose wake is known to boot. A server someone played within `PLAYED_MS` is the
- * one a player is likeliest to come back to, so its memory is counted on for `KEPT_PLAYED_MS` only.
+ * finds out. A server someone played within `PLAYED_MS` is the one a player is likeliest to come
+ * back to, so its memory is counted on for `KEPT_PLAYED_MS` only, and it is refreshed then, after
+ * those whose wake is known to boot. One nobody played that lately is left asleep: a refresh would
+ * boot it for memory that is gone again before anyone comes, and its next player's start boots
+ * either way.
  *
  * A server with an operation in flight, asleep for less than `settledMs` (its sleep's restore
  * point may still be writing), or refreshed within `AGAIN_MS` (within `KEPT_PLAYED_MS` where it was
@@ -39,20 +41,16 @@ import { activeOperation } from '../persistence.ts'
 const SETTLED_MS = 10 * MINUTE_MS
 /** A server refreshed this recently isn't refreshed again for the same reason; a refresh that didn't take is said once. */
 export const AGAIN_MS = 6 * HOUR_MS
-/**
- * How long memory kept for a sleeping server is counted on. A provider promises no resume: Fly
- * drops what it kept for a host move, maintenance or room, and goes on reading the machine
- * `suspended` until the start that boots it from its disk (docs/resume-fallback.md), so nothing
- * can be read of it beforehand. Past this, the server is refreshed: a resume of a few seconds
- * where the memory is still there, a boot where it is gone, nobody waiting for either, and then
- * asleep again on memory just kept.
- */
-export const KEPT_MS = DAY_MS
-/** How lately someone played a server for its memory to be counted on for less: its players come back. */
+/** How lately someone played a server for its kept memory to be looked after: its players come back. */
 export const PLAYED_MS = 2 * DAY_MS
 /**
- * How long memory kept for a server played that lately is counted on. Fly kept none of production's
- * for 4.5 hours or more where measured (2026-11), and every one for 1.3 hours or less.
+ * How long memory kept for a server played that lately is counted on. A provider promises no
+ * resume: Fly drops what it kept for a host move, maintenance or room, and goes on reading the
+ * machine `suspended` until the start that boots it from its disk (docs/resume-fallback.md), so
+ * nothing can be read of it beforehand. Fly kept every one of production's for 1.3 hours or less
+ * where measured (2026-11), and none for 4.5 hours or more: six of six were gone at a day. Past
+ * this, the server is refreshed: a resume of a few seconds where the memory is still there, a boot
+ * where it is gone, nobody waiting for either, and then asleep again on memory just kept.
  */
 export const KEPT_PLAYED_MS = HOUR_MS
 
@@ -110,12 +108,17 @@ async function refreshedSince(db: Db, serverId: string, since: Date): Promise<bo
 
 /**
  * How long the server's kept memory is counted on, and how soon after a refresh it may have
- * another: less of both where someone played it lately.
+ * another. Only where someone played it lately is its memory refreshed for having been kept long:
+ * `kept` is null for any other.
  */
-async function boundsOf(db: Db, serverId: string, now: Date): Promise<{ again: number; kept: number }> {
+async function boundsOf(
+  db: Db,
+  serverId: string,
+  now: Date,
+): Promise<{ again: number; kept: number | null }> {
   const played = await lastActivity(db, serverId)
   const lately = played !== null && played.getTime() > now.getTime() - PLAYED_MS
-  return lately ? { again: KEPT_PLAYED_MS, kept: KEPT_PLAYED_MS } : { again: AGAIN_MS, kept: KEPT_MS }
+  return lately ? { again: KEPT_PLAYED_MS, kept: KEPT_PLAYED_MS } : { again: AGAIN_MS, kept: null }
 }
 
 export function staleSleepers(deps: {
@@ -142,14 +145,14 @@ export function staleSleepers(deps: {
       specOf.set(runtimeKey(server.id), desired.spec)
       recorded.set(runtimeKey(server.id), resumesOn)
       keptSince.set(runtimeKey(server.id), keptAt)
-      countedOn.set(runtimeKey(server.id), kept)
+      if (kept !== null) countedOn.set(runtimeKey(server.id), kept)
     }
     return { specOf, recorded, keptSince, countedOn }
   }
 
   /**
-   * Refreshes up to `limit` servers whose wake would boot, then those whose memory has been kept
-   * too long to count on, the longest kept first; how many it started. A runtime that can't be
+   * Refreshes up to `limit` servers whose wake would boot, then those played lately whose memory
+   * has been kept too long to count on, the longest kept first; how many it started. A runtime that can't be
    * read this pass leaves only the recorded keys to go on.
    */
   return async (options: { limit?: number; settledMs?: number; now?: Date } = {}): Promise<number> => {
@@ -167,9 +170,10 @@ export function staleSleepers(deps: {
     }
     const keptAt = (key: RuntimeKey) => keptSince.get(key)?.getTime() ?? now.getTime()
     const keptLong = [...specOf]
-      .filter(
-        (entry) => !boots(entry) && keptAt(entry[0]) <= now.getTime() - (countedOn.get(entry[0]) ?? KEPT_MS),
-      )
+      .filter((entry) => {
+        const counted = countedOn.get(entry[0])
+        return !boots(entry) && counted !== undefined && keptAt(entry[0]) <= now.getTime() - counted
+      })
       .sort(([a], [b]) => keptAt(a) - keptAt(b))
     const stale = [...[...specOf].filter(boots), ...keptLong]
     let refreshed = 0

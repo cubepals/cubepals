@@ -11,13 +11,13 @@
  */
 import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test'
 import { randomUUID } from 'node:crypto'
-import { HOUR_MS } from '@blockly/contracts/durations'
+import { DAY_MS, HOUR_MS } from '@blockly/contracts/durations'
 import { schema } from '@blockly/db'
 import { and, desc, eq } from 'drizzle-orm'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
 import type { UserActor } from '../actor.ts'
 import { loadRevision } from '../servers/persistence.ts'
-import { AGAIN_MS, KEPT_MS, KEPT_PLAYED_MS, PLAYED_MS } from './schedules/stale-sleep.ts'
+import { AGAIN_MS, KEPT_PLAYED_MS, PLAYED_MS } from './schedules/stale-sleep.ts'
 import { IDLE_GRACE_MS, WAKE_PROBATION_MS } from './schedules.ts'
 
 const operations = schema.serverOperations
@@ -184,21 +184,28 @@ describe.skipIf(!hasDatabase)('stale-sleep', () => {
 })
 
 describe.skipIf(!hasDatabase)('stale-sleep, for memory kept too long to count on', () => {
-  test('memory kept past a day isn’t counted on: dropped unseen, it is found before the player’s wake', async () => {
+  const refreshed = async (id: string) => (await lastStart(id)).key.startsWith('start:refresh:')
+  const playedAt = (id: string, at: Date) =>
+    h.db
+      .insert(schema.serverActivity)
+      .values({ serverId: id, lastPlayerAt: at })
+      .onConflictDoUpdate({ target: schema.serverActivity.serverId, set: { lastPlayerAt: at } })
+
+  test('memory dropped unseen is found before the player’s wake, where someone played lately', async () => {
     const { owner, id } = await running()
     await asleep(owner, id)
-    const refreshed = async () => (await lastStart(id)).key.startsWith('start:refresh:')
+    await playedAt(id, new Date())
     // The provider drops what it kept, and goes on reading the machine asleep: nothing to read of it.
     h.runtime.sleeps.drop(id)
     expect(h.runtime.machine(id)?.state).toBe('suspended')
-    await pass({ limit: 50, now: new Date(Date.now() + KEPT_MS - HOUR_MS) })
-    expect(await refreshed()).toBe(false)
+    await pass({ limit: 50, now: new Date(Date.now() + KEPT_PLAYED_MS / 2) })
+    expect(await refreshed(id)).toBe(false)
     expect((await h.server(id)).lifecycle.status).toBe('stopped')
 
     // A boot that takes longer than a resume is given to answer, as a real one does.
     h.minecraft.bootTakes(11_000)
     try {
-      expect(await pass({ limit: 50, now: new Date(Date.now() + KEPT_MS + HOUR_MS) })).toBeGreaterThan(0)
+      expect(await pass({ limit: 50, now: new Date(Date.now() + 2 * KEPT_PLAYED_MS) })).toBeGreaterThan(0)
       // While it boots, its page is told what the start is: a refresh that keeps it ready.
       expect((await h.app.queries.get(owner, id)).activeOperation).toMatchObject({
         kind: 'start',
@@ -210,7 +217,7 @@ describe.skipIf(!hasDatabase)('stale-sleep, for memory kept too long to count on
       h.minecraft.bootTakes(0)
     }
     await h.settled(id)
-    expect(await refreshed()).toBe(true)
+    expect(await refreshed(id)).toBe(true)
     // The refresh is the start that found the memory gone, with nobody waiting for its boot.
     expect((await lastStart(id)).steps).toEqual(expect.arrayContaining(['resuming', 'booting']))
 
@@ -218,47 +225,31 @@ describe.skipIf(!hasDatabase)('stale-sleep, for memory kept too long to count on
     expect(resumed(await wake(owner, id))).toBe(true)
   }, 120_000)
 
-  test('memory still there after a day is resumed, kept again, and left for another day', async () => {
+  test('one nobody played lately is left asleep, however long its memory has been kept', async () => {
     const { owner, id } = await running()
     await asleep(owner, id)
-    expect(await pass({ limit: 50, now: new Date(Date.now() + KEPT_MS + HOUR_MS) })).toBeGreaterThan(0)
-    await h.until(id, 'running')
-    await h.settled(id)
-    const refresh = await lastStart(id)
-    expect(refresh.key).toStartWith('start:refresh:')
-    expect(resumed(refresh.steps)).toBe(true)
-
-    // Asleep again on memory just kept: nothing to refresh until that is a day old too.
-    await sleepsUnjoined(id)
-    const before = (await lastStart(id)).key
-    await pass({ limit: 50, now: new Date(Date.now() + AGAIN_MS + HOUR_MS) })
-    expect((await lastStart(id)).key).toBe(before)
-    expect(resumed(await wake(owner, id))).toBe(true)
+    // Never played, then last played longer ago than counts: a refresh would boot it for memory
+    // that is gone again before anyone comes.
+    await pass({ limit: 50, now: new Date(Date.now() + 3 * DAY_MS) })
+    expect(await refreshed(id)).toBe(false)
+    await playedAt(id, new Date(Date.now() - PLAYED_MS - HOUR_MS))
+    await pass({ limit: 50, now: new Date(Date.now() + 3 * DAY_MS) })
+    expect(await refreshed(id)).toBe(false)
+    expect((await h.server(id)).lifecycle.status).toBe('stopped')
   }, 90_000)
 
   test('one played lately has its memory counted on for an hour: its players come back', async () => {
     const { owner, id } = await running()
     await asleep(owner, id)
-    const refreshed = async () => (await lastStart(id)).key.startsWith('start:refresh:')
-    const playedAt = (at: Date) =>
-      h.db
-        .insert(schema.serverActivity)
-        .values({ serverId: id, lastPlayerAt: at })
-        .onConflictDoUpdate({ target: schema.serverActivity.serverId, set: { lastPlayerAt: at } })
 
-    // Last played longer ago than counts: its memory is counted on for the day, as anyone's.
-    await playedAt(new Date(Date.now() - PLAYED_MS - HOUR_MS))
-    await pass({ limit: 50, now: new Date(Date.now() + 2 * KEPT_PLAYED_MS) })
-    expect(await refreshed()).toBe(false)
-
-    await playedAt(new Date())
+    await playedAt(id, new Date())
     // Kept for less than the hour: still counted on.
     await pass({ limit: 50, now: new Date(Date.now() + KEPT_PLAYED_MS / 2) })
-    expect(await refreshed()).toBe(false)
+    expect(await refreshed(id)).toBe(false)
     expect(await pass({ limit: 50, now: new Date(Date.now() + 2 * KEPT_PLAYED_MS) })).toBeGreaterThan(0)
     await h.until(id, 'running')
     await h.settled(id)
-    expect(await refreshed()).toBe(true)
+    expect(await refreshed(id)).toBe(true)
     expect(resumed((await lastStart(id)).steps)).toBe(true)
 
     // Asleep again on memory just kept, and refreshed within the hour: left until that is an hour old too.
