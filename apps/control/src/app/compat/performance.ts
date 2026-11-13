@@ -11,9 +11,10 @@
  * The settings page says which run, and its switch is the way back.
  *
  * Whether a server runs them is kept beside it (`server_performance_off`), not in a revision: its
- * owner's switch turns them off (`owner`), and so does a start that failed with them and came up
- * without (`clash`, `operations/boot.ts`), so that Cubepals' own mods are never why a server
- * won't start. One the owner runs already, as their own mod, is theirs and is not added twice.
+ * owner's switch turns them off (`owner`), and so does a start that failed with them (`clash`,
+ * `operations/boot.ts`): one that came up without them, or one that couldn't be tried again, whose
+ * next start is then without them. So Cubepals' own mods are never why a server keeps failing to
+ * start. One the owner runs already, as their own mod, is theirs and is not added twice.
  * None on any other server type, or one playing a pack: a pack is tested as it is.
  *
  * Measured on a Fabric 26.3 server with eleven mods, a boot took the same with and without them.

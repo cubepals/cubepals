@@ -16,6 +16,7 @@ import { FERRITECORE, LITHIUM } from '../../minecraft/mods.ts'
 import { offeredVersions } from '../../minecraft/versions.ts'
 import { Cdn } from '../../testing/cdn.ts'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
+import { listBackups } from '../backups/persistence.ts'
 import { loadRevision } from '../servers/persistence.ts'
 import { ownModsOf, performanceFor, performanceOff, setPerformance } from './performance.ts'
 
@@ -220,6 +221,23 @@ describe.skipIf(!hasDatabase)('a start that fails with Cubepals’ own mods', ()
     await own.turnOn(id)
     expect(await performanceOff(h.db, id)).toBe('owner')
   }, 60_000)
+
+  test('where it can’t be tried again, a restore, leaves them off for the next start', async () => {
+    const { owner, id } = await fabric('Ivy')
+    await h.app.backups.createBackup(owner, id, randomUUID())
+    await h.settled(id)
+    const [backup] = (await listBackups(h.db, id)).filter((b) => b.status === 'ready')
+    if (backup === undefined) throw new Error('No backup was taken')
+    h.minecraft.breakOn((env) => (OWN.test(env.BLOCKLY_JARS ?? '') ? 'one of them clashed with a mod' : null))
+    await h.app.backups.restoreBackup(owner, id, backup.id, randomUUID(), { withConfiguration: false })
+    await h.until(id, (s) => s.lifecycle.status !== 'restoring', 20_000)
+    await h.settled(id, 20_000)
+    expect(await performanceOff(h.db, id)).toBe('clash')
+    // Its next start places none, so they are not what stops it.
+    await restart(owner, id)
+    expect((await h.server(id)).lifecycle.status).toBe('running')
+    expect(onDisk(id)).toEqual([])
+  }, 120_000)
 
   test('a server its owner turned them off for is started as it is', async () => {
     const { owner, id } = await fabric('Gorse')

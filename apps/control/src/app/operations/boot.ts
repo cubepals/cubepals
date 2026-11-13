@@ -380,8 +380,13 @@ export class BootSequence {
    * Up; and where a start fails on a server Cubepals placed its own performance mods on, once more
    * without them: they are turned off for the server and it is started again on that. One that
    * comes up stays without them, which its settings page says, and its owner can turn them back
-   * on. One that fails the same has them back: they were not why. Not for a start that stopped
-   * answering, which is started again as it is, or one with no way to be put in place again.
+   * on. One that fails the same has them back: they were not why. A start with no way to be put
+   * in place again here (a restore, a wake from storage, a move) can't be tried without them, so
+   * they are left off for its next start, which then isn't stopped by them. Not for a start that
+   * stopped answering, which is started again as it is.
+   *
+   * Whether they were placed is read before the start, not after it failed: its owner may turn
+   * them off while it starts, and the start that failed still had them.
    */
   async #upWithoutOwn(
     ctx: OperationContext,
@@ -392,18 +397,21 @@ export class BootSequence {
     reprovision: (() => Promise<RuntimeHandle>) | undefined,
     heard: string[],
   ): Promise<RuntimeHandle> {
+    const own = this.#ownMods
+    const placed = own !== null && (await own.placed(serverId, revision))
     try {
       return await up(first)
     } catch (error) {
-      const own = this.#ownMods
       const asItIs =
         stoppedAnswering(error) || error instanceof Unreadable || error instanceof NoLongerApplies
-      if (own === null || reprovision === undefined || asItIs) throw error
-      if (!(await own.placed(serverId, revision))) throw error
+      if (own === null || !placed || asItIs) throw error
       await own.turnOff(serverId)
-      console.warn(
-        `operation ${ctx.op.kind} ${ctx.op.id}: didn't start with Cubepals' own mods, starting it without them (${inFull(error)})`,
-      )
+      const said = `operation ${ctx.op.kind} ${ctx.op.id}: didn't start with Cubepals' own mods`
+      if (reprovision === undefined) {
+        console.warn(`${said}, its next start is without them (${inFull(error)})`)
+        throw error
+      }
+      console.warn(`${said}, starting it without them (${inFull(error)})`)
       heard.length = 0
       try {
         const handle = await up(await reprovision())

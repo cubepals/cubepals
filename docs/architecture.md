@@ -2586,7 +2586,9 @@ came from (`domain/setup/setup.ts`). Every server begins as one, turned into its
   on the settings page turns them off at the next start, and so does a start that failed with
   them. Such a start is put in place again without them and tried once more (`boot.ts`,
   `own_mods_off` on its record): one that comes up stays without them and its settings page says
-  why; one that fails the same has them back, since they were not why. Measured on a Fabric 26.3
+  why; one that fails the same has them back, since they were not why. A start with no way to
+  be put in place again (a restore, a wake from storage, a move) leaves them off for its next
+  start instead. Measured on a Fabric 26.3
   server with eleven mods, a boot took the same with and without them.
 - **Stop cheaters.** The same layer carries Grim (GPL-3.0-or-later, Modrinth `LJNGWSvH`), the
   anticheat behind the Players page's Stop cheaters switch (`app/stop-cheaters/`): pinned per
