@@ -55,6 +55,10 @@ async function dial(port: number): Promise<Socket> {
 const servers: Server[] = []
 /** Every visit the agent reported, in the order it came. */
 const reported: VisitReport[] = []
+/** Every hostname the control plane was asked to wake, in the order it was asked. */
+const wakes: string[] = []
+/** What the agent wrote to its error output, kept to say why a join went unreported. */
+let agentErrors = ''
 let live = ''
 let gone = ''
 const control = Bun.serve({
@@ -74,6 +78,7 @@ const control = Bun.serve({
     }
     if (!path.endsWith('/wake')) return new Response(null, { status: 404 })
     const { hostname } = (await request.json()) as { hostname: string }
+    wakes.push(hostname)
     // The live server is up; every other is said to be starting, for as long as the test runs.
     return Response.json(
       hostname === LIVE ? { outcome: 'ready', destination: live } : { outcome: 'starting' },
@@ -89,16 +94,31 @@ afterAll(async () => {
   await control.stop(true)
 })
 
-/** The halves the agent reported of the join `name` made, once both have come. */
-async function visitOf(name: string): Promise<Partial<Record<VisitReport['phase'], VisitReport>>> {
+/** What the test saw, for a failure to say: the visits reported, the wakes asked, the agent's errors. */
+const seen = () =>
+  [
+    `reported: ${reported.map((r) => `${r.player?.name ?? '?'} ${r.phase}`).join(', ') || 'none'}`,
+    `wakes asked: ${wakes.join(', ') || 'none'}`,
+    `agent errors: ${agentErrors.slice(-2_000) || 'none'}`,
+  ].join('\n')
+
+/** Waits for `check` to hold, up to 10 s, then fails naming `what` and what the test saw. */
+async function until(what: string, check: () => boolean): Promise<void> {
   const deadline = Date.now() + 10_000
-  for (;;) {
-    const halves = Object.fromEntries(
-      reported.filter((report) => report.player?.name === name).map((report) => [report.phase, report]),
-    )
-    if ((halves.open && halves.close) || Date.now() >= deadline) return halves
+  while (!check()) {
+    if (Date.now() >= deadline) throw new Error(`waited 10 s for ${what}\n${seen()}`)
     await Bun.sleep(50)
   }
+}
+
+/** The halves the agent reported of the join `name` made, once both have come. */
+async function visitOf(name: string): Promise<Partial<Record<VisitReport['phase'], VisitReport>>> {
+  const halves = () =>
+    Object.fromEntries(
+      reported.filter((report) => report.player?.name === name).map((report) => [report.phase, report]),
+    ) as Partial<Record<VisitReport['phase'], VisitReport>>
+  await until(`both halves of ${name}'s visit`, () => Boolean(halves().open && halves().close))
+  return halves()
 }
 
 test.skipIf(ROUTER_BIN === '')(
@@ -127,8 +147,14 @@ test.skipIf(ROUTER_BIN === '')(
         VISIT_LINGER_MS: '200',
       },
       stdout: 'ignore',
-      stderr: 'ignore',
+      stderr: 'pipe',
     })
+    // Read as it comes, so the pipe never fills and holds the agent up.
+    void (async () => {
+      const decoder = new TextDecoder()
+      for await (const chunk of agent.stderr as ReadableStream<Uint8Array>)
+        agentErrors += decoder.decode(chunk)
+    })()
     const joinAs = async (name: string, address: string) => {
       const client = await dial(minecraft ?? 0)
       const said = { bytes: 0, closed: false }
@@ -152,8 +178,10 @@ test.skipIf(ROUTER_BIN === '')(
 
     // The first join to a server that is said to run and isn't up waits in the waiting room, which
     // mc-router counts as its wake for as long as it stays; the next is dialled to the route.
+    // Held, once the waiting room asks the control plane to wake its server itself: the second ask,
+    // after mc-router's own. Only then does mc-router count the server as waking, and dial the next.
     const first = await joinAs('Waiting', GONE)
-    await Bun.sleep(1_500)
+    await until('the waiting room to hold Waiting', () => wakes.filter((h) => h === GONE).length >= 2)
     expect(first.said.closed).toBe(false)
     const unreachable = await joinAs('Unreached', GONE)
     const unreached = await visitOf('Unreached')
@@ -172,8 +200,10 @@ test.skipIf(ROUTER_BIN === '')(
       body: JSON.stringify({ backend: '' }),
     })
     expect(emptied.ok).toBe(true)
+    // mc-router asks with no address for a hostname it holds no route for, which the agent answers
+    // itself: the ask for this address is the waiting room's, holding Asking.
     const second = await joinAs('Asking', UNROUTED)
-    await Bun.sleep(1_500)
+    await until('the waiting room to hold Asking', () => wakes.includes(UNROUTED))
     expect(second.said.closed).toBe(false)
     const nowhere = await joinAs('Unrouted', UNROUTED)
     const unrouted = await visitOf('Unrouted')
