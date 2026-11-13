@@ -42,10 +42,11 @@
  * A server that only sleeps and wakes never exits, so its recording would never be written: a
  * sleep that finds its Java recording is a stop for once (`CACHE_STATE`,
  * `app/operations/handlers/winding-down.ts`), and the server is then started in the background,
- * which makes the cache with nobody waiting, and sleeps as ever (`stale-sleep`). Only a command of the shape `java … -jar …` is given a
- * cache, and only with room for it on the volume; one already made gives way when the volume
- * runs short. Everything here runs as the server's own user,
- * on files that user can write: nothing of it is read as root.
+ * which makes the cache with nobody waiting, and sleeps as ever
+ * (`app/operations/schedules/recorded-starts.ts`). Only a command of the shape `java … -jar …` is
+ * given a cache, and only with room for it on the volume; one already made gives way when the
+ * volume runs short. Everything here runs as the server's own user, on files that user can
+ * write: nothing of it is read as root.
  *
  * Not for whether the image's scripts run (`direct-start.ts`).
  */

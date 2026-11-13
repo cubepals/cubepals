@@ -77,9 +77,10 @@ async function sleepOrStop(
 /**
  * Whether a server about to sleep is stopped for once instead: its Java is recording its start
  * for a startup cache, as the cache's own state on its volume says, and the recording is only
- * written as Java exits (`minecraft/start-cache.ts`). `stale-sleep` then starts it in the
- * background, which makes the cache, and it sleeps as ever. Not in the run that start began: one
- * stop a recording, so one that is never written costs a boot once, not after every sleep.
+ * written as Java exits (`minecraft/start-cache.ts`). The idle check's next pass then starts it
+ * in the background (`schedules/recorded-starts.ts`), which makes the cache, and it sleeps as
+ * ever. Not in the run that start began: one stop a recording, so one that is never written costs
+ * a boot once, not after every sleep.
  */
 async function recordingRefusal(
   deps: { db: Db; runtime: Pick<Runtimes, 'exec'> },

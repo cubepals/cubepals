@@ -22,6 +22,7 @@
  * - `presence.ts`: records who is online on each running server, read from its console.
  * - `purge-sweep.ts`: queues again the decommission or purge a deleted server still owes.
  * - `reconcile.ts`: brings what is recorded in line with what the provider lists since the last pass.
+ * - `recorded-starts.ts`: starts in the background a server stopped so its Java could write a startup cache's recording.
  * - `relocations.ts`: asks for the moves the platform makes on its own, a few a pass.
  * - `scheduled-backups.ts`: queues the daily backups and retires the ones gone or past their lifetime.
  * - `session-cap.ts`: warns, then stops, a run that reaches its account's session cap.
@@ -53,6 +54,7 @@ import { clearingOrphans } from './schedules/orphans.ts'
 import { readingPresence } from './schedules/presence.ts'
 import { purging } from './schedules/purge-sweep.ts'
 import { reconciling } from './schedules/reconcile.ts'
+import { recordedStarts } from './schedules/recorded-starts.ts'
 import { relocating } from './schedules/relocations.ts'
 import { schedulingBackups } from './schedules/scheduled-backups.ts'
 import { sessionCaps } from './schedules/session-cap.ts'
@@ -76,6 +78,7 @@ export class Schedules {
   readonly #relocations: (now: Date, limit: number) => Promise<number>
   readonly #drift: (limit: number) => Promise<number>
   readonly #staleSleep: ReturnType<typeof staleSleepers>
+  readonly #recordedStarts: ReturnType<typeof recordedStarts>
   readonly #scheduledBackups: (now: Date, limit: number) => Promise<number>
   readonly #presenceSync: () => Promise<void>
   readonly #sessionCheck: (now: Date) => Promise<number>
@@ -132,7 +135,11 @@ export class Schedules {
       db: deps.db,
       runtime: deps.runtime,
       specs: deps.specs,
-      refresh: (id, why) => deps.service.refreshAsleep(id, why),
+      refresh: (id) => deps.service.refreshAsleep(id, 'ready'),
+    })
+    this.#recordedStarts = recordedStarts({
+      db: deps.db,
+      refresh: (id) => deps.service.refreshAsleep(id, 'recorded'),
     })
     this.#scheduledBackups = schedulingBackups({
       db: deps.db,
@@ -231,6 +238,11 @@ export class Schedules {
 
   async idleCheck(now = new Date()): Promise<void> {
     return this.#idle.idleCheck(now)
+  }
+
+  /** With the idle check: servers stopped for their Java's recording, started in the background (`schedules/recorded-starts.ts`). */
+  async recordedStarts(now = new Date(), limit = 3): Promise<number> {
+    return this.#recordedStarts(now, limit)
   }
 
   async sessionCheck(now = new Date()): Promise<number> {
