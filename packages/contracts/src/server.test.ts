@@ -411,9 +411,9 @@ test('the performance mods switch takes a server and on or off, and nothing a re
 test('a server view says who turned the performance mods off, or that it has none to say of', () => {
   const shown: server.ServerView['performanceMods'][] = [
     null,
-    { on: true, turnedOff: null, mods: ['Lithium', 'FerriteCore'] },
-    { on: false, turnedOff: 'owner', mods: ['Lithium'] },
-    { on: false, turnedOff: 'clash', mods: [] },
+    { on: true, turnedOff: null, mods: ['Lithium', 'FerriteCore'], runs: ['Lithium', 'FerriteCore'] },
+    { on: false, turnedOff: 'owner', mods: ['Lithium'], runs: ['Lithium', 'FerriteCore'] },
+    { on: false, turnedOff: 'clash', mods: [], runs: [] },
   ]
   expect(shown.map((view) => view?.turnedOff ?? null)).toEqual([null, null, 'owner', 'clash'])
 })

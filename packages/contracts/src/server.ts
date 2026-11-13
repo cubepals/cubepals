@@ -411,11 +411,15 @@ export const SetPerformanceModsInput = z.object({ serverId: ServerId, on: z.bool
  * them (`on`), and who turned them off: its `owner`, or Cubepals after a start that failed with
  * them and came up without (`clash`). `mods` names the ones a start places, or would if they were
  * turned on: fewer where the owner runs one as their own mod, or none is out for its Minecraft.
+ * `runs` names those and the owner's own together, each once: the ones the server runs with them
+ * on, whoever's copy each is, which is what the page names. Empty, none is out for its Minecraft
+ * and its owner runs none. A control plane from before `runs` sends only `mods`.
  */
 export interface PerformanceModsView {
   on: boolean
   turnedOff: 'owner' | 'clash' | null
   mods: string[]
+  runs: string[]
 }
 
 /**

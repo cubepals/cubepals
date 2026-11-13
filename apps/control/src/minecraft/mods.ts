@@ -123,6 +123,16 @@ export const FERRITECORE = 'uXXizFIs'
 export const PERFORMANCE: readonly string[] = [LITHIUM, FERRITECORE]
 
 /**
+ * What each is called, as its Modrinth project is titled: how the settings page names one the
+ * owner runs as their own mod, whose copy may be an upload called anything
+ * (`app/compat/performance-view.ts`).
+ */
+export const PERFORMANCE_NAMES: Readonly<Record<string, string>> = {
+  [LITHIUM]: 'Lithium',
+  [FERRITECORE]: 'FerriteCore',
+}
+
+/**
  * The names of what Cubepals adds, by their Modrinth projects: the same plugin or mod from
  * another catalog or an upload.
  */
