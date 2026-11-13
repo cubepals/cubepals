@@ -24,6 +24,7 @@
 
 import { randomUUID } from 'node:crypto'
 import { resolve4 } from 'node:dns/promises'
+import { volumeGone } from '../apps/control/src/infra/fly/fly-runtime/volumes.ts'
 import { GAME_PORT } from '../apps/control/src/minecraft/ports.ts'
 import { type Edge, join } from './lib/minecraft.ts'
 import { flags, operatorCli } from './lib/operator-cli.ts'
@@ -103,7 +104,7 @@ const appExists = (serverId: string) =>
 const volumesOf = (serverId: string) =>
   appExists(serverId)
     ? (fly(['volumes', 'list', '-a', appOf(serverId)]) as { name: string; state: string }[]).filter(
-        (volume) => volume.state !== 'destroyed' && volume.state !== 'pending_destroy',
+        (volume) => !volumeGone(volume.state),
       )
     : []
 /** Machines and live volumes Fly holds for a server; none when its app is gone. */

@@ -41,6 +41,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { HOUR_S } from '@blockly/contracts/durations'
 import { MAIL_PORT } from '@blockly/contracts/local'
 import { SQL } from 'bun'
+import { volumeGone } from '../apps/control/src/infra/fly/fly-runtime/volumes.ts'
 import { runScheduledNow } from '../apps/control/src/infra/pg/jobs.ts'
 import { type Api, people } from './lib/people.ts'
 import { reachDatabase } from './lib/staging-database.ts'
@@ -361,7 +362,7 @@ if (PACK) {
     ) ?? []) as { id: string; state: string }[]
   const held = () => {
     const machines = listed('machines')
-    const volumes = listed('volumes').filter((v) => v.state !== 'destroyed' && v.state !== 'pending_destroy')
+    const volumes = listed('volumes').filter((v) => !volumeGone(v.state))
     return `${machines.length} machine(s) ${machines.map((m) => m.state).join(',')}, ${volumes.length} volume(s)`
   }
   if (WORLD_MB > 0) {

@@ -50,6 +50,7 @@ import { MINUTE_MS, SECOND_MS } from '@blockly/contracts/durations'
 import { MAIL_PORT } from '@blockly/contracts/local'
 import { SQL } from 'bun'
 import { TEMPLATES } from '../apps/control/src/app/setups/templates.ts'
+import { volumeGone } from '../apps/control/src/infra/fly/fly-runtime/volumes.ts'
 import { runScheduledNow } from '../apps/control/src/infra/pg/jobs.ts'
 import { GAME_PORT } from '../apps/control/src/minecraft/ports.ts'
 import { bringsWorldIn } from './lib/brought-world.ts'
@@ -130,7 +131,7 @@ const volumesOf = async (serverId: string) =>
     size_gb: number
   }[]
 const keptVolumes = async (serverId: string) =>
-  (await volumesOf(serverId)).filter((v) => v.state !== 'destroyed' && v.state !== 'pending_destroy')
+  (await volumesOf(serverId)).filter((v) => !volumeGone(v.state))
 const serverApps = async () =>
   (JSON.parse(await fly(['apps', 'list', '-o', 'blockly-staging', '--json'])) as { Name: string }[]).map(
     (app) => app.Name,

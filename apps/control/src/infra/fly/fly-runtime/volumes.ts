@@ -38,6 +38,11 @@ const VOLUME_GONE = new Set([
   'scheduling_destroy',
   'waiting_for_detach',
 ])
+/**
+ * Whether a volume in this state is gone or going: Fly goes on listing a deleted volume for a
+ * while, as `scheduling_destroy` at first and then `pending_destroy`.
+ */
+export const volumeGone = (state: string | undefined): boolean => VOLUME_GONE.has(state ?? '')
 const UNBIND_SECONDS = 120
 
 /**
