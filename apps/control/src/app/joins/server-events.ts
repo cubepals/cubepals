@@ -8,7 +8,10 @@
  * that reads a PROXY header; else by the player's UUID on a join the edge handed over moments
  * before, or one this server already reported on; else a row of its own, saying the edge's half is
  * missing. A `boot` keeps the server's latest word on what it runs. A login told of after the edge
- * said the join ended may show the game turned it away for its own lists (`refusals.ts`).
+ * said the join ended may show the game turned it away for its own lists (`refusals.ts`). The
+ * times written here are the reporter's own, and the only ones a join is measured by: a row the
+ * server's player list marked first (`player-list.ts`) becomes the reporter's, `reported`, with
+ * the list's moment left in `detail` beside them.
  *
  * Not for the edge's half: that is `visits.ts`.
  */

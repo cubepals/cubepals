@@ -5,8 +5,9 @@
 /**
  * What each join leaves behind, as the places that see it report it: the edge's half of each
  * connection (`VisitReport`), the game server's half from its reporter plugin (`ServerJoinEvent`),
- * and the kinds of signal the control plane raises on the record they make together, with the
- * shape of the `SIGNALS` setting that turns each kind on.
+ * who on the server's side told of a join (`ServerSide`), and the kinds of signal the control
+ * plane raises on the record they make together, with the shape of the `SIGNALS` setting that
+ * turns each kind on.
  *
  * Not for which versions can join a server: that is `joins.ts`.
  */
@@ -56,6 +57,13 @@ export const VisitReport = z.object({
   detail: z.record(z.string(), z.unknown()).optional(),
 })
 export type VisitReport = z.infer<typeof VisitReport>
+
+/**
+ * Who on a server's side told of a join: nobody yet (`not_reported`); its own player list, read
+ * over its console about once a minute, which showed the player on it (`console`); or its reporter
+ * plugin, which tells each step with its own time (`reported`) and stands over the list's word.
+ */
+export type ServerSide = 'not_reported' | 'console' | 'reported'
 
 /** How many reports or events one request may carry. */
 export const MOST_PER_BATCH = 200
@@ -212,7 +220,17 @@ export interface JoinView {
   bytesUp: number | null
   bytesDown: number | null
   tick: { tps: number; mspt: number; online: number } | null
-  serverSide: 'not_reported' | 'reported'
+  serverSide: ServerSide
+  /**
+   * When the server's own player list first showed the player (`detail.listedAt`): in the world by
+   * then, and up to a reading of the list late. It says a join got in, never how long it took.
+   */
+  listedAt: string | null
+  /**
+   * When that list, read a minute or more after the join was handed over, didn't show the player
+   * (`detail.notListedAt`): still on its way in then.
+   */
+  notListedAt: string | null
   detail: Record<string, unknown>
 }
 

@@ -550,7 +550,9 @@ export const publicListings = pgTable('public_listings', {
 //       network /* keyed hash, as known_addresses */, source /* ip:port, an hour at most */,
 //       path /* direct|held|refused */, pinged_at, connected_at, wake_asked_at, wake_operation_id,
 //       ready_at, handed_at, login_at, configure_started_at, configured_at, in_world_at, left_at,
-//       left_reason, pinged_after_at, bytes_up, bytes_down, tick jsonb, server_side, detail jsonb)
+//       left_reason, pinged_after_at, bytes_up, bytes_down, tick jsonb,
+//       server_side /* not_reported|console|reported: who on the server's side told of it */,
+//       detail jsonb /* the edge's `session`; `listedAt`, `notListedAt` from the player list */)
 //   indexes (server_id, connected_at), (player_uuid, …), (lower(player_name), …),
 //   (address, …), (source) where set, (connected_at)
 // signals(id, kind, server_id, join_id, key unique, at, detail jsonb, closed_at, closed_by)
@@ -1017,7 +1019,10 @@ Outcomes are written down in `job_health`, the successes of a minute together:
 - `presence-sync`: every minute, `list uuids` over each running server's console. On the same
   connection it reads `tick query` where the reporter plugin hasn't sampled the server lately
   (`server_vitals`, source `console`), delivers the access changes and player-page actions waiting
-  for someone who just joined (§15.1), and says an operator's account notice in game.
+  for someone who just joined (§15.1), and says an operator's account notice in game. Each reading
+  also tells the server's open joins whether their player was on the list
+  (`app/joins/player-list.ts`): one read of the joins handed over in the last hour, and a write
+  only for a join whose mark is new.
 - `stale-sleep`: every 10 minutes. Servers asleep with their memory whose wake would boot, then
   those played lately whose memory has been kept an hour, then those played lately whose sleep
   was refused and so have none, are refreshed in the background a few a pass, so the player's
@@ -1991,7 +1996,9 @@ left out of drift and of what a sleeping server compares as it wakes, so it neve
 from memory into a boot. The control plane puts each server's events together with the edge's
 visits into one row per join (`app/joins/`). The other is the same reporter's tick health, once a
 minute, to `POST /runtime/v1/servers/{serverId}/vitals` (`app/vitals/`, `server_vitals`); a server
-without the reporter has its ticks read over its console by `presence-sync` instead.
+without the reporter has its ticks read over its console by `presence-sync` instead, and its
+joins told by its own player list in the same pass: that a player got in, to the minute, where
+the reporter tells each step with its time (`server_side` `console`, [diagnosis.md](diagnosis.md)).
 
 **A second catalog: Hangar.** Some Paper plugins are published on Hangar (hangar.papermc.io),
 PaperMC's catalog, and not on Modrinth: OldCombatMechanics and VaultUnlocked among them.

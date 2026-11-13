@@ -11,6 +11,7 @@
 import { isBedrockUuid } from '@blockly/contracts'
 import { type Queryable, schema } from '@blockly/db'
 import { and, asc, countDistinct, eq, gt, sql } from 'drizzle-orm'
+import { listSaid } from '../joins/reached.ts'
 
 /** The events the owner's PostHog dashboard counts. Their names are a contract with it. */
 export const FUNNEL = {
@@ -189,6 +190,7 @@ export async function joinTried(q: Queryable, joinId: string): Promise<void> {
       playerUuid: schema.joins.playerUuid,
       leftReason: schema.joins.leftReason,
       inWorldAt: schema.joins.inWorldAt,
+      detail: schema.joins.detail,
       at: schema.joins.connectedAt,
       ownerId: servers.ownerId,
     })
@@ -200,7 +202,9 @@ export async function joinTried(q: Queryable, joinId: string): Promise<void> {
   const properties = { serverId: join.serverId, edition }
   const mark = { userId: join.ownerId, at: join.at }
   await noteOnce(q, { ...mark, event: FUNNEL.joinFirstTried, subject: join.serverId, properties })
-  if (join.inWorldAt !== null || !stoppedFor(join.leftReason)) return
+  // In the world by its reporter's word, or its server's player list's (`joins/reached.ts`).
+  const gotIn = join.inWorldAt !== null || listSaid(join.detail).listedAt !== null
+  if (gotIn || !stoppedFor(join.leftReason)) return
   await noteOnce(q, {
     ...mark,
     event: FUNNEL.joinStopped,

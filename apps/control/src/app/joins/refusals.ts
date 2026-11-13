@@ -8,26 +8,26 @@
  * whitelist nor the operators, whom the game lets past it. The edge handed such a join on and saw
  * only the connection end, and a server's reporter tells of the login and nothing after. The game
  * checks its lists once it has verified the account and the reporter has told of the login, so on
- * a server that reports (its reporter told of its boot), a join that logged in, ended, never
+ * a server that reports (`reporting` in `reached.ts`), a join that logged in, ended, never
  * reached the world and has no reason yet is read against the server's lists as they stand, a ban
  * first, as the game checks one first; one that never logged in, its account unverified or its
  * client gone first, is given no reason. A server with no reporter, a vanilla one, tells of
  * neither, so a join it was handed is read against its lists alone, and there an unverified
- * account kept out of a whitelisted server reads as the whitelist's refusal. It is read when the
- * edge says the join ended and again when the server's word of the login comes, whichever is last.
+ * account kept out of a whitelisted server reads as the whitelist's refusal. A join the server's
+ * own player list showed in the world (`player-list.ts`) was let in, whatever its lists say now.
+ * It is read when the edge says the join ended and again when the server's word of the login
+ * comes, whichever is last.
  *
  * Not for a join the edge turned away, which carries its own reason, nor for why a player left
  * once in (`server-events.ts`).
  */
 import { type Queryable, schema } from '@blockly/db'
-import { and, eq, inArray, isNotNull, isNull, notExists, or, sql } from 'drizzle-orm'
+import { and, eq, inArray, isNotNull, isNull, or, sql } from 'drizzle-orm'
 import { offlineUuid } from '../access/identity.ts'
+import { gotIn, reporting } from './reached.ts'
 
 const joins = schema.joins
 const entries = schema.serverAccessEntries
-
-/** The join's server has a reporter: it told of its boot. */
-const reporting = sql`(select 1 from ${schema.serverReports} where ${schema.serverReports.serverId} = ${joins.serverId})`
 
 /** What the game holds of a server's lists: an entry whose removal hasn't reached it still counts. */
 const HELD = ['active', 'pending_remove'] as const
@@ -42,10 +42,12 @@ export async function noteRefusal(q: Queryable, id: string): Promise<void> {
         eq(joins.id, id),
         isNotNull(joins.leftAt),
         isNotNull(joins.handedAt),
-        isNull(joins.inWorldAt),
+        // Not one its reporter or its player list saw in the world: the lists as they stand say
+        // nothing of a player who was let in and taken off them since.
+        sql`not ${gotIn}`,
         isNull(joins.leftReason),
         // Logged in, on a server whose reporter would have said so.
-        or(isNotNull(joins.loginAt), notExists(reporting)),
+        or(isNotNull(joins.loginAt), sql`not ${reporting}`),
       ),
     )
   // The player's UUID is the client's own word: enough to explain a refusal, and without it there
