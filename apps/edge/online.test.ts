@@ -33,7 +33,7 @@ describe.skipIf(!hasDatabase || ROUTER_BIN === '')('a server that reads as runni
     h = await startHarness()
     router = await startRouter()
     const routes = new RouterRoutes(router.api)
-    await routes.ready(10_000)
+    await routes.ready(10_000, '')
     control = Bun.serve({
       port: 0,
       fetch: createInternalApp({ edge: h.app.edge, joins: h.app.joins, token: 'edge' }).fetch,
