@@ -2579,7 +2579,9 @@ came from (`domain/setup/setup.ts`). Every server begins as one, turned into its
   names, in no revision, counted by no plan rule, never in the mod list, arriving at a boot and
   never through drift, and part of what a machine asleep may wake on (`resumesOn`), so a sleeping
   Fabric server boots once in the background to have them. One the owner runs as their own mod is
-  theirs and isn't placed again; a pack gets none, being tested as it is. Whether a server runs
+  theirs and isn't placed again; a pack gets none, being tested as it is. A server that stops
+  being Fabric without a pack (another loader, or a pack) still runs the step, with none, so the
+  ones an earlier start placed go. Whether a server runs
   them is kept beside it (`server_performance_off`, a row where they are off): its owner's switch
   on the settings page turns them off at the next start, and so does a start that failed with
   them. Such a start is put in place again without them and tried once more (`boot.ts`,

@@ -595,12 +595,26 @@ export function withoutOwnSteps(entrypoint: readonly string[] | undefined): read
 const placesOwnMods = (revision: Pick<ServerRevision, 'loader' | 'modpack'>): boolean =>
   revision.loader === 'fabric' && revision.modpack === null
 
-/** What Cubepals' own step is given to place on a server of `revision`; undefined where it places none of Cubepals'. */
+/**
+ * Whether a server of `revision` loads mods from its volume though Cubepals places none of its own
+ * there: another loader than Fabric, or a pack. Plain Minecraft reads no such folder.
+ */
+const loadsOtherMods = (revision: Pick<ServerRevision, 'loader' | 'modpack'>): boolean =>
+  revision.modpack !== null || (revision.loader !== 'vanilla' && revision.loader !== 'paper')
+
+/**
+ * What Cubepals' own step is given to place on a server of `revision`; undefined where the step
+ * has nothing of Cubepals' to do. None, on a server that loads mods and is told which it starts
+ * with: the step still runs, so that what an earlier start placed, as a Fabric server, goes.
+ */
 const placedOn = (
   revision: Pick<ServerRevision, 'loader' | 'modpack'>,
   viaPlaced: boolean,
   compat: RuntimeSpecInput['compat'],
-): RuntimeSpecInput['compat'] => (viaPlaced || placesOwnMods(revision) ? compat : undefined)
+): RuntimeSpecInput['compat'] => {
+  if (viaPlaced || placesOwnMods(revision)) return compat
+  return compat !== undefined && loadsOtherMods(revision) ? [] : undefined
+}
 
 export function toRuntimeSpec(input: RuntimeSpecInput): RuntimeSpec {
   const { revision, world, memoryTier } = input

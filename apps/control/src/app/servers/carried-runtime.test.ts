@@ -252,6 +252,43 @@ describe('what a revision places itself', () => {
   })
 })
 
+describe('a server that stops being Fabric', () => {
+  test('what Cubepals placed for a Fabric server goes when it becomes another kind that loads mods', async () => {
+    const data = mkdtempSync(join(tmpdir(), 'carried-'))
+    const own = { ...plugin('BentoBox', BENTOBOX, 'mods'), loaders: ['fabric'] }
+    const fabric = { ...revision, loader: 'fabric' as const, mods: [], files: [] }
+    const run = async (of: ServerRevision, compat: PinnedMod[]) => {
+      const spec = withCompressedFiles(toRuntimeSpec({ ...input, revision: of, compat }))
+      const step = (spec.entrypoint?.[2] ?? '')
+        .replaceAll('/data', data)
+        .replace('exec /image/scripts/start "$@"', 'true')
+      const env = Object.fromEntries(Object.entries(spec.env).filter(([name]) => name.startsWith('BLOCKLY_')))
+      return Bun.spawn(['/bin/sh', '-c', step], { env: { ...env, VERSION: '26.1.2' }, stderr: 'ignore' })
+        .exited
+    }
+    const jar = `${data}/mods/cubepals-${sha512(BENTOBOX).slice(0, 12)}-BentoBox.jar`
+    for (const other of [
+      { ...fabric, loader: 'quilt' as const },
+      { ...fabric, loader: 'neoforge' as const },
+      // A pack: its own files are the pack's, and none of the revision's is written.
+      {
+        ...fabric,
+        modpack: { artifact: plugin('Pack', BENTOBOX).artifact } as never,
+        files: [{ path: 'config/own.yml', content: 'x' }],
+      },
+    ]) {
+      expect(await run(fabric, [own])).toBe(0)
+      expect(readFileSync(jar)).toEqual(BENTOBOX)
+      writeFileSync(`${data}/mods/theirs.jar`, 'the owner’s')
+      expect(await run(other, [])).toBe(0)
+      expect(existsSync(jar)).toBe(false)
+      expect(existsSync(`${data}/config/own.yml`)).toBe(false)
+      expect(readFileSync(`${data}/mods/theirs.jar`, 'utf8')).toBe('the owner’s')
+    }
+    rmSync(data, { recursive: true })
+  })
+})
+
 describe('the world a carried file names', () => {
   test('a file naming the running world names the one the server starts on, before and after a switch', async () => {
     const data = mkdtempSync(join(tmpdir(), 'carried-'))
