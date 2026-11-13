@@ -10,11 +10,7 @@
 import { describe, expect, test } from 'bun:test'
 import { defaultSettings, type ServerRevision } from '../../domain/revision/revision.ts'
 import { CARRIED_STEP, FILES_VARIABLES } from '../../minecraft/carried.ts'
-import {
-  PAPER_CHUNK_LINES,
-  PAPER_DEFAULTS_STEP,
-  PLAIN_PAPER_DEFAULTS_STEP,
-} from '../../minecraft/paper-defaults.ts'
+import { PAPER_CHUNK_LINES, PAPER_DEFAULTS_STEP } from '../../minecraft/paper-defaults.ts'
 import { toRuntimeSpec } from '../../minecraft/runtime-spec.ts'
 import { readList } from '../../minecraft/step-lists.ts'
 import { resumeParts } from './resume-parts.ts'
@@ -79,13 +75,10 @@ describe('the drift digest and the text of Blockly’s own steps', () => {
 
   test('Paper’s settings for how it runs move neither the drift digest nor a part of the resume key', () => {
     const plain = { ...revision, loader: 'vanilla' as const, files: [] }
-    const cases = [
-      { of: revision, step: PAPER_DEFAULTS_STEP },
-      { of: plain, step: PLAIN_PAPER_DEFAULTS_STEP },
-    ]
-    for (const { of, step } of cases) {
+    const step = PAPER_DEFAULTS_STEP
+    for (const of of [revision, plain]) {
       const now = toRuntimeSpec({ ...input, revision: of })
-      expect(now.entrypoint?.[2]).toContain(` ${step} `)
+      expect(now.entrypoint?.[2]).toContain(of === plain ? PAPER_CHUNK_LINES[0] : ` ${step} `)
       // The same start as it read before the step, and a plain server's chunk lines, were in it.
       const lines = PAPER_CHUNK_LINES.map((line) => ` '${line}'`).join('')
       const before = {

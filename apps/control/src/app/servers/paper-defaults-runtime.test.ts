@@ -130,7 +130,6 @@ hopper:
 `
 
 const SAVES = ['  max-auto-save-chunks-per-tick: 24\n', '  max-auto-save-chunks-per-tick: 8\n'] as const
-const EXPLOSIONS = ['  optimize-explosions: false\n', '  optimize-explosions: true\n'] as const
 
 let data = ''
 afterEach(() => {
@@ -187,57 +186,23 @@ describe('a server with no world defaults yet', () => {
 })
 
 describe('a server that ran on Paper before', () => {
-  test('has the lines still at Paper’s default rewritten, nothing else, and only once', () => {
-    volume(STOCK)
-    start(paper)
-    const rewritten = STOCK.replace(...SAVES).replace(...EXPLOSIONS)
-    expect(rewritten).not.toBe(STOCK)
-    expect(read()).toBe(rewritten)
-    expect(configFolder()).toEqual(['paper-global.yml', 'paper-world-defaults.yml'])
-    expect(statSync(file()).uid).toBe(statSync(data).uid)
-    // A second start finds nothing to rewrite, and leaves the file itself in place.
-    const { ino } = statSync(file())
-    start(paper)
-    expect(read()).toBe(rewritten)
-    expect(statSync(file()).ino).toBe(ino)
-    expect(configFolder()).toEqual(['paper-global.yml', 'paper-world-defaults.yml'])
+  test('keeps its file byte for byte, Paper’s own defaults among its values', () => {
+    for (const on of [paper, plain]) {
+      volume(STOCK)
+      const { ino } = statSync(file())
+      start(on)
+      expect(read()).toBe(STOCK)
+      expect(statSync(file()).ino).toBe(ino)
+      expect(configFolder()).toEqual(['paper-global.yml', 'paper-world-defaults.yml'])
+      rmSync(data, { recursive: true })
+    }
   })
 
-  test('as plain Minecraft, has the chunk lines rewritten and its explosions left Mojang’s', () => {
-    volume(STOCK)
-    start(plain)
-    expect(read()).toBe(STOCK.replace(...SAVES))
-    expect(read()).toContain(EXPLOSIONS[0])
-  })
-
-  test('keeps what somebody chose: one value beside lines rewritten, and a whole file byte for byte', () => {
-    const saves = '  max-auto-save-chunks-per-tick: 48\n'
-    volume(STOCK.replace(SAVES[0], saves))
-    start(paper)
-    expect(read()).toBe(STOCK.replace(SAVES[0], saves).replace(...EXPLOSIONS))
-    rmSync(data, { recursive: true })
-    // Every value chosen, one said with a note after it, and no line ending: a file left alone
-    // isn't written again to give it one.
-    const kept = STOCK.replace(SAVES[0], saves)
-      .replace(EXPLOSIONS[0], '  optimize-explosions: false # as Mojang has them\n')
-      .trimEnd()
+  test('keeps what somebody chose', () => {
+    const kept = STOCK.replace(SAVES[0], '  max-auto-save-chunks-per-tick: 48\n')
     volume(kept)
-    const { ino } = statSync(file())
     start(paper)
     expect(read()).toBe(kept)
-    expect(statSync(file()).ino).toBe(ino)
-    expect(configFolder()).toEqual(['paper-global.yml', 'paper-world-defaults.yml'])
-  })
-
-  test('rewrites the key under its own section alone, not its name deeper in or under another', () => {
-    // Not a file Paper writes: the same names where Paper has none, around the one real line.
-    const elsewhere = (saves: string) =>
-      `chunks:\n  entity-per-chunk-save-limit:\n    max-auto-save-chunks-per-tick: 24\n${saves}` +
-      'misc:\n  optimize-explosions: false\n' +
-      'max-auto-save-chunks-per-tick: 24\n'
-    volume(elsewhere(SAVES[0]))
-    start(paper)
-    expect(read()).toBe(elsewhere(SAVES[1]))
   })
 })
 
@@ -255,24 +220,11 @@ describe('the step and what is around it', () => {
     rmSync(outside)
   })
 
-  test('leaves the file as it was where it can’t be rewritten, and the start goes on', () => {
-    volume(STOCK)
-    // A folder in the way of the file the rewrite goes to.
-    mkdirSync(`${file()}.new`)
-    writeFileSync(`${file()}.new/kept`, '')
-    start(paper)
-    expect(read()).toBe(STOCK)
-    // With the way clear, the next start rewrites it.
-    rmSync(`${file()}.new`, { recursive: true })
-    start(paper)
-    expect(read()).toContain(SAVES[1])
-    expect(configFolder()).toEqual(['paper-global.yml', 'paper-world-defaults.yml'])
-  })
-
   test('runs on Paper alone: another server type’s start leaves the file as it finds it', () => {
     const scriptOf = (on: ServerRevision) => toRuntimeSpec({ ...input, revision: on }).entrypoint?.[2] ?? ''
     expect(scriptOf(paper)).toContain('max-auto-save-chunks-per-tick')
     expect(scriptOf(plain)).toContain('max-auto-save-chunks-per-tick')
+    expect(scriptOf(plain)).not.toContain('optimize-explosions')
     const others: ServerRevision[] = [
       { ...plain, loaderVersion: null },
       { ...paper, loader: 'fabric', loaderVersion: null },

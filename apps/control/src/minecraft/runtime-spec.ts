@@ -20,7 +20,7 @@ import { DATAPACKS_STEP, datapacksEnv, datapacksOf } from './datapacks.ts'
 import { DIRECT_START_STEP } from './direct-start.ts'
 import { WAITING_DATAPACK } from './duels-waiting.ts'
 import { DATA_DIR, JAR_LISTS, jarsOf } from './jars.ts'
-import { PAPER_DEFAULTS_STEP, PLAIN_PAPER_DEFAULTS_STEP } from './paper-defaults.ts'
+import { PAPER_DEFAULTS_STEP } from './paper-defaults.ts'
 import { GAME_PORT, RCON_PORT } from './ports.ts'
 import { STARTER_STEP, starterEnv, startsOnOf } from './starter.ts'
 import { STOP_CHEATERS_STEP } from './stop-cheaters.ts'
@@ -564,7 +564,7 @@ function entrypointFor(steps: {
     ...(steps.starter ? [STARTER_STEP] : []),
     ...(steps.vanilla ? [VANILLA_PAPER_STEP] : []),
     steps.paper ? PAPER_STEP : DIMENSIONS_STEP,
-    ...(steps.paper ? [steps.vanilla ? PLAIN_PAPER_DEFAULTS_STEP : PAPER_DEFAULTS_STEP] : []),
+    ...(steps.paper && !steps.vanilla ? [PAPER_DEFAULTS_STEP] : []),
     DATAPACKS_STEP,
     ...(steps.icon ? ICON_STEP : []),
     ...(steps.pack ? PACK_STEP : []),
