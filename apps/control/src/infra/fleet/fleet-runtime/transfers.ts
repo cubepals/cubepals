@@ -17,6 +17,7 @@ import type { Db } from '@blockly/db'
 import { sql } from 'drizzle-orm'
 import {
   type ArchiveTarget,
+  NOT_ARCHIVED,
   type PartsUpload,
   RuntimeUnsupported,
   type SnapshotHandle,
@@ -401,7 +402,8 @@ export class Transfers {
   /**
    * What a move carries, uploaded from the stopped source to the store: the world and everything
    * else the server can't make again. `reconstructible` names what it can (the server jar and the
-   * libraries it unpacks), which the target makes on its first start rather than receives.
+   * libraries it unpacks), which the target makes on its first start rather than receives; what no
+   * archive holds (`NOT_ARCHIVED`) is left behind with it.
    */
   async exportForMove(node: NodeRow, key: string, epoch: number, reconstructible: readonly string[]) {
     const id = randomUUID()
@@ -416,7 +418,7 @@ export class Transfers {
       exported = await this.#sendArchive(
         node,
         `/v1/workloads/${key}/export`,
-        { quiesced: false, exclude: [...reconstructible] },
+        { quiesced: false, exclude: [...reconstructible, ...NOT_ARCHIVED] },
         target,
         await this.#sizeOf(key),
         epoch,

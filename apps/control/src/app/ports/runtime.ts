@@ -62,7 +62,8 @@ interface PortSpec {
 /**
  * Names at the top of a server's storage that no archive of it holds, and no measure of it
  * counts: what its workload makes again by itself, such as a startup cache. A runtime that
- * archives the storage as files leaves them out; a copy of the whole disk has them.
+ * archives the storage as files leaves them out; a copy of the whole disk has them, a provider's
+ * volume snapshot or a node's own.
  */
 export const NOT_ARCHIVED = ['.blockly-remade'] as const
 
