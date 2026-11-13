@@ -44,7 +44,7 @@ import {
   slugAvailable,
   slugClaimable,
 } from './persistence.ts'
-import { refreshAsleep } from './refresh.ts'
+import { type RefreshReason, refreshAsleep } from './refresh.ts'
 import { desiredRuns } from './revision-reads.ts'
 import { TEMPORARY_HOURS } from './temporary.ts'
 import type { ServerTransitions } from './transitions.ts'
@@ -423,7 +423,7 @@ export class MinecraftServerService {
   }
 
   /** A server asleep, started in the background to show a new icon or message, or to keep it ready (`refresh.ts`). */
-  refreshAsleep(serverId: string, why: 'changed' | 'ready' | 'recorded' = 'changed'): Promise<boolean> {
+  refreshAsleep(serverId: string, why: RefreshReason = 'changed'): Promise<boolean> {
     return refreshAsleep({ db: this.#db, start: (...args) => this.start(...args) }, serverId, why)
   }
 

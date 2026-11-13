@@ -20,6 +20,14 @@
  * boot it for memory that is gone again before anyone comes, and its next player's start boots
  * either way.
  *
+ * Last come the servers that should be asleep with their memory and aren't: someone played one
+ * within `PLAYED_MS`, its stop was meant as a sleep, and the server itself couldn't take it
+ * (`UNSLEPT`), so it was stopped for real and its next join would boot. It is started the same
+ * way once the stop is `settledMs` old, as an hourly refresh starts a server its owner stopped,
+ * and never the minute after their Stop. Once a stop: its start is then the newest thing asked of
+ * the server, and the stop that ends a run a refresh began and nobody played is never refreshed,
+ * so a sleep refused a second time is left as it is.
+ *
  * A server with an operation in flight, asleep for less than `settledMs` (its sleep's restore
  * point may still be writing), or refreshed within `AGAIN_MS` (within `KEPT_PLAYED_MS` where it was
  * played lately) is left for a later pass. A player
@@ -34,11 +42,12 @@ import { type RuntimeKey, type RuntimeSpec, runtimeKey } from '../../ports/runti
 import type { Runtimes } from '../../runtimes/router.ts'
 import { listByStatus } from '../../servers/persistence.ts'
 import type { RuntimeSpecs } from '../../servers/specs.ts'
-import { lastActivity, REFRESH_KEY } from '../../servers/usage.ts'
-import { activeOperation } from '../persistence.ts'
+import { lastActivity, REFRESH_KEY, refreshes } from '../../servers/usage.ts'
+import { activeOperation, lastStopsMarked, latestOfKind, pendingOfKind } from '../persistence.ts'
+import type { SleepMark } from '../runner.ts'
 
-/** How long a server has been asleep before a pass looks at it: its sleep's restore point is done by then. */
-const SETTLED_MS = 10 * MINUTE_MS
+/** How long a server has been asleep, or stopped where a sleep was meant, before a pass looks at it: its restore point is done by then. */
+export const SETTLED_MS = 10 * MINUTE_MS
 /** A server refreshed this recently isn't refreshed again for the same reason; a refresh that didn't take is said once. */
 export const AGAIN_MS = 6 * HOUR_MS
 /** How lately someone played a server for its kept memory to be looked after: its players come back. */
@@ -53,6 +62,15 @@ export const PLAYED_MS = 2 * DAY_MS
  * where it is gone, nobody waiting for either, and then asleep again on memory just kept.
  */
 export const KEPT_PLAYED_MS = HOUR_MS
+/**
+ * How a stop that was meant as a sleep says the server itself couldn't take it (`SleepMark`):
+ * someone was on it as it went, its world wasn't saved, or its files weren't written through. The
+ * next sleep may well be taken. Not `runtime_stopped`: it is also what every sleep says while the
+ * runtime's switch is off, when a second one is stopped as surely as the first and its boot is
+ * spent for nothing. Nor a stop that was never to be a sleep (`stop_reason`, `no_sleep`), or one
+ * followed by a start of its own (`recording`, `recorded-starts.ts`).
+ */
+const UNSLEPT = ['players_on', 'unsaved', 'unsynced'] as const satisfies readonly SleepMark[]
 
 const runtimes = schema.serverRuntimes
 const operations = schema.serverOperations
@@ -106,6 +124,12 @@ async function refreshedSince(db: Db, serverId: string, since: Date): Promise<bo
   return row !== undefined
 }
 
+/** When someone last played the server, where that is within `PLAYED_MS`; null otherwise. */
+async function playedLately(db: Db, serverId: string, now: Date): Promise<Date | null> {
+  const played = await lastActivity(db, serverId)
+  return played !== null && played.getTime() > now.getTime() - PLAYED_MS ? played : null
+}
+
 /**
  * How long the server's kept memory is counted on, and how soon after a refresh it may have
  * another. Only where someone played it lately is its memory refreshed for having been kept long:
@@ -116,16 +140,47 @@ async function boundsOf(
   serverId: string,
   now: Date,
 ): Promise<{ again: number; kept: number | null }> {
-  const played = await lastActivity(db, serverId)
-  const lately = played !== null && played.getTime() > now.getTime() - PLAYED_MS
+  const lately = (await playedLately(db, serverId, now)) !== null
   return lately ? { again: KEPT_PLAYED_MS, kept: KEPT_PLAYED_MS } : { again: AGAIN_MS, kept: null }
+}
+
+/**
+ * Whether someone played the server lately, and not only before the refresh that began its last
+ * run, where one did: a run a refresh began and nobody played ends in that refresh's own stop.
+ */
+async function playedItsRun(db: Db, serverId: string, now: Date): Promise<boolean> {
+  const played = await playedLately(db, serverId, now)
+  if (played === null) return false
+  const began = await latestOfKind(db, serverId, 'start')
+  return began === null || !refreshes(began) || played > began.createdAt
+}
+
+/**
+ * The servers stopped where a sleep was meant (`UNSLEPT`) at least `settledMs` ago, the longest
+ * stopped first: someone played each lately, nothing has been asked of it since but background
+ * work, and nothing is in flight, the restore point of that stop included, since the copy is of
+ * the server as it stopped. None has its memory kept: the sleep that would have kept it is the one
+ * refused. No stop older than `PLAYED_MS` is read: nobody played the server after the stop that
+ * left it stopped.
+ */
+async function unslept(db: Db, now: Date, settledMs: number): Promise<string[]> {
+  const stops = await lastStopsMarked(db, new Date(now.getTime() - PLAYED_MS), UNSLEPT)
+  const cold: string[] = []
+  for (const { serverId, at } of stops) {
+    if (at.getTime() > now.getTime() - settledMs) continue
+    if ((await activeOperation(db, serverId)) !== null) continue
+    if (await pendingOfKind(db, serverId, 'backup')) continue
+    if (await playedItsRun(db, serverId, now)) cold.push(serverId)
+  }
+  return cold
 }
 
 export function staleSleepers(deps: {
   db: Db
   runtime: Pick<Runtimes, 'wakesWouldBoot'>
   specs: Pick<RuntimeSpecs, 'desired'>
-  refresh: (serverId: string) => Promise<boolean>
+  /** Starts it in the background where that is allowed: asleep with its memory (`ready`), or without (`cold`). */
+  refresh: (serverId: string, why: 'ready' | 'cold') => Promise<boolean>
 }) {
   const { db, runtime, specs, refresh } = deps
 
@@ -177,13 +232,18 @@ export function staleSleepers(deps: {
     return [...[...specOf].filter(boots), ...keptLong].map(([key]) => key)
   }
 
-  /** Refreshes up to `limit` of them; how many it started. */
+  /** Refreshes up to `limit` of them, the sleeping first, then those stopped where a sleep was meant; how many it started. */
   return async (options: { limit?: number; settledMs?: number; now?: Date } = {}): Promise<number> => {
     const now = options.now ?? new Date()
+    const settledMs = options.settledMs ?? SETTLED_MS
+    const asked = [
+      ...(await stale(now, settledMs)).map((key) => [key, 'ready'] as const),
+      ...(await unslept(db, now, settledMs)).map((id) => [id, 'cold'] as const),
+    ]
     let refreshed = 0
-    for (const key of await stale(now, options.settledMs ?? SETTLED_MS)) {
+    for (const [id, why] of asked) {
       if (refreshed >= (options.limit ?? 3)) break
-      if (await refresh(key)) refreshed++
+      if (await refresh(id, why)) refreshed++
     }
     return refreshed
   }

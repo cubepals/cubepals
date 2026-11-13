@@ -1019,8 +1019,9 @@ Outcomes are written down in `job_health`, the successes of a minute together:
   (`server_vitals`, source `console`), delivers the access changes and player-page actions waiting
   for someone who just joined (§15.1), and says an operator's account notice in game.
 - `stale-sleep`: every 10 minutes. Servers asleep with their memory whose wake would boot, then
-  those whose memory has been kept a day, are refreshed in the background a few a pass, so the
-  player's wake resumes (`app/operations/schedules/stale-sleep.ts`, docs/waking.md).
+  those played lately whose memory has been kept an hour, then those played lately whose sleep
+  was refused and so have none, are refreshed in the background a few a pass, so the player's
+  wake resumes (`app/operations/schedules/stale-sleep.ts`, docs/waking.md).
 - `idle-check`: running servers with no players for longer than `entitlements.idleShutdownAfterMinutes` → `stop{idle}`.
   While running room is tight, a free server's idle time is shorter (`CAPACITY_TUNING`); a paid one's never is.
 - `creates-room`: closes creates by themselves when there is no room, and reopens them once there is.
