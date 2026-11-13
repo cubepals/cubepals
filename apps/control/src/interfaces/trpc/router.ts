@@ -69,6 +69,7 @@ import {
   SetCopyableInput,
   SetLadderInput,
   SetModerationInput,
+  SetPerformanceModsInput,
   SetPublicInput,
   SetStopCheatersInput,
   SetTimeZoneInput,
@@ -224,6 +225,11 @@ const servers = router({
       version: input.version,
       when: input.when,
     })
+    return ctx.services.queries.get(ctx.actor, input.serverId)
+  }),
+  /** Whether a Fabric server starts with the performance mods Cubepals adds; it restarts nothing. */
+  setPerformanceMods: authedProcedure.input(SetPerformanceModsInput).mutation(async ({ ctx, input }) => {
+    await ctx.services.servers.performanceMods.set(ctx.actor, input.serverId, input.on)
     return ctx.services.queries.get(ctx.actor, input.serverId)
   }),
   /** What a new game version or server type does to the mods, before choosing it. */

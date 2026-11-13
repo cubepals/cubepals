@@ -401,6 +401,24 @@ export interface BedrockView {
 }
 
 /**
+ * Whether a Fabric server starts with the performance mods Cubepals adds. It makes no revision and
+ * restarts nothing, so it carries no version and no restart choice: it applies at the next start.
+ */
+export const SetPerformanceModsInput = z.object({ serverId: ServerId, on: z.boolean() })
+
+/**
+ * The performance mods Cubepals adds to a Fabric server as it starts: whether its next start has
+ * them (`on`), and who turned them off: its `owner`, or Cubepals after a start that failed with
+ * them and came up without (`clash`). `mods` names the ones a start places, or would if they were
+ * turned on: fewer where the owner runs one as their own mod, or none is out for its Minecraft.
+ */
+export interface PerformanceModsView {
+  on: boolean
+  turnedOff: 'owner' | 'clash' | null
+  mods: string[]
+}
+
+/**
  * Which players' games join a server, as its settings say it: from `oldest`, the oldest release
  * whose players join, to the one it runs, and any newer one where `newer`. `otherVersions` is the
  * choice behind it, on a server that has one (Paper); null on any other.
@@ -599,6 +617,8 @@ export interface ServerView {
   settings: ServerSettingsView
   /** Bedrock players: on or off on Paper or plain Minecraft, no pack; null on others; false if none. */
   bedrock: BedrockView | null | false
+  /** The performance mods Cubepals adds, on Fabric with no pack; null on any other server. */
+  performanceMods: PerformanceModsView | null
   partySize: PartySize
   /** Stopped with changes that apply when it next starts. */
   pendingRestart: boolean

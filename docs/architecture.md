@@ -2571,6 +2571,21 @@ came from (`domain/setup/setup.ts`). Every server begins as one, turned into its
   The settings page says who joins in one line ("Players on Minecraft 1.9 to 26.2 and newer can
   join") with the switch, and a second one for 1.8 and 1.7; turned off, the step takes the jars
   away at the next boot.
+- **Performance mods.** Every Fabric server playing no pack starts with Lithium (LGPL-3.0-only,
+  Modrinth `gvQqBUqZ`), FerriteCore (MIT, `uXXizFIs`) and Krypton (LGPL-3.0-only, `fQEb0iXm`):
+  they make the game cheaper to run and ask nothing of a player's game
+  (`app/compat/performance.ts`). They ride the same layer as the Via plugins: pinned per release
+  (`compat_plugins`, `compat-pins`), placed in `mods/` by Cubepals' own start step under its own
+  names, in no revision, counted by no plan rule, never in the mod list, arriving at a boot and
+  never through drift, and part of what a machine asleep may wake on (`resumesOn`), so a sleeping
+  Fabric server boots once in the background to have them. One the owner runs as their own mod is
+  theirs and isn't placed again; a pack gets none, being tested as it is. Whether a server runs
+  them is kept beside it (`server_performance_off`, a row where they are off): its owner's switch
+  on the settings page turns them off at the next start, and so does a start that failed with
+  them. Such a start is put in place again without them and tried once more (`boot.ts`,
+  `own_mods_off` on its record): one that comes up stays without them and its settings page says
+  why; one that fails the same has them back, since they were not why. Measured on a Fabric 26.3
+  server with eleven mods, a boot took the same with and without them.
 - **Stop cheaters.** The same layer carries Grim (GPL-3.0-or-later, Modrinth `LJNGWSvH`), the
   anticheat behind the Players page's Stop cheaters switch (`app/stop-cheaters/`): pinned per
   release with the Via plugins (`compat_plugins`, `compat-pins`), placed at a boot by Cubepals' own

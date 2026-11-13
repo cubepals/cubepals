@@ -1,0 +1,214 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
+/**
+ * The performance mods Cubepals adds to every Fabric server: placed as it starts, never among its
+ * owner's mods, taken away where they are turned off, and never why a server won't start.
+ */
+
+import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test'
+import { randomUUID } from 'node:crypto'
+import { existsSync, readdirSync } from 'node:fs'
+import { schema } from '@blockly/db'
+import { and, desc, eq } from 'drizzle-orm'
+import { FERRITECORE, KRYPTON, LITHIUM } from '../../minecraft/mods.ts'
+import { offeredVersions } from '../../minecraft/versions.ts'
+import { Cdn } from '../../testing/cdn.ts'
+import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
+import { loadRevision } from '../servers/persistence.ts'
+import { performanceFor, performanceOff, setPerformance } from './performance.ts'
+
+let h: Harness
+const cdn = new Cdn()
+const operations = schema.serverOperations
+
+/** One of the mods on the catalog, under its real project id, for every release Cubepals offers. */
+const published = (projectId: string, name: string) =>
+  h.catalog.publish(
+    {
+      projectId,
+      slug: projectId,
+      name,
+      summary: '',
+      iconUrl: null,
+      environments: ['server_only'],
+      downloads: 1,
+    },
+    [
+      {
+        versionId: `${projectId}-1`,
+        projectId,
+        versionLabel: '1.0',
+        channel: 'release',
+        state: 'listed',
+        environment: 'server_only',
+        loaders: ['fabric'],
+        gameVersions: offeredVersions().map((offered) => offered.id),
+        publishedAt: new Date(Date.UTC(2026, 0, 1)),
+        file: cdn.file(`${projectId}-1`),
+        dependencies: [],
+      },
+    ],
+  )
+
+beforeAll(async () => {
+  if (!hasDatabase) return
+  await cdn.start()
+  h = await startHarness()
+  published(LITHIUM, 'Lithium')
+  published(FERRITECORE, 'FerriteCore')
+  published(KRYPTON, 'Krypton')
+  await h.app.setups.compat.refresh()
+}, 30_000)
+
+afterEach(() => {
+  if (hasDatabase) h.minecraft.breakOn(() => null)
+})
+
+afterAll(async () => {
+  if (!hasDatabase) return
+  await h.close()
+  cdn.close()
+})
+
+const OWN = /^mods\/cubepals-/
+
+/** What Cubepals' own step places on a server's start, by path, from the spec it boots. */
+const placed = async (id: string) => {
+  const { spec } = await h.app.specs.desired(h.db, await h.server(id))
+  return (spec.env.BLOCKLY_JARS ?? '')
+    .split('\n')
+    .filter(Boolean)
+    .map((line) => line.split(' ')[0] ?? '')
+}
+
+/** Cubepals' own jars in the server's mods folder on its disk. */
+const onDisk = (id: string) => {
+  const dir = `${h.runtime.machine(id)?.dir ?? ''}/mods`
+  return (existsSync(dir) ? readdirSync(dir) : []).filter((file) => file.startsWith('cubepals-'))
+}
+
+/** A Fabric server with no mods of its owner's, running. */
+const fabric = async (name: string) => {
+  const owner = await h.user(name, 'plus')
+  const server = await h.create(owner, { loader: 'fabric' })
+  await h.until(server.id, 'running')
+  await h.settled(server.id)
+  return { owner, id: server.id }
+}
+
+/** The steps the server's newest operation of a kind went through. */
+const stepsOf = async (id: string, kind: 'start' | 'restart') => {
+  const [row] = await h.db
+    .select({ steps: operations.steps, status: operations.status })
+    .from(operations)
+    .where(and(eq(operations.serverId, id), eq(operations.kind, kind)))
+    .orderBy(desc(operations.createdAt))
+    .limit(1)
+  return { steps: (row?.steps ?? []).map((entry) => entry.step), status: row?.status }
+}
+
+const restart = async (owner: Awaited<ReturnType<typeof fabric>>['owner'], id: string) => {
+  await h.app.servers.restart(owner, id, randomUUID())
+  await h.settled(id)
+}
+
+describe.skipIf(!hasDatabase)('the performance mods every Fabric server starts with', () => {
+  test('a Fabric server gets all three, which are not its owner’s mods', async () => {
+    const { owner, id } = await fabric('Ash')
+    const server = await h.server(id)
+    const revision = await loadRevision(h.db, server.desiredRevisionId)
+    expect(revision.loader).toBe('fabric')
+    expect(revision.mods).toEqual([])
+    const own = (await placed(id)).filter((path) => OWN.test(path))
+    expect(own).toHaveLength(3)
+    for (const projectId of [LITHIUM, FERRITECORE, KRYPTON])
+      expect(own.some((path) => path.includes(projectId))).toBe(true)
+    // On the server's disk, placed as it started, and nowhere in what its owner chose.
+    expect(onDisk(id)).toHaveLength(3)
+    expect((await h.app.specs.desired(h.db, server)).spec.env.MODS ?? '').toBe('')
+    expect((await h.app.accountQueries.overview(owner)).plan.key).toBe('plus')
+  }, 60_000)
+
+  test('a Paper server gets none', async () => {
+    const owner = await h.user('Birch')
+    const server = await h.create(owner, { from: { kind: 'template', key: 'smooth' } })
+    await h.until(server.id, 'running')
+    await h.settled(server.id)
+    expect((await placed(server.id)).filter((path) => OWN.test(path))).toEqual([])
+    const revision = await loadRevision(h.db, (await h.server(server.id)).desiredRevisionId)
+    expect(await performanceFor(h.db, server.id, revision)).toEqual([])
+  }, 60_000)
+
+  test('one its owner runs already is theirs, and isn’t added twice; a pack gets none', async () => {
+    const { id } = await fabric('Cedar')
+    const revision = await loadRevision(h.db, (await h.server(id)).desiredRevisionId)
+    const all = await performanceFor(h.db, id, revision)
+    const lithium = all.find((mod) => mod.name === 'Lithium')
+    if (lithium === undefined) throw new Error('Lithium was not pinned')
+    const { dir: _dir, ...theirs } = lithium
+    const beside = await performanceFor(h.db, id, { ...revision, mods: [theirs] })
+    expect(beside.map((mod) => mod.name).sort()).toEqual(['FerriteCore', 'Krypton'])
+    // The same mod from an upload, known only by its name.
+    const uploaded = { ...theirs, name: 'lithium', source: { catalog: 'upload' } as never }
+    const besideUpload = await performanceFor(h.db, id, { ...revision, mods: [uploaded] })
+    expect(besideUpload.map((mod) => mod.name).sort()).toEqual(['FerriteCore', 'Krypton'])
+    // A pack is tested as it is.
+    const pack = { ...revision, modpack: {} as never }
+    expect(await performanceFor(h.db, id, pack)).toEqual([])
+  }, 60_000)
+
+  test('turned off, the next start takes them away, and turned on, puts them back', async () => {
+    const { owner, id } = await fabric('Dune')
+    expect(onDisk(id)).toHaveLength(3)
+    await setPerformance(h.db, id, false)
+    expect(await performanceOff(h.db, id)).toBe('owner')
+    expect((await placed(id)).filter((path) => OWN.test(path))).toEqual([])
+    // Nothing restarts for it: they go at its next start.
+    expect(onDisk(id)).toHaveLength(3)
+    await restart(owner, id)
+    expect(onDisk(id)).toEqual([])
+    await setPerformance(h.db, id, true)
+    expect(await performanceOff(h.db, id)).toBeNull()
+    await restart(owner, id)
+    expect(onDisk(id)).toHaveLength(3)
+  }, 90_000)
+})
+
+describe.skipIf(!hasDatabase)('a start that fails with Cubepals’ own mods', () => {
+  test('comes up without them, which are then off for the server, and its record says so', async () => {
+    const { owner, id } = await fabric('Elm')
+    h.minecraft.breakOn((env) => (OWN.test(env.BLOCKLY_JARS ?? '') ? 'one of them clashed with a mod' : null))
+    await restart(owner, id)
+    expect((await h.server(id)).lifecycle.status).toBe('running')
+    expect(await performanceOff(h.db, id)).toBe('clash')
+    expect(onDisk(id)).toEqual([])
+    const last = await stepsOf(id, 'restart')
+    expect(last.status).toBe('succeeded')
+    expect(last.steps).toContain('own_mods_off')
+    // And it stays so: the next start places none, until its owner turns them back on.
+    h.minecraft.breakOn(() => null)
+    await restart(owner, id)
+    expect(onDisk(id)).toEqual([])
+  }, 120_000)
+
+  test('that fails without them too has them back: they were not why', async () => {
+    const { owner, id } = await fabric('Fir')
+    h.minecraft.breakOn(() => 'its world would not open')
+    await restart(owner, id)
+    expect((await stepsOf(id, 'restart')).status).toBe('failed')
+    expect((await stepsOf(id, 'restart')).steps).not.toContain('own_mods_off')
+    expect(await performanceOff(h.db, id)).toBeNull()
+  }, 120_000)
+
+  test('a server its owner turned them off for is started as it is', async () => {
+    const { owner, id } = await fabric('Gorse')
+    await setPerformance(h.db, id, false)
+    await restart(owner, id)
+    h.minecraft.breakOn(() => 'its world would not open')
+    await restart(owner, id)
+    expect((await stepsOf(id, 'restart')).status).toBe('failed')
+    expect(await performanceOff(h.db, id)).toBe('owner')
+  }, 120_000)
+})

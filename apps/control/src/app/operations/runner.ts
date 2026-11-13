@@ -51,6 +51,8 @@ export type OperationStep =
  * `memory_lost` where its last sleep kept its memory and the provider stopped it since), how a
  * sleep went (`SleepMark`), when a boot let its players in (`let_in`, `boot.ts`), and when a
  * restore's snapshot of the world it replaces was kept, as the backup came meanwhile (`saved`).
+ * `own_mods_off`: the start failed with Cubepals' own performance mods and came up without them,
+ * which are now off for the server (`boot.ts`).
  */
 type OperationMark =
   | 'resume_observing'
@@ -63,6 +65,7 @@ type OperationMark =
   | 'memory_lost'
   | 'let_in'
   | 'saved'
+  | 'own_mods_off'
   | RuntimeMark
   | SleepMark
   | ChangedMark

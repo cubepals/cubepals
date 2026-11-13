@@ -17,6 +17,9 @@
  * Grim, which Stop cheaters runs, is pinned and placed the same way (`grimFor`), wherever the
  * server's Stop cheaters is on (`app/stop-cheaters/`), on plain Minecraft run on Paper too.
  *
+ * The performance mods a Fabric server starts with are pinned by the same job and kept in the same
+ * table; which server gets them is `performance.ts`'s.
+ *
  * Each release's jars are pinned once from the catalog (`refresh`, a scheduled job), so every
  * server on it starts with the same ones, and a start never waits on the catalog. A release with
  * none pinned yet starts without them. A sleeping server's wake boots once where it slept without
@@ -36,7 +39,7 @@ import {
 } from '../../domain/revision/revision.ts'
 import { bedrockAvailable, bedrockPlugins, FLOODGATE } from '../../minecraft/bedrock.ts'
 import { joinsOf } from '../../minecraft/clients.ts'
-import { COMPAT, runsPlugin, VIABACKWARDS, VIAREWIND, VIAVERSION } from '../../minecraft/mods.ts'
+import { COMPAT, PERFORMANCE, runsPlugin, VIABACKWARDS, VIAREWIND, VIAVERSION } from '../../minecraft/mods.ts'
 import { GRIM, runsOwnGrim } from '../../minecraft/stop-cheaters.ts'
 import { offeredVersions, supports } from '../../minecraft/versions.ts'
 import type { ModService } from '../mods/service.ts'
@@ -108,7 +111,32 @@ export class CompatPlugins {
       }
       if (via || grim?.kind === 'ok' || floodgate !== null) pinned++
     }
+    await this.#pinPerformance()
     return pinned
+  }
+
+  /**
+   * The performance mods a Fabric server starts with (`performance.ts`), pinned again for each
+   * release Cubepals offers Fabric on and each one a Fabric server runs: each mod by itself, so a
+   * release one of them has no build for still gets the others.
+   */
+  async #pinPerformance(): Promise<void> {
+    const running = await this.#db
+      .selectDistinct({ gameVersion: revisions.gameVersion })
+      .from(revisions)
+      .innerJoin(servers, eq(servers.desiredRevisionId, revisions.id))
+      .where(and(eq(revisions.loader, 'fabric'), isNull(servers.deletedAt)))
+    const offered = offeredVersions()
+      .map((version) => version.id)
+      .filter((id) => supports(id, 'fabric'))
+    for (const gameVersion of new Set([...offered, ...running.map((row) => row.gameVersion)])) {
+      for (const projectId of PERFORMANCE) {
+        const plan = await this.#mods
+          .resolveNew({ gameVersion, loader: 'fabric' }, [{ projectId }])
+          .catch(() => null)
+        if (plan?.kind === 'ok') await this.#pin(gameVersion, plan.mods, [projectId])
+      }
+    }
   }
 
   /** Floodgate's newest Paper jar as a pinned plugin; null where GeyserMC can't be asked or lists none. */

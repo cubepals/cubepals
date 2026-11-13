@@ -586,6 +586,22 @@ export function withoutOwnSteps(entrypoint: readonly string[] | undefined): read
   return entrypoint?.[2]?.endsWith(EXEC_IMAGE) === true ? undefined : entrypoint
 }
 
+/**
+ * Whether Cubepals' own step places mods of Cubepals' on a server of `revision`: on Fabric with
+ * no pack, the performance mods it adds (`app/compat/performance.ts`). Told which it starts
+ * with, such a server runs the step even with none, so the ones an earlier start placed go when
+ * they are turned off.
+ */
+const placesOwnMods = (revision: Pick<ServerRevision, 'loader' | 'modpack'>): boolean =>
+  revision.loader === 'fabric' && revision.modpack === null
+
+/** What Cubepals' own step is given to place on a server of `revision`; undefined where it places none of Cubepals'. */
+const placedOn = (
+  revision: Pick<ServerRevision, 'loader' | 'modpack'>,
+  viaPlaced: boolean,
+  compat: RuntimeSpecInput['compat'],
+): RuntimeSpecInput['compat'] => (viaPlaced || placesOwnMods(revision) ? compat : undefined)
+
 export function toRuntimeSpec(input: RuntimeSpecInput): RuntimeSpec {
   const { revision, world, memoryTier } = input
   // What Cubepals' own step places: the revision's files and placed jars, the Via plugins and Grim.
@@ -594,7 +610,7 @@ export function toRuntimeSpec(input: RuntimeSpecInput): RuntimeSpec {
   const placing = { ...revision, mods: [...revision.mods, ...(input.compat ?? [])] }
   // Paper, or plain Minecraft run on Paper, with no pack: the servers that read a PROXY header.
   const viaPlaced = input.compat !== undefined && usesProxyProtocol(revision)
-  const placedHere = viaPlaced ? input.compat : undefined
+  const placedHere = placedOn(revision, viaPlaced, input.compat)
   const bedrock = bedrockSpec(placedHere, input.floodgateKey)
   const totalMb = memoryMb(memoryTier)
   const onPaper = runsOnPaper(revision)
@@ -608,7 +624,7 @@ export function toRuntimeSpec(input: RuntimeSpecInput): RuntimeSpec {
     starter: startsOnOf(world) !== null,
     icon: input.iconUrl !== null,
     pack: pack !== null,
-    carried: viaPlaced || placesFiles(placing),
+    carried: placedHere !== undefined || placesFiles(placing),
     stopCheaters: viaPlaced,
     bedrock: viaPlaced,
     jars: pack === null ? (jarsOf(revision.loader)?.env ?? null) : null,

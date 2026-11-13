@@ -52,6 +52,7 @@ import { loadControls, loadStanding } from '../accounts/persistence.ts'
 import { playTotal, totalView } from '../accounts/play-total.ts'
 import { type Actor, authorize } from '../actor.ts'
 import { loadBackup } from '../backups/persistence.ts'
+import { performanceModsView } from '../compat/performance-view.ts'
 import type { PackCuration } from '../curation/service.ts'
 import { type Shown, shownOf } from '../edge/routed.ts'
 import { cameByView } from '../edge/turned-away.ts'
@@ -664,6 +665,7 @@ export class ServerQueries {
       notLoaded: [...server.notLoaded],
       gameVersion: revision.gameVersion,
       ...(await this.#setups.compat.joins(this.#db, revision, { running, applied })),
+      performanceMods: await performanceModsView(this.#db, server.id, revision),
       loader: revision.loader,
       loaderVersion: revision.loaderVersion,
       maxPlayers: revision.settings.maxPlayers,

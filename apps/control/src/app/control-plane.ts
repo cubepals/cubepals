@@ -17,6 +17,8 @@ import { BackupService } from './backups/service.ts'
 import { BillingService } from './billing/service.ts'
 import type { DeploymentCapabilities } from './capabilities.ts'
 import { CatalogSync } from './catalog/sync.ts'
+import { performanceFor, setPerformance } from './compat/performance.ts'
+import { PerformanceSwitch } from './compat/performance-switch.ts'
 import { ConsoleFeed } from './console/feed.ts'
 import { ConsoleService } from './console/service.ts'
 import type { OwnPack } from './curation/own.ts'
@@ -310,6 +312,11 @@ export function composeControlPlane(ports: ControlPlanePorts, settings: ControlP
     console: ports.console,
     rconPasswords: (serverId) => specs.rconPasswords(serverId),
     notLoaded: (serverId, names) => markNotLoaded(db, serverId, names),
+    ownMods: {
+      placed: async (serverId, revision) => (await performanceFor(db, serverId, revision)).length > 0,
+      turnOff: (serverId) => setPerformance(db, serverId, false, 'clash'),
+      turnOn: (serverId) => setPerformance(db, serverId, true),
+    },
   })
   const runner = new OperationRunner(
     { db, transitions, events },
@@ -444,7 +451,14 @@ function withHealthRecords<Parts extends object>(
 
 export type ControlPlane = ReturnType<typeof composeControlPlane>
 
-/** A server's own choices about its players, beside its service: its idle kick, and telling players. */
+/**
+ * A server's own choices that restart nothing, beside its service: its idle kick, telling players,
+ * and the performance mods Cubepals adds.
+ */
 function serverChoices(db: Db, events: EventBus) {
-  return { afkKick: new AfkKick(db, events), tellPlayers: new TellPlayers(db, events) }
+  return {
+    afkKick: new AfkKick(db, events),
+    tellPlayers: new TellPlayers(db, events),
+    performanceMods: new PerformanceSwitch(db, events),
+  }
 }
