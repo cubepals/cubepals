@@ -60,15 +60,22 @@ function operationLine(op: OperationStepsView): Line {
 
 /**
  * How far a join got: into the world, how long that took, or where it stopped. Only a server's
- * reporter tells of a login, so a join handed to a server without one says how much came back
- * through the edge instead, which is all that was seen of it.
+ * reporter tells of a login and times the way in. A server without one has its player list read
+ * once a minute: a player on it was in the world by that reading, which says nothing of how long
+ * the join took, and one not on it a minute or more after being handed over wasn't yet. A join no
+ * reading caught says how much came back through the edge, which is all that was seen of it.
  */
 function reachedOf(join: JoinView): string {
   if (join.inWorldAt !== null) return `in the world in ${secondsBetween(join.connectedAt, join.inWorldAt)}s`
+  const listedAt = join.listedAt ?? null
+  if (listedAt !== null) return `in the world, on its player list by ${clock(listedAt)}`
   if (join.loginAt !== null) return 'logged in, never in the world'
   if (join.handedAt === null) return 'not handed to the server'
   if (join.serverSide === 'reported') return 'never logged in'
   const back = join.bytesDown === null ? '' : `, ${join.bytesDown} bytes back`
+  const notListedAt = join.notListedAt ?? null
+  if (notListedAt !== null)
+    return `handed to the server, not on its player list at ${clock(notListedAt)}${back}`
   return `handed to the server, which reports no login${back}`
 }
 

@@ -7,6 +7,7 @@
  * (`app/joins/`); the signals raised on them; and the last word each server's reporter gave as it
  * booted. Joins and signals are kept 35 days, and a join's `source` an hour at most.
  */
+import type { ServerSide } from '@blockly/contracts/join-records'
 import { sql } from 'drizzle-orm'
 import { bigint, bigserial, index, integer, jsonb, pgTable, text, uuid } from 'drizzle-orm/pg-core'
 import { ts } from './columns.ts'
@@ -56,8 +57,16 @@ export const joins = pgTable(
     bytesDown: bigint('bytes_down', { mode: 'number' }),
     /** How the server ticked as the player came in. */
     tick: jsonb('tick').$type<{ tps: number; mspt: number; online: number }>(),
-    /** Whether the server's reporter told its half: `not_reported` until it does. */
-    serverSide: text('server_side').$type<'not_reported' | 'reported'>().notNull().default('not_reported'),
+    /**
+     * Who on the server's side told of it: `not_reported` until its player list showed the player
+     * (`console`) or its reporter told a step (`reported`), which stands over the list's word.
+     */
+    serverSide: text('server_side').$type<ServerSide>().notNull().default('not_reported'),
+    /**
+     * What the edge kept of the connection (`session`, how it ended), `edge: 'missing'` on a row
+     * only the server told of, and what the server's player list said of the player
+     * (`listedAt`, `notListedAt`: `app/joins/player-list.ts`).
+     */
     detail: jsonb('detail').$type<Record<string, unknown>>().notNull().default({}),
   },
   (t) => [

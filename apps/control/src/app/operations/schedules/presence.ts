@@ -5,7 +5,8 @@
 /**
  * Records who is online on each running server, read from the server's own console, and delivers
  * an access change, or what the owner asked for on a player's page, waiting for someone who has
- * just joined. A console that stops or starts answering again also marks or clears a lost host.
+ * just joined. The same reading tells each open join whether its player was on the list
+ * (`joins/player-list.ts`). A console that stops or starts answering again also marks or clears a lost host.
  * On the same connection it reads how a server ticks (`tick query`) where the reporter plugin
  * doesn't sample it, which `vitals/console-samples.ts` keeps, and says an operator's notice on its
  * owner to the players on it (`notice-said.ts`). Stopping a server nobody is on is `idle.ts`'s;
@@ -25,6 +26,7 @@ import { PORT_NAMES } from '../../../minecraft/runtime-spec.ts'
 import { readAccess } from '../../access/persistence.ts'
 import { noticesOf } from '../../accounts/notice.ts'
 import { playersSeen } from '../../insight/record.ts'
+import { type ListReading, noteListed } from '../../joins/player-list.ts'
 import type { PlayerService } from '../../players/service.ts'
 import type { EventBus } from '../../ports/events.ts'
 import type { ConsoleTarget, ServerConsole } from '../../ports/minecraft.ts'
@@ -51,6 +53,16 @@ async function readConsole(
   if (!ticks) return { output: await console.run(target, LIST_UUIDS).catch(() => null), tick: null }
   const [list, tick] = await console.runAll(target, [LIST_UUIDS, TICK_QUERY]).catch(() => [])
   return { output: list?.ok ? list.output : null, tick: tick?.ok ? parseTickQuery(tick.output) : null }
+}
+
+/**
+ * Tells the joins what the list just read said of their players (`joins/player-list.ts`). It is a
+ * record for operators, so a failure to keep it is only logged, and the pass goes on.
+ */
+async function tellJoins(db: Db, serverId: string, reading: ListReading): Promise<void> {
+  await noteListed(db, serverId, reading, new Date()).catch((error: unknown) =>
+    console.warn('listed joins', serverId, error instanceof Error ? error.message : error),
+  )
 }
 
 /** Keeps a console's tick reading, if it gave one; a failure to keep it is only logged. */
@@ -152,6 +164,7 @@ export function readingPresence(deps: {
             idempotencyKey: `access_join:${Math.floor(now.getTime() / MINUTE_MS)}`,
           })
       })
+      await tellJoins(db, server.id, reading)
       await deliverWaiting(server, handle, reading.players)
       const notice = notices.get(server.ownerId)
       await sayNotice({ db, console: deps.console }, { id: server.id, target }, notice, reading.players)

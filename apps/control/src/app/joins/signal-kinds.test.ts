@@ -158,6 +158,59 @@ describe('signals judged from joins', () => {
   })
 })
 
+describe('a join its server’s player list told of', () => {
+  test('no figure is measured by the moment a server’s player list showed the player', () => {
+    // Every kind that times a join or a stay, with limits any join would cross.
+    const config: SignalsConfig = {
+      slowJoin: { loginToWorldS: 1, connectToWorldS: { stopped: 1, memory: 1, atRest: 1 } },
+      leftWhileLoading: {},
+      shortStay: { underS: 3600 },
+      kickedEarly: { withinS: 3600 },
+    }
+    const listedAt = at(300).toISOString()
+    const joins = [
+      // Seen on the list long after it connected, and still on.
+      row('listed', { serverSide: 'console', detail: { listedAt }, wake: 'stopped' }),
+      // Seen, then gone moments after the reading, of their own accord and by a kick.
+      row('left', {
+        serverSide: 'console',
+        detail: { listedAt },
+        leftAt: at(299),
+        leftReason: 'disconnected',
+      }),
+      row('kicked', { serverSide: 'console', detail: { listedAt }, leftAt: at(299), leftReason: 'kicked' }),
+      // Not on the list a minute after it was handed over, then gone.
+      row('missed', { detail: { notListedAt: listedAt }, leftAt: at(200) }),
+    ]
+    expect(raised(config, joins)).toEqual([])
+    // The reporter told of the login and of no world, and the list showed the player in it: not
+    // one that left while loading. Without the list's word it is.
+    const told = { serverSide: 'reported', loginAt: at(590), leftAt: at(100) }
+    expect(raised({ leftWhileLoading: {} }, [row('seen', { ...told, detail: { listedAt } })])).toEqual([])
+    expect(raised({ leftWhileLoading: {} }, [row('unseen', told)]).map((r) => r.key)).toEqual([
+      'left_while_loading:unseen',
+    ])
+    // Nor one still waiting for the world, its wait growing past any limit.
+    const waiting = { serverSide: 'reported', loginAt: at(590) }
+    expect(
+      raised({ slowJoin: { loginToWorldS: 10 } }, [row('in', { ...waiting, detail: { listedAt } })]),
+    ).toEqual([])
+    expect(raised({ slowJoin: { loginToWorldS: 10 } }, [row('out', waiting)]).map((r) => r.key)).toEqual([
+      'slow_join:out:login',
+    ])
+    // Where the reporter told its own time too, that is the one measured, whatever the list's.
+    const both = row('both', {
+      serverSide: 'reported',
+      loginAt: at(100),
+      inWorldAt: at(80),
+      detail: { listedAt },
+    })
+    expect(raised({ slowJoin: { loginToWorldS: 10 } }, [both])).toEqual([
+      { key: 'slow_join:both:login', detail: expect.objectContaining({ figure: 20, limit: 10 }) },
+    ])
+  })
+})
+
 describe('a player cut off between them and the edge', () => {
   test('dropped: silent while the edge still sent, or reset; not a quit, nor a full way to the server', () => {
     const config: SignalsConfig = { dropped: { quietS: 5 } }

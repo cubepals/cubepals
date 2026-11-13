@@ -5,9 +5,9 @@
 /**
  * Everything the control plane knows about why one account is having a bad time, put together
  * in one answer for an operator or an agent: who it is, its servers, the operations on them that
- * failed or ran slowest, joins that never reached the world, the signals raised on its servers,
- * an operator's notice on it, how its Paper servers ticked, and what ran slow or failed for it, grouped and newest. It reads;
- * it changes nothing.
+ * failed or ran slowest, joins known not to have reached the world (`joins/reached.ts`), the
+ * signals raised on its servers, an operator's notice on it, how its Paper servers ticked, and
+ * what ran slow or failed for it, grouped and newest. It reads; it changes nothing.
  *
  * Not for the account's standing, plan or limits in full, which `GET /ops/v1/accounts/<account>`
  * gives, or for one join's story (`join_get`).

@@ -74,16 +74,49 @@ A join's row says how far it got, each step by whoever saw it (`ops.ts join <id>
   boot. Its rows read `server_side = 'reported'`.
 
 A vanilla, Fabric, Forge or NeoForge server, a modpack, and a Paper server without the plugin
-report nothing: `server_side` stays `not_reported`, and `login_at` and `in_world_at` stay null on a
-join that got in as on one the game refused. What the edge relayed is all that was seen of such a
-join: `bytes_down`, how long it lasted (`handed_at` to `left_at`), and which side closed first
-(`detail.session`, below). A login the game refused ends within seconds, closed by the server,
-with little sent back; a join that got in is sent its world. The edge can't read which: a server
-that checks accounts has the client encrypt the connection before the login ends, and what follows
-is unreadable to it. Where the game refused a join for a ban or its whitelist, the row says so from
-the server's lists (`refused:banned`, `refused:whitelist`, `app/joins/refusals.ts`).
-`ops.ts timeline` prints such a join as handed to a server that reports no login, with the bytes
-that came back.
+report nothing: `login_at` and `in_world_at` stay null on a join that got in as on one the game
+refused. Such a server has a second, coarser witness, its own player list, which the control plane
+reads over its console once a minute (`presence-sync`, `app/joins/player-list.ts`):
+
+- **Its player was on the list**: `detail.listedAt` is when the list first showed them, and
+  `server_side` reads `console`. The join got in. The moment is the reading's, up to a minute
+  after the player came in, so it says nothing of how long the join took: `slow_join` and every
+  other figure are measured by the reporter's own times and never by this one. Of two joins of
+  one player still open, a retry seconds after a failed try, the one handed over last is marked.
+- **Its player wasn't on it a minute or more after the join was handed over**:
+  `detail.notListedAt` is that reading. Once the join has ended it stopped short: it never
+  reached the world, or was in it for less than a minute. No join is marked so while a Bedrock
+  player nobody could tie to a join is on, since Floodgate lists them under a name of its own,
+  nor by a list that counted a player it didn't name.
+- **Neither**: nobody could tell. The join ended before a reading a minute after it was handed
+  over, or the list couldn't be read. It is called neither in the world nor stopped short. What
+  the edge relayed is all that was seen of it: `bytes_down`, how long it lasted (`handed_at` to
+  `left_at`), and which side closed first (`detail.session`, below). A login the game refused
+  ends within seconds, closed by the server, with little sent back; a join that got in is sent
+  its world.
+
+The edge tells of a join's end two minutes after it, so a join is open on its row for a while
+after it ended. A mark the list made in that while is taken back once `left_at` is known. Where
+the reporter told of a join too, its row reads `reported`, `in_world_at` is the reporter's own
+time, and `detail.listedAt` stays beside it as what the list saw.
+
+The edge can't read which way a login went: a server that checks accounts has the client encrypt
+the connection before the login ends, and what follows is unreadable to it. Where the game refused
+a join for a ban or its whitelist, the row says so from the server's lists (`refused:banned`,
+`refused:whitelist`, `app/joins/refusals.ts`), unless its player list showed the player in the
+world. `ops.ts timeline` prints a join the list showed as in the world, on its player list by that
+reading; one it didn't show as handed to the server and not on its player list; and one nobody
+could tell of as handed to a server that reports no login, with the bytes that came back.
+
+**Joins that stopped short** (`ops.ts diagnose`, `account_diagnose`) are the joins known not to
+have got in (`stoppedShort` in `app/joins/reached.ts`): turned away (`refused:*`); never handed to
+a server; and handed over without reaching the world by the word of whoever could tell. On a
+server with a reporter that is every join with no `in_world_at` its player list didn't show
+either, since the reporter tells of every login. On a server without one it is a join that ended
+with its player list not having shown the player, as above. A server
+is read as having a reporter when it told of its boot (`server_reports`) and its newest
+`server_vitals` sample isn't the console's: a server that left Paper keeps its old boot report,
+and its ticks are read over its console from then on.
 
 ## How a session ended
 

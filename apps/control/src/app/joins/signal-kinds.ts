@@ -14,6 +14,7 @@
  */
 import { MINUTE_MS, SECOND_MS } from '@blockly/contracts/durations'
 import type { SignalKind, SignalsConfig } from '@blockly/contracts/join-records'
+import { listSaid } from './reached.ts'
 
 /** A join as the signals read it, with its server's name and whether Cubepals runs it. */
 export interface JoinRow {
@@ -36,7 +37,10 @@ export interface JoinRow {
   pingedAfterAt: Date | null
   tick: { tps: number; mspt: number; online: number } | null
   serverSide: string
-  /** What the edge kept of the join; `session` is how it ended (`apps/edge/session-end.ts`). */
+  /**
+   * What the edge kept of the join; `session` is how it ended (`apps/edge/session-end.ts`). And
+   * what its server's player list said of it (`reached.ts`), which no figure here is measured by.
+   */
   detail: Record<string, unknown>
   /** How the wake it asked for found the server, where it asked for one. */
   wake: 'memory' | 'stopped' | 'atRest' | null
@@ -76,7 +80,9 @@ const raise = (kind: SignalKind, row: JoinRow, which: string, at: Date, extra: R
 
 /**
  * From login to in the world (or to now, while it is still waiting), past its limit; Cubepals' own
- * servers' where set. A join gone before the world is `left_while_loading`'s, not this.
+ * servers' where set. A join gone before the world is `left_while_loading`'s, not this. Both ends
+ * are the reporter's own times: a join only the server's player list showed in the world is no
+ * longer waiting, and the list's moment, a reading late, measures nothing.
  */
 function slowLogin(config: SignalsConfig, rows: readonly JoinRow[], now: Date): Raised[] {
   const slow = config.slowJoin
@@ -84,7 +90,8 @@ function slowLogin(config: SignalsConfig, rows: readonly JoinRow[], now: Date): 
   return rows.flatMap((row) => {
     const limit = row.ours ? (slow.loginToWorldOursS ?? slow.loginToWorldS) : slow.loginToWorldS
     if (limit === undefined || row.loginAt === null) return []
-    if (row.inWorldAt === null && row.leftAt !== null) return []
+    const over = row.leftAt !== null || listSaid(row.detail).listedAt !== null
+    if (row.inWorldAt === null && over) return []
     const figure = seconds(row.loginAt, row.inWorldAt ?? now)
     return figure > limit ? [raise('slow_join', row, 'login', now, { figure, limit })] : []
   })
@@ -102,11 +109,15 @@ function slowConnect(config: SignalsConfig, rows: readonly JoinRow[], now: Date)
   })
 }
 
-/** Handed to the server and gone before the world; or gave up in the waiting room. */
+/**
+ * Handed to the server and gone before the world, by its reporter's word, unless the server's own
+ * player list showed the player in it; or gave up in the waiting room.
+ */
 function leftWhileLoading(config: SignalsConfig, rows: readonly JoinRow[], now: Date): Raised[] {
   if (config.leftWhileLoading === undefined) return []
   return rows.flatMap((row) => {
-    const reported = row.serverSide === 'reported' && row.handedAt !== null && row.inWorldAt === null
+    const inWorld = row.inWorldAt !== null || listSaid(row.detail).listedAt !== null
+    const reported = row.serverSide === 'reported' && row.handedAt !== null && !inWorld
     const gaveUp = row.path === 'held' && row.leftReason === 'gave_up_waiting'
     if (row.leftAt === null || !(reported || gaveUp)) return []
     const figure = seconds(row.connectedAt, row.leftAt)

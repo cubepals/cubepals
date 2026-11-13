@@ -110,6 +110,23 @@ describe('a server’s timeline', () => {
         join({ ...handed, playerName: 'played', serverSide: 'not_reported', bytesDown: 141_043_597 }),
         // The same server, and the game closed the login.
         join({ ...handed, playerName: 'kept-out', serverSide: 'not_reported', bytesDown: 182 }),
+        // The same server, and its player list showed the player: no time says how long it took.
+        join({
+          ...handed,
+          playerName: 'listed',
+          serverSide: 'console',
+          listedAt: '2026-11-07T08:34:02.000Z',
+          leftAt: '2026-11-07T08:50:00.000Z',
+        }),
+        // Still not on that list a minute and more after it was handed over.
+        join({
+          ...handed,
+          playerName: 'stuck',
+          serverSide: 'not_reported',
+          notListedAt: '2026-11-07T08:35:02.000Z',
+          leftAt: '2026-11-07T08:36:00.000Z',
+          bytesDown: 9_000,
+        }),
         // A server whose reporter told of no login.
         join({ ...handed, playerName: 'silent', serverSide: 'reported', bytesDown: 0 }),
         // The edge's router connected it to nothing.
@@ -127,6 +144,10 @@ describe('a server’s timeline', () => {
     const said = (who: string) => lines.find((line) => line.includes(`join   ${who}  `)) ?? ''
     expect(said('played')).toContain('handed to the server, which reports no login, 141043597 bytes back;')
     expect(said('kept-out')).toContain('handed to the server, which reports no login, 182 bytes back;')
+    expect(said('listed')).toContain('in the world, on its player list by 08:34:02; left 08:50:00')
+    expect(said('stuck')).toContain(
+      'handed to the server, not on its player list at 08:35:02, 9000 bytes back;',
+    )
     expect(said('silent')).toContain('never logged in;')
     expect(said('dropped')).toContain('not handed to the server; left 08:33:30 (refused:missing-backend)')
   })

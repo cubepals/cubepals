@@ -13,6 +13,7 @@ import type { JoinDetailView, JoinView, SignalView } from '@blockly/contracts/jo
 import { type Queryable, schema } from '@blockly/db'
 import { and, asc, count, desc, eq, gte, isNull, or, type SQL, sql } from 'drizzle-orm'
 import { normalizeUuid } from '../../minecraft/console.ts'
+import { listSaid, stoppedShort } from './reached.ts'
 
 const { joins, signals, minecraftServers: servers, serverOperations: operations } = schema
 
@@ -29,7 +30,7 @@ export interface JoinFilter {
   /** A whole address, or its first label. */
   address?: string
   since?: Date
-  /** Only joins that never reached the world, or were turned away. */
+  /** Only joins known not to have reached the world, or turned away (`stoppedShort` in `reached.ts`). */
   stoppedShort?: boolean
   limit?: number
 }
@@ -52,7 +53,7 @@ function viewOf(row: typeof joins.$inferSelect, serverName: string | null): Join
     inWorldAt: iso(row.inWorldAt),
     leftAt: iso(row.leftAt),
     pingedAfterAt: iso(row.pingedAfterAt),
-    serverSide: row.serverSide === 'reported' ? 'reported' : 'not_reported',
+    ...listSaid(row.detail),
   }
 }
 
@@ -83,10 +84,7 @@ export async function listJoins(q: Queryable, filter: JoinFilter): Promise<JoinV
     )
   }
   if (filter.since !== undefined) where.push(gte(joins.connectedAt, filter.since))
-  if (filter.stoppedShort)
-    where.push(
-      sql`${joins.kind} = 'join' and (${joins.inWorldAt} is null or ${joins.leftReason} like 'refused:%')`,
-    )
+  if (filter.stoppedShort) where.push(stoppedShort)
   const rows = await q
     .select({ join: joins, serverName: servers.name })
     .from(joins)

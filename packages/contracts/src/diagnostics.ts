@@ -189,7 +189,10 @@ export interface AccountDiagnosisView {
   since: string
   servers: Array<{ id: string; name: string; slug: string; status: string; deleted: boolean }>
   operations: { failed: HealthOperationView[]; slowest: HealthOperationView[] }
-  /** Joins that stopped before the world, or were refused, newest first. */
+  /**
+   * Joins known to have stopped before the world, or refused, newest first. One handed to a server
+   * with no reporter that ended before its player list was read is in neither this nor the world.
+   */
   joins: JoinView[]
   signals: SignalView[]
   diagnostics: { summary: DiagnosticGroupView[]; recent: DiagnosticView[] }

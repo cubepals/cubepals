@@ -7,7 +7,9 @@
  * reaches, and how it reached it, resolved as the edge's routes are; the client's network as a
  * hash keyed to the server, as `known_addresses` keeps it; and every other column only while it is
  * empty, so a later half never overwrites what an earlier one said. `left_at` keeps the earliest,
- * and once it is known, a join the game refused for its whitelist or a ban says so (`refusals.ts`).
+ * and once it is known, what the server's player list said after it is taken back
+ * (`player-list.ts`) and a join the game refused for its whitelist or a ban says so
+ * (`refusals.ts`).
  *
  * Not for the server's half: that is `server-events.ts`.
  */
@@ -23,6 +25,7 @@ import { wakeCompleted } from '../platform/telemetry.ts'
 import type { PlayAddressing } from '../ports/platform.ts'
 import type { SecretKeyring } from '../secrets.ts'
 import { findLiveBySlug } from '../servers/persistence.ts'
+import { settleListed } from './player-list.ts'
 import { noteRefusal } from './refusals.ts'
 import { addressOfSource, sourceOf } from './sources.ts'
 
@@ -134,8 +137,12 @@ export async function recordVisits(
     set.leftAt = sql`least(${joins.leftAt}, excluded.left_at)`
     set.detail = sql`${joins.detail} || excluded.detail`
     await q.insert(joins).values(row).onConflictDoUpdate({ target: joins.id, set })
-    // Its end is known now: where the game turned it away for its own lists, that is why.
-    if (row.leftAt !== null) await noteRefusal(q, row.id)
+    if (row.leftAt !== null) {
+      // Its end is known now: what its server's list said after it wasn't about this join.
+      await settleListed(q, row.id)
+      // And where the game turned it away for its own lists, that is why.
+      await noteRefusal(q, row.id)
+    }
     // The funnel's word of it, once its reason, if any, is known.
     if (row.serverId !== null) await joinTried(q, row.id)
     // Timed once, by the report that first says the server was ready.

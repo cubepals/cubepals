@@ -49,13 +49,26 @@ export function signalLine(signal: SignalView): string {
   return `#${signal.id} ${signal.at.slice(11, 16)} UTC ${parts.join(' · ')}`
 }
 
+/**
+ * How far a join got into the world, for its line: how long it took by the reporter's own times,
+ * or only that the server's player list showed the player, which is read once a minute and so
+ * times nothing.
+ */
+function inWorld(join: JoinView): string {
+  if (join.loginAt !== null && join.inWorldAt !== null)
+    return ` · in the world in ${seconds(join.loginAt, join.inWorldAt)} s`
+  return join.inWorldAt === null && listed(join) !== null ? ' · on the server’s player list' : ''
+}
+
+/** When the server's player list first showed the player; null where it didn't, or wasn't asked. */
+const listed = (join: JoinView): string | null => join.listedAt ?? null
+/** When that list, read a minute or more after the join was handed over, didn't show them. */
+const notListed = (join: JoinView): string | null => join.notListedAt ?? null
+
 /** One join on a line: when, who, where, how, and how it ended. */
 export function joinLine(join: JoinView): string {
   const who = join.playerName ?? (join.kind === 'look' ? 'a server list' : 'someone')
-  const took =
-    join.loginAt !== null && join.inWorldAt !== null
-      ? ` · in the world in ${seconds(join.loginAt, join.inWorldAt)} s`
-      : ''
+  const took = inWorld(join)
   const ended = join.leftReason === null ? '' : ` · ${join.leftReason}`
   return `${join.connectedAt.slice(0, 19).replace('T', ' ')} ${join.id} ${join.serverName ?? join.address} · ${who} via ${join.address} · ${join.path ?? join.kind}${took}${ended}`
 }
@@ -83,6 +96,10 @@ function timeline(view: JoinDetailView): { at: string; where: string; what: stri
       'server',
       `In the world${join.tick === null ? '' : ` (${join.tick.mspt} ms a tick, ${join.tick.online} online)`}`,
     ],
+    // Read by the control plane over the server's console, once a minute: when it looked, not
+    // when the player came in.
+    [notListed(join), 'console', 'Not on the server’s player list when it was read'],
+    [listed(join), 'console', 'On the server’s player list when it was read: in the world by then'],
     [
       join.leftAt,
       join.serverSide === 'reported' ? 'server' : 'edge',
@@ -100,6 +117,30 @@ function timeline(view: JoinDetailView): { at: string; where: string; what: stri
     .sort((a, b) => Date.parse(a.at) - Date.parse(b.at))
 }
 
+/**
+ * What the server's own player list said of a join its reporter gave no time in the world for:
+ * the list is read once a minute, so it says whether the player got in and never when.
+ */
+function listWord(join: JoinView): string[] {
+  if (join.inWorldAt !== null) return []
+  const seen = listed(join)
+  if (seen !== null)
+    return [
+      `- When it reached the world: the server’s player list showed the player at ${time(seen)} UTC. The list is read once a minute, so they came in up to a minute before, and no time here says how long the join took.`,
+    ]
+  if (join.serverSide === 'reported') return ['- Never reached the world, by the server’s word.']
+  // Never handed to a server: there was no list for it to be on.
+  if (join.handedAt === null) return []
+  const missed = notListed(join)
+  if (missed === null)
+    return [
+      '- Whether it reached the world: the server’s player list is read once a minute, and no reading has told of this join. It was over before one, is too new for one, or the list couldn’t be read.',
+    ]
+  return [
+    `- The player wasn’t on the server’s player list at ${time(missed)} UTC, a minute or more after the join was handed over${join.leftAt === null ? '' : ', and no later reading showed them: it didn’t reach the world, or was in it for under a minute'}.`,
+  ]
+}
+
 /** What nobody recorded of the join, in plain words. */
 function unknowns(view: JoinDetailView): string[] {
   const { join } = view
@@ -115,8 +156,7 @@ function unknowns(view: JoinDetailView): string[] {
   if (join.serverSide === 'reported' && join.loginAt === null)
     lines.push('- No login time: the server’s word of it didn’t reach this join.')
   if (join.pingedAt === null) lines.push('- No server-list ping before the join.')
-  if (join.serverSide === 'reported' && join.inWorldAt === null)
-    lines.push('- Never reached the world, by the server’s word.')
+  lines.push(...listWord(join))
   if (join.leftAt === null)
     lines.push(
       '- No leaving recorded: still on, or neither side has said yet (the edge tells of a join’s end two minutes after it).',

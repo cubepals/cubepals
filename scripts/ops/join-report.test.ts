@@ -37,6 +37,8 @@ const JOIN: JoinView = {
   bytesDown: 900_000,
   tick: { tps: 19.9, mspt: 31.5, online: 3 },
   serverSide: 'reported',
+  listedAt: null,
+  notListedAt: null,
   detail: {},
 }
 
@@ -141,8 +143,83 @@ test('a join the server never told of, and the edge never saw, says so', () => {
     '- The edge’s half is missing: no connection the edge reported matched this join.',
     '- The server didn’t report its side: the join reporter isn’t on it (JOIN_REPORTER), it isn’t a Paper server, or it hasn’t fully booted since the reporter was turned on.',
     '- No server-list ping before the join.',
+    '- Whether it reached the world: the server’s player list is read once a minute, and no reading has told of this join. It was over before one, is too new for one, or the list couldn’t be read.',
     '- Its wake’s start is no longer kept.',
   ])
+})
+
+test('a join only the server’s player list told of says it got in, and never how long it took', () => {
+  const listed: JoinView = {
+    ...JOIN,
+    path: 'direct',
+    wakeOperationId: null,
+    loginAt: null,
+    inWorldAt: null,
+    tick: null,
+    serverSide: 'console',
+    listedAt: '2026-10-20T15:44:40.000Z',
+  }
+  const report = joinReport({ ...VIEW, wake: null, signals: [], join: listed })
+  expect(report).toContain(
+    '| 15:44:40.000 | 79 | console | On the server’s player list when it was read: in the world by then |',
+  )
+  expect(report).toContain(
+    '- When it reached the world: the server’s player list showed the player at 15:44:40 UTC. The list is read once a minute, so they came in up to a minute before, and no time here says how long the join took.',
+  )
+  expect(report.join('\n')).not.toContain('| server |')
+  expect(joinLine(listed)).toBe(
+    `2026-10-20 15:43:21 ${JOIN.id} Castle · Steve via castle.play.example · direct · on the server’s player list · disconnected`,
+  )
+  // The reporter's own times are what a join is timed by, where it told them too.
+  expect(joinLine({ ...JOIN, listedAt: listed.listedAt })).toContain('· in the world in 89 s ·')
+})
+
+test('a join the server’s player list didn’t show says when it looked', () => {
+  const missed: JoinView = {
+    ...JOIN,
+    loginAt: null,
+    inWorldAt: null,
+    tick: null,
+    serverSide: 'not_reported',
+    notListedAt: '2026-10-20T15:45:10.000Z',
+  }
+  const report = joinReport({ ...VIEW, signals: [], join: missed })
+  expect(report).toContain(
+    '| 15:45:10.000 | 109 | console | Not on the server’s player list when it was read |',
+  )
+  expect(report).toContain(
+    '- The player wasn’t on the server’s player list at 15:45:10 UTC, a minute or more after the join was handed over, and no later reading showed them: it didn’t reach the world, or was in it for under a minute.',
+  )
+  // Still open, nothing is said of how it ended.
+  expect(joinReport({ ...VIEW, signals: [], join: { ...missed, leftAt: null, leftReason: null } })).toContain(
+    '- The player wasn’t on the server’s player list at 15:45:10 UTC, a minute or more after the join was handed over.',
+  )
+  expect(joinLine(missed)).not.toContain('in the world')
+  // A reporter that told of the login and no world, and a list that showed the player: in the world.
+  const both = joinReport({
+    ...VIEW,
+    join: { ...JOIN, inWorldAt: null, listedAt: '2026-10-20T15:45:10.000Z' },
+  })
+  expect(both).not.toContain('- Never reached the world, by the server’s word.')
+  expect(joinReport({ ...VIEW, join: { ...JOIN, inWorldAt: null } })).toContain(
+    '- Never reached the world, by the server’s word.',
+  )
+  // As a join only the server told of does, which the edge never handed over.
+  const unhanded = { ...JOIN, inWorldAt: null, handedAt: null, detail: { edge: 'missing' } }
+  expect(joinReport({ ...VIEW, join: unhanded })).toContain(
+    '- Never reached the world, by the server’s word.',
+  )
+  // One turned away at the door was never on a server whose list could be read.
+  const refused: JoinView = {
+    ...JOIN,
+    path: 'refused',
+    handedAt: null,
+    loginAt: null,
+    inWorldAt: null,
+    serverSide: 'not_reported',
+    leftReason: 'refused:busy',
+  }
+  expect(joinReport({ ...VIEW, join: refused }).join('\n')).not.toContain('player list')
 })
 
 test('a signal on one line, leaving out the parts its kind doesn’t have', () => {
