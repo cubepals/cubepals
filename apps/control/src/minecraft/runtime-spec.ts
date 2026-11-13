@@ -20,6 +20,7 @@ import { DATAPACKS_STEP, datapacksEnv, datapacksOf } from './datapacks.ts'
 import { DIRECT_START_STEP } from './direct-start.ts'
 import { WAITING_DATAPACK } from './duels-waiting.ts'
 import { DATA_DIR, JAR_LISTS, jarsOf } from './jars.ts'
+import { PAPER_DEFAULTS_STEP, PLAIN_PAPER_DEFAULTS_STEP } from './paper-defaults.ts'
 import { GAME_PORT, RCON_PORT } from './ports.ts'
 import { STARTER_STEP, starterEnv, startsOnOf } from './starter.ts'
 import { STOP_CHEATERS_STEP } from './stop-cheaters.ts'
@@ -539,8 +540,9 @@ const EXEC_IMAGE = `exec ${IMAGE_ENTRYPOINT} "$@"`
  * what they call to replace a link where they write (`volume-links.ts`). The world a server starts
  * on (`STARTER_STEP`) comes first where it has one, so the steps after it find the world it
  * unpacked as they find any. The first of those puts the volume's files as the server type reads
- * them (`PAPER_STEP` on Paper, after `VANILLA_PAPER_STEP` on plain Minecraft run on Paper,
- * `DIMENSIONS_STEP` on any other), and the second the world's datapacks (`DATAPACKS_STEP`); the
+ * them (`PAPER_STEP` on Paper, after `VANILLA_PAPER_STEP` on plain Minecraft run on Paper and before
+ * the settings Cubepals gives Paper for how it runs, `paper-defaults.ts`; `DIMENSIONS_STEP` on any
+ * other), and the second the world's datapacks (`DATAPACKS_STEP`); the
  * icon, the pack, the files Cubepals places itself and the list of jars the image installs follow
  * where a server has them, then what spares the image work it would redo (`WAKE_STEP`), and last
  * what starts the server without the image's scripts where they would change nothing
@@ -562,6 +564,7 @@ function entrypointFor(steps: {
     ...(steps.starter ? [STARTER_STEP] : []),
     ...(steps.vanilla ? [VANILLA_PAPER_STEP] : []),
     steps.paper ? PAPER_STEP : DIMENSIONS_STEP,
+    ...(steps.paper ? [steps.vanilla ? PLAIN_PAPER_DEFAULTS_STEP : PAPER_DEFAULTS_STEP] : []),
     DATAPACKS_STEP,
     ...(steps.icon ? ICON_STEP : []),
     ...(steps.pack ? PACK_STEP : []),
