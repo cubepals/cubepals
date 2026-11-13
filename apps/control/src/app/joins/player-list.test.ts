@@ -297,6 +297,23 @@ describe.skipIf(!hasDatabase)('whose join a reading of the list is about', () =>
     expect(typeof (await row(waiting)).detail.notListedAt).toBe('string')
   }, 30_000)
 
+  test('says nothing of a join handed over after the list was read', async () => {
+    const to = await running('Came back')
+    const noor = player('Noor')
+    // On the list as it was read half a minute ago, for a visit that began before it; the retry
+    // was handed over since, and is the later of the two rows still open.
+    const before = await handed(to, noor, 90 * SECOND_MS)
+    const retry = await handed(to, noor, 5 * SECOND_MS)
+    const readAt = new Date(Date.now() - 30 * SECOND_MS)
+    await noteListed(h.db, to.id, { online: 1, players: [noor] }, readAt)
+    expect((await row(retry)).detail).toEqual({})
+    expect((await row(retry)).serverSide).toBe('not_reported')
+    expect((await row(before)).detail.listedAt).toBe(readAt.toISOString())
+    // Nor is the retry called absent by a reading from before it began.
+    await noteListed(h.db, to.id, { online: 0, players: [] }, readAt)
+    expect((await row(retry)).detail).toEqual({})
+  }, 30_000)
+
   test('finds a Bedrock player under the name Floodgate lists them by', async () => {
     const to = await running('Bedrock')
     // The join names the gamertag; the server lists Floodgate's name and UUID for it.

@@ -23,7 +23,7 @@ import { floodgateName, isBedrockUuid } from '@blockly/contracts'
 import { HOUR_MS, MINUTE_MS } from '@blockly/contracts/durations'
 import type { ServerSide } from '@blockly/contracts/join-records'
 import { type Queryable, schema } from '@blockly/db'
-import { and, desc, eq, gt, inArray, isNotNull, isNull, sql } from 'drizzle-orm'
+import { and, desc, eq, gt, inArray, isNull, lte, sql } from 'drizzle-orm'
 import type { PresentPlayer } from '../servers/usage.ts'
 import { LISTED_AT, listed, listSaid, NOT_LISTED_AT } from './reached.ts'
 
@@ -110,8 +110,8 @@ const marked = (key: string, at: Date) => sql`${joins.detail} || ${JSON.stringif
 
 /**
  * Marks server `serverId`'s open joins with what its list, read at `at`, said of their players.
- * One read of the joins handed over in the last hour and still open, and a write only for a join
- * whose mark is new, which is once or twice in its life.
+ * One read of the joins handed over in the last hour, by `at`, and still open, and a write only
+ * for a join whose mark is new, which is once or twice in its life.
  */
 export async function noteListed(
   q: Queryable,
@@ -134,7 +134,9 @@ export async function noteListed(
         eq(joins.serverId, serverId),
         eq(joins.kind, 'join'),
         gt(joins.connectedAt, new Date(at.getTime() - LOOKED_FOR_MS)),
-        isNotNull(joins.handedAt),
+        // Handed over by the time the list was read: a reading says nothing of a join that began
+        // after it, and a player who came back in between was listed for the visit before.
+        lte(joins.handedAt, at),
         isNull(joins.leftAt),
       ),
     )
