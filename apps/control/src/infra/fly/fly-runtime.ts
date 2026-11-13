@@ -17,6 +17,7 @@
  * - `apps.ts`: a server's Fly app, its name, its Flycast address and its secrets.
  * - `volumes.ts`: the volumes a server's world lives on.
  * - `snapshots.ts`: a volume's snapshots, taken and accounted for.
+ * - `exports.ts`: a snapshot's world packed into the archive store.
  * - `machines.ts`: Fly machines read, changed under their lease, and waited on.
  * - `helper-machine.ts`: one shell job on a throwaway machine.
  * - `helper-jobs.ts`: the scripts helper machines run, and what they print.
@@ -36,7 +37,6 @@ import type {
   MinecraftRuntime,
   Placement,
   ProgressSink,
-  PutPart,
   RestoreOptions,
   RestoreSource,
   RuntimeHandle,
@@ -60,14 +60,8 @@ import {
 } from './fly-runtime/apps.ts'
 import { wakesWouldBoot } from './fly-runtime/asleep.ts'
 import { changedSince, inventory } from './fly-runtime/discovery.ts'
-import {
-  exportJob,
-  PARTS_PER_JOB,
-  partBatches,
-  partsJob,
-  partsPut,
-  restoreJob,
-} from './fly-runtime/helper-jobs.ts'
+import { exportSnapshot } from './fly-runtime/exports.ts'
+import { restoreJob } from './fly-runtime/helper-jobs.ts'
 import { helperJob } from './fly-runtime/helper-machine.ts'
 import {
   afterReplace,
@@ -98,7 +92,6 @@ import {
   dataVolume,
   deleteLeftoverVolumes,
   deleteVolume,
-  EXPORT_VOLUME_NAME,
   ensureVolume,
   fitVolume,
   gameVolume,
@@ -523,58 +516,9 @@ export class FlyRuntime implements MinecraftRuntime {
     return this.#replace(ref, fork, region, spec, progress)
   }
 
-  /**
-   * The snapshot as a tar.gz, packed on a volume made from it by a helper machine, which sends it
-   * in one PUT. One larger than a PUT carries waits on that volume while helpers send it in parts,
-   * a few to each job.
-   */
-  async exportSnapshot(
-    snapshot: SnapshotHandle,
-    target: ArchiveTarget,
-    signal?: AbortSignal,
-  ): Promise<{ sizeBytes: number; sha256: string }> {
-    const ref = decodeSnapshot(snapshot)
-    // Twice the world's size: the archive is written beside the world before it is uploaded.
-    const volume = await createVolume(
-      this.#fly,
-      ref.app,
-      {
-        name: EXPORT_VOLUME_NAME,
-        region: ref.region,
-        size_gb: ref.sizeGb * 2,
-        snapshot_id: ref.snapshotId,
-      },
-      this.snapshotLifetimeDays,
-    )
-    const volumeId = idOf(volume, 'a volume')
-    const job = (script: string) =>
-      whenRoom(this.#roomWait, () =>
-        helperJob(this.#fly, this.#deployment, ref.app, ref.region, volumeId, script, signal),
-      )
-    try {
-      await volumeReady(this.#fly, ref.app, volumeId)
-      const [how = '', sha256 = '', size = '0'] = (
-        await job(exportJob(target.put, target.maxPutBytes))
-      ).split(' ')
-      const sizeBytes = Number(size)
-      if (how === 'parts') {
-        const parts = await target.inParts(sizeBytes, PARTS_PER_JOB)
-        try {
-          const put: PutPart[] = []
-          for (const batch of partBatches(parts, sizeBytes, PARTS_PER_JOB))
-            put.push(...partsPut(await job(partsJob(parts, sizeBytes, batch))))
-          await parts.complete(put)
-        } catch (error) {
-          await parts.abort().catch(() => undefined)
-          throw error
-        }
-      }
-      return { sha256, sizeBytes }
-    } finally {
-      // The archive is up: a volume Fly won't let go of yet is the leftover sweep's.
-      const sweep = `fly: ${ref.app} keeps export volume ${volumeId} for the leftover sweep`
-      await deleteVolume(this.#fly, ref.app, volumeId).catch((error: unknown) => console.warn(sweep, error))
-    }
+  exportSnapshot(snapshot: SnapshotHandle, target: ArchiveTarget, signal?: AbortSignal) {
+    const from = { deployment: this.#deployment, roomWait: this.#roomWait }
+    return exportSnapshot(this.#fly, from, this.snapshotLifetimeDays, snapshot, target, signal)
   }
 
   async exec(handle: RuntimeHandle, command: readonly string[], timeoutSeconds: number): Promise<ExecResult> {
