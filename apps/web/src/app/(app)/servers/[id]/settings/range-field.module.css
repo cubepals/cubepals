@@ -10,26 +10,15 @@
  * Square, as everything on the site is; the colours are the theme's.
  */
 
+/* The field is the design system's `.bk-field`; this keeps it from overflowing its column. */
 .field {
-  display: grid;
-  /* A field stretched to its row's height keeps its parts together at the top. */
-  align-content: start;
-  gap: var(--space-8);
   min-inline-size: 0;
 }
 
-/*
- * In a grid, a field takes four of its rows and shares them: side by side with another, the
- * label, the slider, the scale and the help line up across both, whichever label wraps; alone in
- * a column it reads as before. The head sits at the bottom of its row, so a one-line label waits
- * on the line a two-line one ends. Outside a grid the rows are its own.
- */
-@supports (grid-template-rows: subgrid) {
-  .field {
-    grid-row: span 4;
-    grid-template-rows: subgrid;
-    row-gap: var(--space-8);
-  }
+/* The slider and its scale: one control, as a field's middle row. */
+.control {
+  display: grid;
+  gap: var(--space-8);
 }
 
 .head {
@@ -37,7 +26,6 @@
   grid-template-columns: minmax(0, 1fr) auto;
   /* The value on the label's last line, so values line up when one label wraps. */
   align-items: last baseline;
-  align-self: end;
   gap: var(--space-12);
 }
 

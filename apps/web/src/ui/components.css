@@ -2338,6 +2338,27 @@ textarea.bk-input {
   }
 }
 
+/*
+ * Fields side by side line up. A field is three rows: its label, its control and its note (help
+ * or error). In a grid it takes three of the grid's rows and shares them with the fields beside
+ * it, so labels, controls and notes each sit on one line across the row, whichever label wraps or
+ * note is missing; the label sits at the bottom of its row, next to its control. Stacked in one
+ * column it reads as a plain field. Every field component keeps those three parts in that order
+ * (fields.test.ts holds them to it), and a page gets this by putting fields in `.bk-grid`.
+ */
+@supports (grid-template-rows: subgrid) {
+  .bk-grid > .bk-field {
+    display: grid;
+    grid-row: span 3;
+    grid-template-rows: subgrid;
+    align-content: start;
+    row-gap: var(--space-8);
+  }
+  .bk-grid > .bk-field > :first-child {
+    align-self: end;
+  }
+}
+
 .bk-stack {
   display: flex;
   flex-direction: column;
