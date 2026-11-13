@@ -45,6 +45,11 @@ interface Tuning {
    * (`billing/gifts.ts`). Absent, as in tests, it is off.
    */
   giftsByEmail?: boolean
+  /**
+   * SLOW_HOST_MHZ: a clock, in MHz, below which a host counts as slow (`runtimes/hosts.ts`).
+   * Absent, as in tests, or 0, no host does.
+   */
+  slowHostMhz?: number
 }
 
 /** Grim's punishments file as text, and when removals for sending what no game can become a ban. */

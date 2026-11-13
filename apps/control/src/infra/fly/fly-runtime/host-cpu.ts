@@ -6,7 +6,8 @@
  * The host a Fly machine runs on, read where Fly says it: its CPU from the machine's own
  * `/proc/cpuinfo`, since Fly's API says nothing of a host's hardware, and which host it is from
  * the `zone` of the volume the machine mounts, which Fly gives as it makes the volume. It only
- * reads: what a boot keeps of it is `app/operations/host-cpu.ts`'s.
+ * reads: what a boot keeps of it is `app/operations/host-cpu.ts`'s, and what is done about a host
+ * known to be slow is `faster-host.ts`'s.
  */
 
 import { SECOND_MS } from '@blockly/contracts/durations'
@@ -36,7 +37,7 @@ export function parseCpuinfo(text: string): Pick<HostCpu, 'model' | 'mhz'> | nul
 }
 
 /** The host a volume is on, by Fly's names: its region, and its zone there; null where Fly gives none. */
-function hostOf(volume: Volume | null): HostCpu['host'] {
+export function hostOf(volume: Volume | null): HostCpu['host'] {
   return volume?.region && volume.zone ? { region: volume.region, id: volume.zone } : null
 }
 

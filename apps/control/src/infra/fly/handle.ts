@@ -82,6 +82,10 @@ export function machineOf(storage: HeldStorage): string | null {
   return storage.held != null && isFlyHandle(storage.held) ? decodeHandle(storage.held).machineId : null
 }
 
+/** Whether a server holds no storage at all: no handle yet, and nothing a rebuild kept. */
+export const holdsNone = (storage: HeldStorage): boolean =>
+  storage.held == null && (storage.kept ?? []).length === 0
+
 /** The volumes the storage a server holds names, by id: what its handle names, and what is kept. */
 export function volumesOf(storage: HeldStorage): { held: string | null; kept: string[] } {
   const volume = (handle: RuntimeHandle) => (isFlyHandle(handle) ? decodeHandle(handle).volumeId : null)

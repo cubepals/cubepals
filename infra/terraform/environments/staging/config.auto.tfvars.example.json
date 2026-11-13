@@ -43,5 +43,5 @@
     "POLAR_ACCESS_TOKEN",
     "POLAR_WEBHOOK_SECRET"
   ],
-  "optional_secret_names": ["SIGNALS"]
+  "optional_secret_names": ["SIGNALS", "SLOW_HOST_MHZ"]
 }

@@ -249,6 +249,14 @@ export const VALUES: Value[] = [
     shape: (value) => (/^[A-Za-z0-9+/]{22}==$/.test(value) ? null : 'is not 16 bytes as base64'),
   },
   {
+    name: 'SLOW_HOST_MHZ',
+    goes: ['secret'],
+    where:
+      'only to move new servers off slow hosts: the private records, the clock in MHz below which a host counts as slow (docs/configuration.md); left out, none does',
+    optional: 'slow hosts',
+    shape: (value) => (/^\d+(\.\d+)?$/.test(value) ? null : 'is a number of MHz, 0 or more'),
+  },
+  {
     name: 'ADMIN_EMAILS',
     goes: ['operator'],
     where: 'your own email, once confirmed an admin; comma-separate more',

@@ -46,7 +46,10 @@ Blockly does about it. A resume that hangs, and the fallbacks for it, are
    Fly's hosts in one region are of several speeds, and a server boots and ticks slower on a slow
    one. Each reading is also kept by host in `runtime_hosts` (`app/runtimes/hosts.ts`): the clock
    as last read and the least and the most ever read there, the model, how many readings, and
-   when the first and the last were. A
+   when the first and the last were. A new server's first start may hold `slow_host:<region>/<zone>`,
+   up to three times: its first volume landed on a host whose every reading is under
+   `SLOW_HOST_MHZ`, and was made again elsewhere before a machine was made on it
+   (`infra/fly/fly-runtime/faster-host.ts`). A
    start that boots although the server slept with its
    memory raises the `wake_booted` signal, except a `stale-sleep` refresh, which boots so that a
    player's wake doesn't (docs/diagnosis.md). One server's operations, joins and signals in time

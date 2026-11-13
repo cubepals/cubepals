@@ -331,6 +331,21 @@ describe('the optional tuning and official files', () => {
   })
 })
 
+describe('the clock below which a host counts as slow', () => {
+  test('left out, nothing reaches the control plane; given, it is a secret', () => {
+    expect(JSON.parse(terraformEnv(complete).TF_VAR_secrets ?? '{}')).not.toHaveProperty('SLOW_HOST_MHZ')
+    const given = { ...complete, SLOW_HOST_MHZ: '2500' }
+    expect(problemsOf(given, example).wrong).toEqual([])
+    expect(JSON.parse(terraformEnv(given).TF_VAR_secrets ?? '{}')).toMatchObject({ SLOW_HOST_MHZ: '2500' })
+  })
+
+  test('one the control plane would not read is named before anything is made', () => {
+    expect(problemsOf({ ...complete, SLOW_HOST_MHZ: 'fast' }, example).wrong).toEqual([
+      'SLOW_HOST_MHZ is a number of MHz, 0 or more.',
+    ])
+  })
+})
+
 describe('join records', () => {
   test('left out, nothing reaches the control plane: no reporter and no signals', () => {
     expect(problemsOf(complete, example)).toEqual({ missing: [], wrong: [], bucketFirst: false })
