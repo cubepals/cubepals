@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { type Queryable, schema, type Tx } from '@blockly/db'
-import { and, desc, eq, gte, inArray, isNotNull, ne, notInArray, or, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, gte, inArray, isNotNull, ne, notInArray, or, sql } from 'drizzle-orm'
 import type { OperationKind } from '../../domain/server/lifecycle.ts'
 
 const operations = schema.serverOperations
@@ -243,33 +243,40 @@ export async function latestOfKind(
   return row ? { ...toRecord(row), finishedAt: row.finishedAt } : null
 }
 
+/** Whether an operation's `steps` hold `mark` (`OperationMark`). */
+const marked = (mark: string) => sql`${operations.steps} @> ${JSON.stringify([{ step: mark }])}::jsonb`
+
 /**
- * The servers whose newest stop since `since` was made for their Java to write the recording of
- * its start (`SleepMark`), with no start asked of them after it.
+ * The stops made since `since` that carry one of `marks` (`SleepMark`), where the stop is the
+ * newest thing asked of its server but background work: nothing started it, stopped it, restored
+ * it or moved it since. Oldest first, each with when it ended.
  */
-export async function stoppedForRecording(q: Queryable, since: Date): Promise<string[]> {
+export async function lastStopsMarked(
+  q: Queryable,
+  since: Date,
+  marks: readonly string[],
+): Promise<Array<{ serverId: string; at: Date }>> {
   const stops = await q
-    .select({ id: operations.id, serverId: operations.serverId })
+    .select({
+      id: operations.id,
+      serverId: operations.serverId,
+      createdAt: operations.createdAt,
+      finishedAt: operations.finishedAt,
+    })
     .from(operations)
-    .where(
-      and(
-        eq(operations.kind, 'stop'),
-        gte(operations.createdAt, since),
-        sql`${operations.steps} @> '[{"step":"recording"}]'::jsonb`,
-      ),
-    )
-  const waiting: string[] = []
+    .where(and(eq(operations.kind, 'stop'), gte(operations.createdAt, since), or(...marks.map(marked))))
+    .orderBy(asc(operations.createdAt))
+  const last: Array<{ serverId: string; at: Date }> = []
   for (const stop of stops) {
-    // The newest start or stop asked of the server, which is that stop where nothing came after.
     const [newest] = await q
       .select({ id: operations.id })
       .from(operations)
-      .where(and(eq(operations.serverId, stop.serverId), inArray(operations.kind, ['start', 'stop'])))
+      .where(and(eq(operations.serverId, stop.serverId), notInArray(operations.kind, [...BACKGROUND])))
       .orderBy(desc(operations.createdAt))
       .limit(1)
-    if (newest?.id === stop.id) waiting.push(stop.serverId)
+    if (newest?.id === stop.id) last.push({ serverId: stop.serverId, at: stop.finishedAt ?? stop.createdAt })
   }
-  return waiting
+  return last
 }
 
 /**
@@ -286,7 +293,6 @@ export const resumedWake = sql<boolean>`coalesce(${operations.steps} @> '[{"step
  * gave up on a resume, or its server's host couldn't run it (`OperationMark`).
  */
 export async function failedWaking(q: Queryable, operationId: string): Promise<boolean> {
-  const marked = (mark: string) => sql`${operations.steps} @> ${JSON.stringify([{ step: mark }])}::jsonb`
   const [row] = await q
     .select({ id: operations.id })
     .from(operations)

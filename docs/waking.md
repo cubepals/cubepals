@@ -15,6 +15,16 @@ Blockly does about it. A resume that hangs, and the fallbacks for it, are
    `app/operations/handlers/winding-down.ts`). Otherwise it stops. A sleep that kept the memory
    says so in `server_runtimes.memory_kept_at`, which the next run's start clears.
 
+   A stop that was meant as a sleep and that the server itself couldn't take (`players_on`,
+   `unsaved`, `unsynced`) leaves a server its players come back to with a boot ahead of it. Where
+   someone played it in the last two days (`PLAYED_MS`), `stale-sleep` starts it in the background
+   once the stop is 10 minutes old and its restore point is written, as it refreshes a sleeping
+   one: a run nobody is billed for, asleep with its memory after the probation, so the next join
+   resumes. Once a stop: nothing since may have started, stopped, restored or moved it, and the
+   stop that ends a refresh's own run, which nobody played, is never refreshed, so a sleep refused
+   twice stays stopped. A sleep the runtime turned into a stop (`runtime_stopped`) is left: the
+   switch being off reads the same, and every sleep is refused then.
+
    Each record says how it went, as marks among the operation's steps: the stop's `slept`, or why
    it stopped instead (`stop_reason`, `unsaved`, `players_on`, `unsynced`, `no_sleep`,
    `runtime_stopped`); a start that boots, why (`not_asleep`, `memory_lost` where the sleep kept

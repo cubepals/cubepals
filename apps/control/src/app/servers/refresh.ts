@@ -13,10 +13,12 @@
  *
  * Bounded as a server-list ping's wake is (`edge/ping-wake.ts`): its owner must be able to start it,
  * the hourly cap on wakes nobody joined counts it, and none starts once the owner's included hours
- * are used. Not for a server stopped without its memory, whose next start boots anyway, but one:
- * a server stopped for once so that its Java could write the recording of its start
- * (`minecraft/start-cache.ts`) is started the same way (`recorded`), which makes its startup cache
- * with nobody waiting and leaves it asleep with its memory, as it would have been.
+ * are used. Not for a server stopped without its memory, whose next start boots anyway, but two,
+ * each started the same way so that it ends asleep with its memory, as it would have been: a
+ * server stopped for once so that its Java could write the recording of its start
+ * (`minecraft/start-cache.ts`), which makes its startup cache with nobody waiting (`recorded`),
+ * and one someone played lately whose stop was meant as a sleep and couldn't be one (`cold`,
+ * `operations/schedules/stale-sleep.ts`). Which servers, and when, is the caller's.
  */
 import type { Db } from '@blockly/db'
 import { entitlementsOf } from '../../domain/account/entitlements.ts'
@@ -29,20 +31,35 @@ import { findServer, memoryKept } from './persistence.ts'
 import { READY_KEY, RECORDED_KEY, REFRESH_KEY, unjoinedWakes } from './usage.ts'
 
 /**
- * Starts the server asleep where that is worth it, and says whether it did: to show what its owner
- * just changed of it (`changed`), or with nothing of theirs asking, to keep it ready for its next
- * join (`ready`), or after the stop that let it write its start's recording (`recorded`). They
- * differ in what the server's page says of the start, and in that the last has no memory kept.
+ * Why a server asleep is started with nobody waiting: to show what its owner just changed of it
+ * (`changed`), or with nothing of theirs asking, to keep it ready for its next join (`ready`), or
+ * after the stop that let it write its start's recording (`recorded`), or after a stop that should
+ * have been a sleep (`cold`). They differ in what the server's page says of the start, where
+ * the last is said as `ready` is, and in that the last two have no memory kept.
  */
+export type RefreshReason = 'changed' | 'ready' | 'recorded' | 'cold'
+
+/** What each reason's start is keyed by, which is how its page and its hours tell it (`usage.ts`). */
+const KEY_OF: Record<RefreshReason, string> = {
+  changed: REFRESH_KEY,
+  ready: READY_KEY,
+  recorded: RECORDED_KEY,
+  cold: READY_KEY,
+}
+
+/** The reasons to start a server that sleeps without its memory. */
+const WITHOUT_MEMORY: ReadonlySet<RefreshReason> = new Set(['recorded', 'cold'])
+
+/** Starts the server asleep where that is worth it, and says whether it did. */
 export async function refreshAsleep(
   deps: { db: Db; start: (actor: Actor, serverId: string, requestId: string) => Promise<unknown> },
   serverId: string,
-  why: 'changed' | 'ready' | 'recorded' = 'changed',
+  why: RefreshReason = 'changed',
 ): Promise<boolean> {
   const { db } = deps
   const server = await findServer(db, serverId)
   if (server?.lifecycle.status !== 'stopped') return false
-  if (why !== 'recorded' && !(await memoryKept(db, serverId))) return false
+  if (!WITHOUT_MEMORY.has(why) && !(await memoryKept(db, serverId))) return false
   const now = new Date()
   if ((await unjoinedWakes(db, serverId, now)) >= tuning().abuse.wakesPerHour) return false
   const standing = await loadStanding(db, server.ownerId)
@@ -50,8 +67,7 @@ export async function refreshAsleep(
   if (month !== null && month.units >= month.included + month.carried) return false
   try {
     // Asked as a wake, so its run is a woken one, and sleeps unjoined after the probation.
-    const key = { changed: REFRESH_KEY, ready: READY_KEY, recorded: RECORDED_KEY }[why]
-    await deps.start({ kind: 'system', reason: 'wake' }, serverId, `${key}${crypto.randomUUID()}`)
+    await deps.start({ kind: 'system', reason: 'wake' }, serverId, `${KEY_OF[why]}${crypto.randomUUID()}`)
   } catch (error) {
     // Refused by the same checks as any start: its owner can't start it now.
     if (error instanceof AppError) return false

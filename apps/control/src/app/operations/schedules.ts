@@ -27,7 +27,7 @@
  * - `scheduled-backups.ts`: queues the daily backups and retires the ones gone or past their lifetime.
  * - `session-cap.ts`: warns, then stops, a run that reaches its account's session cap.
  * - `spend.ts`: works out what today cost and, past the daily limit, pauses starts and creation.
- * - `stale-sleep.ts`: refreshes in the background a server asleep whose wake would boot, so a player's resumes.
+ * - `stale-sleep.ts`: refreshes in the background a server asleep whose wake would boot, or stopped where a sleep was meant, so a player's resumes.
  * - `store-sweep.ts`: hands servers idle past their plan's days to the `store` operation.
  * - `stray.ts`: finds compute the provider runs that no running server here accounts for.
  */
@@ -135,7 +135,7 @@ export class Schedules {
       db: deps.db,
       runtime: deps.runtime,
       specs: deps.specs,
-      refresh: (id) => deps.service.refreshAsleep(id, 'ready'),
+      refresh: (id, why) => deps.service.refreshAsleep(id, why),
     })
     this.#recordedStarts = recordedStarts({
       db: deps.db,
@@ -223,7 +223,7 @@ export class Schedules {
     return this.#drift(limit)
   }
 
-  /** `stale-sleep`: servers asleep whose wake would boot, refreshed first in the background (`schedules/stale-sleep.ts`). */
+  /** `stale-sleep`: servers whose next wake would boot where it could resume, refreshed first in the background (`schedules/stale-sleep.ts`). */
   async staleSleep(options: Parameters<ReturnType<typeof staleSleepers>>[0] = {}): Promise<number> {
     return this.#staleSleep(options)
   }
