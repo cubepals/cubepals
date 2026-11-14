@@ -4,8 +4,9 @@
 
 name: Nightly
 
-# Main's newest commit deployed to staging and taken through the staging check, then staging is
-# stopped again. A commit that passes is tagged v<next>-nightly.<date>.<run> (scripts/versions.ts)
+# Main's newest commit deployed to staging and taken through the staging check and the Bedrock
+# check (Bedrock players over NetherNet, a wake included, and Xbox sign-in enforced), then staging
+# is stopped again. A commit that passes is tagged v<next>-nightly.<date>.<run> (scripts/versions.ts)
 # and made a prerelease; production.ts deploys only such a commit. With `production` ticked (Deploy
 # production's `ship now` starts it so), a nightly that passes goes on to production at once: it
 # starts Deploy production's `apply` for its own tag, which main's guard checks like any other.
@@ -100,6 +101,38 @@ jobs:
           STAGING_STATE: ${{ secrets.STAGING_STATE }}
           STAGING_DATABASE: ${{ vars.STAGING_DATABASE }}
           STAGING_DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+      # Bedrock players on this commit's edge, as the Bedrock E2E workflow runs them, so no nightly
+      # that production can take has had its Bedrock path untried. The headless players have no Xbox
+      # account, so the edge's sign-in check is off for the check and on again after, whatever
+      # happened; then a player with no sign-in must be refused.
+      - name: Install the headless Bedrock client
+        if: steps.new.outputs.run == 'true'
+        run: bun install --frozen-lockfile
+        working-directory: tools/bedrock-join
+      - name: Turn the edge's Xbox sign-in check off
+        id: validation
+        if: steps.new.outputs.run == 'true'
+        run: fly secrets set BEDROCK_VALIDATE_LOGIN=false -a bly-staging-edge
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      - name: Bedrock check
+        if: steps.new.outputs.run == 'true'
+        run: bun scripts/bedrock-check.ts
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          STAGING_STATE: ${{ secrets.STAGING_STATE }}
+          STAGING_DATABASE: ${{ vars.STAGING_DATABASE }}
+          STAGING_DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+      - name: Turn the edge's Xbox sign-in check on
+        if: always() && steps.validation.conclusion != 'skipped'
+        run: |
+          fly secrets set BEDROCK_VALIDATE_LOGIN=true -a bly-staging-edge ||
+            (sleep 60 && fly secrets set BEDROCK_VALIDATE_LOGIN=true -a bly-staging-edge)
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      - name: A player with no Xbox sign-in is refused
+        if: steps.new.outputs.run == 'true'
+        run: bun scripts/bedrock-signed-in-check.ts
       # Whatever happened above, nothing is left running or holding an address. A second try
       # covers a blip reaching Fly, which once left staging running (2026-10-08).
       - name: Stop staging
