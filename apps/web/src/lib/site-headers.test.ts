@@ -33,6 +33,7 @@ describe("next.config.ts's headers", () => {
     if (indexable === undefined) delete process.env.WEB_INDEXABLE
     else process.env.WEB_INDEXABLE = indexable
   })
+  const build = config.env?.BLOCKLY_VERSION
   const forEveryPath = async () => {
     const rules = await config.headers()
     const all = rules.filter((rule) => rule.source === '/:path*')
@@ -41,12 +42,17 @@ describe("next.config.ts's headers", () => {
 
   test('sends them on every path of production, with no noindex', async () => {
     process.env.WEB_INDEXABLE = '1'
-    expect(await forEveryPath()).toEqual(expected)
+    expect(await forEveryPath()).toEqual({ ...expected, 'X-Build': build })
   })
 
   test('sends them on every path of any other deployment, beside its noindex', async () => {
     delete process.env.WEB_INDEXABLE
-    expect(await forEveryPath()).toEqual({ ...expected, 'X-Robots-Tag': 'noindex' })
+    expect(await forEveryPath()).toEqual({ ...expected, 'X-Build': build, 'X-Robots-Tag': 'noindex' })
+  })
+
+  test('names the build PostHog is told, so a request can say which commit the site runs', () => {
+    expect(build).toBe(config.env?.BLOCKLY_VERSION)
+    expect(build).not.toBe('')
   })
 })
 
