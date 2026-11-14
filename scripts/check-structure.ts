@@ -386,32 +386,14 @@ function checkHeaders() {
   }
 }
 
-function checkCopied() {
-  for (const path of sources.filter((path) => langOf(path) === 'ts')) {
-    const n = linesOf(path).filter((line) => COPIED.some((pattern) => pattern.test(line))).length
-    if (n > 0) report('copied', { key: path, n, message: 'lines writing out a value tRPC or Postgres owns' })
+/** Counts, in each file `keeps` keeps, the lines one of `patterns` finds: the line-by-line checks. */
+function checkLines(check: string, patterns: RegExp[], keeps: (path: string) => boolean, message: string) {
+  for (const path of sources.filter(keeps)) {
+    const n = linesOf(path).filter((line) => patterns.some((pattern) => pattern.test(line))).length
+    if (n > 0) report(check, { key: path, n, message })
   }
 }
-
-function checkDurations() {
-  for (const path of sources.filter((path) => langOf(path) === 'ts')) {
-    const n = linesOf(path).filter((line) => DURATIONS.some((pattern) => pattern.test(line))).length
-    if (n > 0)
-      report('durations', {
-        key: path,
-        n,
-        message: 'lines writing out a unit of time; import it from @blockly/contracts/durations',
-      })
-  }
-}
-
-function checkAttributed() {
-  for (const path of sources) {
-    const n = linesOf(path).filter((line) => ATTRIBUTED.some((pattern) => pattern.test(line))).length
-    if (n > 0)
-      report('attributed', { key: path, n, message: 'lines saying who decided, or when, instead of why' })
-  }
-}
+const typescript = (path: string) => langOf(path) === 'ts'
 
 /** The doc comment a file opens with, each line without its comment marker. */
 function header(path: string): Array<{ line: number; text: string }> {
@@ -761,9 +743,15 @@ else {
   checkCycles(rustImports(), 'modules that use each other')
   if (!crateRepo) checkUnused()
   if (!crateRepo) checkDuplicates()
-  if (!crateRepo) checkCopied()
-  if (!crateRepo) checkDurations()
-  checkAttributed()
+  if (!crateRepo) checkLines('copied', COPIED, typescript, 'lines writing out a value tRPC or Postgres owns')
+  if (!crateRepo)
+    checkLines(
+      'durations',
+      DURATIONS,
+      typescript,
+      'lines writing out a unit of time; import it from @blockly/contracts/durations',
+    )
+  checkLines('attributed', ATTRIBUTED, () => true, 'lines saying who decided, or when, instead of why')
 }
 
 const baseline = JSON.parse(readFileSync(BASELINE, 'utf8'))
