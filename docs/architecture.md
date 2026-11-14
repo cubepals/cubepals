@@ -923,8 +923,9 @@ through the wake flow, which starts it first (§12).
   (non-deprecated), and capacity via `/v1/platform/placements`.
 - Sizing: `memoryMb` → performance CPUs only, as the capacity research found (every shared size
   was throttled and crashed): 1 core up to 3 GB, 2 at 4 GB, 4 from 6 GB, within 2–8 GB per
-  CPU, so a 6 GB server runs on 4 cores with 8 GB. A one-shot helper on a volume is 1 shared CPU,
-  1 GB. The placement check asks about the same machine the server will run on.
+  CPU, so a 6 GB server runs on 4 cores with 8 GB. A one-shot helper on a volume is 1 performance
+  CPU with 2 GB: packing a world is one core's work, and a shared CPU's throttle made it five
+  times as long. The placement check asks about the same machine the server will run on.
 - Machine config:
   - `restart: on-failure` (max 3).
   - One `services` entry per `spec.ports` port, raw TCP, with `autostart: false` and

@@ -19,8 +19,12 @@ import { idOf, launched } from './responses.ts'
 const HELPER_IMAGE = 'curlimages/curl:8.22.0'
 /** Well under what Fly's exec takes as one argument; the jobs Blockly runs are a few hundred bytes. */
 const HELPER_SCRIPT_BYTES = 16_384
-/** A helper copies and packs files for a while and plays no game: the smallest shared machine. */
-const HELPER_GUEST = { cpu_kind: 'shared', cpus: 1, memory_mb: 1024 }
+/**
+ * A helper packs or unpacks a world, which is one core's work for as long as it lasts, and a
+ * shared CPU is held to a fraction of a core once its burst is spent: packing 3 GB took 938 s on
+ * one and 196 s on this, on the same volume. A full core with the least memory it comes with.
+ */
+const HELPER_GUEST = { cpu_kind: 'performance', cpus: 1, memory_mb: 2048 }
 
 /** How long a job's result is read every `quickMs`, before every `slowMs`. */
 const QUICK_READS_MS = 20_000
