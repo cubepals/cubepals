@@ -16,10 +16,88 @@ import type { UserActor } from '../actor.ts'
 import { loadRevision } from '../servers/persistence.ts'
 import type { ModChange } from './service.ts'
 
-describe.skipIf(!hasDatabase)('mod updates', () => {
-  let h: Harness
-  const cdn = new Cdn()
+let h: Harness
+const cdn = new Cdn()
 
+interface Release {
+  id: string
+  channel?: CatalogVersion['channel']
+  incompatible?: string[]
+  /** Versions of other projects it can't run beside. */
+  incompatibleVersions?: string[]
+}
+/** A project on the catalog, its versions listed newest first, their files on the CDN. */
+const publish = (projectId: string, releases: Release[]) =>
+  h.catalog.publish(
+    {
+      projectId,
+      slug: projectId,
+      name: projectId,
+      summary: `${projectId}, for tests`,
+      iconUrl: null,
+      environments: ['server_only'],
+      downloads: 1,
+    },
+    releases.map(
+      (release, i): CatalogVersion => ({
+        versionId: release.id,
+        projectId,
+        versionLabel: release.id,
+        channel: release.channel ?? 'release',
+        state: 'listed',
+        environment: 'server_only',
+        loaders: ['fabric'],
+        gameVersions: ['26.3'],
+        publishedAt: new Date(Date.UTC(2026, 0, 1 + releases.length - i)),
+        file: cdn.file(`${projectId}-${release.id}`),
+        dependencies: [
+          ...(release.incompatible ?? []).map((p) => ({
+            projectId: p,
+            versionId: null,
+            kind: 'incompatible' as const,
+          })),
+          ...(release.incompatibleVersions ?? []).map((v) => ({
+            projectId: null,
+            versionId: v,
+            kind: 'incompatible' as const,
+          })),
+        ],
+      }),
+    ),
+  )
+
+/** A running Fabric server with these mods added, as its owner would add them. */
+const serverWith = async (add: NonNullable<ModChange['add']>) => {
+  const owner = await h.user('Alex', 'plus')
+  const created = await h.create(owner, { loader: 'fabric' })
+  await h.until(created.id, 'running')
+  await h.settled(created.id)
+  await apply(owner, created.id, { add })
+  return { owner, id: created.id }
+}
+const apply = async (owner: UserActor, id: string, change: ModChange) => {
+  const plan = await h.app.mods.plan(owner, id, change)
+  if (plan.kind !== 'ok') throw new Error(`Conflicts: ${JSON.stringify(plan.conflicts)}`)
+  const before = await h.server(id)
+  await h.app.mods.apply(
+    owner,
+    id,
+    change,
+    plan.mods.map((m) => m.artifact.sha512),
+    randomUUID(),
+  )
+  await h.until(id, (s) => s.lifecycle.status === 'running' && s.version > before.version + 1, 20_000)
+  await h.settled(id, 20_000)
+}
+const offered = async (owner: UserActor, id: string) => {
+  const { versions } = await h.app.modQueries.updates(owner, id)
+  const { mods } = await h.app.modQueries.list(owner, id)
+  return mods.map((mod) => [mod.name, mod.versionLabel, versions[mod.id] ?? null])
+}
+const pinned = async (id: string) =>
+  (await loadRevision(h.db, (await h.server(id)).desiredRevisionId)).mods.map((m) => m.versionLabel)
+
+describe.skipIf(!hasDatabase)('mod updates', () => {
   beforeAll(async () => {
     await cdn.start()
     h = await startHarness()
@@ -29,75 +107,6 @@ describe.skipIf(!hasDatabase)('mod updates', () => {
     await h.close()
     cdn.close()
   })
-
-  interface Release {
-    id: string
-    channel?: CatalogVersion['channel']
-    incompatible?: string[]
-  }
-  /** A project on the catalog, its versions listed newest first, their files on the CDN. */
-  const publish = (projectId: string, releases: Release[]) =>
-    h.catalog.publish(
-      {
-        projectId,
-        slug: projectId,
-        name: projectId,
-        summary: `${projectId}, for tests`,
-        iconUrl: null,
-        environments: ['server_only'],
-        downloads: 1,
-      },
-      releases.map(
-        (release, i): CatalogVersion => ({
-          versionId: release.id,
-          projectId,
-          versionLabel: release.id,
-          channel: release.channel ?? 'release',
-          state: 'listed',
-          environment: 'server_only',
-          loaders: ['fabric'],
-          gameVersions: ['26.3'],
-          publishedAt: new Date(Date.UTC(2026, 0, 1 + releases.length - i)),
-          file: cdn.file(`${projectId}-${release.id}`),
-          dependencies: (release.incompatible ?? []).map((p) => ({
-            projectId: p,
-            versionId: null,
-            kind: 'incompatible',
-          })),
-        }),
-      ),
-    )
-
-  /** A running Fabric server with these mods added, as its owner would add them. */
-  const serverWith = async (add: NonNullable<ModChange['add']>) => {
-    const owner = await h.user('Alex', 'plus')
-    const created = await h.create(owner, { loader: 'fabric' })
-    await h.until(created.id, 'running')
-    await h.settled(created.id)
-    await apply(owner, created.id, { add })
-    return { owner, id: created.id }
-  }
-  const apply = async (owner: UserActor, id: string, change: ModChange) => {
-    const plan = await h.app.mods.plan(owner, id, change)
-    if (plan.kind !== 'ok') throw new Error(`Conflicts: ${JSON.stringify(plan.conflicts)}`)
-    const before = await h.server(id)
-    await h.app.mods.apply(
-      owner,
-      id,
-      change,
-      plan.mods.map((m) => m.artifact.sha512),
-      randomUUID(),
-    )
-    await h.until(id, (s) => s.lifecycle.status === 'running' && s.version > before.version + 1, 20_000)
-    await h.settled(id, 20_000)
-  }
-  const offered = async (owner: UserActor, id: string) => {
-    const { versions } = await h.app.modQueries.updates(owner, id)
-    const { mods } = await h.app.modQueries.list(owner, id)
-    return mods.map((mod) => [mod.name, mod.versionLabel, versions[mod.id] ?? null])
-  }
-  const pinned = async (id: string) =>
-    (await loadRevision(h.db, (await h.server(id)).desiredRevisionId)).mods.map((m) => m.versionLabel)
 
   test('a newer version is found and offered, and goes on only when applied', async () => {
     publish('pickaxe', [{ id: 'pickaxe-1' }])
@@ -138,6 +147,23 @@ describe.skipIf(!hasDatabase)('mod updates', () => {
       ['hoe', 'hoe-1', null],
       ['sword', 'sword-1', 'sword-2'],
     ])
+  })
+
+  test('an update that needs another’s is offered with it, and applies as checked', async () => {
+    publish('anvil', [{ id: 'anvil-1' }])
+    publish('forge', [{ id: 'forge-1' }])
+    const { owner, id } = await serverWith([{ projectId: 'anvil' }, { projectId: 'forge' }])
+    publish('anvil', [{ id: 'anvil-2', incompatibleVersions: ['forge-1'] }, { id: 'anvil-1' }])
+    publish('forge', [{ id: 'forge-2' }, { id: 'forge-1' }])
+
+    expect(await offered(owner, id)).toEqual([
+      ['anvil', 'anvil-1', 'anvil-2'],
+      ['forge', 'forge-1', 'forge-2'],
+    ])
+    // The anvil alone would be refused beside forge-1: what is applied is the change that was checked.
+    expect((await h.app.mods.plan(owner, id, { upgrade: ['anvil'] })).kind).toBe('conflicts')
+    await apply(owner, id, { upgrade: (await h.app.modQueries.updates(owner, id)).upgrade })
+    expect(await pinned(id)).toEqual(['anvil-2', 'forge-2'])
   })
 
   test('a catalog that can’t be asked shows no updates, and the list still answers', async () => {

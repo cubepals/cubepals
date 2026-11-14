@@ -4,24 +4,26 @@
 
 'use client'
 
-import type { ServerView } from '@blockly/contracts'
+import type { ModUpdatesView, ServerView } from '@blockly/contracts'
 import { useQuery } from '@tanstack/react-query'
 import Link from 'next/link'
 import { useTRPC } from '../../../../lib/api'
 import { Note } from '../../../../ui'
 import { changeable } from './settings/shared'
-import { updateHref, updatesLine, type Versions } from './update-lines'
+import { updateHref, updatesLine } from './update-lines'
 
 /**
  * The updates Cubepals found for the server's mods, asked apart from the list so neither page waits
  * on them. None while they are looked for, or when they can't be: a control plane that doesn't
  * answer this yet included.
  */
-export function useModUpdates(serverId: string): Versions {
+export function useModUpdates(serverId: string): ModUpdatesView {
   const trpc = useTRPC()
   const updates = useQuery(trpc.mods.updates.queryOptions({ serverId }))
-  return updates.data?.versions ?? {}
+  return updates.data ?? NONE
 }
+
+const NONE: ModUpdatesView = { versions: {}, upgrade: [] }
 
 /**
  * On the server's page, the updates Cubepals found for its mods or its pack, with the way to them:
@@ -31,7 +33,7 @@ export function useModUpdates(serverId: string): Versions {
 export function ModUpdates({ server }: { server: ServerView }) {
   const trpc = useTRPC()
   const mods = useQuery(trpc.mods.list.queryOptions({ serverId: server.id }))
-  const versions = useModUpdates(server.id)
+  const { versions } = useModUpdates(server.id)
   const line = mods.data === undefined ? null : updatesLine(mods.data, versions)
   if (line === null || !changeable(server).ok) return null
   return (

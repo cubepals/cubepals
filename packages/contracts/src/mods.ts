@@ -114,6 +114,11 @@ export interface ModsView {
  */
 export interface ModUpdatesView {
   versions: Record<string, string>
+  /**
+   * The change Cubepals checked, which applying them sends as `ModChangeInput.upgrade`: an update
+   * that works only beside another's goes with it. Empty when there is nothing to update.
+   */
+  upgrade: string[] | 'all'
 }
 
 export interface ModSearchHit {

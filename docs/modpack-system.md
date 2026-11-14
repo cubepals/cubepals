@@ -313,8 +313,10 @@ on the catalog for it: the line appears when the answer does.
 - **Checked together.** The whole set, dependencies and what each jar asks for included, has to
   resolve. When it doesn't, the largest set that does is built one mod at a time, and the rest
   wait.
-- **Offered, never applied.** The Mods page marks each mod's version (`2.13.0 → 2.13.1`) with its
-  own Update, and says above the list what is out, with Update all. The server's page says the
+- **Offered, never applied.** The Mods page marks each mod's version (`2.13.0 → 2.13.1`), and
+  says above the list what is out, with one button (Update, or Update all) that applies the change
+  that was checked (`ModUpdatesView.upgrade`). No mod is offered on its own: an update that works
+  only beside another's goes with it. The server's page says the
   same sentence, linking to the Mods page with the update already planned (`?update=all`). The
   same link opens a pack's update on a pack server.
 - **Applied as any mod change.** The plan is shown first; the server restarts with it, or at its

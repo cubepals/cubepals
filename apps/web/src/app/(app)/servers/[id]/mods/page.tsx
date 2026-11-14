@@ -4,7 +4,14 @@
 
 'use client'
 
-import type { ModChangeInput, ModsView, ModView, RestartWhen, ServerView } from '@blockly/contracts'
+import type {
+  ModChangeInput,
+  ModsView,
+  ModUpdatesView,
+  ModView,
+  RestartWhen,
+  ServerView,
+} from '@blockly/contracts'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Download, ExternalLink, Plus, RefreshCw, Upload } from 'lucide-react'
 import Image from 'next/image'
@@ -39,7 +46,7 @@ import {
   useChanged,
   whatHappens,
 } from '../settings/shared'
-import { updateOf, updatesLine, type Versions, withUpdates } from '../update-lines'
+import { updateOf, updatesLine, withUpdates } from '../update-lines'
 import { useServer } from '../use-server'
 import { BedrockGoes } from './bedrock-goes'
 import { OwnDatapacks } from './own-datapacks'
@@ -62,13 +69,16 @@ function useAskedUpdate(ready: boolean, open: () => void) {
   }, [asked, ready, open])
 }
 
-/** Every update Cubepals found, as one change: the set it checked runs together. */
-function updateAll(list: ModsView, versions: Versions): Pending {
-  const mods = withUpdates(list, versions)
+/**
+ * Every update Cubepals found, as the one change it checked: an update that works only beside
+ * another's goes with it, so none is offered on its own.
+ */
+function updateAll(list: ModsView, updates: ModUpdatesView): Pending {
+  const mods = withUpdates(list, updates.versions)
   const noun = list.kind === 'plugins' ? 'plugins' : list.kind === 'datapacks' ? 'datapacks' : 'mods'
   return {
     title: mods.length === 1 ? `Update ${mods[0]?.name}?` : `Update ${mods.length} ${noun}?`,
-    change: { upgrade: mods.map((mod) => mod.id) },
+    change: { upgrade: updates.upgrade },
   }
 }
 
@@ -252,12 +262,14 @@ export default function ModsPage() {
   const server = useServer()
   const trpc = useTRPC()
   const mods = useQuery(trpc.mods.list.queryOptions({ serverId: server.id }))
-  const versions = useModUpdates(server.id)
+  const updates = useModUpdates(server.id)
   const [pending, setPending] = useState<Pending | null>(null)
   const found =
-    mods.data !== undefined && mods.data.modpack === null && withUpdates(mods.data, versions).length > 0
+    mods.data !== undefined &&
+    mods.data.modpack === null &&
+    withUpdates(mods.data, updates.versions).length > 0
   useAskedUpdate(found && server.data !== undefined && changeable(server.data).ok, () => {
-    if (mods.data !== undefined) setPending(updateAll(mods.data, versions))
+    if (mods.data !== undefined) setPending(updateAll(mods.data, updates))
   })
 
   if (server.isPending || mods.isPending) return <PageSkeleton sections={[3]} />
@@ -287,7 +299,7 @@ export default function ModsPage() {
       ) : (
         <>
           <ChangeState view={view} />
-          <Installed view={view} list={list} versions={versions} onChange={setPending} />
+          <Installed view={view} list={list} updates={updates} onChange={setPending} />
           <Search view={view} list={list} onChange={setPending} />
           {/* Jars need a server type that runs them; a datapack goes into any world. */}
           {list.kind !== 'datapacks' && <Uploads view={view} list={list} onChange={setPending} />}
@@ -310,18 +322,18 @@ export default function ModsPage() {
 function Installed({
   view,
   list,
-  versions,
+  updates,
   onChange,
 }: {
   view: ServerView
   list: ModsView
-  versions: Versions
+  updates: ModUpdatesView
   onChange: (pending: Pending) => void
 }) {
   const noun = list.kind === 'plugins' ? 'plugins' : list.kind === 'datapacks' ? 'datapacks' : 'mods'
   const allowed = changeable(view)
   // Cubepals looks for updates itself, each time this page is read, and offers only what it checked.
-  const found = updatesLine(list, versions)
+  const found = updatesLine(list, updates.versions)
   return (
     <FormSection
       title="On this server"
@@ -331,15 +343,15 @@ function Installed({
           : `${loaderLabel(list.loader)} ${list.gameVersion}. Players need the ones marked for players too.`
       }
       actions={
-        // One update is its row's button; more go together, as the set Cubepals checked.
-        withUpdates(list, versions).length < 2 ? undefined : (
+        // One button for what Cubepals checked together; a row only says its version.
+        found === null ? undefined : (
           <Button
             variant="primary"
             icon={<RefreshCw {...ICON} aria-hidden />}
             disabled={!allowed.ok}
-            onClick={() => onChange(updateAll(list, versions))}
+            onClick={() => onChange(updateAll(list, updates))}
           >
-            Update all
+            {withUpdates(list, updates.versions).length === 1 ? 'Update' : 'Update all'}
           </Button>
         )
       }
@@ -354,7 +366,7 @@ function Installed({
           <ModRow
             key={mod.id}
             mod={mod}
-            update={updateOf(mod, versions)}
+            update={updateOf(mod, updates.versions)}
             allowed={allowed.ok}
             onChange={onChange}
           />
@@ -403,16 +415,6 @@ function ModRow({
               aria-label={`${mod.name} on Modrinth`}
             >
               Modrinth
-            </Button>
-          )}
-          {update !== null && (
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={!allowed}
-              onClick={() => onChange({ title: `Update ${mod.name}?`, change: { upgrade: [mod.id] } })}
-            >
-              Update
             </Button>
           )}
           {mod.origin === 'user' && (

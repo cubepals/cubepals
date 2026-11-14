@@ -139,8 +139,12 @@ export class ModQueries {
   async updates(actor: Actor, serverId: string): Promise<ModUpdatesView> {
     const server = authorize(actor, await findServer(this.#db, serverId))
     const revision = await loadRevision(this.#db, server.desiredRevisionId)
-    const found = await this.#updates.of(revision).catch(() => new Map<string, string>())
-    return { versions: Object.fromEntries(found) }
+    const found = await this.#updates.of(revision).catch(() => null)
+    if (found === null) return { versions: {}, upgrade: [] }
+    return {
+      versions: Object.fromEntries(found.versions),
+      upgrade: found.upgrade === 'all' ? 'all' : [...found.upgrade],
+    }
   }
 
   /** Whether the owner can upload here: the policy's own answer. */

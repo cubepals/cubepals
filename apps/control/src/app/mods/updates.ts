@@ -28,6 +28,17 @@ type Planner = (desired: ServerRevision, change: ModChange) => Promise<ModPlan>
 
 type Updated = Extract<ModPlan, { kind: 'ok' }>['updated']
 
+/**
+ * What was found: each mod's version by `identity`, and the change that was checked, which is the
+ * one to apply. A mod whose update works only beside another's is never offered on its own.
+ */
+export interface Found {
+  versions: ReadonlyMap<string, string>
+  upgrade: NonNullable<ModChange['upgrade']>
+}
+
+const NONE: Found = { versions: new Map(), upgrade: [] }
+
 /** How long the updates found for one revision are kept: a page opened again asks nobody. */
 const KEPT_MS = 5 * MINUTE_MS
 /** Revisions whose updates are kept at once; the oldest go first. */
@@ -40,7 +51,7 @@ const MOST_TRIED = 40
 export class ModUpdates {
   readonly #plan: Planner
   readonly #catalog: Pick<ModCatalog, 'versionsByIds'>
-  readonly #kept = new Map<string, { until: number; updates: ReadonlyMap<string, string> }>()
+  readonly #kept = new Map<string, { until: number; found: Found }>()
 
   constructor(deps: { plan: Planner; catalog: Pick<ModCatalog, 'versionsByIds'> }) {
     this.#plan = deps.plan
@@ -48,47 +59,48 @@ export class ModUpdates {
   }
 
   /**
-   * The mods with an update this revision can run, by `identity`, each with the version it moves
-   * to. Empty for a pack server, one with no catalog mods, or one already up to date.
+   * The mods with an update this revision can run, and the change that applies them. None for a
+   * pack server, one with no catalog mods, or one already up to date.
    */
-  async of(desired: ServerRevision): Promise<ReadonlyMap<string, string>> {
-    if (desired.modpack !== null || !desired.mods.some((m) => 'versionId' in m.source)) return new Map()
+  async of(desired: ServerRevision): Promise<Found> {
+    if (desired.modpack !== null || !desired.mods.some((m) => 'versionId' in m.source)) return NONE
     const kept = this.#kept.get(desired.id)
-    if (kept !== undefined && kept.until > Date.now()) return kept.updates
-    const updates = (await this.#together(desired)) ?? (await this.#oneByOne(desired))
-    this.#keep(desired.id, updates)
-    return updates
+    if (kept !== undefined && kept.until > Date.now()) return kept.found
+    const found = (await this.#together(desired)) ?? (await this.#oneByOne(desired))
+    this.#keep(desired.id, found)
+    return found
   }
 
   /** Every update at once, narrowed to the ones that are newer; null when they can't run together. */
-  async #together(desired: ServerRevision): Promise<ReadonlyMap<string, string> | null> {
+  async #together(desired: ServerRevision): Promise<Found | null> {
     let upgrade: ModChange['upgrade'] = 'all'
     for (let round = 0; round < NARROWING_ROUNDS; round++) {
       const plan = await this.#plan(desired, { upgrade })
       if (plan.kind === 'conflicts') return null
       const newer = await this.#newer(plan.updated)
-      if (newer.length === plan.updated.length) return labels(newer)
-      if (newer.length === 0) return new Map()
+      if (newer.length === plan.updated.length)
+        return newer.length === 0 ? NONE : { versions: labels(newer), upgrade }
+      if (newer.length === 0) return NONE
       upgrade = newer.map(({ to }) => identity(to))
     }
-    return new Map()
+    return NONE
   }
 
   /**
    * The largest set that runs together, built one mod at a time: each is kept when it still
    * plans with the ones kept before it and moves nothing back.
    */
-  async #oneByOne(desired: ServerRevision): Promise<ReadonlyMap<string, string>> {
+  async #oneByOne(desired: ServerRevision): Promise<Found> {
     const tried = desired.mods.filter((m) => 'versionId' in m.source).map(identity)
     let kept: string[] = []
-    let found: ReadonlyMap<string, string> = new Map()
+    let found = NONE
     for (const id of tried.slice(0, MOST_TRIED)) {
       const plan = await this.#plan(desired, { upgrade: [...kept, id] })
       if (plan.kind === 'conflicts' || !plan.updated.some(({ to }) => identity(to) === id)) continue
       const newer = await this.#newer(plan.updated)
       if (newer.length !== plan.updated.length) continue
       kept = [...kept, id]
-      found = labels(newer)
+      found = { versions: labels(newer), upgrade: kept }
     }
     return found
   }
@@ -111,9 +123,9 @@ export class ModUpdates {
     })
   }
 
-  #keep(revisionId: string, updates: ReadonlyMap<string, string>) {
+  #keep(revisionId: string, found: Found) {
     this.#kept.delete(revisionId)
-    this.#kept.set(revisionId, { until: Date.now() + KEPT_MS, updates })
+    this.#kept.set(revisionId, { until: Date.now() + KEPT_MS, found })
     for (const oldest of this.#kept.keys()) {
       if (this.#kept.size <= MOST_KEPT) break
       this.#kept.delete(oldest)
