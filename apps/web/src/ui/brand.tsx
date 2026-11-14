@@ -17,7 +17,7 @@
 export const SOURCE_URL = 'https://github.com/cubepals/cubepals'
 
 /** The mark alone. Give it a label where it stands for the name; leave it out where the word is beside it. */
-export function Mark({ className, label }: { className?: string; label?: string }) {
+function Mark({ className, label }: { className?: string; label?: string }) {
   return (
     // biome-ignore lint/a11y/noSvgWithoutTitle: titled below where it carries the name, aria-hidden where the word is beside it
     <svg

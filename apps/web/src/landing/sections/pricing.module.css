@@ -1,0 +1,109 @@
+/* SPDX-FileCopyrightText: 2026 The Cubepals Authors
+ *
+ * SPDX-License-Identifier: LicenseRef-Cubepals-Reserved
+ */
+
+/* What it costs: the plan cards, and beside them how far a plan's hours go at each size. */
+
+.pricing {
+  border-top: 1px solid var(--rule);
+}
+
+.head {
+  display: grid;
+  justify-items: start;
+  gap: 22px;
+  padding-block: clamp(72px, 10vw, 136px) clamp(40px, 5vw, 56px);
+}
+
+.title {
+  max-width: 13em;
+}
+
+.body {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr);
+  align-items: start;
+  gap: clamp(24px, 3vw, 40px);
+}
+
+.cards {
+  margin: 0;
+}
+
+/* How far the hours go: the sizes, the hours of play they leave, and a bar of the plan's hours. */
+.hours {
+  display: grid;
+  gap: 16px;
+  padding: 24px;
+  box-shadow: inset 0 0 0 1px var(--rule);
+}
+
+.sizes {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  margin: 0;
+}
+
+.sizes label {
+  justify-content: center;
+  min-width: 0;
+  padding-inline: 4px;
+}
+
+.play {
+  display: grid;
+  gap: 4px;
+  font-size: 15px;
+  line-height: 20px;
+  color: var(--on-ground-muted);
+}
+
+.number {
+  font-size: 64px;
+  line-height: 0.95;
+  font-weight: 640;
+  letter-spacing: -0.04em;
+  font-variation-settings: "SHRP" 100;
+  font-variant-numeric: tabular-nums;
+  color: var(--on-ground);
+}
+
+/* The plan's hours as a bar, the part played filled with ink and the rest a dither of it. */
+.bar {
+  height: 14px;
+  background-color: var(--paper);
+  background-image: radial-gradient(var(--ink) 0.6px, transparent 0.8px);
+  background-size: 4px 4px;
+  box-shadow: inset 0 0 0 1px var(--ink);
+}
+
+.bar span {
+  display: block;
+  height: 100%;
+  background: var(--ink);
+  transition: width 420ms var(--out-quart);
+}
+
+.more {
+  padding-block: 28px clamp(72px, 9vw, 120px);
+  font-size: 16px;
+  line-height: 24px;
+}
+
+@media (max-width: 1060px) {
+  .body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .hours {
+    max-width: 560px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bar span {
+    transition: none;
+  }
+}

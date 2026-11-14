@@ -1,0 +1,64 @@
+/* SPDX-FileCopyrightText: 2026 The Cubepals Authors
+ *
+ * SPDX-License-Identifier: LicenseRef-Cubepals-Reserved
+ */
+
+/* The last call: the line, big, and the button under it, on ink. */
+
+.closing {
+  border-top: 1px solid var(--rule);
+}
+
+.inner {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  align-items: end;
+  gap: 40px clamp(24px, 4vw, 64px);
+  padding-block: clamp(96px, 12vw, 168px) clamp(72px, 9vw, 120px);
+}
+
+.inner .title {
+  grid-column: 1;
+  max-width: 8.5em;
+  font-size: clamp(44px, 5.6vw, 84px);
+}
+
+/* The island asleep, big, waiting: the page's last picture, printed dot for dot and cropped by
+   its box rather than scaled to it. */
+.picture {
+  position: relative;
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: center;
+  aspect-ratio: 32 / 30;
+  width: 100%;
+}
+
+.go {
+  grid-column: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px 28px;
+}
+
+.small {
+  max-width: 30em;
+  font-size: 15px;
+  line-height: 22px;
+  color: var(--on-ground-muted);
+}
+
+@media (max-width: 860px) {
+  .inner {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .picture {
+    grid-column: 1;
+    grid-row: auto;
+    max-width: 420px;
+    overflow: hidden;
+  }
+}

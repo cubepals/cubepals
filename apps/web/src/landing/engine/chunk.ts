@@ -15,10 +15,10 @@ import { hash3, Kind, World } from './world'
 export const SIZE = 16
 export const SURFACE_Y = 64
 export const TOP = 13
-export const BOTTOM = -128
+const BOTTOM = -128
 
 /** The rooms, top to bottom, by the Minecraft Y of their floor. Each has its own light switch. */
-export const ROOMS = [
+const ROOMS = [
   { key: 'edge', floorY: 52, wall: 'z' },
   { key: 'sleep', floorY: 40, wall: 'x' },
   { key: 'machine', floorY: 28, wall: 'z' },
@@ -27,25 +27,19 @@ export const ROOMS = [
   { key: 'runtimes', floorY: -16, wall: 'x' },
   { key: 'fleet', floorY: -34, wall: 'z' },
 ] as const
-export type RoomKey = (typeof ROOMS)[number]['key']
+type RoomKey = (typeof ROOMS)[number]['key']
 
 const ROOM_HEIGHT = 7
 const ROOM_DEPTH = 7
 
 /** Light switches: 1 is the house, then one per room in order; the cellar has its own. */
 export const HOME = 1
-export const CELLAR = 12
+const CELLAR = 12
 /** A switch that is never on, for a place that stays dark whatever its room does. */
-export const DARK = 11
+const DARK = 11
 /** A switch that is always on, for things that carry their own light. */
 export const LIT = 13
-export const groupOf = (key: RoomKey): number => 2 + ROOMS.findIndex((room) => room.key === key)
-
-/** The Minecraft Y a section about this room should hold in the middle of the view. */
-export const roomY = (key: RoomKey): number => {
-  const room = ROOMS.find((candidate) => candidate.key === key)
-  return (room?.floorY ?? SURFACE_Y) + ROOM_HEIGHT / 2
-}
+const groupOf = (key: RoomKey): number => 2 + ROOMS.findIndex((room) => room.key === key)
 
 // Every room is the same box, cut through one wall: twelve blocks along the wall, seven deep.
 const ROOM_LO = 2
@@ -57,19 +51,11 @@ const ROOM_BACK = SIZE - ROOM_DEPTH
  * wall you look through, `v` is how far in from the back wall, `h` is height above the floor.
  * Heights in the world are blocks from the grass.
  */
-export function roomPlace(key: RoomKey, u: number, v: number, h: number): [number, number, number] {
+function roomPlace(key: RoomKey, u: number, v: number, h: number): [number, number, number] {
   const spec = ROOMS.find((candidate) => candidate.key === key) ?? ROOMS[0]
   const y = spec.floorY - SURFACE_Y + 1 + h
   return spec.wall === 'z' ? [ROOM_LO + u, y, ROOM_BACK + v] : [ROOM_BACK + v, y, ROOM_LO + u]
 }
-
-/** The middle of a room, where a camera looking at it should point. */
-export const roomCenter = (key: RoomKey): [number, number, number] =>
-  roomPlace(key, 5.5, 3.5, ROOM_HEIGHT / 2 - 1.5)
-
-/** Which way a room opens, seen from the corner the two open walls share: z-wall rooms face left. */
-export const roomFaces = (key: RoomKey): 'left' | 'right' =>
-  ROOMS.find((candidate) => candidate.key === key)?.wall === 'x' ? 'right' : 'left'
 
 function strata(world: World): void {
   for (let y = BOTTOM; y <= 0; y++)

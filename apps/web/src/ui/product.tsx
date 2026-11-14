@@ -10,32 +10,47 @@ import { PlayerFace } from './face'
 import { type PillStatus, StatusPill } from './status'
 import { Badge } from './surfaces'
 
-export function ServerCard({
-  href,
-  name,
-  status,
-  statusLabel,
-  image,
-  version,
-  loader,
-  pack,
-  detail,
-  address,
-}: {
-  href: string
+/** What a server's card shows of it, whichever way the card is drawn. */
+interface Shown {
   name: string
   status: PillStatus
   statusLabel?: string
-  /** The world's cover, cropped to 3:2 by the card. */
-  image: string
-  version: string
+  /** Its Minecraft version, where there is one to show. */
+  version?: string
   loader: string
   /** The modpack it plays, shown in place of its loader: the pack is what it is. */
   pack?: { name: string; icon: string | null } | null | undefined
   /** One live line: "12 / 20 players", or the wait while it is being built. */
   detail: string
   address: string
-}) {
+}
+
+/** The servers page's card: pressing it opens the server's page, under its world's cover. */
+interface Linked {
+  href: string
+  /** The world's cover, cropped to 3:2 by the card. */
+  image: string
+  action?: never
+  live?: never
+}
+
+/**
+ * A card with a button of its own, which a link can't hold. Its world is drawn beside it rather
+ * than over it (the landing's island), so it has no cover: its state sits beside its name, which
+ * isn't a heading on a card that stands alone, and the button sits at its foot, beside the line
+ * a press of it changes.
+ */
+interface Own {
+  href?: never
+  image?: never
+  action: ReactNode
+  /** Whether a change of its detail is said aloud: only once the visitor has asked for one. */
+  live?: boolean
+}
+
+export function ServerCard(props: Shown & (Linked | Own)) {
+  if (props.href === undefined) return <OwnCard {...props} />
+  const { href, image, name, status, statusLabel, detail, address } = props
   return (
     // Fetched whole as soon as the card shows, so pressing it opens the server at once.
     <Link href={href} prefetch className="bk-server">
@@ -53,14 +68,42 @@ export function ServerCard({
       </div>
       <div className="bk-server__body">
         <h3 className="bk-server__name">{name}</h3>
-        <div className="bk-server__meta">
-          <Badge mono>{version}</Badge>
-          {pack ? <PackBadge name={pack.name} icon={pack.icon} /> : <Badge>{loader}</Badge>}
-        </div>
+        <Runs {...props} />
         <p className="bk-server__detail bk-num">{detail}</p>
         <span className="bk-server__addr">{address}</span>
       </div>
     </Link>
+  )
+}
+
+function OwnCard({ name, status, statusLabel, detail, address, action, live, ...runs }: Shown & Own) {
+  return (
+    <div className="bk-server">
+      <div className="bk-server__body">
+        <div className="bk-server__head">
+          <p className="bk-server__name">{name}</p>
+          <StatusPill status={status} {...(statusLabel ? { label: statusLabel } : {})} />
+        </div>
+        <Runs {...runs} />
+        <span className="bk-server__addr">{address}</span>
+        <div className="bk-server__foot">
+          <p className="bk-server__detail bk-num" aria-live={live ? 'polite' : undefined}>
+            {detail}
+          </p>
+          {action}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/** What a server runs, under its name: its version, and its modpack or else its loader. */
+function Runs({ version, loader, pack }: Pick<Shown, 'version' | 'loader' | 'pack'>) {
+  return (
+    <div className="bk-server__meta">
+      {version !== undefined && <Badge mono>{version}</Badge>}
+      {pack ? <PackBadge name={pack.name} icon={pack.icon} /> : <Badge>{loader}</Badge>}
+    </div>
   )
 }
 

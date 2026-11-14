@@ -3,13 +3,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * The web app's build: the /api rewrite to the control plane, a phone's landing page, the headers
- * every response carries, where password managers change a password, standalone output for
- * self-hosting, and what PostHog needs from the build (the environment, the version, source maps).
+ * The web app's build: the /api rewrite to the control plane, the headers every response carries,
+ * where password managers change a password, standalone output for self-hosting, and what PostHog
+ * needs from the build (the environment, the version, source maps).
  */
 import { join } from 'node:path'
 import type { NextConfig } from 'next'
-import { PHONE_AGENT, PHONE_HINT } from './src/landing/phone/agent'
 import { indexable } from './src/lib/site'
 import { SITE_HEADERS } from './src/lib/site-headers'
 import { apiUpstream } from './src/lib/upstream'
@@ -86,20 +85,7 @@ export default {
   },
   async rewrites() {
     return {
-      // A phone asking for the landing page is shown the phone's own (src/app/phone), at the same
-      // address: it never loads the film it would only hide.
-      beforeFiles: [
-        {
-          source: '/',
-          has: [{ type: 'header', key: 'user-agent', value: PHONE_AGENT }],
-          destination: '/phone',
-        },
-        {
-          source: '/',
-          has: [{ type: 'header', key: 'sec-ch-ua-mobile', value: PHONE_HINT }],
-          destination: '/phone',
-        },
-      ],
+      beforeFiles: [],
       afterFiles: [{ source: '/api/:path*', destination: `${apiUpstream()}/api/:path*` }],
       fallback: [],
     }

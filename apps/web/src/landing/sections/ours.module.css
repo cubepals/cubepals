@@ -1,0 +1,85 @@
+/* SPDX-FileCopyrightText: 2026 The Cubepals Authors
+ *
+ * SPDX-License-Identifier: LicenseRef-Cubepals-Reserved
+ */
+
+/* Cubepals' own servers, on ink: a ruled cell each, with its state and its address to copy. */
+
+.ours {
+  border-top: 1px solid var(--rule);
+}
+
+.head {
+  display: grid;
+  justify-items: start;
+  gap: 22px;
+  padding-block: clamp(72px, 10vw, 136px) clamp(40px, 5vw, 56px);
+}
+
+.title {
+  max-width: 12em;
+}
+
+.list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--rule);
+}
+
+.server {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  padding: 28px var(--gutter) 32px;
+}
+
+.server + .server {
+  border-left: 1px solid var(--rule);
+}
+
+.top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.now {
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--on-ground);
+}
+
+.copy {
+  margin-top: 8px;
+  color: var(--ink);
+}
+
+.more {
+  padding-block: 28px clamp(72px, 9vw, 120px);
+  border-top: 1px solid var(--rule);
+  font-size: 16px;
+  line-height: 24px;
+}
+
+.more a {
+  color: var(--on-ground);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.25em;
+}
+
+@media (max-width: 860px) {
+  .list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .server + .server {
+    border-left: 0;
+    border-top: 1px solid var(--rule);
+  }
+}

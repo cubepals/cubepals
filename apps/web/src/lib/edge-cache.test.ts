@@ -38,8 +38,7 @@ function edge() {
         cache,
         render: async (request) => {
           made++
-          const form = /Mobi/.test(request.headers.get('user-agent') ?? '') ? 'phone' : 'film'
-          return new Response(`<html>${form} ${made}</html>`, {
+          return new Response(`<html>${new URL(request.url).pathname} ${made}</html>`, {
             headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': NEXT_PRIVATE },
           })
         },
@@ -89,7 +88,7 @@ describe('the pages kept at the edge', () => {
       const { response, body } = await site.ask(path, { cookie: SIGNED_IN })
       expect(response.headers.get('cache-control')).toBe(NEXT_PRIVATE)
       expect(response.headers.has(EDGE)).toBe(false)
-      expect(body).not.toBe('<html>film 1</html>')
+      expect(body).not.toBe('<html>/ 1</html>')
     }
     expect(site.kept.size).toBe(1)
   })
@@ -122,13 +121,12 @@ describe('the pages kept at the edge', () => {
     expect(site.kept.size).toBe(0)
   })
 
-  test("a phone's landing page is kept apart from the film's", async () => {
+  test('the landing page is one page for every screen: a phone is answered with the kept copy', async () => {
     const site = edge()
-    expect((await site.ask('/')).body).toContain('film')
-    expect((await site.ask('/', { 'user-agent': IPHONE })).body).toContain('phone')
-    expect((await site.ask('/', { 'sec-ch-ua-mobile': '?1', 'user-agent': IPHONE })).body).toContain('phone')
-    expect((await site.ask('/')).body).toContain('film')
-    expect(site.made()).toBe(2)
+    const first = (await site.ask('/')).body
+    expect((await site.ask('/', { 'user-agent': IPHONE })).body).toBe(first)
+    expect((await site.ask('/', { 'sec-ch-ua-mobile': '?1', 'user-agent': IPHONE })).body).toBe(first)
+    expect(site.made()).toBe(1)
   })
 
   test('a new deploy never answers with the last one’s pages', async () => {
@@ -147,9 +145,9 @@ describe('the pages kept at the edge', () => {
     site.pass(FRESH_S * SECOND_MS + 1)
     const stale = await site.ask('/')
     expect(stale.response.headers.get(EDGE)).toBe('stale')
-    expect(stale.body).toBe('<html>film 1</html>')
+    expect(stale.body).toBe('<html>/ 1</html>')
     expect(site.made()).toBe(2)
-    expect((await site.ask('/')).body).toBe('<html>film 2</html>')
+    expect((await site.ask('/')).body).toBe('<html>/ 2</html>')
   })
 
   test('an answer that sets a cookie is never kept', async () => {

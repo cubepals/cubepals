@@ -4,17 +4,16 @@
 
 /**
  * Holds the cast to how people move: never more of them than a scene has, nobody within a block
- * of anybody, nobody sliding sideways or backwards, jumping, hurrying or spinning. Every scene on
- * the surface and every room under it is played for minutes and measured.
+ * of anybody, nobody sliding sideways or backwards, jumping, hurrying or spinning. The friends on
+ * the grass are played for minutes, joining and leaving as the island asks, and measured.
  */
 import { describe, expect, test } from 'bun:test'
-import { Cast, type Play } from './cast.ts'
-import { ROOMS, type RoomKey } from './chunk.ts'
+import { Cast } from './cast.ts'
 import { REACH } from './models.ts'
 
 /**
- * What the page promises about how the people on the chunk move (README, "Who is in the
- * picture"), held to by running every scene for a long while with no browser:
+ * What the page promises about how the people on the chunk move (README, "The island"), held to
+ * by running every scene for a long while with no browser:
  *
  *   - no two figures are ever nearer than a block apart;
  *   - nobody moves across the way they face, or backwards;
@@ -201,6 +200,16 @@ describe('the people on the grass', () => {
     )
   })
 
+  test('the island: three join one at a time, play a while, and all leave, over and over', () => {
+    holds(
+      run((cast, time, box) => {
+        const count = time % 40 < 22 ? 3 : 0
+        cast.friendsStep(count, DT, box, none, 1)
+      }),
+      3,
+    )
+  })
+
   test('the first screen, pressed impatiently: joins and leaves cut across each other', () => {
     holds(
       run((cast, time, box) => {
@@ -279,85 +288,4 @@ describe('the people on the grass', () => {
         expect(reached).toBeCloseTo(rod.y + rod.sy / 2 + (rod.sy / 2) * Math.cos(rod.tipped))
       }
     })
-})
-
-describe('each way to play', () => {
-  const people: Record<Play, number> = { survival: 2, hardcore: 3, smooth: 3, creative: 1, create: 1 }
-  for (const play of Object.keys(people) as Play[])
-    test(play, () => {
-      holds(
-        run((cast, _time, box) => {
-          cast.playStep(play, DT, box, none, 1, false)
-        }),
-        people[play],
-      )
-    })
-
-  test('in the order the tour goes, each for as long as the tour holds it', () => {
-    const order: Play[] = ['survival', 'creative', 'creative', 'create']
-    holds(
-      run((cast, time, box) => {
-        cast.playStep(order[Math.floor(time / 9) % order.length] as Play, DT, box, none, 1, false)
-      }),
-      2,
-    )
-  })
-})
-
-describe('the worker underground', () => {
-  for (const room of ROOMS.map((each) => each.key) as RoomKey[])
-    test(room, () => {
-      holds(
-        run((cast, _time, box) => {
-          cast.roomStep(room, DT, box, none, false)
-        }),
-        // The gate and the sleep room have a friend who comes and goes, beside the worker.
-        room === 'edge' || room === 'sleep' ? 2 : 1,
-      )
-    })
-})
-
-describe('the server under the house', () => {
-  const drawn = (cast: Cast, play: Play, party: '5' | '10' | '20' | '50' | 'more', frames: number) => {
-    let boxes: Raw[] = []
-    for (let n = 0; n < frames; n++) {
-      boxes = []
-      cast.cellar(
-        '',
-        play,
-        party,
-        DT,
-        (x, y, z, sx, sy, sz, tone, _kind, _group, _inside, round = 0, _tipped = 0, solid = 1) => {
-          boxes.push({ x, y, z, sx, sy, sz, tone, round, solid })
-        },
-        false,
-      )
-    }
-    return boxes
-  }
-  /** The trays of the rack: the pale ones, nearly two blocks deep and nearly as wide. */
-  const trays = (boxes: Raw[]) => boxes.filter((box) => near(box.sx, 1.84) && near(box.sz, 1.95)).length
-
-  test('it stands inside the vault, whatever was chosen', () => {
-    for (const play of ['survival', 'creative', 'hardcore', 'smooth', 'create'] as Play[])
-      for (const party of ['5', '10', '20', '50', 'more'] as const)
-        for (const box of drawn(new Cast(), play, party, 600)) {
-          expect(box.x).toBeGreaterThanOrEqual(3)
-          expect(box.x + box.sx).toBeLessThanOrEqual(16)
-          expect(box.z).toBeGreaterThanOrEqual(1)
-          expect(box.z + box.sz).toBeLessThanOrEqual(7)
-          expect(box.y).toBeGreaterThanOrEqual(-8)
-          // A turning piece of the small world reaches a little past its own box at the corners.
-          expect(box.y + box.sy).toBeLessThanOrEqual(-1.4)
-        }
-  })
-
-  test('it grows with the group, a tray at a time, and shrinks again', () => {
-    const cast = new Cast()
-    expect(trays(drawn(cast, 'survival', '5', 1))).toBe(3)
-    // Asked for more, nothing arrives in a frame.
-    expect(trays(drawn(cast, 'survival', '20', 1))).toBe(3)
-    expect(trays(drawn(cast, 'survival', '20', 300))).toBe(5)
-    expect(trays(drawn(cast, 'survival', '5', 300))).toBe(3)
-  })
 })

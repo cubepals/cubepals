@@ -1,0 +1,192 @@
+/* SPDX-FileCopyrightText: 2026 The Cubepals Authors
+ *
+ * SPDX-License-Identifier: LicenseRef-Cubepals-Reserved
+ */
+
+/* The island on the first screen: its picture, the drawing's measurements, and the server's card. */
+
+.island {
+  position: relative;
+  display: grid;
+  gap: 14px;
+}
+
+.picture {
+  position: relative;
+  aspect-ratio: 32 / 30;
+  width: 100%;
+}
+
+/* The print is kept dot for dot, centred in its box and cropped by it: never scaled, never
+   smoothed into grey. The canvas is sized to whole dots by the page (drawing.ts). */
+.canvas {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  translate: -50% -50%;
+  image-rendering: pixelated;
+  opacity: 0;
+  transition: opacity 600ms cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+.picture[data-shown] .canvas {
+  opacity: 1;
+}
+
+/* A still, at its own dots times the CSS pixels a dot is: 2 at one device pixel to a CSS pixel,
+   1.5 at two, 1 at three (dots.ts); the page refines it for any other (`--unit`, Print.tsx). */
+.print {
+  --unit: 2px;
+  --across: 282;
+  --down: 265;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  translate: -50% -50%;
+  display: block;
+  pointer-events: none;
+}
+
+@media (min-resolution: 1.5dppx) {
+  .print {
+    --unit: 1.5px;
+    --across: 376;
+    --down: 353;
+  }
+}
+
+@media (min-resolution: 2.5dppx) {
+  .print {
+    --unit: 1px;
+  }
+}
+
+.print img {
+  display: block;
+  width: calc(var(--across) * var(--unit));
+  height: calc(var(--down) * var(--unit));
+  max-width: none;
+  image-rendering: pixelated;
+}
+
+.picture .print {
+  transition: opacity 600ms 120ms;
+}
+
+.picture[data-shown] .print {
+  opacity: 0;
+}
+
+/* Hairlines in the ground's own ink, never on the drawing. */
+.measures {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.measures line {
+  stroke: var(--on-ground-faint);
+  stroke-width: 1.5px;
+  vector-effect: non-scaling-stroke;
+}
+
+.measure {
+  position: absolute;
+  translate: -50% -50%;
+  font-family: var(--font-plex-mono), ui-monospace, monospace;
+  font-size: 11px;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  color: var(--on-ground-muted);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.level {
+  translate: 0 -50%;
+}
+
+/* A sleeping server's snore, from the chimney: three letters rising and thinning, one after another. */
+.snore {
+  position: absolute;
+  translate: -20% -110%;
+  display: flex;
+  gap: 1px;
+  font-family: var(--font-pixel), var(--font-plex-mono), monospace;
+  color: var(--paper);
+  pointer-events: none;
+}
+
+.snore i {
+  font-style: normal;
+  font-size: 13px;
+  animation: snore 2.4s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+  opacity: 0;
+}
+
+.snore i:nth-child(2) {
+  font-size: 16px;
+  animation-delay: 0.5s;
+  translate: 0 -8px;
+}
+
+.snore i:nth-child(3) {
+  font-size: 20px;
+  animation-delay: 1s;
+  translate: 0 -18px;
+}
+
+@keyframes snore {
+  0% {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  30% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+}
+
+/* The server's card is the design system's (Card.tsx): here it is only given its width. */
+.card {
+  width: min(100%, 400px);
+}
+
+.note {
+  font-family: var(--font-plex-mono), ui-monospace, monospace;
+  font-size: 11px;
+  line-height: 16px;
+  letter-spacing: 0.02em;
+  color: var(--on-ground-muted);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .snore i {
+    animation: none;
+    opacity: 1;
+  }
+
+  .canvas,
+  .picture .print {
+    transition: none;
+  }
+}
+
+/* A narrow screen crops the print to its box rather than scale it, and leaves the measurements
+   out: there is no room for them beside it. */
+@media (max-width: 560px) {
+  .picture {
+    overflow: hidden;
+  }
+
+  .measures,
+  .measure {
+    display: none;
+  }
+}
