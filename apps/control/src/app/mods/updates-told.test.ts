@@ -5,16 +5,15 @@
 /**
  * The updates Cubepals found, said in the game to an operator as they join, with the link that
  * opens them on the Mods page: once a join, to operators alone, in the text format of the server's
- * Minecraft.
+ * Minecraft, and to the operator whose join woke the server.
  */
 
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { randomUUID } from 'node:crypto'
 import { SECOND_MS } from '@blockly/contracts/durations'
 import { stays, until } from '@blockly/contracts/waits'
-import { schema } from '@blockly/db'
 import type { CatalogVersion } from '../../domain/mods/catalog.ts'
-import { tellWithLink } from '../../minecraft/console.ts'
+import { normalizeUuid as dashed, tellWithLink } from '../../minecraft/console.ts'
 import { Cdn } from '../../testing/cdn.ts'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
 
@@ -96,20 +95,16 @@ describe.skipIf(!hasDatabase)('mod updates said in the game', () => {
     await h.settled(id, 20_000)
     publish('lantern', ['lantern-2', 'lantern-1'])
 
-    const kai = { uuid: randomUUID(), name: 'Kai' }
+    await h.app.access.add(owner, id, 'operator', 'Kai')
+    await h.settled(id, 20_000)
+    const profile = await h.profiles.byName('Kai')
+    if (profile === null) throw new Error('expected Kai to have an account')
+    const kai = { uuid: dashed(profile.uuid), name: profile.name }
     const ana = { uuid: randomUUID(), name: 'Ana' }
-    await h.db.insert(schema.serverAccessEntries).values({
-      serverId: id,
-      list: 'operator',
-      playerUuid: kai.uuid,
-      playerName: kai.name,
-      state: 'active',
-      origin: 'blockly',
-    })
     const toldKai = () => h.minecraft.said(id).filter((line) => line.startsWith('to Kai: '))
     const told = () => h.minecraft.said(id).filter((line) => line.includes('lantern-2'))
 
-    // The first reading only notes who is on; then both join, and only the operator is told.
+    // Nobody on, then both join: only the operator is told.
     await h.app.schedules.presenceSync()
     h.minecraft.join(id, kai)
     h.minecraft.join(id, ana)
@@ -132,5 +127,18 @@ describe.skipIf(!hasDatabase)('mod updates said in the game', () => {
       seen: () => told().join('\n'),
     })
     expect(told().filter((line) => line.startsWith('to Ana: '))).toEqual([])
-  })
+
+    // Stopped while they play, then woken by their join: they are on at its first reading, and told.
+    await h.app.servers.stop(owner, id, randomUUID())
+    await h.until(id, 'stopped')
+    await h.settled(id)
+    await h.app.servers.start(owner, id, randomUUID())
+    await h.until(id, 'running')
+    await h.settled(id)
+    h.minecraft.join(id, kai)
+    await h.app.schedules.presenceSync()
+    await until('the operator who woke it to be told', () => toldKai().length === 3, {
+      seen: () => told().join('\n'),
+    })
+  }, 60_000)
 })
