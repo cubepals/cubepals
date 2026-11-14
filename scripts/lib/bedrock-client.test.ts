@@ -3,44 +3,37 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { expect, test } from 'bun:test'
-import { bedrockPing } from './bedrock-client.ts'
+import { bedrockProbe } from './bedrock-client.ts'
 
-const MAGIC = '00ffff00fefefefefdfdfdfd12345678'
-
-test('a Bedrock ping reads the MOTD out of the pong', async () => {
-  const motd = 'MCPE;A Cubepals server;944;1.26;1;20;1;Cubepals;Survival;1;19132;19133;'
-  const text = Buffer.from(motd)
-  const length = Buffer.alloc(2)
-  length.writeUInt16BE(text.length)
-  const server = await Bun.udpSocket({
+test('a join probe asks GET /v1/join and gives back what the server said', async () => {
+  const asked: string[] = []
+  const server = Bun.serve({
+    port: 0,
     hostname: '127.0.0.1',
-    socket: {
-      data(socket, ping, port, address) {
-        expect(ping[0]).toBe(0x01)
-        expect(ping.subarray(9, 25).toString('hex')).toBe(MAGIC)
-        const pong = Buffer.concat([
-          Buffer.from([0x1c]),
-          Buffer.alloc(16),
-          Buffer.from(MAGIC, 'hex'),
-          length,
-          text,
-        ])
-        socket.send(pong, port, address)
-      },
+    fetch: (request) => {
+      asked.push(`${request.method} ${new URL(request.url).pathname}`)
+      return Response.json({ motd: 'Cubepals' })
     },
   })
   try {
-    expect(await bedrockPing('127.0.0.1', server.port)).toBe(motd)
+    expect(await bedrockProbe(`http://127.0.0.1:${server.port}`)).toBe('200 {"motd":"Cubepals"}')
+    expect(asked).toEqual(['GET /v1/join'])
   } finally {
-    server.close()
+    server.stop(true)
   }
 })
 
-test('a ping nobody answers fails with where it went', async () => {
-  const silent = await Bun.udpSocket({ hostname: '127.0.0.1', socket: { data() {} } })
+test('a probe the server refuses fails with where it asked and what it answered', async () => {
+  const server = Bun.serve({
+    port: 0,
+    hostname: '127.0.0.1',
+    fetch: () => new Response('no', { status: 503 }),
+  })
   try {
-    await expect(bedrockPing('127.0.0.1', silent.port, 200)).rejects.toThrow(`127.0.0.1:${silent.port}`)
+    await expect(bedrockProbe(`http://127.0.0.1:${server.port}`)).rejects.toThrow(
+      `http://127.0.0.1:${server.port}/v1/join answered 503: no`,
+    )
   } finally {
-    silent.close()
+    server.stop(true)
   }
 })

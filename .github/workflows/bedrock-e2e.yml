@@ -39,7 +39,7 @@ jobs:
       # The release ships only `flyctl`; the scripts call it `fly`, as its installer names it.
       - run: ln -s flyctl "$(dirname "$(command -v flyctl)")/fly" && fly version
       - run: bun install --frozen-lockfile
-      # The headless Bedrock client is outside the workspaces: it needs a native RakNet build.
+      # The headless Bedrock client is outside the workspaces: its WebRTC client is needed nowhere else.
       - run: bun install --frozen-lockfile
         working-directory: tools/bedrock-join
       - name: Start staging

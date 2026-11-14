@@ -16,6 +16,7 @@ import {
   bedrockFromEnv,
   geyserEnv,
   prepareGeyserDir,
+  signalingAnswers,
   signalingDoor,
   untilItHolds,
 } from './bedrock.ts'
@@ -45,8 +46,8 @@ test('Xbox sign-in stays on unless a test edge turns it off', () => {
   expect(bedrockFromEnv({ FLOODGATE_KEY: key, BEDROCK_VALIDATE_LOGIN: 'false' }, 25565)?.validateLogin).toBe(
     false,
   )
-  expect(bedrockFromEnv({ FLOODGATE_KEY: key, BEDROCK_PORT: '19140' }, 25570)).toMatchObject({
-    port: 19140,
+  expect(bedrockFromEnv({ FLOODGATE_KEY: key, BEDROCK_SIGNALING_PORT: '19140' }, 25570)).toMatchObject({
+    signalingPort: 19140,
     front: 25570,
   })
 })
@@ -89,6 +90,8 @@ test('its folder gets what was fetched at build, the key and identity for this u
   const config = readFileSync(join(dir, 'config.yml'), 'utf8')
   expect(config).toContain('port: 25570')
   expect(config).toContain('  address: 172.19.0.2')
+  expect(config).toContain('  transport: nethernet')
+  expect(config).toContain('  port: 19135')
   expect(config).toContain('    - "198.51.100.7:19133"')
   expect(() => prepareGeyserDir({ ...options, key: 'AAAA' }, place)).toThrow('16 bytes')
 })
@@ -144,4 +147,24 @@ test('a signaling door that can’t listen says so, so the edge tries it again',
   const taken = await signalingDoor(0, '127.0.0.1:1')
   await expect(signalingDoor((taken.address() as AddressInfo).port, '127.0.0.1:1')).rejects.toThrow()
   taken.close()
+})
+
+test('Geyser is taken to answer when its own signaling answers a join probe, and not otherwise', async () => {
+  const answering = Bun.serve({
+    port: 0,
+    hostname: '127.0.0.1',
+    fetch: (request) =>
+      new Response(null, { status: new URL(request.url).pathname === '/v1/join' ? 200 : 404 }),
+  })
+  const refusing = Bun.serve({
+    port: 0,
+    hostname: '127.0.0.1',
+    fetch: () => new Response(null, { status: 503 }),
+  })
+  expect(await signalingAnswers(`127.0.0.1:${answering.port}`)).toBe(true)
+  expect(await signalingAnswers(`127.0.0.1:${refusing.port}`)).toBe(false)
+  refusing.stop(true)
+  // Nothing listening is no answer, within the time given.
+  expect(await signalingAnswers(`127.0.0.1:${refusing.port}`, 500)).toBe(false)
+  answering.stop(true)
 })

@@ -1998,16 +1998,12 @@
       "n": 1,
       "reason": "Waited on time before tests waited on events; replace each wait with until or stays from @blockly/contracts/waits."
     },
-    "apps/edge/bedrock-relay.test.ts": {
-      "n": 43,
-      "reason": "Waited on time before tests waited on events; replace each wait with until or stays from @blockly/contracts/waits."
-    },
     "apps/edge/concurrent-joins.test.ts": {
       "n": 4,
       "reason": "Waited on time before tests waited on events; replace each wait with until or stays from @blockly/contracts/waits."
     },
     "apps/edge/front.test.ts": {
-      "n": 25,
+      "n": 23,
       "reason": "Waited on time before tests waited on events; replace each wait with until or stays from @blockly/contracts/waits."
     },
     "apps/edge/geyser.test.ts": {

@@ -45,7 +45,7 @@ export interface Pages {
    * own. It is never part of `/_health`, which Fly's check asks and which covers Java alone, since
    * a check that failed for Geyser's sake would take the Java players' edge down with it.
    */
-  bedrock?: () => { state: string; bound: boolean; restarts: number } | null
+  bedrock?: () => { state: string; signaling: boolean; restarts: number } | null
 }
 
 /**

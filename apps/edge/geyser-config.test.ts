@@ -10,25 +10,20 @@ import { expect, test } from 'bun:test'
 import { type GeyserSettings, geyserConfig } from './geyser-config.ts'
 
 const settings: GeyserSettings = {
-  bedrock: { address: '172.19.0.2', port: 19131 },
+  bedrock: { address: '172.19.0.2', signalingPort: 19135 },
   nethernet: { webrtcPort: 19133, advertise: ['198.51.100.7:19133'], trustedProxies: ['172.16.0.0/12'] },
-  publicPort: 19132,
   java: { address: '127.0.0.1', port: 25565 },
   keyFile: 'key.pem',
   validateLogin: true,
-  mtu: 1300,
 }
 
-test('Geyser routes by the name the player typed, signs players in, and reads who each is from the relay', () => {
+test('Geyser routes by the name the player typed, signs players in, and tells the front door whose each is', () => {
   const config = geyserConfig(settings)
   expect(config).toContain('  forward-hostname: true')
   expect(config).toContain('  auth-type: floodgate')
   expect(config).toContain('    validate-bedrock-login: true')
-  // On the Java side the header is a switch; on the Bedrock side, listing the relay turns it on.
   expect(config).toContain('  java:\n    use-haproxy-protocol: true')
   expect(config.match(/use-haproxy-protocol/g)).toHaveLength(1)
-  expect(config).toContain('    mtu: 1300')
-  expect(config).toContain('    broadcast-port: 19132')
 })
 
 test('Xbox sign-in is off only when asked, and what players see says Cubepals', () => {
@@ -45,15 +40,16 @@ test('Geyser never pings the front door itself, so a Bedrock connection the edge
   expect(config).not.toContain('ping-passthrough-interval')
 })
 
-test('Bedrock 26.60 and later join over NetherNet, at the public address given, and older ones over RakNet', () => {
+test('Bedrock players join over NetherNet alone, signaling on its own port and playing at the public address given', () => {
   const config = geyserConfig(settings)
-  expect(config).toContain('  transport: both')
+  expect(config).toContain('  transport: nethernet')
+  expect(config).toContain('  port: 19135')
   expect(config).toContain('  webrtc-port: 19133')
   expect(config).toContain('    mode: builtin')
   expect(config).toContain('    - "198.51.100.7:19133"')
   expect(config).toContain('    stun-discovery: false')
-  // Only the relay may say whose a RakNet datagram is; only Fly's proxy whose a signaling request is.
-  expect(config).toContain('    haproxy-protocol-whitelisted-ips:\n    - 127.0.0.1')
+  // Only Fly's proxy may say whose a signaling request is; nothing RakNet alone reads is written.
+  expect(config).not.toMatch(/haproxy-protocol-whitelisted-ips|broadcast-port|mtu:/)
   expect(config).toContain('    signaling-trusted-proxies:\n    - "172.16.0.0/12"')
   expect(config).toContain('    prefer-signaling-proxy-address: true')
   expect(config).toContain('config-version: 12')

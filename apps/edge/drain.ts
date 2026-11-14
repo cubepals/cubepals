@@ -15,7 +15,7 @@
 export interface Drain {
   players: number
   routesCurrent: boolean
-  /** Whether Bedrock players are taken here ('none' where they aren't) and Geyser has bound its port. */
+  /** Whether Bedrock players are taken here ('none' where they aren't) and the door their signaling reaches listens. */
   bedrock: 'none' | 'bound' | 'unbound'
 }
 
@@ -48,9 +48,14 @@ export function serveDrain(drain: () => Drain): void {
   }
 }
 
-/** What the edge says: Bedrock is 'unbound' while it is taken here (`taken`) and Geyser hasn't bound its port. */
-export const drainOf = (players: number, routesCurrent: boolean, taken: boolean, bound?: boolean): Drain => ({
+/** What the edge says: Bedrock is 'unbound' while it is taken here (`taken`) and its signaling door doesn't listen yet. */
+export const drainOf = (
+  players: number,
+  routesCurrent: boolean,
+  taken: boolean,
+  listening?: boolean,
+): Drain => ({
   players,
   routesCurrent,
-  bedrock: !taken ? 'none' : bound ? 'bound' : 'unbound',
+  bedrock: !taken ? 'none' : listening ? 'bound' : 'unbound',
 })

@@ -705,7 +705,9 @@ if (WEB_ORIGIN && PLAY_DOMAINS.length > 0)
     aliasOf: (name) => aliases.get(name),
   })
 else console.error('WEB_CANONICAL_ORIGIN or PLAY_DOMAINS is unset; browsers aren’t redirected')
-serveDrain(() => drainOf(playersOnline(), poll.current(), bedrockSettings !== null, bedrock?.status().bound))
+serveDrain(() =>
+  drainOf(playersOnline(), poll.current(), bedrockSettings !== null, bedrock?.status().signaling),
+)
 
 // ─── Supervise mc-router ────────────────────────────────────────────────────────────────────
 

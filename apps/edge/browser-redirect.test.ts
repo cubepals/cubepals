@@ -155,9 +155,9 @@ test('no request ever asks anything of the control plane, so none wakes a server
 })
 
 test('the edge’s health is Java’s alone: Bedrock down, or never started, never changes it', async () => {
-  let bedrock: { state: string; bound: boolean; restarts: number } | null = {
+  let bedrock: { state: string; signaling: boolean; restarts: number } | null = {
     state: 'down',
-    bound: false,
+    signaling: false,
     restarts: 3,
   }
   const server = browserRedirect({ ...PAGES, port: 0, hostname: '127.0.0.1', bedrock: () => bedrock })
@@ -166,8 +166,8 @@ test('the edge’s health is Java’s alone: Bedrock down, or never started, nev
     expect((await at('/_health')).status).toBe(204)
     const down = await at('/_health/bedrock')
     expect(down.status).toBe(503)
-    expect(await down.json()).toEqual({ state: 'down', bound: false, restarts: 3 })
-    bedrock = { state: 'up', bound: true, restarts: 3 }
+    expect(await down.json()).toEqual({ state: 'down', signaling: false, restarts: 3 })
+    bedrock = { state: 'up', signaling: true, restarts: 3 }
     expect((await at('/_health/bedrock')).status).toBe(200)
     bedrock = null
     expect((await at('/_health/bedrock')).status).toBe(404)
