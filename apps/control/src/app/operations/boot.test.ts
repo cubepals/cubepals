@@ -230,26 +230,26 @@ describe('the CPU of the host a boot runs on', () => {
   })
 
   test('is read while the server boots: a read as long as the boot adds nothing to it', async () => {
-    const readyAt = Date.now() + 1_000
+    // The read is answered only once the server says it is done, and the server says so only once
+    // the read was asked. A boot that asked after the server was up, or waited for the answer
+    // before it listened, would never end; one that reads while it boots ends as the server is up.
+    const asked = Promise.withResolvers<void>()
+    const up = Promise.withResolvers<void>()
+    let said = false
     async function* tail(): AsyncIterable<LogLine> {
-      await Bun.sleep(readyAt - Date.now())
+      await asked.promise
+      said = true
+      up.resolve()
       yield { at: new Date(), text: '[03:31:02 INFO]: Done (21.542s)! For help, type "help"' }
     }
     const hostCpu = async () => {
-      await Bun.sleep(1_000)
+      asked.resolve()
+      await up.promise
       return { model: 'AMD EPYC', mhz: 3000, host: null }
     }
-    const { boot, ctx, seen } = machine({
-      answers: () => Date.now() >= readyAt,
-      tail,
-      hostCpu,
-      readyMs: 10_000,
-    })
-    const asked = Date.now()
+    const { boot, ctx, seen } = machine({ answers: () => said, tail, hostCpu, readyMs: 10_000 })
     await boot.run(ctx, server, handle, vanilla)
     expect(seen.marks).toEqual(['host_cpu:AMD EPYC@3000', 'let_in'])
-    // One second for both, where one after the other would be two.
-    expect(Date.now() - asked).toBeLessThan(1_700)
   })
 
   test('says nothing where the runtime reads none, or can’t: the boot goes on as it does', async () => {
