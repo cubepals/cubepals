@@ -92,6 +92,8 @@ export type CurationJob = ReleaseRef
 export interface BlockedOperation {
   operationId: string
   serverId: string
+  /** Its server's work apart waits behind it (`JobQueue.enqueue`), not the server's own queue. */
+  apart: boolean
   failedAt: Date | null
   /** What the queue recorded when it gave up. */
   error: string | null
@@ -118,7 +120,10 @@ export interface JobQueue {
    * `wakes`: a start or a wake, which someone is waiting on to play. It runs before anything else
    * queued, on workers kept for it, but never before what its own server queued first. `paid`: a
    * wake on a paid plan, ahead of other wakes. `creates`: a new server's first build, behind
-   * everything for the servers people already have.
+   * everything for the servers people already have. `apart`: work that only reads what its server
+   * already keeps, as an archive reads a snapshot. It runs beside its server's other operations,
+   * in an order of its own with the server's other work apart, so nothing a player waits on waits
+   * for it; `deadlineSeconds` is how long one attempt of it may take.
    */
   enqueue(
     tx: Tx,
@@ -129,6 +134,7 @@ export interface JobQueue {
       wakes: boolean
       paid?: boolean
       creates?: boolean
+      apart?: { deadlineSeconds: number }
     },
   ): Promise<void>
   /**

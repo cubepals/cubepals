@@ -174,6 +174,13 @@ export async function finishOperation(
 }
 
 /**
+ * Operations that may run apart from their server's queue (`JobQueue.enqueue`): an archive packs
+ * a snapshot, for minutes or hours by the world's size, and where its runtime packs it beside the
+ * server (`archivesBeside`) neither a stop nor a player's start waits for it.
+ */
+export const APART: readonly OperationKind[] = ['archive']
+
+/**
  * Work that doesn't change what the server is doing: it never locks the owner's pages, and the
  * server page doesn't show it as the server's progress.
  */

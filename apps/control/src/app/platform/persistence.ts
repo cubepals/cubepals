@@ -24,6 +24,7 @@ import {
 } from 'drizzle-orm'
 import type { PlatformControls } from '../../domain/policy/policy.ts'
 import type { DaySpend } from '../../domain/policy/spend.ts'
+import { APART } from '../operations/persistence.ts'
 
 const alerts = schema.platformAlerts
 const jobs = schema.jobHealth
@@ -421,14 +422,19 @@ export async function failuresOf(
   return { failed: counted?.n ?? 0, lastError: latest?.detail ?? latest?.error ?? null }
 }
 
-/** Operations waiting behind blocked ones, per server; the blocked ones don't count themselves. */
+/**
+ * Operations waiting behind each blocked one, by its id; the blocked ones don't count themselves.
+ * Behind one that runs apart waits the server's other work of its kinds. Behind any other waits
+ * everything else queued for its server: work apart is counted there too, since an operation's
+ * row doesn't say which line it took.
+ */
 export async function queuedBehind(
   q: Queryable,
-  blocked: ReadonlyArray<{ serverId: string; operationId: string }>,
+  blocked: ReadonlyArray<{ serverId: string; operationId: string; apart: boolean }>,
 ): Promise<Map<string, number>> {
   if (blocked.length === 0) return new Map()
   const rows = await q
-    .select({ serverId: operations.serverId, n: count() })
+    .select({ serverId: operations.serverId, kind: operations.kind, n: count() })
     .from(operations)
     .where(
       and(
@@ -443,8 +449,12 @@ export async function queuedBehind(
         eq(operations.status, 'queued'),
       ),
     )
-    .groupBy(operations.serverId)
-  return new Map(rows.map((row) => [row.serverId, row.n]))
+    .groupBy(operations.serverId, operations.kind)
+  const behind = (b: { serverId: string; apart: boolean }) =>
+    rows
+      .filter((row) => row.serverId === b.serverId && (!b.apart || APART.includes(row.kind)))
+      .reduce((sum, row) => sum + row.n, 0)
+  return new Map(blocked.map((b) => [b.operationId, behind(b)]))
 }
 
 // ─── The audit log ──────────────────────────────────────────────────────────────────────────

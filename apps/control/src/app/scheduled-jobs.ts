@@ -30,7 +30,15 @@ function schedules(
   provider: { fleet?: { runtime: { upkeep(): Promise<void> } } },
 ): Schedule[] {
   return [
-    { job: 'reconcile', run: () => app.schedules.reconcile() },
+    {
+      job: 'reconcile',
+      // What is recorded is brought in line with the provider, then with the queue: an operation
+      // that ended while its job failed no longer holds its server's queue.
+      run: async () => {
+        await app.schedules.reconcile()
+        await app.stuck.dropSettled()
+      },
+    },
     { job: 'drift', run: () => app.schedules.drift() },
     {
       job: 'stale-sleep',

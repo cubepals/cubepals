@@ -376,7 +376,7 @@ export class OperationRunner {
   }
 }
 
-const isFinished = (status: OperationStatus) =>
+export const isFinished = (status: OperationStatus) =>
   status === 'succeeded' || status === 'failed' || status === 'cancelled'
 
 function progressEvent(

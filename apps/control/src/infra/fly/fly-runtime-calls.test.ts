@@ -432,7 +432,7 @@ describe('FlyRuntime requests', () => {
       config: {
         image: 'curlimages/curl:8.22.0',
         init: { exec: ['/bin/sleep', String(HELPER_LIFETIME_MS / 1000)] },
-        guest: { cpu_kind: 'shared', cpus: 1, memory_mb: 1024 },
+        guest: { cpu_kind: 'performance', cpus: 1, memory_mb: 2048 },
         mounts: [{ volume: expect.stringMatching(/^vol_/), path: '/data' }],
         restart: { policy: 'no' },
         auto_destroy: true,
