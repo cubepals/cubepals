@@ -223,3 +223,23 @@ export interface ModUploadView {
 export type UploadStartView =
   | { kind: 'known'; uploadId: string }
   | { kind: 'upload'; ticket: string; url: string; headers: Record<string, string> }
+
+/**
+ * One sentence about the updates found, said the same on the website and in the game: "VeinMiner
+ * 2.13.1 is out. Cubepals checked it runs with your other mods." Null when nothing is newer.
+ */
+export function updatesSaid(
+  updated: ReadonlyArray<{ name: string; version: string }>,
+  noun: 'mods' | 'plugins' | 'datapacks',
+): string | null {
+  const [only] = updated
+  if (only === undefined) return null
+  if (updated.length === 1)
+    return `${only.name} ${only.version} is out. Cubepals checked it runs with your other ${noun}.`
+  const names = updated.map((u) => u.name)
+  const said =
+    names.length > 4
+      ? `${names.slice(0, 3).join(', ')} and ${names.length - 3} more`
+      : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`
+  return `Updates for ${said} are out. Cubepals checked they run together with your other ${noun}.`
+}

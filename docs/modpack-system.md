@@ -320,6 +320,12 @@ on the catalog for it: the line appears when the answer does.
   only beside another's goes with it. The server's page says the
   same sentence, linking to the Mods page with the update already planned (`?update=all`). The
   same link opens a pack's update on a pack server.
+- **Said in the game too.** A mod may say it is out of date in the game's chat, as VeinMiner does
+  to operators when they join, with a link to download it. Cubepals tells the same people, an
+  operator who has just joined, in the same words as the website, with a link that opens the
+  update on the Mods page (`app/mods/updates-told.ts`, said in the presence pass, so within a
+  minute of the join). Once a join, to operators alone. The mod's own line can't be taken over
+  cleanly: hiding it would mean rewriting the mod's config on the owner's server.
 - **Applied as any mod change.** The plan is shown first; the server restarts with it, or at its
   next start, and goes back to the revision before if it doesn't start.
 - **Kept for five minutes per revision,** in the control plane's memory, on top of the catalog's

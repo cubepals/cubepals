@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /** Console commands the platform itself issues, and parsers for their answers. */
+import { compareVersions } from '@blockly/contracts/release-order'
 import { motdForGame } from '@blockly/contracts/server-list'
 
 export const SAVE_ALL_FLUSH = 'save-all flush'
@@ -20,7 +21,7 @@ export function announce(message: string): string {
 }
 
 /** One line from Cubepals, as chat shows it: the name in aqua, the words in yellow. */
-const fromCubepals = (message: string) => ({
+const fromCubepals = (message: string): { text: string; extra: Record<string, unknown>[] } => ({
   text: '',
   extra: [
     { text: '[Cubepals] ', color: 'aqua' },
@@ -34,6 +35,31 @@ const fromCubepals = (message: string) => ({
  */
 export function tell(name: string, message: string): string {
   return `tellraw ${name} ${JSON.stringify(fromCubepals(message))}`
+}
+
+/**
+ * The release whose text components name a link `click_event` with its `url`; before it, the game
+ * reads `clickEvent` with its `value` (minecraft.wiki, Text component format, Java Edition 1.21.5).
+ */
+const SNAKE_CASE_TEXT = '1.21.5'
+
+/**
+ * `tell`'s line with a link after it that the player clicks to open `link.url`, in the text format
+ * of `gameVersion`, which the server runs.
+ */
+export function tellWithLink(
+  name: string,
+  message: string,
+  link: { text: string; url: string },
+  gameVersion: string,
+): string {
+  const click =
+    compareVersions(gameVersion, SNAKE_CASE_TEXT) >= 0
+      ? { click_event: { action: 'open_url', url: link.url } }
+      : { clickEvent: { action: 'open_url', value: link.url } }
+  const line = fromCubepals(message)
+  line.extra.push({ text: ` ${oneLine(link.text)}`, color: 'aqua', underlined: true, ...click })
+  return `tellraw ${name} ${JSON.stringify(line)}`
 }
 
 /**
