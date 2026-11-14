@@ -16,6 +16,7 @@
 import { afterAll, expect, test } from 'bun:test'
 import { type AddressInfo, connect, createServer, type Server, type Socket } from 'node:net'
 import { join } from 'node:path'
+import { until } from '@blockly/contracts/waits'
 import type { VisitReport } from '../../packages/contracts/src/join-records.ts'
 import { packet, string, varInt } from './notice.ts'
 import { ROUTER_STATUS } from './router-session.ts'
@@ -39,17 +40,16 @@ async function freePort(): Promise<number> {
 
 /** Connects to `port` once something listens there. */
 async function dial(port: number): Promise<Socket> {
-  const deadline = Date.now() + 15_000
-  for (;;) {
-    const socket = await new Promise<Socket | null>((resolve) => {
+  let socket = null as Socket | null
+  await until(`something to listen on ${port}`, async () => {
+    socket = await new Promise<Socket | null>((resolve) => {
       const s = connect(port, '127.0.0.1')
       s.once('connect', () => resolve(s))
       s.once('error', () => resolve(null))
     })
-    if (socket !== null) return socket
-    if (Date.now() >= deadline) throw new Error(`nothing listened on ${port}`)
-    await Bun.sleep(100)
-  }
+    return socket !== null
+  })
+  return socket as Socket
 }
 
 const servers: Server[] = []
@@ -102,22 +102,13 @@ const seen = () =>
     `agent errors: ${agentErrors.slice(-2_000) || 'none'}`,
   ].join('\n')
 
-/** Waits for `check` to hold, up to 10 s, then fails naming `what` and what the test saw. */
-async function until(what: string, check: () => boolean): Promise<void> {
-  const deadline = Date.now() + 10_000
-  while (!check()) {
-    if (Date.now() >= deadline) throw new Error(`waited 10 s for ${what}\n${seen()}`)
-    await Bun.sleep(50)
-  }
-}
-
 /** The halves the agent reported of the join `name` made, once both have come. */
 async function visitOf(name: string): Promise<Partial<Record<VisitReport['phase'], VisitReport>>> {
   const halves = () =>
     Object.fromEntries(
       reported.filter((report) => report.player?.name === name).map((report) => [report.phase, report]),
     ) as Partial<Record<VisitReport['phase'], VisitReport>>
-  await until(`both halves of ${name}'s visit`, () => Boolean(halves().open && halves().close))
+  await until(`both halves of ${name}'s visit`, () => Boolean(halves().open && halves().close), { seen })
   return halves()
 }
 
@@ -181,7 +172,9 @@ test.skipIf(ROUTER_BIN === '')(
     // Held, once the waiting room asks the control plane to wake its server itself: the second ask,
     // after mc-router's own. Only then does mc-router count the server as waking, and dial the next.
     const first = await joinAs('Waiting', GONE)
-    await until('the waiting room to hold Waiting', () => wakes.filter((h) => h === GONE).length >= 2)
+    await until('the waiting room to hold Waiting', () => wakes.filter((h) => h === GONE).length >= 2, {
+      seen,
+    })
     expect(first.said.closed).toBe(false)
     const unreachable = await joinAs('Unreached', GONE)
     const unreached = await visitOf('Unreached')
@@ -203,7 +196,7 @@ test.skipIf(ROUTER_BIN === '')(
     // mc-router asks with no address for a hostname it holds no route for, which the agent answers
     // itself: the ask for this address is the waiting room's, holding Asking.
     const second = await joinAs('Asking', UNROUTED)
-    await until('the waiting room to hold Asking', () => wakes.includes(UNROUTED))
+    await until('the waiting room to hold Asking', () => wakes.includes(UNROUTED), { seen })
     expect(second.said.closed).toBe(false)
     const nowhere = await joinAs('Unrouted', UNROUTED)
     const unrouted = await visitOf('Unrouted')

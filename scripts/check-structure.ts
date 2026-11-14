@@ -38,6 +38,9 @@
  *   number of milliseconds, a day as a product of seconds, an hour or a minute as a product ending
  *   in a thousand, or a product of a minute's milliseconds. They are `@blockly/contracts/durations`'s.
  *   Keyed by file, its number the lines.
+ * - sleeps: no test that waits on time: `Bun.sleep`, a promise of `setTimeout`, or an awaited sleep
+ *   or delay in a .test.ts(x) file. A test waits for what it waits on with `until`, and shows that
+ *   something didn't happen with `stays`, both `@blockly/contracts/waits`'s. Keyed by file.
  * - attributed: no line saying who decided something, or when, in place of why: an owner or a
  *   maintainer followed by a date, or a decision or a request put down to someone. "Owner" as a
  *   server's or an account's owner is the domain's word, and passes. Keyed by file.
@@ -89,6 +92,8 @@ const DURATIONS = [
   /\b(?:60 \* 1_?000|1_?000 \* 60)\b/,
   /\* 60_?000\b/,
 ]
+/** A test waiting on time, where it should wait for the thing (`@blockly/contracts/waits`). */
+const SLEEPS = [/\bBun\.sleep(?:Sync)?\(/, /new Promise\b.*\bsetTimeout\(/, /\bawait (?:sleep|delay|pause)\(/]
 /** Who decided something, or when, where a comment should say why. */
 const ATTRIBUTED = [
   /\b(?:owner|maintainer)(?:['’]s)?(?: [a-z]+)?,? (?:on )?\d{4}-\d\d-\d\d\b/i,
@@ -751,6 +756,13 @@ else {
       typescript,
       'lines writing out a unit of time; import it from @blockly/contracts/durations',
     )
+  if (!crateRepo)
+    checkLines(
+      'sleeps',
+      SLEEPS,
+      (p) => /\.test\.tsx?$/.test(p),
+      'lines waiting on time; wait with until from @blockly/contracts/waits',
+    )
   checkLines('attributed', ATTRIBUTED, () => true, 'lines saying who decided, or when, instead of why')
 }
 
@@ -769,6 +781,7 @@ const checks = rust
         'duplicates',
         'copied',
         'durations',
+        'sleeps',
         'attributed',
       ]
 for (const check of checks) judge(check, baseline[check] ?? {})

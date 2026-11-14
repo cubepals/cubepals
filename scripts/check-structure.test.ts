@@ -480,6 +480,22 @@ describe('durations', () => {
   })
 })
 
+describe('sleeps', () => {
+  // Split, so this file sleeps in no line the check reads.
+  const sleeping = `/** Waits. */\nawait Bun.${'sleep'}(1_500)\nawait new Promise((r) => set${'Timeout'}(r, 100))\n`
+
+  test('a test that waits on time fails, keyed by file', () => {
+    const { code, out } = check(tree({ 'apps/a.test.ts': sleeping }))
+    expect(code).toBe(1)
+    expect(out).toContain('sleeps  apps/a.test.ts: 2 lines waiting on time')
+  })
+
+  test('code that waits on time passes, and so does a test that waits with until', () => {
+    const waiting = `/** Waits. */\nawait until('the door to open', () => door.open)\n`
+    expect(check(tree({ 'apps/a.ts': sleeping, 'apps/b.test.ts': waiting })).code).toBe(0)
+  })
+})
+
 describe('attributed', () => {
   const decided = `/** Plans. */\n// Datapacks come with Plus: the owner's ${'decision'}, 2026-10-09.\nexport const plus = 1\n`
   const asked = `"""Plans."""\n# Kept a week, ${'as'} requested.\nWEEK = 7\n`
