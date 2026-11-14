@@ -23,19 +23,24 @@
  * --timeout   seconds to wait for a player to spawn (240, a cold wake included).
  * --signaling where signaling is asked, when that isn't https://<address>: an origin such as
  *             http://10.0.0.5:19145, for a Geyser run by hand with its built-in signaling.
+ * --xbox      a prismarine-auth cache directory holding a real Xbox account's sign-in: the one
+ *             player is that account (`signed-in.ts`), its gamertag and XUID from Minecraft's
+ *             services, its login and its offer signed with one key and one multiplayer token, so
+ *             it gets in with the edge's Xbox sign-in check on. --xbox-account names the sign-in
+ *             in the cache. Without a usable sign-in it exits 3 (signed-in.ts' REAUTH_EXIT).
  *
  * The client signals over plain HTTP, so it is pointed at a door on this machine that asks the
  * edge over HTTPS (`signaling-forwarder.ts`). The game then goes straight to the address the edge's
  * answer names. It speaks protocol 2225 (Bedrock 26.60), the first that joins only this way, and
  * signs its offer with its login's own key, as the game does.
  *
- * Offline login: there is no Xbox account here, so the edge must run with Xbox sign-in off
- * (BEDROCK_VALIDATE_LOGIN=false). Production keeps it on, and refuses these players.
+ * Offline login, unless --xbox: there is no Xbox account then, so the edge must run with Xbox
+ * sign-in off (BEDROCK_VALIDATE_LOGIN=false). Production keeps it on, and refuses these players.
  *
  * Prints one JSON object on the last line: how many spawned, each player's time
  * to spawn, how many attempts each made (one: a NetherNet join is one request and one connection),
- * and each player's kick message and the chat lines they were sent. Exits 1 unless every player
- * spawned.
+ * and each player's kick message and the chat lines they were sent; with --xbox, also the account's
+ * gamertag and XUID (never a token). Exits 1 unless every player spawned.
  */
 
 import { createPrivateKey } from 'node:crypto'
@@ -46,6 +51,7 @@ import { NetherNetIdentity } from '@jsprismarine/nethernet'
 import { PacketIdentifier, TextPacket, TextPacketType } from '@jsprismarine/protocol'
 import { SECOND_MS } from '../../packages/contracts/src/durations.ts'
 import { signalingForwarder } from './signaling-forwarder.ts'
+import { DEFAULT_ACCOUNT, signedInIdentity, signedInProvider } from './signed-in.ts'
 
 const { values } = parseArgs({
   options: {
@@ -59,6 +65,8 @@ const { values } = parseArgs({
     hold: { type: 'string', default: '10' },
     timeout: { type: 'string', default: '240' },
     signaling: { type: 'string' },
+    xbox: { type: 'string' },
+    'xbox-account': { type: 'string', default: DEFAULT_ACCOUNT },
   },
 })
 
@@ -74,6 +82,18 @@ if (typedHost === '') {
   process.exit(2)
 }
 const count = Number(values.players)
+if (
+  values.xbox !== undefined &&
+  (count !== 1 || values.username !== undefined || values.xuid !== undefined)
+) {
+  console.error('--xbox joins one player, the account itself: no --players, --username or --xuid')
+  process.exit(2)
+}
+/** The signed-in account's provider, with --xbox: its sign-in and the one key the player uses. */
+const signedIn =
+  values.xbox === undefined
+    ? null
+    : signedInProvider({ cacheDirectory: values.xbox, account: values['xbox-account'] })
 const timeoutMs = Number(values.timeout) * SECOND_MS
 const t0 = Date.now()
 const log = (...parts: unknown[]) =>
@@ -89,8 +109,30 @@ const authOf = (client: Client) => (client as unknown as { auth: OwnAuth }).auth
 
 const door = signalingForwarder(values.signaling ?? `https://${typedHost}:${typedPort}`)
 
+/**
+ * The signed-in account's client: the provider logs in, and the offer is signed with the
+ * provider's own key and multiplayer token, so signaling and login name the same player.
+ */
+function signedInClient(auth: NonNullable<typeof signedIn>): Client {
+  const transport = new NetherNetTransport({
+    host: '127.0.0.1',
+    port: door.port,
+    timeoutMs,
+    identity: () => signedInIdentity(auth),
+  })
+  return new Client({
+    host: typedHost,
+    port: Number(typedPort),
+    auth,
+    transport,
+    protocolVersion: PROTOCOL,
+    loginTimeoutMs: timeoutMs,
+  })
+}
+
 /** A client for one player: signaling through the door, the Login naming the typed address. */
 function clientFor(username: string, xuid: string): Client {
+  if (signedIn !== null) return signedInClient(signedIn)
   let made: Client | null = null
   // The offer is signed with the login's own key, as the game signs it: Geyser refuses a login
   // whose key isn't the one the connection was admitted with, and the client's default for an
@@ -139,7 +181,8 @@ async function join1(index: number): Promise<void> {
   client.on('packet', (packet: { id: number; data: unknown }) => {
     if (packet.id === PacketIdentifier.TEXT) {
       const message = (packet.data as { message?: string }).message ?? ''
-      log(username, 'chat:', message)
+      // A signed-in player's chat carries the account's gamertag, which CI logs keep out.
+      log(username, 'chat:', signedIn === null ? message : `(${message.length} characters)`)
       heard.chat.push(message)
     } else if (packet.id === PacketIdentifier.DISCONNECT) {
       heard.kicked = (packet.data as { message?: string }).message ?? 'no reason given'
@@ -157,17 +200,25 @@ async function join1(index: number): Promise<void> {
   spawnMs[index] = Date.now() - begun
   spawned++
   log(username, `spawned after ${spawnMs[index]} ms (${spawned}/${count})`)
+  // A signed-in player speaks as the account Minecraft's services named.
+  const as = signedIn === null ? { name: username, xuid } : await account(signedIn)
   await client.getSession().send(
     new TextPacket({
       type: TextPacketType.Chat,
       needsTranslation: false,
-      sourceName: username,
+      sourceName: as.name,
       message: values.chat,
-      xuid,
+      xuid: as.xuid,
       platformChatId: '',
       filtered: '',
     }),
   )
+}
+
+/** The signed-in account as its chain names it: its gamertag and XUID. */
+async function account(auth: NonNullable<typeof signedIn>): Promise<{ name: string; xuid: string }> {
+  const identity = await auth.getIdentity()
+  return { name: identity.displayName, xuid: identity.xuid }
 }
 
 const joining: Promise<void>[] = []
@@ -182,5 +233,9 @@ await pause(Number(values.hold) * SECOND_MS)
 for (const client of clients) client.disconnect()
 await pause(SECOND_MS)
 door.close()
-process.stdout.write(`${JSON.stringify({ players: count, spawned, spawnMs, attempts, told })}\n`)
+// The account's gamertag and XUID only, once it signed in; nothing of its tokens.
+const signedInAs = signedIn !== null && spawned > 0 ? await account(signedIn) : undefined
+process.stdout.write(
+  `${JSON.stringify({ players: count, spawned, spawnMs, attempts, told, ...(signedInAs ? { signedInAs } : {}) })}\n`,
+)
 process.exit(spawned === count ? 0 : 1)

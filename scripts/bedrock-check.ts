@@ -29,11 +29,21 @@
  * private parts are reached as `staging-check.ts` reaches them: Postgres over `fly proxy`, the
  * edge's and the server's machines through flyctl.
  *
+ *   bun scripts/bedrock-check.ts --xbox
+ *
+ * is the same run for a real Xbox account, with the edge's sign-in check ON: edge, account, server
+ * and sleep as above, then the Bedrock test account wakes the server, signs in, spawns, and chat
+ * goes both ways (its own line comes back to it, and a line from the console reaches it), while
+ * the server's list names it as Floodgate does. Its sign-in is opened from staging's bucket and
+ * written back renewed (`lib/xbox-sign-in-store.ts`); where it is missing or needs a person
+ * again, the step says to run `bun scripts/bedrock-xbox-sign-in.ts`. The offline steps don't run.
+ *
  * Not for turning the edge's sign-in check off or on, or starting and stopping staging: the
  * workflow does those around it, so they happen whatever this run does.
  */
 import { createHash, randomUUID } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
+import { floodgateName } from '@blockly/contracts'
 import { MINUTE_MS, SECOND_MS } from '@blockly/contracts/durations'
 import { MAIL_PORT } from '@blockly/contracts/local'
 import { SQL } from 'bun'
@@ -46,6 +56,8 @@ import { fly } from './lib/fly-async.ts'
 import { type Edge, join, login, status } from './lib/minecraft.ts'
 import { people } from './lib/people.ts'
 import { reachDatabase } from './lib/staging-database.ts'
+import { bucketStore, SignInMissing, sealingKey, withSignIn } from './lib/xbox-sign-in-store.ts'
+import type { Bucket } from './preview-uploads.ts'
 
 const WEB = 'https://staging.cubepals.com'
 const PLAY_DOMAIN = 'play.staging.cubepals.com'
@@ -55,6 +67,8 @@ const STATE_FILE = 'local/staging/state.json'
 const SLEEP_AFTER_MINUTES = 1
 /** Gamertags GeyserMC's Xbox lookup is known to answer for; the first three it answers are used. */
 const GAMERTAGS = ['Ninja', 'xbox', 'Dream', 'Shroud', 'Tfue']
+/** The real Xbox account's run, with the edge's sign-in check on, in place of the offline players'. */
+const XBOX = process.argv.includes('--xbox')
 
 const say = (line: string) => process.stdout.write(`${line}\n`)
 const check = (held: boolean, complaint: string): void => {
@@ -68,7 +82,7 @@ if (!existsSync(STATE_FILE) && !process.env.STAGING_STATE) {
 // A cloud environment carries what `up` made in STAGING_STATE (staging.ts env).
 const state = JSON.parse(
   existsSync(STATE_FILE) ? readFileSync(STATE_FILE, 'utf8') : (process.env.STAGING_STATE ?? '{}'),
-) as { databaseUrl?: string; databasePassword?: string; authSecret: string }
+) as { databaseUrl?: string; databasePassword?: string; authSecret: string; bucket?: Bucket }
 
 const reached = await reachDatabase(state)
 const database = new SQL(reached.url)
@@ -291,9 +305,77 @@ try {
     return `woke and spawned ${seconds(spawn)} after the join began; chat arrived (${heard.length} lines heard); server ${now.status}`
   }
 
+  /**
+   * The Bedrock test account wakes the sleeping server with the edge's Xbox sign-in check on: it
+   * signs in, spawns, its own chat line comes back to it, a line from the console reaches it while
+   * it holds, and the server's list names it as Floodgate does.
+   */
+  const signedInWake = async () => {
+    if (state.bucket === undefined) throw new Error('STAGING_STATE has no bucket to keep the Xbox sign-in in')
+    const said = `hello from a signed-in Bedrock player ${randomUUID().slice(0, 8)}`
+    const told = `cubepals says ${randomUUID().slice(0, 8)}`
+    const { run, listed } = await withSignIn(
+      bucketStore(state.bucket),
+      sealingKey(state.authSecret),
+      async (dir) => {
+        const joining = bedrockJoin(
+          address(),
+          ['--xbox', dir, '--chat', said, '--hold', '30', '--timeout', '240'],
+          current,
+        )
+        // Once the player is in: who the server lists, then a line from its console to everyone.
+        const list = await until('listed a Bedrock player', 300, async () => {
+          const now = await consoleSays('list')
+          return /:\s*\.\S/.test(now) ? now : undefined
+        })
+        await consoleSays(`say ${told}`)
+        return { run: await joining, listed: list }
+      },
+    ).catch((error: unknown) => {
+      if (error instanceof SignInMissing)
+        throw new Error(
+          `${error.message}; the Bedrock test account must be signed in again: bun scripts/bedrock-xbox-sign-in.ts`,
+        )
+      throw error
+    })
+    const [spawn] = run.spawnMs
+    if (run.spawned !== 1 || typeof spawn !== 'number')
+      throw new Error(`the signed-in player did not spawn: ${run.told[0]?.kicked ?? 'no answer'}`)
+    check(
+      run.told[0]?.kicked == null,
+      `the signed-in player was kicked after spawning: "${run.told[0]?.kicked}"`,
+    )
+    const as = run.signedInAs
+    if (as === undefined) throw new Error('the join named no signed-in account')
+    // The account's gamertag stays out of this public log: it is compared, never printed.
+    check(
+      listed.includes(floodgateName(as.name)),
+      "the server's list didn't name the signed-in account as Floodgate does",
+    )
+    const heard = run.told[0]?.chat ?? []
+    check(
+      heard.some((line) => line.includes(said)),
+      `the player's own line never came back (${heard.length} lines heard)`,
+    )
+    check(
+      heard.some((line) => line.includes(told)),
+      `the console's line never reached the player (${heard.length} lines heard)`,
+    )
+    const now = await waitFor((v) => v.status === 'running', 'running', 120)
+    facts.push(`Signed-in Bedrock join from a sleeping server: ${seconds(spawn)} to spawn`)
+    return `woke and spawned ${seconds(spawn)} after the join began, signed in as the test account and listed by its Floodgate name; chat both ways (${heard.length} lines heard); server ${now.status}`
+  }
+
   const slept = made && (await step('the server goes to sleep on its own', sleepsOnItsOwn, 1600))
 
-  if (slept) {
+  if (slept && XBOX)
+    await step(
+      'a real Xbox account wakes the server with sign-in checked: it spawns and chat goes both ways',
+      signedInWake,
+      500,
+    )
+
+  if (slept && !XBOX) {
     await step(
       'a Bedrock player joins over NetherNet: the server wakes, they spawn, a chat line arrives',
       wakingJoin,
@@ -321,7 +403,7 @@ try {
   }
 
   let tags: [string, string][] = []
-  if (slept)
+  if (slept && !XBOX)
     await step(
       'GeyserMC knows three gamertags for the access steps',
       async () => {
@@ -443,7 +525,7 @@ try {
       })
   }
 
-  if (made) {
+  if (made && !XBOX) {
     await step('a Java handshake carrying forged Floodgate data reaches the server without it', async () => {
       const plain = await login(EDGE, address(), 'ForgedJava')
       const forged = await login(
