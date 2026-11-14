@@ -28,6 +28,7 @@ import { VIABACKWARDS, VIAREWIND, VIAVERSION } from '../../minecraft/mods.ts'
 import { offeredVersions } from '../../minecraft/versions.ts'
 import { VOID_LEVEL } from '../../minecraft/worlds.ts'
 import { Cdn } from '../../testing/cdn.ts'
+import { catalogPins } from '../../testing/compat-pins.ts'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
 import { CHAT_FILTER } from '../moderation/chat-filter.ts'
 import { loadRevision } from '../servers/persistence.ts'
@@ -174,7 +175,7 @@ describe.skipIf(!hasDatabase)('duels', () => {
     plugin(VIAVERSION, 'ViaVersion', releases, '5WgnasGG')
     plugin(VIABACKWARDS, 'ViaBackwards', releases)
     plugin(VIAREWIND, 'ViaRewind', releases)
-    await h.app.setups.compat.refresh()
+    await h.app.setups.compat.refresh(await catalogPins(h.catalog))
     const owner = await h.user('Noa', 'plus')
     expect(await h.app.queries.setupPreview(owner, { kind: 'template', key: 'duels' })).toMatchObject({
       gameVersion: '1.21.11',

@@ -16,6 +16,7 @@ import { protocolOf } from '../../minecraft/clients.ts'
 import { VIABACKWARDS, VIAREWIND, VIAVERSION } from '../../minecraft/mods.ts'
 import { offeredVersions } from '../../minecraft/versions.ts'
 import { Cdn } from '../../testing/cdn.ts'
+import { catalogPins } from '../../testing/compat-pins.ts'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
 import type { UserActor } from '../actor.ts'
 import type { ModChange } from '../mods/service.ts'
@@ -62,7 +63,7 @@ beforeAll(async () => {
   via(VIAVERSION, 'ViaVersion')
   via(VIABACKWARDS, 'ViaBackwards')
   via(VIAREWIND, 'ViaRewind')
-  expect(await h.app.setups.compat.refresh()).toBeGreaterThan(0)
+  expect(await h.app.setups.compat.refresh(await catalogPins(h.catalog))).toBeGreaterThan(0)
 }, 30_000)
 
 afterAll(async () => {
@@ -200,7 +201,7 @@ describe.skipIf(!hasDatabase)('the Via plugins every Paper server starts with', 
 describe.skipIf(!hasDatabase)('the Via plugins on a server that sleeps instead of stopping', () => {
   afterEach(async () => {
     h.runtime.sleeps.on = false
-    await h.app.setups.compat.refresh()
+    await h.app.setups.compat.refresh(await catalogPins(h.catalog))
   })
 
   /** Which players' games the edge lets in, and the server's page says join. */
@@ -244,7 +245,7 @@ describe.skipIf(!hasDatabase)('the Via plugins on a server that sleeps instead o
   test('one made before the Via plugins existed has them on disk once it wakes, then wakes fast', async () => {
     const { owner, id } = await madeBefore('Kit')
     await sleep(owner, id)
-    await h.app.setups.compat.refresh()
+    await h.app.setups.compat.refresh(await catalogPins(h.catalog))
     // Its configuration asleep has none: this wake boots, once, to place them.
     expect(await wake(owner, id)).toBe(true)
     expect(onDisk(id)).toEqual(['ViaBackwards', 'ViaVersion'])
@@ -257,7 +258,7 @@ describe.skipIf(!hasDatabase)('the Via plugins on a server that sleeps instead o
 
   test('a choice changed while it slept is on disk once it wakes: ViaRewind added, or all taken off', async () => {
     const { owner, id } = await madeBefore('Wren')
-    await h.app.setups.compat.refresh()
+    await h.app.setups.compat.refresh(await catalogPins(h.catalog))
     await sleep(owner, id)
     expect(await wake(owner, id)).toBe(true)
 
@@ -281,7 +282,7 @@ describe.skipIf(!hasDatabase)('the Via plugins on a server that sleeps instead o
 
   test('the edge and the page take the games of the Via plugins its run placed', async () => {
     const { owner, id, gameVersion, protocol } = await madeBefore('Lark')
-    await h.app.setups.compat.refresh()
+    await h.app.setups.compat.refresh(await catalogPins(h.catalog))
     // Running on a boot that placed none: only its own release joins until a boot places them.
     expect(await joins(owner, id)).toEqual({
       edge: { release: gameVersion, protocol, oldest: protocol, newest: protocol },
