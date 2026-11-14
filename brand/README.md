@@ -113,3 +113,66 @@ Cubepals follows it:
 
 The tokens are in `apps/web/src/ui/tokens.json`; the landing page (`apps/web/src/landing/`) is
 where the look is at full strength.
+
+## Drawing and motion
+
+How Cubepals draws what it does, and how a drawing moves, wherever it appears: on the site, in the
+product and in a film. Anything new that is drawn or moves follows it. The landing's stack
+(`apps/web/src/landing/stack/`) is the reference.
+
+**A technical drawing, not an illustration.** What Cubepals runs is drawn the way a machine is drawn
+in its manual: an exploded drawing of its parts, in Ink, Paper and the print's dither, seen through
+the island's one camera, a long lens with the near corner toward the eye. The camera never moves
+round what it draws. Depth is the air between the parts and their dithered sides, never a gradient
+or a blur.
+
+- **Parts, one over the next.** A thing made of parts is drawn as those parts, stacked on one axis
+  with air between them, each a plate the size of the whole. Each part shows one thing on its top,
+  its own, so no two parts look alike.
+- **Construction shows, and follows.** Parts are tied by their construction: dashed rails from
+  corner to corner, and a trace from each player to the door they come in at. Every line is worked
+  out from where its two ends are, on every frame, so it follows what it joins: as a part rises or
+  slides out, its rails lean and stretch with it, and a player's trace goes with the door. Nothing
+  on a drawing stands still while what it belongs to moves.
+- **Numbered as a drawing is.** Each part carries its number and name at its corner, in mono
+  capitals on a short leader (`03 THE DOOR`), and while it is read, a line under them saying what
+  its top shows. No boxes round labels.
+- **At rest, lines; read, paper.** Parts at rest are faint lines. The part being read is a solid
+  plate of Paper with its sides in dither, and the rest steps back: a print that isn't being read is
+  screened to fewer of its dots, never greyed.
+- **Open where it is read.** The part being read is shown whole: what is over it rises until its top
+  is clear, and it lifts off what is under it and is pulled out toward the words that tell it. The
+  parts further off close up, so the drawing keeps its height.
+- **The product's own content, and true.** A part's top shows the product itself: its ways to play,
+  an address Cubepals keeps, an example day of a server's hours, the plans' own numbers, each read
+  from where the product keeps it. Words are set to the measure of their plate and never run past
+  its edge, and a test measures every one.
+- **Said in words as well.** The page says in words what the drawing shows, and the drawing is
+  hidden from screen readers, so nobody who can't see it misses anything.
+
+**Motion: one clock, and each thing follows the one before.**
+
+- **The reader drives.** A drawing moves because it is read: it opens when it is first seen, and
+  each step plays as it crosses the reading line. It never plays by itself, and nothing holds or
+  steers the scroll; the page scrolls as the browser scrolls it.
+- **One clock.** The parts, their rails, the traces and the labels are placed together on each
+  frame, so nothing lags what it belongs to.
+- **A move is one eased gesture,** in and out (cubic), from wherever things stand, so a reader who
+  changes their mind halfway is never jolted. What arrives eases out (quart).
+- **Cause, then effect.** In a sequence each thing waits for what causes it: a player comes along
+  their trace to the door, the door lights, the way climbs the stack lighting each part as it gets
+  there, and the world wakes last. A product's state is shown the same way, through each state the
+  product passes, in its own words: when the last player leaves, a server's card says it sleeps
+  soon if nobody joins, then that it is stopping, and only then that it is asleep. It never jumps
+  from the first to the last.
+- **Fills and prints change through the dither,** a dot at a time in the dither's own order, never
+  by fading, so at every frame each dot is there or not and a print never turns grey. Words change
+  as calmly: the old ones lift away as the new ones settle (`SaidLine`).
+- **What opens grows alone.** Opening one card's details grows that card; the cards beside it keep
+  their height, with their rows still level.
+- **Whole pixels.** Whatever moves is placed on whole device pixels on every frame, so its dither
+  never shimmers.
+- **Less motion** shows each step's end at once.
+- **On a phone the drawing follows.** It holds the top of the screen and pans to the part being
+  read. What has no room there, the names and the players, is left out rather than drawn smaller,
+  and the island takes a smaller print of its own, never a scaled one.
