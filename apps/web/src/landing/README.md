@@ -20,7 +20,7 @@ people ask; the button once more, beside the island asleep. It starts at night a
 | `Landing.tsx` | What the page reads (who is signed in, where its buttons lead, the plans, Cubepals' own servers) and the frame it is set in |
 | `landing.css` | The page's look: the two grounds, the sheet, the type, and how things arrive |
 | `sections/` | One section to a file, each with its own CSS module: `Opening`, `Steps`, `Handled`, `Pricing` (with `Hours`), `Ours`, `Asked`, `Closing`, `Footer`; `Arcade` is the first screen's line about Cubepals' own Arcade, and `said.ts` the plans in a few words |
-| `island/` | The island: `scene.ts` (the drawing, from the engine), `island.worker.ts` (where it runs), `drawing.ts` (the page's side of the worker), `Island.tsx` (what is shown round it), `Card.tsx`, `Measures.tsx`, `Snore.tsx` |
+| `island/` | The island: `scene.ts` (the drawing, from the engine), `island.worker.ts` (where it runs) with `serve.ts` (what it does there), `drawing.ts` (the page's side of the worker), `Island.tsx` (what is shown round it), `Card.tsx`, `Measures.tsx`, `Snore.tsx` |
 | `engine/` | The voxel world and its one-bit print: `world.ts`, `chunk.ts`, `cast.ts` (the people on the grass), `models.ts`, `gl.ts` with `scene-pass.ts` and `print-pass.ts`, `light.ts`, `shadow.ts`, `camera.ts` |
 | `start.ts` | What is counted when the island can't be drawn |
 

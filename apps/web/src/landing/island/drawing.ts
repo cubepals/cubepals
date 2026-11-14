@@ -5,18 +5,18 @@
 'use client'
 
 /**
- * The page's side of the island's worker (island.worker.ts): starting it once the page has loaded,
- * handing it the canvas, and telling it whatever changes: its size, whether it is on the screen,
- * how far the first screen has scrolled, where the mouse is, and what the visitor asked. What it
- * answers comes back through `heard`. Scrolling is never waited on or held: the page only says how
- * far it has gone, after the browser has moved it. Not what is shown round the drawing, which is
- * Island.tsx.
+ * The page's side of the island's worker (island.worker.ts, which runs serve.ts): starting it once
+ * the page has loaded, handing it the canvas, and telling it whatever changes: its size, whether it
+ * is on the screen, how far the first screen has scrolled, where the mouse is, and what the visitor
+ * asked. What it answers comes back through `heard`. Scrolling is never waited on or held: the page
+ * only says how far it has gone, after the browser has moved it. Not what is shown round the
+ * drawing, which is Island.tsx.
  */
 import { type RefObject, useCallback, useEffect, useRef, useState } from 'react'
 import { drawingFailed } from '../start'
 import { fitted } from './dots'
-import type { Answer, Told } from './island.worker'
 import type { Input } from './scene'
+import type { Answer, Told } from './serve'
 import { withParamsInQuery } from './worker-url'
 
 /** Whether the drawing is coming, is on the screen, or won't be: then the printed still stays. */
