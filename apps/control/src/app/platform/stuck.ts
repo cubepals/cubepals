@@ -8,7 +8,7 @@ import { type Db, schema } from '@blockly/db'
 import { type Actor, requestedBy } from '../actor.ts'
 import { NotFound } from '../errors.ts'
 import { loadOperation, runningOperationIds } from '../operations/persistence.ts'
-import type { OperationRunner } from '../operations/runner.ts'
+import { isFinished, type OperationRunner } from '../operations/runner.ts'
 import type { BlockedOperation, JobQueue } from '../ports/jobs.ts'
 import { findServer } from '../servers/persistence.ts'
 import { failuresOf, overduePurges, queuedBehind } from './persistence.ts'
@@ -19,9 +19,11 @@ export const PURGE_GRACE_MS = HOUR_MS
 /**
  * Work that stopped (§9). What a restart cut off mid-attempt is taken back at once, as a worker
  * starts: an attempt with retries left runs again, as a failed one does, since every step is safe
- * to run twice; one that was its operation's last is discarded as below, with nobody to ask. What
- * only an admin can move is the rest: a blocked operation is retried, or discarded: settled as a
- * final failure, as the runner would have, and its job dropped so the server's queue moves again.
+ * to run twice; one that was its operation's last is discarded as below, with nobody to ask. A
+ * blocked operation that already ended has its job dropped each minute (`dropSettled`), since
+ * nothing of it is left to decide. What only an admin can move is the rest: a blocked operation
+ * is retried, or discarded: settled as a final failure, as the runner would have, and its job
+ * dropped so the server's queue moves again.
  * Overdue purges retry on their own; this shows why they fail.
  */
 export class StuckWork {
@@ -84,6 +86,27 @@ export class StuckWork {
       }
     }
     return lastAttempts.length
+  }
+
+  /**
+   * Drops the job of every blocked operation that has already ended. An attempt that outlives its
+   * deadline is failed by the queue while the runner still records how the operation ended: the
+   * operation is settled, and only its job is left, failed, at the head of its line. Nothing of
+   * it is left for an admin to decide, and until it goes every later operation of its server
+   * waits: a stop, so the server runs on with nobody on it. Returns how many were dropped.
+   */
+  async dropSettled(): Promise<number> {
+    let dropped = 0
+    for (const job of await this.#jobs.blockedOperations()) {
+      const op = await loadOperation(this.#db, job.operationId)
+      if (op !== null && !isFinished(op.status)) continue
+      console.warn(
+        `operation ${op?.kind ?? 'unknown'} ${job.operationId} had ended; its failed job is dropped, and its server's queue moves on`,
+      )
+      await this.#jobs.discardBlocked(job.operationId)
+      dropped++
+    }
+    return dropped
   }
 
   async retry(actor: Actor, operationId: string): Promise<void> {
