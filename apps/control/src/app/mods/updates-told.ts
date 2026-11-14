@@ -10,10 +10,11 @@
  * with the rest, and does it for them.
  *
  * Said in the pass that reads who is on (`operations/schedules/presence.ts`), so within a minute of
- * the join; once a join, to an operator who wasn't on at the last reading; nothing when nothing is
- * newer, or to anyone who isn't an operator. The first reading of a server after the control plane
- * starts only notes who is on, so a restart never says it again to whoever is already playing. The
- * check runs apart from the pass, which never waits on the catalog; a failure is only logged.
+ * the join; once a join, to an operator the server's reading before didn't find; nothing when
+ * nothing is newer, or to anyone who isn't an operator. That reading is the one kept in the
+ * database, so a restart of the control plane never says it again to whoever is playing, and the
+ * operator whose join woke a sleeping server is told, since a stop clears it. The check runs apart
+ * from the pass, which never waits on the catalog; a failure is only logged.
  *
  * Not for finding the updates (`updates.ts`), or for the words, which the website says too
  * (`updatesSaid` in `@blockly/contracts`).
@@ -40,8 +41,6 @@ export class UpdatesTold {
   readonly #console: Pick<ServerConsole, 'run'>
   readonly #updates: Pick<ModUpdates, 'whenFound'>
   readonly #webOrigin: string
-  /** Who was on each server at its last reading; a server not here hasn't been read since the start. */
-  readonly #seen = new Map<string, ReadonlySet<string>>()
 
   constructor(deps: {
     db: Db
@@ -56,17 +55,16 @@ export class UpdatesTold {
   }
 
   /**
-   * A reading of who is on `server`: tells each operator who has just joined of the updates found.
-   * Settles once they are told, or once there is nobody to tell; never rejects.
+   * A reading of who is on `server`, and who the reading before it found (`before`, by UUID): tells
+   * each operator who has just joined of the updates found. Settles once they are told, or once
+   * there is nobody to tell; never rejects.
    */
   async heard(
     server: { id: string; desiredRevisionId: string },
     target: ConsoleTarget,
     players: readonly PresentPlayer[],
+    before: ReadonlySet<string>,
   ): Promise<void> {
-    const before = this.#seen.get(server.id)
-    this.#seen.set(server.id, new Set(players.map((p) => p.uuid)))
-    if (before === undefined) return
     const joined = players.filter((p) => !before.has(p.uuid))
     if (joined.length === 0) return
     try {
