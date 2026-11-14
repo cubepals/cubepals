@@ -35,6 +35,7 @@ import { ListingService } from './listings/service.ts'
 import { JarChecks } from './mods/jar-checks.ts'
 import { ModQueries } from './mods/queries.ts'
 import { ModService } from './mods/service.ts'
+import { updatesOf } from './mods/updates.ts'
 import { BootSequence, type BootTimeouts } from './operations/boot.ts'
 import { createHandlers } from './operations/handlers.ts'
 import { OperationRunner } from './operations/runner.ts'
@@ -309,8 +310,8 @@ export function composeControlPlane(ports: ControlPlanePorts, settings: ControlP
     players,
     storing: ports.capabilities.archives !== null,
     mailer: ports.mailer,
-    webOrigin: settings.webOrigin,
-    adminInbox: settings.adminInbox,
+    ...settings,
+    updates: updatesOf(mods, ports.catalog),
   })
   const boot = new BootSequence({
     runtime,

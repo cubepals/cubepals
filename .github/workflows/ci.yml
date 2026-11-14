@@ -395,6 +395,12 @@ jobs:
             [ "$wait" = 0 ] && exit 1
             sleep "$wait"
           done
+      # The headless Bedrock client's own packages, outside the workspaces, for its tests (the
+      # signed-in player's), which fall in this group.
+      - name: Install the headless Bedrock client
+        if: matrix.group == 'Accounts and the rest of the control plane'
+        working-directory: tools/bedrock-join
+        run: bun install --frozen-lockfile
       - run: bun run openapi:install
       - run: bun run labels:install
       - name: Create the test bucket

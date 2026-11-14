@@ -21,7 +21,7 @@ import { MINUTE_MS, SECOND_MS } from '@blockly/contracts/durations'
 import type { PinnedMod } from '../../domain/mods/artifact.ts'
 import type { ServerRevision } from '../../domain/revision/revision.ts'
 import type { ModCatalog } from '../ports/catalog.ts'
-import { identity, type ModChange, type ModPlan } from './service.ts'
+import { identity, type ModChange, type ModPlan, type ModService } from './service.ts'
 
 /** A change planned on the server's own Minecraft and type, with nothing written. */
 type Planner = (desired: ServerRevision, change: ModChange) => Promise<ModPlan>
@@ -72,17 +72,26 @@ export class ModUpdates {
    * The mods with an update this revision can run, and the change that applies them. None for a
    * pack server, one with no catalog mods, or one already up to date.
    */
-  async of(desired: ServerRevision): Promise<Found> {
-    if (desired.modpack !== null || !desired.mods.some((m) => 'versionId' in m.source)) return NONE
+  of(desired: ServerRevision): Promise<Found> {
+    return this.#waitOn(this.whenFound(desired))
+  }
+
+  /**
+   * The same, however long the catalog takes: for what runs apart from any request, as the line
+   * said in the game does (`updates-told.ts`).
+   */
+  whenFound(desired: ServerRevision): Promise<Found> {
+    if (desired.modpack !== null || !desired.mods.some((m) => 'versionId' in m.source))
+      return Promise.resolve(NONE)
     const kept = this.#kept.get(desired.id)
-    if (kept !== undefined && kept.until > Date.now()) return kept.found
+    if (kept !== undefined && kept.until > Date.now()) return Promise.resolve(kept.found)
     // However many ask at once, one discovery runs for a revision; one that fails isn't kept.
     let asked = this.#asked.get(desired.id)
     if (asked === undefined) {
       asked = this.#discover(desired).finally(() => this.#asked.delete(desired.id))
       this.#asked.set(desired.id, asked)
     }
-    return this.#waitOn(asked)
+    return asked
   }
 
   /** The discovery's answer, or none once `#waitMs` has passed; it goes on without the request. */
@@ -199,6 +208,28 @@ function withoutNamed(
 /** The server's mods its catalog can update, by `identity`. */
 const catalogIds = (desired: ServerRevision): string[] =>
   desired.mods.filter((m) => 'versionId' in m.source).map(identity)
+
+const shared = new WeakMap<object, ModUpdates>()
+
+/**
+ * The one `ModUpdates` for a server's mods: the Mods page and the line said in the game share what
+ * it finds and keeps, so a burst of either runs one discovery.
+ */
+export function updatesOf(
+  mods: Pick<ModService, 'planOn'>,
+  catalog: Pick<ModCatalog, 'versionsByIds'>,
+): ModUpdates {
+  let updates = shared.get(mods)
+  if (updates === undefined) {
+    updates = new ModUpdates({
+      catalog,
+      plan: (desired, change) =>
+        mods.planOn(desired, { gameVersion: desired.gameVersion, loader: desired.loader }, change),
+    })
+    shared.set(mods, updates)
+  }
+  return updates
+}
 
 const versionOf = (mod: PinnedMod): string | null => ('versionId' in mod.source ? mod.source.versionId : null)
 

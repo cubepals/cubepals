@@ -12,6 +12,11 @@ name: Bedrock E2E
 # concurrency group: neither changes staging under the other.
 on:
   workflow_dispatch:
+    inputs:
+      xbox_only:
+        description: Only the Bedrock test account's run (a real Xbox account), without the offline players
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -53,10 +58,12 @@ jobs:
       # in the step that always runs below, which is why it comes before anything that can fail.
       - name: Turn the edge's Xbox sign-in check off
         id: validation
+        if: ${{ !inputs.xbox_only }}
         run: fly secrets set BEDROCK_VALIDATE_LOGIN=false -a bly-staging-edge
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
       - name: Bedrock check
+        if: ${{ !inputs.xbox_only }}
         shell: bash
         run: bun scripts/bedrock-check.ts | tee bedrock-check.log
         env:
@@ -78,6 +85,17 @@ jobs:
             (sleep 60 && fly secrets set BEDROCK_VALIDATE_LOGIN=true -a bly-staging-edge)
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      # The Bedrock test account, a real Xbox account, wakes a server and plays with the edge's
+      # sign-in check on. Its sign-in is opened from staging's bucket, sealed with a key from
+      # STAGING_STATE, and written back renewed; when it needs a person again, the step says to run
+      # scripts/bedrock-xbox-sign-in.ts. This environment's secrets reach main's runs alone.
+      - name: A real Xbox account wakes a server and plays
+        run: bun scripts/bedrock-check.ts --xbox
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          STAGING_STATE: ${{ secrets.STAGING_STATE }}
+          STAGING_DATABASE: ${{ vars.STAGING_DATABASE }}
+          STAGING_DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
       # Whatever happened above, nothing is left running. A second try covers a blip reaching Fly.
       # The servers this run made were trashed by the check; one that a cancelled run left is
       # purged by the next staging check, which knows them by their create key.

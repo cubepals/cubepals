@@ -8,6 +8,7 @@
  * those are the verbs in `fly-runtime.ts`. What a machine's state means is `observation.ts`.
  */
 
+import { constants } from 'node:http2'
 import { setTimeout as delay } from 'node:timers/promises'
 import { SECOND_MS } from '@blockly/contracts/durations'
 import { z } from 'zod'
@@ -250,8 +251,10 @@ async function clearClaim(
 
 /**
  * A new config for the machine, under its lease. One Fly refuses because an update before it is
- * still being put in place is asked again once that one is, the lease held meanwhile, so no other
- * worker's change comes between.
+ * still being put in place is asked again once that one is, and one Fly's API gave up on with a
+ * 408 (its request timed out) is asked again at once, the lease held meanwhile in both, so no other
+ * worker's change comes between. Asking again sends the same config, so an update the 408 hid
+ * having gone through is put in place once, not twice.
  */
 export async function updateMachine(
   fly: FlyClient,
@@ -276,9 +279,10 @@ export async function updateMachine(
         },
       })
       const replacing = updated.response.status === 409 && saysReplacing(updated.error)
+      const timedOut = updated.response.status === constants.HTTP_STATUS_REQUEST_TIMEOUT
       const left = (deadline - Date.now()) / 1000
-      if (!replacing || left <= 0) return launched(updated, 'updating the machine')
-      await afterReplace(fly, app, machineId, left)
+      if (!(replacing || timedOut) || left <= 0) return launched(updated, 'updating the machine')
+      if (replacing) await afterReplace(fly, app, machineId, left)
     }
   })
 }

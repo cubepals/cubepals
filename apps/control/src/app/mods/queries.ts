@@ -34,7 +34,7 @@ import { loadRevisionFields } from '../servers/revision-reads.ts'
 import { checksOf, quarantinedOf, refusalOf } from './jar-check-records.ts'
 import { packView } from './pack.ts'
 import { identity, type ModPlan, type ModService } from './service.ts'
-import { ModUpdates } from './updates.ts'
+import { type ModUpdates, updatesOf } from './updates.ts'
 import { isDatapackUpload, listModUploads, type ModUploadRecord, uploadInUse } from './uploads.ts'
 
 export class ModQueries {
@@ -62,11 +62,7 @@ export class ModQueries {
     this.#packs = deps.packs
     this.#contents = deps.contents
     this.#curation = deps.curation
-    this.#updates = new ModUpdates({
-      catalog: deps.catalog,
-      plan: (desired, change) =>
-        deps.mods.planOn(desired, { gameVersion: desired.gameVersion, loader: desired.loader }, change),
-    })
+    this.#updates = updatesOf(deps.mods, deps.catalog)
   }
 
   /** Where people read about a mod: its catalog's page, when it came from this catalog. */
