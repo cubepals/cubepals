@@ -3,14 +3,17 @@
 // SPDX-License-Identifier: LicenseRef-Cubepals-Reserved
 
 /**
- * What is counted when the island can't be drawn: the worker wouldn't start, or the drawing failed
- * once running. Either way the page keeps the printed still, and says so once to PostHog. Not the
- * drawing itself, which is island/.
+ * What is counted when the island can't be drawn: the worker wouldn't start, the drawing failed
+ * once running, or its context was taken away. Each way the page shows the printed still, and says
+ * so once to PostHog. Not the drawing itself, which is island/.
  */
 import { capture } from '../lib/insight'
 
-/** What stopped the drawing: the renderer failed in its worker, or the worker never started. */
-export type Reason = 'frame' | 'worker'
+/**
+ * What stopped the drawing: the renderer failed in its worker, the worker never started, or the
+ * WebGL context was taken away.
+ */
+export type Reason = 'frame' | 'worker' | 'lost'
 
 const counted = new Set<Reason>()
 

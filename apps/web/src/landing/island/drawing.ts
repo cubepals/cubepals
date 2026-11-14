@@ -64,7 +64,11 @@ export function useDrawing(
     const answered = (event: MessageEvent<Answer>) => {
       const answer = event.data
       if (answer.kind === 'shown') setDrawing('shown')
-      else if (answer.kind === 'failed') {
+      else if (answer.kind === 'lost') {
+        // The still comes back until the context does, and the drawing with it.
+        setDrawing('none')
+        drawingFailed('lost')
+      } else if (answer.kind === 'failed') {
         setDrawing('none')
         drawingFailed('frame')
       } else listener.current(answer)
