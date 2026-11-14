@@ -30,3 +30,13 @@ test('stays holds for its time, and fails as soon as its check stops holding', a
   )
   expect(Date.now() - before).toBeLessThan(1_000)
 })
+
+test('a check that never answers is held to the deadline, and fails as late', async () => {
+  const hangs = () => new Promise<boolean>(() => {})
+  const before = Date.now()
+  await expect(until('an answer', hangs, { timeoutMs: 120, seen: () => 'no answer' })).rejects.toThrow(
+    'Timed out waiting for an answer\nno answer',
+  )
+  await expect(stays('an answer', hangs, 120)).rejects.toThrow('Expected an answer to hold for 120 ms')
+  expect(Date.now() - before).toBeLessThan(1_000)
+})

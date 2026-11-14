@@ -20,41 +20,58 @@ export interface Seen {
   seen?: () => string
 }
 
-/** The runtime's timer: contracts carries no runtime's types, and every runtime a test runs in has it. */
+/** The runtime's timers: contracts carries no runtime's types, and every runtime a test runs in has them. */
 declare function setTimeout(callback: () => void, ms: number): unknown
+declare function clearTimeout(timer: unknown): void
+
+type Check = () => boolean | Promise<boolean>
 
 const pause = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
 const saying = (options: Seen) => (options.seen ? `\n${options.seen()}` : '')
 
+/** One look at `check`, given at most `ms` to answer: its answer, or 'late' when it gave none in time. */
+async function look(check: Check, ms: number): Promise<boolean | 'late'> {
+  let timer: unknown
+  const late = new Promise<'late'>((resolve) => {
+    timer = setTimeout(() => resolve('late'), Math.max(ms, 0))
+  })
+  try {
+    return await Promise.race([Promise.resolve().then(check), late])
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 /**
  * Waits until `check` holds, looking again every 50 ms, for up to `timeoutMs` (15 s unless given);
- * then fails, naming `what` and saying what the test saw.
+ * then fails, naming `what` and saying what the test saw. An async check that hangs is held to the
+ * same deadline.
  */
 export async function until(
   what: string,
-  check: () => boolean | Promise<boolean>,
+  check: Check,
   options: Seen & { timeoutMs?: number } = {},
 ): Promise<void> {
   const deadline = Date.now() + (options.timeoutMs ?? 15 * SECOND_MS)
-  while (!(await check())) {
-    if (Date.now() >= deadline) throw new Error(`Timed out waiting for ${what}${saying(options)}`)
+  for (;;) {
+    const answer = await look(check, deadline - Date.now())
+    if (answer === true) return
+    if (answer === 'late' || Date.now() >= deadline)
+      throw new Error(`Timed out waiting for ${what}${saying(options)}`)
     await pause(EVERY_MS)
   }
 }
 
 /**
  * That `check` holds all through `ms`, looking every 50 ms: the one wait on time, to show that
- * something didn't happen. It fails as soon as `check` stops holding, naming `what`.
+ * something didn't happen. It fails as soon as `check` stops holding, naming `what`, and when an
+ * async check gives no answer by the end, since then nothing showed that it held.
  */
-export async function stays(
-  what: string,
-  check: () => boolean | Promise<boolean>,
-  ms: number,
-  options: Seen = {},
-): Promise<void> {
+export async function stays(what: string, check: Check, ms: number, options: Seen = {}): Promise<void> {
   const end = Date.now() + ms
   for (;;) {
-    if (!(await check())) throw new Error(`Expected ${what} to hold for ${ms} ms${saying(options)}`)
+    if ((await look(check, Math.max(end - Date.now(), EVERY_MS))) !== true)
+      throw new Error(`Expected ${what} to hold for ${ms} ms${saying(options)}`)
     const left = end - Date.now()
     if (left <= 0) return
     await pause(Math.min(EVERY_MS, left))
