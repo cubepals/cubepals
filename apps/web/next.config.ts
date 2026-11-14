@@ -20,6 +20,9 @@ import { apiUpstream } from './src/lib/upstream'
  */
 const standalone = process.env.NEXT_OUTPUT === 'standalone'
 
+/** The commit a deploy builds from (scripts/lib/web-worker.ts sets it), as PostHog and X-Build say it. */
+const version = (process.env.GIT_COMMIT_SHA ?? 'dev').slice(0, 12)
+
 /**
  * Source maps for PostHog's errors, built only when scripts/sourcemaps.ts will upload them and
  * delete them after: with its key and project, never otherwise.
@@ -51,8 +54,7 @@ export default {
   productionBrowserSourceMaps: sourceMaps,
   env: {
     BLOCKLY_ENVIRONMENT: environment,
-    // The commit a deploy builds from: scripts/lib/web-worker.ts sets it.
-    BLOCKLY_VERSION: (process.env.GIT_COMMIT_SHA ?? 'dev').slice(0, 12),
+    BLOCKLY_VERSION: version,
   },
   // `bun run dev:lan` opens the dev server to other devices; Next refuses its dev resources to any
   // origin not named here, which would leave a phone with a page and no scripts.
@@ -66,10 +68,12 @@ export default {
   experimental: { caseSensitiveRoutes: true },
   // Every response carries the site's own headers (src/lib/site-headers.ts). Every deployment but
   // production also says noindex on every response, files and images too, which the pages' own
-  // robots meta can't reach.
+  // robots meta can't reach. X-Build names the commit the answer was built from, so whether a
+  // change is live on the site is read from the site itself.
   async headers() {
     const robots = indexable() ? [] : [{ key: 'X-Robots-Tag', value: 'noindex' }]
-    return [{ source: '/:path*', headers: [...SITE_HEADERS, ...robots] }]
+    const build = { key: 'X-Build', value: version }
+    return [{ source: '/:path*', headers: [...SITE_HEADERS, build, ...robots] }]
   },
   // Where a password manager sends someone to change a saved password (w3c.github.io/
   // webappsec-change-password-url). A password is changed by a reset link, so it is that page.
