@@ -67,6 +67,7 @@
     "STOP_CHEATERS",
     "SIGNALS",
     "FLOODGATE_KEY",
-    "EARLY_ROOM_TOKEN"
+    "EARLY_ROOM_TOKEN",
+    "SLOW_HOST_MHZ"
   ]
 }

@@ -84,6 +84,9 @@ const suspendsOn = (env: NodeJS.ProcessEnv) =>
     ? environmentOf(env.DEPLOYMENT_ID) !== 'production'
     : env.FLY_SUSPEND === 'true'
 
+/** SLOW_HOST_MHZ: a clock, in MHz, below which a host counts as slow. Unset, 0: no host does. */
+const slowHostMhz = (env: NodeJS.ProcessEnv) => Number(env.SLOW_HOST_MHZ ?? 0)
+
 /**
  * The SMTP server and the senders, the account's and the notices' falling back to the everyday
  * one; staging's subjects say they are staging's, by the deployment's own id. Admin mail goes to
@@ -406,6 +409,7 @@ export function configFromEnv(env: NodeJS.ProcessEnv): unknown {
     insight: insightFrom(env),
     ...billingFrom(env),
     giftsByEmail: env.GIFTS_BY_EMAIL === 'true',
+    slowHostMhz: slowHostMhz(env),
     freeLinkTuning: privateJson(env, 'FREE_LINK_TUNING', DEFAULT_FREE_LINK_TUNING),
     abuseLimits: privateJson(env, 'ABUSE_LIMITS', DEFAULT_ABUSE_LIMITS),
     capacityTuning: privateJson(env, 'CAPACITY_TUNING', DEFAULT_CAPACITY_TUNING),
@@ -426,6 +430,7 @@ export const tuningOf = (config: DeploymentConfig) => ({
   joins: config.joins,
   stopCheaters: config.stopCheaters.tuning,
   giftsByEmail: config.giftsByEmail,
+  slowHostMhz: config.slowHostMhz,
 })
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): DeploymentConfig {

@@ -14,9 +14,11 @@ import type { MinecraftServer } from '../../../domain/server/server.ts'
 import { PermanentFailure } from '../../errors.ts'
 import type { JobQueue } from '../../ports/jobs.ts'
 import type { ProgressSink, RuntimeHandle } from '../../ports/runtime.ts'
+import { knownSlow } from '../../runtimes/hosts.ts'
 import type { Runtimes } from '../../runtimes/router.ts'
 import { findServer, loadRuntime, memoryKept, saveApplied, saveHandle } from '../../servers/persistence.ts'
 import type { DesiredRuntime } from '../../servers/specs.ts'
+import { tuning } from '../../tuning.ts'
 import type { OperationContext, OperationHandler } from '../runner.ts'
 
 export type ServerBinding = ReturnType<typeof serverBinding>
@@ -64,6 +66,16 @@ export function serverBinding(deps: {
   const machineOf = (handle: RuntimeHandle) =>
     runtime.locate(handle).names.find((name) => name.label === 'Machine')?.value ?? null
 
+  /**
+   * What a runtime is told of hosts as it provisions: whether one is known to be slow, by the
+   * deployment's floor. With no floor nothing is offered, so no runtime asks and nothing is read.
+   */
+  const slowHosts = (): Pick<ProgressSink, 'slowHost'> => {
+    const floorMhz = tuning().slowHostMhz ?? 0
+    if (floorMhz <= 0) return {}
+    return { slowHost: (provider, host) => knownSlow(db, provider, host, floorMhz) }
+  }
+
   const progressSink = (ctx: OperationContext, server: MinecraftServer): ProgressSink => ({
     step: (step) => ctx.step(step),
     // Which machine the operation acted on, so its record says so after the provider forgets it.
@@ -75,6 +87,7 @@ export function serverBinding(deps: {
     // A machine stopped though its last sleep kept its memory: the provider dropped what it kept.
     mark: async (mark) =>
       ctx.mark(mark === 'not_asleep' && (await memoryKept(db, server.id)) ? 'memory_lost' : mark),
+    ...slowHosts(),
   })
 
   /** Starts compute and keeps the handle it comes back with, which may reach it at another address. */

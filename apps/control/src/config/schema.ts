@@ -503,6 +503,8 @@ export const DeploymentConfig = z.object({
   local: z.object({ notes: z.array(z.string()) }).nullable(),
   /** GIFTS_BY_EMAIL: gifts emailed to the person they are for, bought with or without an account. */
   giftsByEmail: z.boolean(),
+  /** A clock, in MHz, below which a host counts as slow; 0 counts none. SLOW_HOST_MHZ. */
+  slowHostMhz: z.number().nonnegative(),
   /**
    * Private tuning, installed at startup (`app/tuning.ts`). Required in production; elsewhere,
    * unset is the harmless default.
