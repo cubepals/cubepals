@@ -369,7 +369,7 @@ export function composeControlPlane(ports: ControlPlanePorts, settings: ControlP
     catalog,
     mods,
     jarChecks,
-    modQueries: new ModQueries({ db, policy, catalog: ports.catalog, packs, contents, curation }),
+    modQueries: new ModQueries({ db, policy, catalog: ports.catalog, packs, contents, curation, mods }),
     queries,
     setups,
     packs,

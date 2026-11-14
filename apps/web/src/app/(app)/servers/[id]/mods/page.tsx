@@ -8,7 +8,8 @@ import type { ModChangeInput, ModsView, ModView, RestartWhen, ServerView } from 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Download, ExternalLink, Plus, RefreshCw, Upload } from 'lucide-react'
 import Image from 'next/image'
-import { useState } from 'react'
+import { useSearchParams } from 'next/navigation'
+import { useEffect, useRef, useState } from 'react'
 import { messageOf, useTRPC } from '../../../../../lib/api'
 import { useDebounced } from '../../../../../lib/hooks'
 import { datapacksSaid, loaderLabel, presentConflict, presentPlan } from '../../../../../lib/present'
@@ -29,6 +30,7 @@ import {
 } from '../../../../../ui'
 import { PackDrop } from '../../../pack-drop'
 import { PlusOffer } from '../../../plus-offer'
+import { useModUpdates } from '../mod-updates'
 import {
   ChangeState,
   ConfirmChange,
@@ -37,12 +39,38 @@ import {
   useChanged,
   whatHappens,
 } from '../settings/shared'
+import { updateOf, updatesLine, type Versions, withUpdates } from '../update-lines'
 import { useServer } from '../use-server'
 import { BedrockGoes } from './bedrock-goes'
 import { OwnDatapacks } from './own-datapacks'
 import { UploadRow, useOwnUploads } from './own-uploads'
 
 type Change = Omit<ModChangeInput, 'serverId'>
+type Pending = { title: string; change: Change }
+
+/**
+ * `?update=all`, as the server's page links here: the update Cubepals found opens planned, once,
+ * so the owner arrives at the choice already made rather than looking for it.
+ */
+function useAskedUpdate(ready: boolean, open: () => void) {
+  const asked = useSearchParams().get('update') === 'all'
+  const opened = useRef(false)
+  useEffect(() => {
+    if (!asked || !ready || opened.current) return
+    opened.current = true
+    open()
+  }, [asked, ready, open])
+}
+
+/** Every update Cubepals found, as one change: the set it checked runs together. */
+function updateAll(list: ModsView, versions: Versions): Pending {
+  const mods = withUpdates(list, versions)
+  const noun = list.kind === 'plugins' ? 'plugins' : list.kind === 'datapacks' ? 'datapacks' : 'mods'
+  return {
+    title: mods.length === 1 ? `Update ${mods[0]?.name}?` : `Update ${mods.length} ${noun}?`,
+    change: { upgrade: mods.map((mod) => mod.id) },
+  }
+}
 
 /**
  * A server playing a modpack has no mod list of its own: the pack chose them, installs them and
@@ -53,9 +81,24 @@ type Change = Omit<ModChangeInput, 'serverId'>
 function PlayingAPack({ view, list }: { view: ServerView; list: ModsView }) {
   const pack = list.modpack
   const [moving, setMoving] = useState<PackMove | null>(null)
-  if (pack === null) return null
-  const allowed = changeable(view)
   const update = list.packUpdate
+  const allowed = changeable(view)
+  const toUpdate = () => {
+    if (pack === null || update === null) return
+    setMoving({
+      // A pack Blockly offers by name moves to the release it offers, never a catalog version.
+      to:
+        update.release !== null
+          ? { kind: 'curated', version: update.release }
+          : { kind: 'catalog', versionId: update.versionId },
+      name: pack.name,
+      version: update.label,
+      gameVersion: update.gameVersion,
+      movesWorld: update.movesWorld,
+    })
+  }
+  useAskedUpdate(update !== null && allowed.ok, toUpdate)
+  if (pack === null) return null
   return (
     <>
       <ChangeState view={view} />
@@ -72,19 +115,7 @@ function PlayingAPack({ view, list }: { view: ServerView; list: ModsView }) {
               variant="outline"
               icon={<RefreshCw {...ICON} aria-hidden />}
               disabled={!allowed.ok}
-              onClick={() =>
-                setMoving({
-                  // A pack Blockly offers by name moves to the release it offers, never a catalog version.
-                  to:
-                    update.release !== null
-                      ? { kind: 'curated', version: update.release }
-                      : { kind: 'catalog', versionId: update.versionId },
-                  name: pack.name,
-                  version: update.label,
-                  gameVersion: update.gameVersion,
-                  movesWorld: update.movesWorld,
-                })
-              }
+              onClick={toUpdate}
             >
               Update to {update.label}
             </Button>
@@ -221,7 +252,13 @@ export default function ModsPage() {
   const server = useServer()
   const trpc = useTRPC()
   const mods = useQuery(trpc.mods.list.queryOptions({ serverId: server.id }))
-  const [pending, setPending] = useState<{ title: string; change: Change } | null>(null)
+  const versions = useModUpdates(server.id)
+  const [pending, setPending] = useState<Pending | null>(null)
+  const found =
+    mods.data !== undefined && mods.data.modpack === null && withUpdates(mods.data, versions).length > 0
+  useAskedUpdate(found && server.data !== undefined && changeable(server.data).ok, () => {
+    if (mods.data !== undefined) setPending(updateAll(mods.data, versions))
+  })
 
   if (server.isPending || mods.isPending) return <PageSkeleton sections={[3]} />
   if (server.isError) return <LoadFailed error={messageOf(server.error)} onRetry={() => server.refetch()} />
@@ -250,7 +287,7 @@ export default function ModsPage() {
       ) : (
         <>
           <ChangeState view={view} />
-          <Installed view={view} list={list} onChange={setPending} />
+          <Installed view={view} list={list} versions={versions} onChange={setPending} />
           <Search view={view} list={list} onChange={setPending} />
           {/* Jars need a server type that runs them; a datapack goes into any world. */}
           {list.kind !== 'datapacks' && <Uploads view={view} list={list} onChange={setPending} />}
@@ -273,14 +310,18 @@ export default function ModsPage() {
 function Installed({
   view,
   list,
+  versions,
   onChange,
 }: {
   view: ServerView
   list: ModsView
-  onChange: (pending: { title: string; change: Change }) => void
+  versions: Versions
+  onChange: (pending: Pending) => void
 }) {
   const noun = list.kind === 'plugins' ? 'plugins' : list.kind === 'datapacks' ? 'datapacks' : 'mods'
   const allowed = changeable(view)
+  // Cubepals looks for updates itself, each time this page is read, and offers only what it checked.
+  const found = updatesLine(list, versions)
   return (
     <FormSection
       title="On this server"
@@ -290,68 +331,103 @@ function Installed({
           : `${loaderLabel(list.loader)} ${list.gameVersion}. Players need the ones marked for players too.`
       }
       actions={
-        list.mods.some((m) => m.source === 'catalog') ? (
+        // One update is its row's button; more go together, as the set Cubepals checked.
+        withUpdates(list, versions).length < 2 ? undefined : (
           <Button
-            variant="outline"
+            variant="primary"
             icon={<RefreshCw {...ICON} aria-hidden />}
             disabled={!allowed.ok}
-            onClick={() => onChange({ title: `Update ${noun}?`, change: { upgrade: 'all' } })}
+            onClick={() => onChange(updateAll(list, versions))}
           >
-            Check for updates
+            Update all
           </Button>
-        ) : undefined
+        )
       }
     >
+      {found !== null && <Note tone="info">{found}</Note>}
       {list.mods.length === 0 ? (
         <p className="type-body" style={{ color: 'var(--ink-muted)' }}>
           No {noun} yet. Find some below.
         </p>
       ) : (
         list.mods.map((mod) => (
-          <FormRow
+          <ModRow
             key={mod.id}
-            label={
-              <span className="bk-row bk-wrap" style={{ gap: 'var(--space-8)' }}>
-                {mod.name}
-                <span className="type-mono-sm" style={{ color: 'var(--ink-muted)' }}>
-                  {mod.versionLabel}
-                </span>
-                {mod.datapack && <Badge tone="neutral">Datapack</Badge>}
-                {mod.environment === 'both' && <Badge tone="info">For players too</Badge>}
-                {mod.revoked && <Badge tone="danger">Taken down</Badge>}
-                {mod.malware && <Badge tone="danger">Malware</Badge>}
-              </span>
-            }
-            description={describe(mod)}
-            control={
-              <div className="bk-row" style={{ gap: 'var(--space-8)' }}>
-                {mod.url && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    href={mod.url}
-                    iconEnd={<ExternalLink {...ICON} aria-hidden />}
-                    aria-label={`${mod.name} on Modrinth`}
-                  >
-                    Modrinth
-                  </Button>
-                )}
-                {mod.origin === 'user' && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={!allowed.ok}
-                    onClick={() => onChange({ title: `Remove ${mod.name}?`, change: { remove: [mod.id] } })}
-                  >
-                    Remove
-                  </Button>
-                )}
-              </div>
-            }
+            mod={mod}
+            update={updateOf(mod, versions)}
+            allowed={allowed.ok}
+            onChange={onChange}
           />
         ))
       )}
     </FormSection>
+  )
+}
+
+/** One of the server's mods: what it is, the update found for it, and what the owner can do. */
+function ModRow({
+  mod,
+  update,
+  allowed,
+  onChange,
+}: {
+  mod: ModView
+  /** The version Cubepals found it can move to, or null. */
+  update: string | null
+  allowed: boolean
+  onChange: (pending: Pending) => void
+}) {
+  return (
+    <FormRow
+      label={
+        <span className="bk-row bk-wrap" style={{ gap: 'var(--space-8)' }}>
+          {mod.name}
+          <span className="type-mono-sm" style={{ color: 'var(--ink-muted)' }}>
+            {update === null ? mod.versionLabel : `${mod.versionLabel} → ${update}`}
+          </span>
+          {mod.datapack && <Badge tone="neutral">Datapack</Badge>}
+          {mod.environment === 'both' && <Badge tone="info">For players too</Badge>}
+          {mod.revoked && <Badge tone="danger">Taken down</Badge>}
+          {mod.malware && <Badge tone="danger">Malware</Badge>}
+        </span>
+      }
+      description={describe(mod)}
+      control={
+        <div className="bk-row" style={{ gap: 'var(--space-8)' }}>
+          {mod.url && (
+            <Button
+              variant="ghost"
+              size="sm"
+              href={mod.url}
+              iconEnd={<ExternalLink {...ICON} aria-hidden />}
+              aria-label={`${mod.name} on Modrinth`}
+            >
+              Modrinth
+            </Button>
+          )}
+          {update !== null && (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={!allowed}
+              onClick={() => onChange({ title: `Update ${mod.name}?`, change: { upgrade: [mod.id] } })}
+            >
+              Update
+            </Button>
+          )}
+          {mod.origin === 'user' && (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={!allowed}
+              onClick={() => onChange({ title: `Remove ${mod.name}?`, change: { remove: [mod.id] } })}
+            >
+              Remove
+            </Button>
+          )}
+        </div>
+      }
+    />
   )
 }
 
@@ -369,7 +445,7 @@ function Search({
 }: {
   view: ServerView
   list: ModsView
-  onChange: (pending: { title: string; change: Change }) => void
+  onChange: (pending: Pending) => void
 }) {
   const trpc = useTRPC()
   const [text, setText] = useState('')
@@ -499,7 +575,7 @@ function Uploads({
 }: {
   view: ServerView
   list: ModsView
-  onChange: (pending: { title: string; change: Change }) => void
+  onChange: (pending: Pending) => void
 }) {
   const own = useOwnUploads(view, 'mod', (done) =>
     onChange({ title: `Add ${done.fileName}?`, change: { addUploads: [done.uploadId] } }),
@@ -586,6 +662,7 @@ function PlanChange({
       onSuccess: (next) => {
         changed(next)
         void queries.invalidateQueries({ queryKey: trpc.mods.list.queryKey({ serverId: view.id }) })
+        void queries.invalidateQueries({ queryKey: trpc.mods.updates.queryKey({ serverId: view.id }) })
         void queries.invalidateQueries({ queryKey: trpc.mods.search.pathKey() })
         void queries.invalidateQueries({ queryKey: trpc.mods.uploads.queryKey({ serverId: view.id }) })
         onClose()

@@ -7,6 +7,7 @@ import type {
   ModConflictView,
   ModPlanView,
   ModsView,
+  ModUpdatesView,
   ModUploadView,
   ModView,
   PackUpdateView,
@@ -28,11 +29,12 @@ import type { PackContents } from '../packs/contents.ts'
 import type { PackService } from '../packs/service.ts'
 import type { AccessPolicy } from '../policy/access-policy.ts'
 import type { ModCatalog } from '../ports/catalog.ts'
-import { findServer } from '../servers/persistence.ts'
+import { findServer, loadRevision } from '../servers/persistence.ts'
 import { loadRevisionFields } from '../servers/revision-reads.ts'
 import { checksOf, quarantinedOf, refusalOf } from './jar-check-records.ts'
 import { packView } from './pack.ts'
-import { identity, type ModPlan } from './service.ts'
+import { identity, type ModPlan, type ModService } from './service.ts'
+import { ModUpdates } from './updates.ts'
 import { isDatapackUpload, listModUploads, type ModUploadRecord, uploadInUse } from './uploads.ts'
 
 export class ModQueries {
@@ -42,6 +44,7 @@ export class ModQueries {
   readonly #packs: PackService
   readonly #contents: PackContents
   readonly #curation: PackCuration
+  readonly #updates: ModUpdates
 
   constructor(deps: {
     db: Db
@@ -50,6 +53,8 @@ export class ModQueries {
     packs: PackService
     contents: PackContents
     curation: PackCuration
+    /** Plans the updates Cubepals offers, as any change is planned, with nothing written. */
+    mods: Pick<ModService, 'planOn'>
   }) {
     this.#db = deps.db
     this.#policy = deps.policy
@@ -57,6 +62,11 @@ export class ModQueries {
     this.#packs = deps.packs
     this.#contents = deps.contents
     this.#curation = deps.curation
+    this.#updates = new ModUpdates({
+      catalog: deps.catalog,
+      plan: (desired, change) =>
+        deps.mods.planOn(desired, { gameVersion: desired.gameVersion, loader: desired.loader }, change),
+    })
   }
 
   /** Where people read about a mod: its catalog's page, when it came from this catalog. */
@@ -120,6 +130,17 @@ export class ModQueries {
       uploads: await this.#availability(server.ownerId, 'upload_mod'),
       datapackUploads: await this.#availability(server.ownerId, 'upload_datapack'),
     }
+  }
+
+  /**
+   * The updates Cubepals found for the server's mods (`updates.ts`), asked apart from `list` so the
+   * page never waits on the catalog for them. A catalog that can't be asked shows none.
+   */
+  async updates(actor: Actor, serverId: string): Promise<ModUpdatesView> {
+    const server = authorize(actor, await findServer(this.#db, serverId))
+    const revision = await loadRevision(this.#db, server.desiredRevisionId)
+    const found = await this.#updates.of(revision).catch(() => new Map<string, string>())
+    return { versions: Object.fromEntries(found) }
   }
 
   /** Whether the owner can upload here: the policy's own answer. */
