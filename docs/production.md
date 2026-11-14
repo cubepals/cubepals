@@ -81,7 +81,9 @@ line of JSON each ([tuning](configuration.md#private-tuning),
 [files](configuration.md#files-for-official-servers-optional),
 [Stop cheaters](configuration.md#stop-cheaters-optional)); left out, the economics report leaves
 fees and margin out, official servers start with the public defaults, Stop cheaters only alerts
-and logs, and no signal is raised.
+and logs, and no signal is raised. `SLOW_HOST_MHZ`, a number from the private records too, only to
+move new servers' volumes off hosts known to be slow ([configuration](configuration.md)); left
+out, none is.
 
 ```sh
 bun scripts/production.ts check

@@ -149,9 +149,17 @@ type RuntimeStep = 'allocating' | 'waiting_for_room' | 'storage' | 'compute' | '
  * stopped rather than asleep with its memory; `other_spec`, asleep on another spec than the one
  * asked for; `no_compute`, nothing there to start yet. And what the provider said of the start
  * itself, where it says: `moved_host`, started on another host than it slept on; and, for a
- * resume, `started_from:<state>`, the state the provider had it in when asked.
+ * resume, `started_from:<state>`, the state the provider had it in when asked. And
+ * `slow_host:<region>/<name>`, a host known to be slow that a new server's first storage landed on,
+ * where the runtime made that storage again elsewhere before anything ran on it.
  */
-export type RuntimeMark = 'not_asleep' | 'other_spec' | 'no_compute' | 'moved_host' | `started_from:${string}`
+export type RuntimeMark =
+  | 'not_asleep'
+  | 'other_spec'
+  | 'no_compute'
+  | 'moved_host'
+  | `started_from:${string}`
+  | `slow_host:${string}`
 
 /**
  * The CPU of the host a server's compute runs on, as the compute itself reads it: its model's
@@ -171,6 +179,13 @@ export interface ProgressSink {
   handle(handle: RuntimeHandle): Promise<void>
   /** Kept on the operation's record beside its steps, for the platform; a runtime may say none. */
   mark?(mark: RuntimeMark): Promise<void>
+  /**
+   * Whether a host is known to be slow, by what the boots that ran on it read (`HostCpu`): a
+   * runtime whose provider names the host of new storage before anything runs on it may ask, and
+   * make that storage again elsewhere while it is empty. `provider` is the runtime's own id, under
+   * which its hosts are known. Absent, no host is known to be slow.
+   */
+  slowHost?(provider: string, host: NonNullable<HostCpu['host']>): Promise<boolean>
 }
 
 export type RestoreSource =

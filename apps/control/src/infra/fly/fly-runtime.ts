@@ -17,6 +17,7 @@
  * - `apps.ts`: a server's Fly app, its name, its Flycast address and its secrets.
  * - `volumes.ts`: the volumes a server's world lives on.
  * - `host-cpu.ts`: the host a machine runs on: its CPU, and which host it is.
+ * - `faster-host.ts`: a new server's first volume made again off a host known to be slow.
  * - `snapshots.ts`: a volume's snapshots, taken and accounted for.
  * - `exports.ts`: a snapshot's world packed into the archive store.
  * - `machines.ts`: Fly machines read, changed under their lease, and waited on.
@@ -63,6 +64,7 @@ import {
 import { wakesWouldBoot } from './fly-runtime/asleep.ts'
 import { changedSince, inventory } from './fly-runtime/discovery.ts'
 import { exportSnapshot } from './fly-runtime/exports.ts'
+import { offSlowHost } from './fly-runtime/faster-host.ts'
 import { restoreJob } from './fly-runtime/helper-jobs.ts'
 import { helperJob } from './fly-runtime/helper-machine.ts'
 import { readHostCpu } from './fly-runtime/host-cpu.ts'
@@ -106,6 +108,7 @@ import {
   decodeSnapshot,
   encodeHandle,
   type FlyRef,
+  holdsNone,
   isFlyHandle,
   isFlySnapshot,
   locationOf,
@@ -285,14 +288,24 @@ export class FlyRuntime implements MinecraftRuntime {
     const secretsVersion = await setSecrets(this.#fly, app, spec.secrets)
 
     await progress.step('storage')
-    const volume = await ensureVolume(
-      this.#fly,
-      app,
-      region,
-      { sizeGb: spec.storage.sizeGb, memoryMb: spec.resources.memoryMb },
-      this.snapshotLifetimeDays,
-      { mounted: existing?.config?.mounts?.[0]?.volume, ...volumesOf(storage) },
-    )
+    const size = { sizeGb: spec.storage.sizeGb, memoryMb: spec.resources.memoryMb }
+    const retentionDays = this.snapshotLifetimeDays
+    const { volume: first, made } = await ensureVolume(this.#fly, app, region, size, retentionDays, {
+      mounted: existing?.config?.mounts?.[0]?.volume,
+      ...volumesOf(storage),
+    })
+    // Made just now, for a server that held nothing and has no machine: empty, so it may be made
+    // again off a host known to be slow (`faster-host.ts`) before a machine is made on it.
+    const fresh = made && existing === null && holdsNone(storage)
+    const volume = fresh
+      ? await offSlowHost(this.#fly, app, first, {
+          provider: this.provider,
+          progress,
+          region,
+          ...size,
+          retentionDays,
+        })
+      : first
     const volumeId = idOf(volume, 'a volume')
 
     await progress.step('compute')

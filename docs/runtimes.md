@@ -185,7 +185,9 @@ and only an operator can say what it is.
 
 The same sweep, as it ends, asks each server's own runtime for storage it holds beside the world
 that no machine mounts (`clearLeftovers`): what a wake, a restore or a move that failed partway
-made, or a delete that gave up while the provider still held the volume. It keeps what the
+made, a new server's first volume on Fly that was made again off a slow host and that Fly
+wouldn't let go of then (`infra/fly/fly-runtime/faster-host.ts`), or a delete that gave up while
+the provider still held the volume. It keeps what the
 server's handle names, unless the server is resting, whose world is in the archive store. On Fly
 it also destroys a server machine in the app that no handle names (a restore or a move that
 stopped after making its new machine), and a helper past its lifetime, and deletes an export's
@@ -221,7 +223,8 @@ The admin servers page shows each server's runtime, and any move under way.
 - `runtime_decisions`: where each server was placed, and why.
 - `runtime_hosts`: each host a server booted on, where its runtime names its hosts (Fly: a region
   and a volume's zone), with the CPU clock read there. A boot's own record names its host too
-  ([waking.md](waking.md)).
+  ([waking.md](waking.md)), and a new server's first volume is moved off a host known here to be
+  slow (`SLOW_HOST_MHZ`, [configuration.md](configuration.md)).
 - `server_runtimes`: storage and disk used. Backup sizes are in `backups`.
 - A runtime that pays for machines reports them through `capacity()`. For the fleet that is every
   node: its `monthly_cost_cents` label, the memory and CPU held for the servers running on it, the

@@ -46,7 +46,8 @@ const UNBIND_SECONDS = 120
  * storage leaves two world volumes in the app, and a volume it kept (`kept`) is never taken: it
  * holds the world as it was before the rebuild, and booting it would hide what was played since.
  * Where only kept storage is left, nothing is made either, which would boot no world at all: the
- * start fails, for an admin to decide.
+ * start fails, for an admin to decide. `made` says the volume is a new one, empty, where the app
+ * had no world volume at all.
  */
 export async function ensureVolume(
   fly: FlyClient,
@@ -55,7 +56,7 @@ export async function ensureVolume(
   size: { sizeGb: number; memoryMb: number },
   retentionDays: number,
   known: { mounted?: string; held?: string | null; kept?: readonly string[] } = {},
-): Promise<Volume> {
+): Promise<{ volume: Volume; made: boolean }> {
   const { sizeGb, memoryMb } = size
   const kept = new Set(known.kept ?? [])
   const existing =
@@ -64,11 +65,12 @@ export async function ensureVolume(
     (await dataVolume(fly, app, kept))
   if (existing) {
     await fitVolume(fly, app, idOf(existing, 'a volume'), sizeGb, retentionDays)
-    return existing
+    return { volume: existing, made: false }
   }
   if (kept.size > 0 && (await dataVolume(fly, app)) !== null)
     throw new Error(`${app} holds only the storage kept from before a rebuild, which it doesn't boot`)
-  return createVolume(fly, app, gameVolume(memoryMb, { region, size_gb: sizeGb }), retentionDays)
+  const made = gameVolume(memoryMb, { region, size_gb: sizeGb })
+  return { volume: await createVolume(fly, app, made, retentionDays), made: true }
 }
 
 /** The volume, where it is there and not going away. */
