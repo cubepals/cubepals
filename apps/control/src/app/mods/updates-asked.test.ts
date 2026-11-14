@@ -5,6 +5,7 @@
 /** However many ask about one revision's updates at once, one discovery runs for it. */
 
 import { expect, test } from 'bun:test'
+import { until } from '@blockly/contracts/waits'
 import type { PinnedMod } from '../../domain/mods/artifact.ts'
 import type { ServerRevision } from '../../domain/revision/revision.ts'
 import type { ModChange, ModPlan } from './service.ts'
@@ -59,4 +60,26 @@ test('a discovery that fails isn’t kept: the next ask runs one again', async (
   await expect(updates.of(revision('r2'))).rejects.toThrow('the catalog is down')
   expect((await updates.of(revision('r2'))).upgrade).toEqual([])
   expect(plans).toBe(2)
+})
+
+test('a slow discovery answers none at once and goes on, without the request, for the next ask', async () => {
+  const gate = Promise.withResolvers<void>()
+  let plans = 0
+  const updates = new ModUpdates({
+    catalog: { versionsByIds: async () => new Map() },
+    waitMs: 0,
+    plan: async () => {
+      plans++
+      await gate.promise
+      return upToDate
+    },
+  })
+  // The request lets go before the discovery ends.
+  expect((await updates.of(revision('r3'))).versions.size).toBe(0)
+  gate.resolve()
+  await until('the discovery to be asked', () => plans === 1)
+  // The discovery it started answers the next ask: it isn't run again.
+  await updates.of(revision('r3'))
+  await updates.of(revision('r3'))
+  expect(plans).toBe(1)
 })

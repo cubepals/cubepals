@@ -17,7 +17,7 @@
  * Not for pack servers: a pack updates as a whole (`PackService.updateFor`).
  */
 
-import { MINUTE_MS } from '@blockly/contracts/durations'
+import { MINUTE_MS, SECOND_MS } from '@blockly/contracts/durations'
 import type { PinnedMod } from '../../domain/mods/artifact.ts'
 import type { ServerRevision } from '../../domain/revision/revision.ts'
 import type { ModCatalog } from '../ports/catalog.ts'
@@ -41,6 +41,11 @@ const NONE: Found = { versions: new Map(), upgrade: [] }
 
 /** How long the updates found for one revision are kept: a page opened again asks nobody. */
 const KEPT_MS = 5 * MINUTE_MS
+/**
+ * How long a request waits on a discovery before it answers "none yet" and lets go: a slow catalog
+ * never holds requests open, and the discovery goes on and fills what is kept for the next ask.
+ */
+const WAIT_MS = 8 * SECOND_MS
 /** Revisions whose updates are kept at once; the oldest go first. */
 const MOST_KEPT = 1_000
 /** Rounds of narrowing the set to what runs and moves forward, before one mod at a time is tried. */
@@ -54,10 +59,13 @@ export class ModUpdates {
   readonly #kept = new Map<string, { until: number; found: Found }>()
   /** Discoveries under way, by revision: asked again meanwhile, the same one answers. */
   readonly #asked = new Map<string, Promise<Found>>()
+  readonly #waitMs: number
 
-  constructor(deps: { plan: Planner; catalog: Pick<ModCatalog, 'versionsByIds'> }) {
+  /** `waitMs`: `WAIT_MS`, unless a test shortens it. */
+  constructor(deps: { plan: Planner; catalog: Pick<ModCatalog, 'versionsByIds'>; waitMs?: number }) {
     this.#plan = deps.plan
     this.#catalog = deps.catalog
+    this.#waitMs = deps.waitMs ?? WAIT_MS
   }
 
   /**
@@ -74,7 +82,22 @@ export class ModUpdates {
       asked = this.#discover(desired).finally(() => this.#asked.delete(desired.id))
       this.#asked.set(desired.id, asked)
     }
-    return asked
+    return this.#waitOn(asked)
+  }
+
+  /** The discovery's answer, or none once `#waitMs` has passed; it goes on without the request. */
+  async #waitOn(asked: Promise<Found>): Promise<Found> {
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const late = new Promise<Found>((settle) => {
+      timer = setTimeout(() => settle(NONE), this.#waitMs)
+    })
+    // One that ends after the request let go is still kept; one that fails is only ever said once.
+    asked.catch(() => undefined)
+    try {
+      return await Promise.race([asked, late])
+    } finally {
+      clearTimeout(timer)
+    }
   }
 
   async #discover(desired: ServerRevision): Promise<Found> {
