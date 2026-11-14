@@ -2,6 +2,10 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
+/**
+ * What the edge tells Geyser, read as the text Geyser reads: how it routes and signs players in,
+ * which transports it takes them on, and what it does on its own. Not Geyser running (`geyser.ts`).
+ */
 import { expect, test } from 'bun:test'
 import { type GeyserSettings, geyserConfig } from './geyser-config.ts'
 
@@ -31,6 +35,14 @@ test('Xbox sign-in is off only when asked, and what players see says Cubepals', 
   expect(geyserConfig({ ...settings, validateLogin: false })).toContain('validate-bedrock-login: false')
   expect(geyserConfig(settings)).toContain('  primary-motd: Cubepals')
   expect(geyserConfig(settings)).not.toMatch(/blockly/i)
+})
+
+test('Geyser never pings the front door itself, so a Bedrock connection the edge counts is a player', () => {
+  const config = geyserConfig(settings)
+  // Geyser starts its ping timer when either passthrough is on; both default to on.
+  expect(config).toContain('  passthrough-motd: false')
+  expect(config).toContain('  passthrough-player-counts: false')
+  expect(config).not.toContain('ping-passthrough-interval')
 })
 
 test('Bedrock 26.60 and later join over NetherNet, at the public address given, and older ones over RakNet', () => {

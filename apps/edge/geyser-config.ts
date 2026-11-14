@@ -73,8 +73,10 @@ export function geyserConfig(s: GeyserSettings): string {
     `  primary-motd: ${NAME}`,
     `  secondary-motd: ${NAME}`,
     '  passthrough-motd: false',
-    // Geyser pings the Java server for its own message; ours is fixed, so it isn't asked every few seconds.
-    '  ping-passthrough-interval: 3600',
+    // With either passthrough on, Geyser pings its Java address (this edge's front door) on a timer,
+    // naming no server, which the front door counts as a Bedrock connection that found none. The
+    // counts it would read are the fallback it shows anyway: its own players and `max-players`.
+    '  passthrough-player-counts: false',
     'gameplay:',
     `  server-name: ${NAME}`,
     'advanced:',
