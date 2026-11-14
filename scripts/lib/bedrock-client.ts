@@ -3,45 +3,24 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * What the Bedrock check does as a Bedrock player does, from a machine that can send UDP: a RakNet
- * ping to the edge's port, a join by the headless client (`tools/bedrock-join`), and the Xbox user
- * ids behind the gamertags the access steps use.
+ * What the Bedrock check does as a Bedrock player does: the join probe a client sends before it
+ * joins by address, a join by the headless client (`tools/bedrock-join`) over NetherNet, and the
+ * Xbox user ids behind the gamertags the access steps use.
  *
  * Not for the check's steps or its accounts (`scripts/bedrock-check.ts`).
  */
-import { createSocket } from 'node:dgram'
-import { lookup } from 'node:dns/promises'
 import { SECOND_MS } from '@blockly/contracts/durations'
 
-/** RakNet's offline-message marker, which every unconnected packet carries. */
-const MAGIC = Buffer.from('00ffff00fefefefefdfdfdfd12345678', 'hex')
-const UNCONNECTED_PING = 0x01
-const UNCONNECTED_PONG = 0x1c
-
-/** What a Bedrock client's server list shows of a server: the answer to RakNet's unconnected ping. */
-export async function bedrockPing(host: string, port = 19132, timeoutMs = 5 * SECOND_MS): Promise<string> {
-  const { address } = await lookup(host, { family: 4 })
-  const ping = Buffer.concat([Buffer.from([UNCONNECTED_PING]), Buffer.alloc(8), MAGIC, Buffer.alloc(8)])
-  const socket = createSocket('udp4')
-  try {
-    return await new Promise<string>((done, fail) => {
-      const timer = setTimeout(
-        () => fail(new Error(`no pong from ${address}:${port} in ${timeoutMs} ms`)),
-        timeoutMs,
-      )
-      socket.on('error', fail)
-      socket.on('message', (reply) => {
-        if (reply[0] !== UNCONNECTED_PONG) return
-        clearTimeout(timer)
-        // Id, time, the server's guid and the magic come first, then the MOTD as a length-prefixed string.
-        const at = 1 + 8 + 8 + MAGIC.length
-        done(reply.subarray(at + 2, at + 2 + reply.readUInt16BE(at)).toString())
-      })
-      socket.send(ping, port, address)
-    })
-  } finally {
-    socket.close()
-  }
+/**
+ * What a Bedrock client asks before it joins by address: `GET /v1/join` on the server's signaling,
+ * at `origin` (https://<name>:19132 for the edge). Any 2xx means it speaks NetherNet; the answer is
+ * its status line and what it said, or a failure naming where it asked.
+ */
+export async function bedrockProbe(origin: string, timeoutMs = 5 * SECOND_MS): Promise<string> {
+  const response = await fetch(`${origin}/v1/join`, { signal: AbortSignal.timeout(timeoutMs) })
+  const body = await response.text()
+  if (!response.ok) throw new Error(`${origin}/v1/join answered ${response.status}: ${body.slice(0, 120)}`)
+  return `${response.status} ${body.slice(0, 120)}`.trim()
 }
 
 /** What one run of the headless client reported on its last line. */
@@ -54,8 +33,9 @@ export interface BedrockJoin {
 }
 
 /**
- * Runs `tools/bedrock-join` against a play address, once with the options given. Its exit status
- * says whether every player spawned; a check that expects a refusal reads the answer instead.
+ * Runs `tools/bedrock-join` against a play address, once with the options given (players, gamertag
+ * and XUID, chat, hold, timeout). Its exit status says whether every player spawned; a check that
+ * expects a refusal reads the answer instead.
  */
 export async function bedrockJoin(
   address: string,

@@ -9,28 +9,20 @@
  * Geyser (`geyser.ts`) or for deciding where it is reached (`bedrock.ts`).
  */
 
-/**
- * The largest datagram, its IP and UDP headers included, that Fly's UDP is taken to carry whole:
- * Fly's documentation on UDP says to assume "something more like 1300 bytes to work with, not
- * 1500" (docs.fly.io/networking/udp-and-tcp).
- */
-export const FLY_UDP_MTU = 1300
-
 export interface GeyserSettings {
   /**
    * Where Geyser listens: the machine's UDP address (Fly's `fly-global-services`), which NetherNet
-   * answers players from directly. RakNet's `port` there is reached only through the relay
-   * (`bedrock-relay.ts`), which Fly doesn't expose.
+   * answers players from directly, and the TCP port its built-in signaling binds there. Fly's proxy
+   * doesn't connect to that address, so signaling is reached only through the agent's door
+   * (`signalingDoor` in `bedrock.ts`).
    */
-  bedrock: { address: string; port: number }
+  bedrock: { address: string; signalingPort: number }
   /**
-   * NetherNet, the transport Bedrock 26.60 and later join by: signaling over HTTP on
-   * `signalingPort` (behind Fly's TLS, on the public Bedrock port over TCP), then the game over WebRTC
-   * on UDP `webrtcPort`, which players reach at `advertise` (the edge's public IPv4 and that port).
+   * NetherNet, the one way Bedrock players join: signaling over HTTPS on the public Bedrock port
+   * over TCP (Fly ends TLS), then the game over WebRTC on UDP `webrtcPort`, which players reach at
+   * `advertise` (the edge's public IPv4 and that port).
    */
   nethernet: { webrtcPort: number; advertise: string[]; trustedProxies: string[] }
-  /** The port players reach the relay on, which a ping tells clients to join. */
-  publicPort: number
   /** Where Geyser dials a Java player's connection: this edge's own front door. */
   java: { address: string; port: number }
   /** Where the Floodgate key is, relative to Geyser's folder. */
@@ -40,8 +32,6 @@ export interface GeyserSettings {
    * that joins with headless clients, which have no Xbox account.
    */
   validateLogin: boolean
-  /** The largest datagram Geyser sends: Fly's UDP path carries about 1300 bytes whole. */
-  mtu: number
 }
 
 /** What a Bedrock player sees of the server in their list and pause menu. */
@@ -52,10 +42,11 @@ export function geyserConfig(s: GeyserSettings): string {
   return `${[
     'bedrock:',
     `  address: ${s.bedrock.address}`,
-    `  port: ${s.bedrock.port}`,
+    // Built-in signaling binds this port over TCP; the game's WebRTC has its own UDP port.
+    `  port: ${s.bedrock.signalingPort}`,
     `  webrtc-port: ${s.nethernet.webrtcPort}`,
-    // NetherNet for Bedrock 26.60 and later, which no longer join over RakNet; RakNet for older ones.
-    '  transport: both',
+    // NetherNet alone: Bedrock 26.60 and later join by nothing else, and RakNet binds no port.
+    '  transport: nethernet',
     '  signaling:',
     '    mode: builtin',
     '    advertise-addresses:',
@@ -85,13 +76,6 @@ export function geyserConfig(s: GeyserSettings): string {
     // Tells the front door whose connection it is: the player's own address, not the edge's.
     '    use-haproxy-protocol: true',
     '  bedrock:',
-    `    broadcast-port: ${s.publicPort}`,
-    `    mtu: ${s.mtu}`,
-    // The relay says whose each player is (`bedrock-relay.ts`), and only the relay, on this machine,
-    // may: listing it is what turns the header on, and RakNet then takes nothing that doesn't open
-    // with one.
-    '    haproxy-protocol-whitelisted-ips:',
-    '    - 127.0.0.1',
     // Fly's proxy ends TLS in front of signaling and names the player in X-Forwarded-For.
     '    signaling-trusted-proxies:',
     ...s.nethernet.trustedProxies.map((range) => `    - ${JSON.stringify(range)}`),

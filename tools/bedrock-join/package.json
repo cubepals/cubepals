@@ -2,10 +2,11 @@
   "name": "bedrock-join-tools",
   "private": true,
   "type": "module",
-  "description": "A headless Bedrock join (bedrock-join.ts), for testing the edge's Geyser. Outside the workspaces: it needs a native RakNet build, which nothing else in the repository does.",
+  "description": "A headless Bedrock join over NetherNet (join.ts), for testing the edge's Geyser. Outside the workspaces: its WebRTC client is needed by nothing else in the repository.",
   "dependencies": {
-    "bedrock-protocol": "3.59.0",
-    "raknet-native": "1.2.3"
+    "@jsprismarine/client": "0.20.0",
+    "@jsprismarine/nethernet": "0.20.0",
+    "@jsprismarine/protocol": "0.20.0"
   },
   "devDependencies": {
     "@types/bun": "1.4.3",

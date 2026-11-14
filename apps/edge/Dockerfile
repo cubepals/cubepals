@@ -7,8 +7,8 @@
 # one: `bun scripts/geyser.ts bump` (the latest) or `bun scripts/geyser.ts bump <build>`, which
 # rewrites the three lines below; `bun scripts/geyser.ts check` says whether the hash is the build's.
 ARG GEYSER_VERSION=2.12.1
-ARG GEYSER_BUILD=1284
-ARG GEYSER_SHA256=4cfa8be3eb08d0e5c1991c93e5a950dcb8c90a369709ec77e3289104bf4ff25b
+ARG GEYSER_BUILD=1302
+ARG GEYSER_SHA256=ccafefeb8f5447396bfc8e5411e5476c59fb84de3b99196b8d1b7de3306e92c8
 
 FROM ghcr.io/itzg/mc-router:1.49.0@sha256:76697861c41e7d64880accf0d25e953a3c2d871e6f5f0922d7c830ffcb2b75ab AS router
 
@@ -44,7 +44,7 @@ COPY packages/contracts/package.json packages/contracts/
 RUN bun -e 'const p = await Bun.file("package.json").json(); p.workspaces = ["apps/edge", "packages/contracts"]; delete p.devDependencies; await Bun.write("package.json", JSON.stringify(p))' \
  && bun install --lockfile-only \
  && bun install --production --frozen-lockfile
-COPY apps/edge/agent.ts apps/edge/asleep.ts apps/edge/bedrock-relay.ts apps/edge/bedrock.ts apps/edge/browser-redirect.ts apps/edge/clients.ts apps/edge/drain.ts apps/edge/example-address.ts apps/edge/forwarding.ts apps/edge/front.ts apps/edge/geyser-config.ts apps/edge/geyser.ts apps/edge/header.ts apps/edge/hold.ts apps/edge/join-trace.ts apps/edge/limits.ts apps/edge/mappings.ts apps/edge/metrics.ts apps/edge/nethernet-identity.ts apps/edge/notice.ts apps/edge/ping-notice.ts apps/edge/ping-wake.ts apps/edge/poll.ts apps/edge/resting.ts apps/edge/router.ts apps/edge/router-session.ts apps/edge/session-end.ts apps/edge/visit-reporter.ts apps/edge/visits.ts apps/edge/waking-line.ts apps/edge/
+COPY apps/edge/agent.ts apps/edge/asleep.ts apps/edge/bedrock.ts apps/edge/browser-redirect.ts apps/edge/clients.ts apps/edge/drain.ts apps/edge/example-address.ts apps/edge/forwarding.ts apps/edge/front.ts apps/edge/geyser-config.ts apps/edge/geyser.ts apps/edge/header.ts apps/edge/hold.ts apps/edge/join-trace.ts apps/edge/limits.ts apps/edge/mappings.ts apps/edge/metrics.ts apps/edge/nethernet-identity.ts apps/edge/notice.ts apps/edge/ping-notice.ts apps/edge/ping-wake.ts apps/edge/poll.ts apps/edge/resting.ts apps/edge/router.ts apps/edge/router-session.ts apps/edge/session-end.ts apps/edge/visit-reporter.ts apps/edge/visits.ts apps/edge/waking-line.ts apps/edge/
 COPY packages/contracts/src/durations.ts packages/contracts/src/edge-poll.ts packages/contracts/src/example-address.ts packages/contracts/src/proxy-header.ts packages/contracts/src/server-list.ts packages/contracts/src/
 COPY apps/control/src/minecraft/ports.ts apps/control/src/minecraft/
 RUN bun build apps/edge/agent.ts --compile --outfile /build/edge-agent
@@ -59,5 +59,5 @@ COPY --from=warm /geyser/warm/cache /geyser/warm/cache
 COPY --from=warm /geyser/warm/locales /geyser/warm/locales
 ENV PATH=/opt/java/openjdk/bin:$PATH
 USER 65532
-EXPOSE 25565 8080 19132/udp
+EXPOSE 25565 8080 19134 19133/udp
 ENTRYPOINT ["/edge-agent"]

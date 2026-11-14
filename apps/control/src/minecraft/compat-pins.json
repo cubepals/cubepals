@@ -1,0 +1,40 @@
+{
+  "plugins": [
+    {
+      "name": "ViaVersion",
+      "projectId": "P1OZGk5p",
+      "versionId": "Fkfcr89K",
+      "label": "5.12.2",
+      "sha512": "c6af11f50e14bc1ba239f5a90be653cce85feee30c473a4b53336b4d5527d790369cf43843f7cb06d3ac3a34fc207e7203436737ca719070644101472453401b"
+    },
+    {
+      "name": "ViaBackwards",
+      "projectId": "NpvuJQoq",
+      "versionId": "WFO37e8T",
+      "label": "5.12.2",
+      "sha512": "78bc7e5fd33ecf13aee31c62e1de46a854e066a1936f294347c6798371357497fe2cc6f23f1d42003ad3050f94ac5382db95e60ffa90d765fada0322b59b0ef9"
+    },
+    {
+      "name": "ViaRewind",
+      "projectId": "TbHIxhx5",
+      "versionId": "EPLCoxMK",
+      "label": "4.2.0",
+      "sha512": "7f3a2a972a3fe45f9c16b48a2e2b08fca6aa70da77eb8e47644726f19a43dc24116c2f7e126434f9f9388fa1b987a014efe287e3980f773b6e261313e7e939b2"
+    },
+    {
+      "name": "Grim Anticheat",
+      "projectId": "LJNGWSvH",
+      "versionId": "baDrVvfo",
+      "label": "2.3.74",
+      "sha512": "3ac8793dccccc05b6ed671cdaea0fdc3309240ceb9fd6d6dee1c35a6aa8ea58be95e0e929278e56a604a6ce3dd1db4ac882510d473b09a91e9635fdb934b424a"
+    }
+  ],
+  "floodgate": {
+    "version": "2.2.5",
+    "build": 141,
+    "fileName": "floodgate-spigot.jar",
+    "url": "https://download.geysermc.org/v2/projects/floodgate/versions/2.2.5/builds/141/downloads/spigot",
+    "sha512": "f3ee694abaddbbaad3ce1e64b49ee4f2323971e97b9d8a9ff7a38c281f83c95e91dc996223ed3ba04dc3783144ccd70fa7307721e532e62eb368af0fb9e98233",
+    "sizeBytes": 11561096
+  }
+}

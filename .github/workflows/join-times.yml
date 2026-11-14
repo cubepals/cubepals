@@ -55,7 +55,7 @@ jobs:
       - run: bun install --frozen-lockfile
       # The Java client: mineflayer, which the players probe installs where it runs.
       - run: bun add --no-save mineflayer@4.39.0
-      # The headless Bedrock client is outside the workspaces: it needs a native RakNet build.
+      # The headless Bedrock client is outside the workspaces: its WebRTC client is needed nowhere else.
       - run: bun install --frozen-lockfile
         working-directory: tools/bedrock-join
       - name: Was staging up?

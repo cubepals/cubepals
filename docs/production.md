@@ -316,7 +316,7 @@ What isn't known to be narrow takes the whole road.
 | `control`, `edge` | The same as `full` |
 
 The run's summary lists each area it found with its paths, so the reason for the road is on the
-run. The Nightly still runs every night on main, whatever road a change took.
+run. The Nightly still runs every night on main, whatever road a change took. Every nightly also takes Bedrock players through the staging edge it deployed (`scripts/bedrock-check.ts`, a NetherNet wake included) and checks that a player with no Xbox sign-in is refused (`scripts/bedrock-signed-in-check.ts`), so no road that goes through a nightly reaches production with its Bedrock path untried. A real Xbox account signing in is the one part no headless player can try.
 
 **The website route.** A commit is proved when Actions' `check` passed on it and its own preview
 version answered 200 on `/`, `/pricing`, `/sign-in`, `/browse` and a picture through

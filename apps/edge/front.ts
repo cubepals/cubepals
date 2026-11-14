@@ -226,6 +226,8 @@ class Arrival {
   #received: Uint8Array = new Uint8Array(0)
   /** Who is connecting; null until the PROXY line says, where one is expected. */
   #source: Source | null = null
+  /** At Geyser's door, whether Geyser's header named the player, so `#source` is theirs and not Geyser's own. */
+  #named = false
   /** Releases the address's place among connections still greeting. */
   #greeted: (() => void) | null = null
   readonly #receive = (chunk: Buffer) => this.#take(chunk)
@@ -330,6 +332,7 @@ class Arrival {
       }
       if (header !== 'none') {
         this.#received = this.#received.slice(header.next)
+        this.#named = header.source !== null
         return this.#greet(header.source ?? this.#socketSource())
       }
       if (!this.#options.proxied) return this.#greet(this.#socketSource())
@@ -350,6 +353,16 @@ class Arrival {
     return this.#greet(read.source)
   }
 
+  /**
+   * The address a connection is held to, as a Java player's is: a Bedrock player's own, which
+   * Geyser's header names. A connection Geyser named nobody on is counted per server only, so
+   * players never share Geyser's own address.
+   */
+  #countedAs(): string | null {
+    if (this.#geyser && !this.#named) return null
+    return this.#source?.address ?? null
+  }
+
   #admit(handshake: Handshake): void {
     const { gate, known, plain, busy, refuse, router, port, timeouts } = this.#options
     const visit = this.#visit(handshake)
@@ -361,9 +374,7 @@ class Arrival {
       this.#count('refused', 'wrong_game')
       return void this.#client.end(turnAway(refused))
     }
-    // Geyser's door is counted per server only: the relay caps each Bedrock address itself.
-    const from = this.#geyser ? null : (this.#source?.address ?? null)
-    const admitted = gate.admit(known(handshake.hostname) ? handshake.hostname : '', from)
+    const admitted = gate.admit(known(handshake.hostname) ? handshake.hostname : '', this.#countedAs())
     if (!admitted) {
       // A ping just goes unanswered; a join hears why, in Cubepals' words.
       if (handshake.joining) this.#client.end(turnAway(busy))

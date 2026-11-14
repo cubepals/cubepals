@@ -21,8 +21,9 @@
  * table, but only as the exact releases `minecraft/performance-pins.ts` names, never the newest a
  * project publishes; which server gets them is `performance.ts`'s.
  *
- * Each release's jars are pinned once from the catalog (`refresh`, a scheduled job), so every
- * server on it starts with the same ones, and a start never waits on the catalog. A release with
+ * Each of these is the exact release `minecraft/compat-pins.ts` names, never the newest a project
+ * publishes. Each release's jars are pinned once from the catalog (`refresh`, a scheduled job), so
+ * every server on it starts with the same ones, and a start never waits on the catalog. A release with
  * none pinned yet starts without them. A sleeping server's wake boots once where it slept without
  * the ones it now places (`servers/specs.ts`). Which clients a server takes is
  * `minecraft/clients.ts`'s, from the ones a boot placed or the next will (`joinsNow`).
@@ -40,6 +41,12 @@ import {
 } from '../../domain/revision/revision.ts'
 import { bedrockAvailable, bedrockPlugins, FLOODGATE } from '../../minecraft/bedrock.ts'
 import { joinsOf } from '../../minecraft/clients.ts'
+import {
+  COMPAT_PINS,
+  type CompatPin,
+  type CompatPins,
+  type FloodgatePin,
+} from '../../minecraft/compat-pins.ts'
 import { COMPAT, PERFORMANCE, runsPlugin, VIABACKWARDS, VIAREWIND, VIAVERSION } from '../../minecraft/mods.ts'
 import { PERFORMANCE_PINS, type PerformancePins } from '../../minecraft/performance-pins.ts'
 import { GRIM, runsOwnGrim } from '../../minecraft/stop-cheaters.ts'
@@ -85,33 +92,47 @@ export class CompatPlugins {
 
   /**
    * `compat-pins`: the Via plugins pinned again for each release Cubepals offers Paper on and each
-   * one a Paper server runs, Grim for each where Grim publishes a build, and Floodgate, whose one
-   * jar runs on them all. A release the catalog can't answer for keeps what it had. How many
+   * one a Paper server runs, Grim for each where its pinned release runs, and Floodgate, whose one
+   * jar runs on them all: each the release `pins` names, and only where the catalog gives that
+   * release with that file. A release the catalog can't answer for keeps what it had. How many
    * releases were pinned.
    */
-  async refresh(): Promise<number> {
+  async refresh(pins: CompatPins = COMPAT_PINS): Promise<number> {
     let pinned = 0
-    const floodgate = await this.#floodgate()
+    const floodgate = this.#floodgate(pins.floodgate)
+    const named = (projectId: string) => pins.plugins.find((pin) => pin.projectId === projectId)
+    // The pinned release of each, or nothing where the catalog's plan holds any other.
+    const resolve = async (gameVersion: string, projects: readonly string[]) => {
+      const wanted = projects.map(named)
+      if (wanted.some((pin) => pin === undefined)) return null
+      const plan = await this.#mods
+        .resolveNew({ gameVersion, loader: 'paper' }, wanted as CompatPin[])
+        .catch(() => null)
+      if (plan?.kind !== 'ok') return null
+      const exact = plan.mods.every((mod) => {
+        const pin = 'projectId' in mod.source ? named(mod.source.projectId) : undefined
+        return (
+          pin !== undefined &&
+          'versionId' in mod.source &&
+          mod.source.versionId === pin.versionId &&
+          mod.artifact.sha512 === pin.sha512
+        )
+      })
+      return exact ? plan.mods : null
+    }
     for (const gameVersion of await this.#releases()) {
       if (floodgate !== null) await this.#pin(gameVersion, [floodgate], [FLOODGATE])
-      const grim = await this.#mods
-        .resolveNew({ gameVersion, loader: 'paper' }, [{ projectId: GRIM }])
-        .catch(() => null)
-      if (grim?.kind === 'ok') await this.#pin(gameVersion, grim.mods, [GRIM])
+      const grim = await resolve(gameVersion, [GRIM])
+      if (grim !== null) await this.#pin(gameVersion, grim, [GRIM])
       let via = false
       for (const wanted of TRIES) {
-        const plan = await this.#mods
-          .resolveNew(
-            { gameVersion, loader: 'paper' },
-            wanted.map((projectId) => ({ projectId })),
-          )
-          .catch(() => null)
-        if (plan?.kind !== 'ok') continue
-        await this.#pin(gameVersion, plan.mods, TRIES[0] ?? [])
+        const mods = await resolve(gameVersion, wanted)
+        if (mods === null) continue
+        await this.#pin(gameVersion, mods, TRIES[0] ?? [])
         via = true
         break
       }
-      if (via || grim?.kind === 'ok' || floodgate !== null) pinned++
+      if (via || grim !== null || floodgate !== null) pinned++
     }
     await this.pinPerformance()
     return pinned
@@ -153,10 +174,9 @@ export class CompatPlugins {
     }
   }
 
-  /** Floodgate's newest Paper jar as a pinned plugin; null where GeyserMC can't be asked or lists none. */
-  async #floodgate(): Promise<PinnedMod | null> {
-    const jar = await this.#geyser?.latestFloodgate().catch(() => null)
-    if (jar === null || jar === undefined) return null
+  /** The pinned Floodgate build as a pinned plugin; null where Bedrock isn't offered or none is pinned. */
+  #floodgate(jar: FloodgatePin | null): PinnedMod | null {
+    if (this.#geyser === null || jar === null) return null
     return {
       source: { catalog: 'geysermc', projectId: FLOODGATE, versionId: `${jar.version}-${jar.build}` },
       name: 'Floodgate',

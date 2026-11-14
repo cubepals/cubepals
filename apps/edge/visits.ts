@@ -168,21 +168,32 @@ export class Visits {
 
   /**
    * The connection from `source` closed: its visit waits a moment for a ping, then is sent, with
-   * how the session went (`session-end.ts`) where it was watched.
+   * how the session went (`session-end.ts`) where it was watched. Its aliases stay as long as it
+   * does: mc-router may tell of a connection it closed after the close reached the front door.
    */
   closed(source: string, bytes: { up: number; down: number }, session?: SessionEnd): void {
     this.#sessions.delete(source)
     const visit = this.#visits.get(source)
-    for (const [local, aliased] of this.#aliases) if (aliased === source) this.#aliases.delete(local)
-    if (visit === undefined) return
+    if (visit === undefined) {
+      this.#unalias(source)
+      return
+    }
     visit.leftAt ??= this.#now().toISOString()
     visit.bytesUp = bytes.up
     visit.bytesDown = bytes.down
     if (session !== undefined) visit.detail = { ...visit.detail, session }
     setTimeout(() => {
-      if (this.#visits.get(source) === visit) this.#visits.delete(source)
+      if (this.#visits.get(source) === visit) {
+        this.#visits.delete(source)
+        this.#unalias(source)
+      }
       this.#send(report(visit, 'close'))
     }, this.#times.lingerMs).unref()
+  }
+
+  /** Forgets every front-door end that named the visit from `source`. */
+  #unalias(source: string): void {
+    for (const [local, aliased] of this.#aliases) if (aliased === source) this.#aliases.delete(local)
   }
 
   /** A ping no join followed: a look, unless one went for it lately or the hour's are used. */
