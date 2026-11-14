@@ -3,7 +3,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { describe, expect, test } from 'bun:test'
-import { MINUTE_MS } from '@blockly/contracts/durations'
+import { MINUTE_MS, SECOND_MS } from '@blockly/contracts/durations'
+import { until } from '@blockly/contracts/waits'
 import type { ServerRevision } from '../../domain/revision/revision.ts'
 import type { MinecraftServer } from '../../domain/server/server.ts'
 import type { AccessReconciler } from '../access/reconciler.ts'
@@ -229,26 +230,34 @@ describe('the CPU of the host a boot runs on', () => {
     expect(seen.marks).toEqual(['host_cpu:AMD EPYC@2500', 'host:fra/a1b2', 'let_in'])
   })
 
-  test('is read while the server boots: a read as long as the boot adds nothing to it', async () => {
-    // The read is answered only once the server says it is done, and the server says so only once
-    // the read was asked. A boot that asked after the server was up, or waited for the answer
-    // before it listened, would never end; one that reads while it boots ends as the server is up.
-    const asked = Promise.withResolvers<void>()
-    const up = Promise.withResolvers<void>()
-    let said = false
+  test('is read while the server boots: the boot doesn’t wait on the read to go on', async () => {
+    // The read answers only once the server's log has said Done, which the boot reaches only by
+    // going on while the read is under way. A boot that waited on the read first would never get
+    // there, and the wait below would fail saying so.
+    let saidDone = () => {}
+    const done = new Promise<void>((resolve) => {
+      saidDone = resolve
+    })
+    let ready = false
     async function* tail(): AsyncIterable<LogLine> {
-      await asked.promise
-      said = true
-      up.resolve()
+      ready = true
+      saidDone()
       yield { at: new Date(), text: '[03:31:02 INFO]: Done (21.542s)! For help, type "help"' }
     }
     const hostCpu = async () => {
-      asked.resolve()
-      await up.promise
+      await done
       return { model: 'AMD EPYC', mhz: 3000, host: null }
     }
-    const { boot, ctx, seen } = machine({ answers: () => said, tail, hostCpu, readyMs: 10_000 })
-    await boot.run(ctx, server, handle, vanilla)
+    const { boot, ctx, seen } = machine({ answers: () => ready, tail, hostCpu, readyMs: 10_000 })
+    let finished = false
+    const run = boot.run(ctx, server, handle, vanilla).then(() => {
+      finished = true
+    })
+    await until('the boot to let players in while its host is read', () => finished, {
+      timeoutMs: 3 * SECOND_MS,
+      seen: () => `log said Done: ${ready}; marks: ${seen.marks.join(', ') || 'none'}`,
+    })
+    await run
     expect(seen.marks).toEqual(['host_cpu:AMD EPYC@3000', 'let_in'])
   })
 

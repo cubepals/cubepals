@@ -408,6 +408,10 @@ const mods = router({
       })),
     }
   }),
+  /** The updates Cubepals found for the server's mods, checked to run together. */
+  updates: authedProcedure
+    .input(ServerRef)
+    .query(({ ctx, input }) => ctx.services.modQueries.updates(ctx.actor, input.serverId)),
   plan: authedProcedure
     .input(ModChangeInput)
     .query(async ({ ctx, input }) =>

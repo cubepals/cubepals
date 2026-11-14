@@ -72,6 +72,7 @@ function Invalidation() {
     void queries.invalidateQueries({ queryKey: trpc.servers.revisions.queryKey({ serverId }) })
     void queries.invalidateQueries({ queryKey: trpc.servers.settingsOptions.queryKey({ serverId }) })
     void queries.invalidateQueries({ queryKey: trpc.mods.list.queryKey({ serverId }) })
+    void queries.invalidateQueries({ queryKey: trpc.mods.updates.queryKey({ serverId }) })
     void queries.invalidateQueries({ queryKey: trpc.worlds.list.queryKey({ serverId }) })
     void queries.invalidateQueries({ queryKey: trpc.worlds.freshStart.queryKey({ serverId }) })
   }

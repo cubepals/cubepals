@@ -300,6 +300,35 @@ On a server without a pack, the Mods page adds mods one at a time (`app/mods/ser
 - Any other jar is the owner's own: refused if it says it only runs in players' games, and held
   to the Minecraft and loader it declares.
 
+### Updates for mods one at a time
+
+Cubepals looks for updates itself; nobody asks for them (`app/mods/updates.ts`). Whenever the
+Mods page or the server's page is open, its catalog mods are planned with every one moved to its
+newest version for the server's Minecraft, type and Java, exactly as a change is planned, with
+nothing written. It is its own query (`mods.updates`), apart from the list, so neither page waits
+on the catalog for it: the line appears when the answer does.
+
+- **Only forward.** A version counts as an update only when it was published after the pinned one,
+  so a mod pinned on a beta is never moved back to an older release.
+- **Checked together.** The whole set, dependencies and what each jar asks for included, has to
+  resolve. When it doesn't, the mods its conflicts name are dropped and the rest planned again,
+  so updates that only work as a pair stay together; failing that, a set is built one mod at a
+  time. What is dropped waits.
+- **Offered, never applied.** The Mods page marks each mod's version (`2.13.0 → 2.13.1`), and
+  says above the list what is out, with one button (Update, or Update all) that applies the change
+  that was checked (`ModUpdatesView.upgrade`). No mod is offered on its own: an update that works
+  only beside another's goes with it. The server's page says the
+  same sentence, linking to the Mods page with the update already planned (`?update=all`). The
+  same link opens a pack's update on a pack server.
+- **Applied as any mod change.** The plan is shown first; the server restarts with it, or at its
+  next start, and goes back to the revision before if it doesn't start.
+- **Kept for five minutes per revision,** in the control plane's memory, on top of the catalog's
+  own shared reads. An applied update is a new revision, so it is asked about afresh. A catalog
+  that can't be asked shows no updates, and the page still answers.
+
+Nothing updates by itself: a newer release is code nobody here has read, and an owner takes it
+when they choose.
+
 ## Players
 
 The invite and the server page name the pack and its exact version, with its page and where to

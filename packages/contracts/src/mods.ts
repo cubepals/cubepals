@@ -106,6 +106,21 @@ export interface ModsView {
   datapackUploads: Availability
 }
 
+/**
+ * The updates Cubepals found for a server's mods, apart from the list so the list never waits on
+ * them: by `ModView.id`, the version label each can move to. Checked to run together with the
+ * server's other mods and with each other; offered, never put on by itself. Empty for a pack
+ * server, whose update is `ModsView.packUpdate`.
+ */
+export interface ModUpdatesView {
+  versions: Record<string, string>
+  /**
+   * The change Cubepals checked, which applying them sends as `ModChangeInput.upgrade`: an update
+   * that works only beside another's goes with it. Empty when there is nothing to update.
+   */
+  upgrade: string[] | 'all'
+}
+
 export interface ModSearchHit {
   projectId: string
   slug: string
