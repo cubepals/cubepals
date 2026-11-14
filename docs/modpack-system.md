@@ -324,7 +324,9 @@ on the catalog for it: the line appears when the answer does.
   to operators when they join, with a link to download it. Cubepals tells the same people, an
   operator who has just joined, in the same words as the website, with a link that opens the
   update on the Mods page (`app/mods/updates-told.ts`, said in the presence pass, so within a
-  minute of the join). Once a join, to operators alone. The mod's own line can't be taken over
+  minute of the join). Once a join, to operators alone. A join is someone the server's previous
+  reading, kept in the database, didn't find: the operator whose join woke a sleeping server is
+  told, and a restart of the control plane tells nobody again. The mod's own line can't be taken over
   cleanly: hiding it would mean rewriting the mod's config on the owner's server.
 - **Applied as any mod change.** The plan is shown first; the server restarts with it, or at its
   next start, and goes back to the revision before if it doesn't start.

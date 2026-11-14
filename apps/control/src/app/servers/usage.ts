@@ -137,15 +137,20 @@ export interface PresentPlayer {
 
 /**
  * Replaces who is online with an authoritative reading from the server itself, and remembers
- * each of them as someone who has played there.
+ * each of them as someone who has played there. Answers who the server's own reading before this
+ * one found, by UUID: none after the server stopped (presence is cleared then), and kept across a
+ * restart of the control plane. The edge's hints aren't readings, and aren't in it.
  */
 export async function replacePresence(
   q: Queryable,
   serverId: string,
   players: readonly PresentPlayer[],
   at: Date,
-): Promise<void> {
-  await q.delete(presence).where(eq(presence.serverId, serverId))
+): Promise<ReadonlySet<string>> {
+  const before = await q
+    .delete(presence)
+    .where(eq(presence.serverId, serverId))
+    .returning({ uuid: presence.playerUuid, source: presence.source })
   if (players.length > 0) {
     await q
       .insert(presence)
@@ -171,6 +176,7 @@ export async function replacePresence(
     // the one that keeps a world from resting. At most one write in ten minutes.
     await markActive(q, serverId, at, 10)
   }
+  return new Set(before.filter((p) => p.source === 'rcon').map((p) => p.uuid))
 }
 
 /**

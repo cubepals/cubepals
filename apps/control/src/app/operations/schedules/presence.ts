@@ -139,9 +139,9 @@ export function readingPresence(deps: {
       const reading = output === null ? null : parseOnlinePlayers(output)
       if (reading === null) continue
       await keepTick(db, server.id, tick, reading.online)
-      await db.transaction(async (tx) => {
+      const before = await db.transaction(async (tx) => {
         const now = new Date()
-        await replacePresence(tx, server.id, reading.players, now)
+        const before = await replacePresence(tx, server.id, reading.players, now)
         await recordPlay(tx, server.id, provider, reading.online, now)
         if (reading.players.length > 0)
           await playersSeen(
@@ -170,10 +170,11 @@ export function readingPresence(deps: {
             requestedBy: 'system:access',
             idempotencyKey: `access_join:${Math.floor(now.getTime() / MINUTE_MS)}`,
           })
+        return before
       })
       await tellJoins(db, server.id, reading, readAt)
       await deliverWaiting(server, handle, reading.players)
-      void deps.updatesTold?.heard(server, target, reading.players)
+      void deps.updatesTold?.heard(server, target, reading.players, before)
       const notice = notices.get(server.ownerId)
       await sayNotice({ db, console: deps.console }, { id: server.id, target }, notice, reading.players)
     }
