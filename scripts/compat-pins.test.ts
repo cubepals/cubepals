@@ -6,7 +6,7 @@
 import { describe, expect, test } from 'bun:test'
 import type { CatalogVersion } from '../apps/control/src/domain/mods/catalog.ts'
 import { COMPAT_PINS } from '../apps/control/src/minecraft/compat-pins.ts'
-import { behind, newestInAll } from './compat-pins.ts'
+import { behind, heldBack, newestInAll } from './compat-pins.ts'
 
 const version = (versionId: string, day: number, over: Partial<CatalogVersion> = {}): CatalogVersion => ({
   versionId,
@@ -64,5 +64,23 @@ describe('behind', () => {
       `${first.name}: ${first.label} -> next`,
       `Floodgate: ${COMPAT_PINS.floodgate.version} build ${COMPAT_PINS.floodgate.build} -> ${COMPAT_PINS.floodgate.version} build ${COMPAT_PINS.floodgate.build + 1}`,
     ])
+  })
+})
+
+describe('heldBack', () => {
+  const pin = { name: 'ViaVersion', projectId: 'p', versionId: 'a', label: 'a', sha512: '' }
+
+  test('names a newer release that one Minecraft release lacks, and which', () => {
+    const lists = [[version('a', 1), version('b', 2)], [version('a', 1)]]
+    expect(heldBack(pin, lists, ['26.2', '26.3'])).toBe(
+      'ViaVersion: b is out but not for 26.3, which servers here run; the pin stays',
+    )
+  })
+
+  test('is null where the newest release is the pin, or the one bump takes', () => {
+    expect(heldBack(pin, [[version('a', 1)], [version('a', 1)]], ['26.2', '26.3'])).toBeNull()
+    expect(
+      heldBack(pin, [[version('a', 1), version('b', 2)], [version('b', 2)]], ['26.2', '26.3']),
+    ).toBeNull()
   })
 })

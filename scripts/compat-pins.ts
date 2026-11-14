@@ -56,12 +56,35 @@ export function newestInAll(lists: readonly (readonly CatalogVersion[])[]): Cata
   return fits.sort((a, b) => b.publishedAt.getTime() - a.publishedAt.getTime())[0] ?? null
 }
 
-async function newest(pinned: CompatPins): Promise<CompatPins> {
+/**
+ * Where a plugin has a release newer than the one `bump` would take, because it doesn't list every
+ * Minecraft release a server here can run: which, as a line `check` fails on. Null where there is
+ * none, so a release that can't be taken is never passed over in silence.
+ */
+export function heldBack(
+  pin: CompatPin,
+  lists: readonly (readonly CatalogVersion[])[],
+  releases: readonly string[],
+): string | null {
+  const taken = newestInAll(lists)
+  const newest = lists
+    .flat()
+    .filter((v) => v.channel === 'release' && v.state === 'listed')
+    .sort((a, b) => b.publishedAt.getTime() - a.publishedAt.getTime())[0]
+  if (newest === undefined || newest.versionId === pin.versionId || newest.versionId === taken?.versionId)
+    return null
+  const missing = releases.filter((_, i) => !lists[i]?.some((v) => v.versionId === newest.versionId))
+  return `${pin.name}: ${newest.versionLabel} is out but not for ${missing.join(', ')}, which servers here run; the pin stays`
+}
+
+async function newest(pinned: CompatPins): Promise<{ latest: CompatPins; held: string[] }> {
   const catalog = new ModrinthCatalog(modrinthClient(USER_AGENT))
   const loaders = catalogLoadersFor('paper')
-  // Every release a Paper server here can run: Paper's own, and plain Minecraft's, which runs on it.
+  // Every release a Paper server here can run: Paper's own, and plain Minecraft's, which runs on
+  // it, as the control plane pins for each (`CompatPlugins.#releases`).
   const releases = offeredVersions().map((offered) => offered.id)
   const plugins: CompatPin[] = []
+  const held: string[] = []
   for (const pin of pinned.plugins) {
     const lists = await Promise.all(
       releases.map((gameVersion) => catalog.versions(pin.projectId, { loaders, gameVersion })),
@@ -72,9 +95,11 @@ async function newest(pinned: CompatPins): Promise<CompatPins> {
         ? pin
         : { ...pin, versionId: release.versionId, label: release.versionLabel, sha512: release.file.sha512 },
     )
+    const line = heldBack(pin, lists, releases)
+    if (line !== null) held.push(line)
   }
   const floodgate = (await new GeyserMcService().latestFloodgate()) ?? pinned.floodgate
-  return { plugins, floodgate }
+  return { latest: { plugins, floodgate }, held }
 }
 
 const read = (): CompatPins => JSON.parse(readFileSync(FILE, 'utf8'))
@@ -82,19 +107,22 @@ const read = (): CompatPins => JSON.parse(readFileSync(FILE, 'utf8'))
 if (import.meta.main) {
   const command = process.argv[2]
   const pinned = read()
-  const latest = await newest(pinned)
+  const { latest, held } = await newest(pinned)
   const lines = behind(pinned, latest)
   if (command === 'check') {
-    if (lines.length === 0) console.log('Every plugin is pinned to its newest release.')
+    if (lines.length === 0 && held.length === 0) console.log('Every plugin is pinned to its newest release.')
     else {
-      console.log(
-        `Newer than the pins (bun scripts/compat-pins.ts bump, in a pull request):\n${lines.join('\n')}`,
-      )
+      if (lines.length > 0)
+        console.log(
+          `Newer than the pins (bun scripts/compat-pins.ts bump, in a pull request):\n${lines.join('\n')}`,
+        )
+      if (held.length > 0) console.log(`Newer, but not for every release served here:\n${held.join('\n')}`)
       process.exit(1)
     }
   } else if (command === 'bump') {
     writeFileSync(FILE, `${JSON.stringify(latest, null, 2)}\n`)
     console.log(lines.length === 0 ? 'Nothing newer; the pins are as they were.' : lines.join('\n'))
+    if (held.length > 0) console.log(held.join('\n'))
   } else {
     console.error('usage: bun scripts/compat-pins.ts check|bump')
     process.exit(2)
