@@ -125,6 +125,29 @@ interface Chip {
 /** The camera the scene opens with, before any scroll or mouse, for a picture of `aspect`. */
 export const openingCamera = (aspect: number): Camera => cameraOf(BASE, aspect, MIDDLE, 40)
 
+/**
+ * Whether the island has to be drawn again: something moved, the light is still on its way, or the
+ * server is between two states (started but not yet up, emptied but not yet asleep), which only
+ * time moves on. Without the last, everyone leaving before a friend came would stop the drawing
+ * once the light had gone, with the server still emptying and its card showing it online.
+ */
+export function keepsDrawing(now: {
+  drawn: boolean
+  moving: boolean
+  lamps: number
+  day: number
+  power: Power
+}): boolean {
+  return (
+    now.drawn ||
+    now.moving ||
+    now.lamps % 1 !== 0 ||
+    now.day % 1 !== 0 ||
+    now.power === 'starting' ||
+    now.power === 'emptying'
+  )
+}
+
 /** Where the scene's marks are on the picture `lens` draws. */
 export function marksOf(lens: Camera | null): Marks {
   const levels = { across: SIZE, grassY: SURFACE_Y, cutY: SURFACE_Y + GRASS - DEPTH }
@@ -271,11 +294,11 @@ export class Island {
       this.pose[key] += gap * ease
     }
 
-    const busy = this.drawFrame(dt, time, moving)
+    const drawn = this.drawFrame(dt, time, moving)
     return {
       power: this.power,
       players: this.cast.present,
-      busy: busy || moving || this.lamps % 1 !== 0 || this.day % 1 !== 0,
+      busy: keepsDrawing({ drawn, moving, lamps: this.lamps, day: this.day, power: this.power }),
     }
   }
 
