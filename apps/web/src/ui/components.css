@@ -1561,6 +1561,28 @@ textarea.bk-input {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* A card with a button of its own (`ServerCard` without `href`): no cover, since its world is
+   drawn beside it; its state beside its name, and the button at its foot, beside the line a press
+   of it changes. */
+.bk-server__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-12);
+}
+.bk-server__head .bk-server__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bk-server__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-12);
+  margin-top: var(--space-4);
+}
 
 .bk-player {
   display: flex;

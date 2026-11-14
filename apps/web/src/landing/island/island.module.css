@@ -153,65 +153,9 @@
   }
 }
 
-/* The server's own card, as the servers page draws one: its name, address, state and players. */
+/* The server's card is the design system's (Card.tsx): here it is only given its width. */
 .card {
-  position: relative;
-  display: grid;
-  gap: 12px;
   width: min(100%, 400px);
-  padding: 14px 16px 14px;
-  background: var(--paper);
-  color: var(--ink);
-  box-shadow: 0 0 0 2px var(--ink);
-}
-
-.cardTop {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 12px;
-}
-
-.icon {
-  image-rendering: pixelated;
-}
-
-.cardName {
-  display: grid;
-  min-width: 0;
-}
-
-.name {
-  font-size: 15px;
-  line-height: 20px;
-  font-weight: 600;
-  font-variation-settings: "SHRP" 100;
-}
-
-.address {
-  overflow: hidden;
-  font-family: var(--font-plex-mono), ui-monospace, monospace;
-  font-size: 12px;
-  line-height: 18px;
-  color: var(--ink-muted);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.cardFoot {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding-top: 12px;
-  border-top: 1px solid var(--border);
-}
-
-.detail {
-  font-size: 14px;
-  line-height: 20px;
-  color: var(--ink-muted);
-  font-variant-numeric: tabular-nums;
 }
 
 .note {
