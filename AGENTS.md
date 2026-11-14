@@ -77,6 +77,7 @@ A source file past about 800 lines, or one `impl` block, class or function past 
 - **Unused:** no file, export or dependency that nothing uses, as knip finds them from the entry points in `knip.jsonc`.
 - **Duplicates:** no TypeScript block of 12 lines and 80 tokens or more written twice, tests aside (jscpd).
 - **Durations:** no unit of time written out (a day in milliseconds, `60 * 60 * 1000` and the like); they come from `@blockly/contracts/durations`.
+- **Sleeps:** no test waits on time (`Bun.sleep`, a promise of `setTimeout`, an awaited sleep or delay). A test waits for what it waits on with `until`, and shows that something didn't happen with `stays`, both from `@blockly/contracts/waits`.
 - **Attributed:** no comment saying who decided something, or the date it was decided. A comment says why, as fact.
 
 It is a ratchet. What broke a rule before the rule existed is in `scripts/structure-baseline.json`, with its number and why. A check fails when anything gets worse, and when an entry is out of date. The baseline only shrinks: `--update` lowers its numbers and never adds one. Nobody fixes old code to get a change through, and nobody adds a baseline entry without saying why in it.
@@ -161,6 +162,7 @@ authorization and an expected-head check; leave merged history alone.
 - **Subjects are short.** A commit subject or pull request title says the change in 50 characters or fewer, with no closing period; the detail goes in the body. The `commit-msg` hook that `bun install` sets up and the `PR title` workflow enforce it.
 - **After a merge, look at the Actions page,** not only the PR's checks: `gh run list -R cubepals/<repo> -L 30`. Scheduled runs (the nightly, the weekly fleet run) fail without a PR to show it.
 - **A failure outside the code is still a failure.** A registry's rate limit or an outage gets a fix (a mirror, a retry), not a rerun until it passes.
+- **A flaky test is a bug.** A test that passes and fails on the same code waits on time somewhere, or leans on something another test or process left behind. It gets a fix that waits on the event itself, and a failure that says what the test saw, in a pull request of its own; a rerun only shows whether a pull request's own change is to blame.
 
 ## Production
 

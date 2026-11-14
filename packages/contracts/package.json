@@ -13,6 +13,7 @@
     "./diagnostics": "./src/diagnostics.ts",
     "./server-vitals": "./src/server-vitals.ts",
     "./durations": "./src/durations.ts",
+    "./waits": "./src/waits.ts",
     "./release-order": "./src/release-order.ts",
     "./limits": "./src/limits.ts",
     "./server-list": "./src/server-list.ts",
