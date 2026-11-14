@@ -4,6 +4,7 @@
 
 import { describe, expect, test } from 'bun:test'
 import { MINUTE_MS } from '@blockly/contracts/durations'
+import { until } from '@blockly/contracts/waits'
 import type { ServerRevision } from '../../domain/revision/revision.ts'
 import type { MinecraftServer } from '../../domain/server/server.ts'
 import type { AccessReconciler } from '../access/reconciler.ts'
@@ -230,26 +231,33 @@ describe('the CPU of the host a boot runs on', () => {
   })
 
   test('is read while the server boots: a read as long as the boot adds nothing to it', async () => {
-    const readyAt = Date.now() + 1_000
+    // The read and the boot end on the same event, so neither is over before the other has begun:
+    // a boot that read its host first, and only then watched the server, would never get here.
+    const begun = { read: false, log: false }
+    let up = false
+    let finish = () => {}
+    const finished = new Promise<void>((resolve) => {
+      finish = resolve
+    })
     async function* tail(): AsyncIterable<LogLine> {
-      await Bun.sleep(readyAt - Date.now())
+      begun.log = true
+      await finished
       yield { at: new Date(), text: '[03:31:02 INFO]: Done (21.542s)! For help, type "help"' }
     }
     const hostCpu = async () => {
-      await Bun.sleep(1_000)
+      begun.read = true
+      await finished
       return { model: 'AMD EPYC', mhz: 3000, host: null }
     }
-    const { boot, ctx, seen } = machine({
-      answers: () => Date.now() >= readyAt,
-      tail,
-      hostCpu,
-      readyMs: 10_000,
+    const { boot, ctx, seen } = machine({ answers: () => up, tail, hostCpu, readyMs: 10_000 })
+    const ran = boot.run(ctx, server, handle, vanilla)
+    await until('the host to be read while the server’s log is followed', () => begun.read && begun.log, {
+      seen: () => `begun: ${JSON.stringify(begun)}`,
     })
-    const asked = Date.now()
-    await boot.run(ctx, server, handle, vanilla)
+    up = true
+    finish()
+    await ran
     expect(seen.marks).toEqual(['host_cpu:AMD EPYC@3000', 'let_in'])
-    // One second for both, where one after the other would be two.
-    expect(Date.now() - asked).toBeLessThan(1_700)
   })
 
   test('says nothing where the runtime reads none, or can’t: the boot goes on as it does', async () => {
