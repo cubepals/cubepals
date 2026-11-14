@@ -73,7 +73,9 @@ const DEPTH = 11
 /** The chimney's top, as engine/chunk.ts builds it. */
 const CHIMNEY = [3.5, 8.6, 3.5] as const
 /** The top of the grass, in blocks: the ground's top layer, Minecraft's `SURFACE_Y`, stands from 0 to 1. */
-const GRASS = 1
+export const GRASS = 1
+/** The cube's bottom, in blocks: where the chunk is cut. */
+export const CUT = GRASS - DEPTH
 /** How many friends join. */
 const FRIENDS = 3
 /** Seconds for the light to come up once someone joins, and to go once the last has left. */
@@ -109,7 +111,7 @@ const BASE: Pose = {
 }
 
 /** The cube's middle: what the camera's distance is measured from, and which way is out. */
-const MIDDLE = [SIZE / 2, (GRASS - DEPTH) / 2, SIZE / 2] as const
+const MIDDLE = [SIZE / 2, CUT / 2, SIZE / 2] as const
 
 /** What the camera's numbers are smoothed with, in seconds: the scroll moves it, never in one frame. */
 const WEIGHT = 0.22
@@ -150,17 +152,17 @@ export function keepsDrawing(now: {
 
 /** Where the scene's marks are on the picture `lens` draws. */
 export function marksOf(lens: Camera | null): Marks {
-  const levels = { across: SIZE, grassY: SURFACE_Y, cutY: SURFACE_Y + GRASS - DEPTH }
+  const levels = { across: SIZE, grassY: SURFACE_Y, cutY: SURFACE_Y + CUT }
   if (!lens) return { chimney: null, middle: null, from: null, to: null, grass: null, cut: null, ...levels }
   const at = (point: readonly [number, number, number]) => project(lens, point)
   return {
     ...levels,
     chimney: at(CHIMNEY),
     middle: at(MIDDLE),
-    from: at([0, GRASS - DEPTH, SIZE]),
-    to: at([SIZE, GRASS - DEPTH, SIZE]),
+    from: at([0, CUT, SIZE]),
+    to: at([SIZE, CUT, SIZE]),
     grass: at([SIZE, GRASS, 0]),
-    cut: at([SIZE, GRASS - DEPTH, 0]),
+    cut: at([SIZE, CUT, 0]),
   }
 }
 
@@ -352,7 +354,7 @@ export class Island {
       torch: null,
       time: quiet ? 0 : time,
       pick: null,
-      runs: this.mesh.between(GRASS - DEPTH, TOP),
+      runs: this.mesh.between(CUT, TOP),
       farRuns: [],
       eye: lens.eye,
       fog: [lens.distance * 4, lens.distance * 4],

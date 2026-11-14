@@ -12,3 +12,5 @@ export const clamp = (value: number, lo = 0, hi = 1) => Math.min(hi, Math.max(lo
 export const ease = (t: number) => t * t * (3 - 2 * t)
 /** In-out cubic: what lines and moves are eased by. */
 export const inOut = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2)
+/** Out-quart: what arrives is eased by. */
+export const outQuart = (t: number) => 1 - (1 - t) ** 4

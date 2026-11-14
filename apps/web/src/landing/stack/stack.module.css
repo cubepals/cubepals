@@ -1,0 +1,276 @@
+/* SPDX-FileCopyrightText: 2026 The Cubepals Authors
+ *
+ * SPDX-License-Identifier: LicenseRef-Cubepals-Reserved
+ */
+
+/*
+ * The parts under every world (Stack.tsx): the drawing's window, held on the screen while the steps
+ * scroll past it, over them on a narrow screen and beside them on a wide one; and the drawing's
+ * inks, which are the ink section's own (landing.css). Grey in the drawing is only ever its dither.
+ */
+
+.scrolly {
+  position: relative;
+  margin-top: clamp(8px, 2vw, 24px);
+}
+
+.figure {
+  position: sticky;
+  top: 64px;
+  z-index: 1;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  height: 54svh;
+  background: var(--ground);
+}
+
+.window {
+  position: relative;
+  overflow: clip;
+}
+
+.caption {
+  padding: 8px var(--gutter) 14px;
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 16px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--on-ground-faint);
+}
+
+.steps {
+  margin: 0;
+  padding: 2svh var(--gutter) 30svh;
+  list-style: none;
+}
+
+.step {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 10px;
+  min-height: 34svh;
+  max-width: 30em;
+  opacity: 0.32;
+}
+
+.step[data-on] {
+  opacity: 1;
+}
+
+.count {
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--on-ground-faint);
+}
+
+.title {
+  max-width: 16em;
+}
+
+/* Wide enough for the drawing beside the steps: the window takes the screen's height under the header. */
+@media (min-width: 1000px) {
+  .scrolly {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(300px, 380px);
+    column-gap: 32px;
+    padding-inline-end: var(--gutter);
+  }
+
+  .figure {
+    z-index: auto;
+    height: calc(100svh - 64px);
+    background: none;
+  }
+
+  /* The first step reaches the reading line, the screen's middle, only once the window has stopped under the header. */
+  .steps {
+    padding: calc(50svh - 40px) 0 36svh;
+  }
+
+  .step {
+    min-height: 56svh;
+  }
+}
+
+/* The drawing: placed and moved by motion.ts, on whole device pixels. */
+.drawing {
+  position: absolute;
+  top: 0;
+  left: 0;
+  will-change: transform;
+}
+
+.svg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  overflow: visible;
+}
+
+.print {
+  position: absolute;
+  max-width: none;
+  image-rendering: pixelated;
+  -webkit-mask-repeat: repeat;
+  mask-repeat: repeat;
+}
+
+/* The island's own shape in ink, under its print, so a print screened back to fewer dots stays solid. */
+.shade {
+  filter: brightness(0);
+}
+
+.ink {
+  fill: var(--ground);
+}
+
+.paper {
+  fill: var(--on-ground);
+}
+
+.edge,
+.faint,
+.muted,
+.rule,
+.lineInk {
+  stroke-width: 1;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.edge {
+  stroke: var(--on-ground);
+}
+
+.faint {
+  stroke: var(--on-ground-faint);
+}
+
+.muted {
+  stroke: var(--on-ground-muted);
+}
+
+.rule {
+  stroke: var(--rule);
+}
+
+.lineInk {
+  stroke: var(--ground);
+}
+
+.markFaint {
+  color: var(--on-ground-faint);
+  fill: var(--on-ground-faint);
+}
+
+.markMuted {
+  color: var(--on-ground-muted);
+  fill: var(--on-ground-muted);
+}
+
+.markInk {
+  color: var(--ground);
+  fill: var(--ground);
+}
+
+.markPaper {
+  color: var(--on-ground);
+  fill: var(--on-ground);
+}
+
+.words {
+  font-family: var(--mono);
+  font-weight: 500;
+}
+
+.rails line {
+  stroke: var(--on-ground-faint);
+  stroke-width: 1;
+  stroke-dasharray: 1 6;
+}
+
+.trace {
+  fill: none;
+  stroke: var(--on-ground-muted);
+  stroke-width: 1;
+  stroke-dasharray: 3 4;
+}
+
+.label,
+.labelNote,
+.nameText,
+.note {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.6px;
+}
+
+.label,
+.nameText {
+  fill: var(--on-ground);
+}
+
+.labelNote,
+.note {
+  fill: var(--on-ground-muted);
+}
+
+.note {
+  font-size: 11.5px;
+  letter-spacing: 0;
+  opacity: 0;
+}
+
+.players {
+  opacity: 0.25;
+}
+
+.players[data-on] {
+  opacity: 1;
+}
+
+.name {
+  opacity: 0.45;
+}
+
+.name[data-on] {
+  opacity: 1;
+}
+
+.name[data-on] .note {
+  opacity: 1;
+}
+
+.way {
+  fill: none;
+  stroke: var(--on-ground);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: square;
+}
+
+.dot {
+  fill: var(--on-ground);
+  stroke: var(--ground);
+  stroke-width: 1.5;
+  visibility: hidden;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .step,
+  .players,
+  .name,
+  .note {
+    transition: opacity 600ms var(--out-quart);
+  }
+
+  .name[data-on] .note {
+    transition-delay: 220ms;
+  }
+}

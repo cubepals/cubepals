@@ -29,6 +29,17 @@ export const STILLS = {
   },
 } as const
 
+/**
+ * The stills printed once more, smaller, for the parts drawn under the island's world (stack/):
+ * three quarters of the box, so that at three device pixels a dot they are the `coarse` ones above,
+ * and at two they are these, the scene's print of `SMALL_BOX` at one device pixel to a CSS pixel.
+ */
+export const SMALL_BOX = { width: 423, height: 397.5 } as const
+export const SMALL = {
+  join: { src: '/imagery/island-awake-small.png', width: 211, height: 198 },
+  leave: { src: '/imagery/island-asleep-small.png', width: 211, height: 198 },
+} as const
+
 /** Where the scene's marks fall on the stills, as fractions of their width and height. */
 export const STILL_MARKS: Marks = {
   across: 16,

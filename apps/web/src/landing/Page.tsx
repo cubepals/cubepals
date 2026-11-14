@@ -9,6 +9,7 @@
  * ask, and the button once more. The design's rules are in README.md.
  */
 import { SiteHeader } from '../app/(public)/header'
+import { PAID } from '../legal/figures'
 import type { Landed } from './Landing'
 import { Asked } from './sections/Asked'
 import { Closing } from './sections/Closing'
@@ -20,13 +21,15 @@ import { Steps } from './sections/Steps'
 
 export function Page({ signedIn, create, plans, getPlan, arcade, ours, bedrock }: Landed) {
   const plus = plans.find((plan) => plan.mods)?.name ?? null
+  // The most sessions any plan keeps to go back to, or what every paid plan keeps if the plans can't be read.
+  const kept = Math.max(0, ...plans.map((plan) => plan.sessionsKept)) || PAID.backupsKept
   return (
     <>
       <SiteHeader signedIn={signedIn} create={create} marks="nav" over />
       <main>
         <Opening create={create} plans={plans} arcade={arcade} bedrock={bedrock} />
         <Steps />
-        <Handled bedrock={bedrock} plus={plus} />
+        <Handled bedrock={bedrock} plus={plus} kept={kept} />
         <Pricing plans={plans} create={create} getPlan={getPlan} bedrock={bedrock} />
         <Ours ours={ours} />
         <Asked plans={plans} />

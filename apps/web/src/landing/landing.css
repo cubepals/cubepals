@@ -92,11 +92,13 @@
   min-height: 100lvh;
 }
 
+/* As wide as any other sheet: in the section's column it would otherwise shrink to what it holds. */
 .lp section[data-tone="ink"] > .lp-sheet {
   display: flex;
   flex: 1 0 auto;
   flex-direction: column;
   justify-content: center;
+  width: 100%;
 }
 
 /* A section's head: its mono label, the heading, and a sentence or two under it. */

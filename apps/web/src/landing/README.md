@@ -9,8 +9,9 @@ scroll, steers it or plays on a clock that runs ahead of the reader. No scroll b
 it (`landing.css`); every other page keeps its own.
 
 Top to bottom: the first screen, with the island playing the sentence; how a server is made and
-joined; what Cubepals does for it; what it costs; Cubepals' own servers to try; the questions
-people ask; the button once more, beside the island asleep. It starts at night and ends there.
+joined; what Cubepals does for it, as the parts under the island's world; what it costs; Cubepals'
+own servers to try; the questions people ask; the button once more, beside the island asleep. It
+starts at night and ends there.
 
 ## Where things are
 
@@ -20,7 +21,8 @@ people ask; the button once more, beside the island asleep. It starts at night a
 | `Page.tsx` | The sections, in order, under the public pages' own header (`app/(public)/header.tsx`) |
 | `Landing.tsx` | What the page reads (who is signed in, where its buttons lead, the plans, Cubepals' own servers) and the frame it is set in |
 | `landing.css` | The page's look: the two grounds, the sheet, the type, and how things arrive |
-| `sections/` | One section to a file, each with its own CSS module: `Opening`, `Steps`, `Handled`, `Pricing` (with `Hours`), `Ours`, `Asked`, `Closing`, `Footer`; `Arcade` is the first screen's line about Cubepals' own Arcade, and `said.ts` the plans in a few words |
+| `sections/` | One section to a file, each with its own CSS module: `Opening`, `Steps`, `Handled`, `Pricing` (with `Hours`), `Ours`, `Asked`, `Closing`, `Footer`; `Arcade` is the first screen's line about Cubepals' own Arcade, `said.ts` the plans in a few words, and `drawn.ts` the server the drawings show |
+| `stack/` | The parts under the island's world, read one at a time: `geometry.ts` (where everything falls, through the island's own camera), `tops.ts` (what each plate's top shows), `dither.ts`, `Drawing.tsx` (the picture), `motion.ts` (how it moves), `Stack.tsx` (the window and the steps) |
 | `island/` | The island: `scene.ts` (the drawing, from the engine), `island.worker.ts` (where it runs) with `serve.ts` (what it does there), `drawing.ts` (the page's side of the worker), `Island.tsx` (what is shown round it), `Card.tsx`, `Measures.tsx`, `Snore.tsx` |
 | `engine/` | The voxel world and its one-bit print: `world.ts`, `chunk.ts`, `cast.ts` (the people on the grass), `models.ts`, `gl.ts` with `scene-pass.ts` and `print-pass.ts`, `light.ts`, `shadow.ts`, `camera.ts` |
 | `start.ts` | What is counted when the island can't be drawn |
@@ -82,15 +84,39 @@ own, in the product's words, and its one button lets the visitor join it or have
 `next dev` reloads the page over and over once the worker has been compiled for it, which reads
 as the island never waking. The stills come from the scene itself, through a page that runs
 `scene.ts` on a plain canvas at the box `stills.ts` names, once with two device pixels to a CSS
-pixel and once with one; `island/stills.test.ts` fails until their sizes and marks match it.
+pixel and once with one; `island/stills.test.ts` fails until their sizes and marks match it. The
+stack's smaller stills (`island-*-small.png`) are the same page's prints of `SMALL_BOX` with one
+device pixel to a CSS pixel.
 
 The people on the grass move as `engine/cast.ts` says, and `engine/cast.test.ts` holds them to it:
 nobody within a block of anybody, nobody sliding, jumping, hurrying or spinning, joining and
 leaving one at a time along the path.
 
+## The parts under the world
+
+What Cubepals does for a server (`Handled`, with `stack/`) is drawn as the parts under the island's
+world, one plate each, seen through the island's own camera: the game, asleep or awake, the door,
+the backups. A window holds the drawing on the screen while the steps beside it are scrolled past
+(on a phone, under it), and the step across the reading line is the part the stack opens at: the
+parts over it rise until its whole top shows, it rises a little and is pulled out toward its words,
+and it comes in lit, in paper. The last step is a friend joining: the stack closes, their way is
+drawn in at the door and up the stack, and the world wakes.
+
+- **The island's print is the scene's own,** chosen for the screen's density and the room there is
+  (`printFor`), so it is shown dot for dot; the plates' dither is drawn in the print's dots.
+- **A move is eased in and out,** from wherever things stand, so a reader who scrolls on halfway
+  through one is never jolted. It starts when a step crosses the reading line, never on its own.
+- **A change of look is a dissolve through the dither** (`dither.ts`), never a fade: at every frame
+  each dot is there or not, so nothing on the drawing is ever grey but the dither. The world is
+  screened back to fewer of its dots while another part is read.
+- **Less motion** shows each step's end at once.
+- **Its tops are drawn with the landing's own server** (`sections/drawn.ts`) and the plans' own
+  numbers, and every word on a plate is held to its plate by `stack/geometry.test.ts`.
+
 ## Motion
 
 Things arrive as they are scrolled to, driven by the scroll itself (`.lp-arrive`, CSS
-`animation-timeline: view()`), never on a clock: where the browser can't, or less motion is asked
+`animation-timeline: view()`), never on a clock that runs on without the reader (the stack's moves
+start when a step is read, and the island's join a moment after it is seen): where the browser can't, or less motion is asked
 for, they are simply there. What arrives eases out (out-quart); lines and moves ease in and out
 (in-out cubic). Nothing loops to be noticed except a sleeping server's snore.
