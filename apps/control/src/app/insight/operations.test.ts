@@ -8,6 +8,7 @@ import { randomUUID } from 'node:crypto'
 import { schema } from '@blockly/db'
 import { and, eq } from 'drizzle-orm'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
+import type { MinecraftRuntime } from '../ports/runtime.ts'
 import { OPERATION_FINISHED } from './operations.ts'
 
 describe.skipIf(!hasDatabase)('operation_finished', () => {
@@ -56,6 +57,9 @@ describe.skipIf(!hasDatabase)('operation_finished', () => {
         kind: 'provision',
         status: 'succeeded',
         way: 'booted',
+        // The fake runtime reads nothing of its host.
+        host_cpu: '',
+        host: '',
         server_id: created.id,
       }),
     ])
@@ -66,6 +70,36 @@ describe.skipIf(!hasDatabase)('operation_finished', () => {
     const [woke] = await kept(start?.id ?? '')
     expect(woke).toMatchObject({ kind: 'start', status: 'succeeded', way: 'resumed', attempts: 1 })
     expect(typeof woke?.seconds).toBe('number')
+  }, 60_000)
+
+  test('a boot on a runtime that reads its host keeps the host, apart from its marks and beside its other readings', async () => {
+    const reading: MinecraftRuntime = h.runtime
+    reading.hostCpu = async () => ({ model: 'AMD EPYC', mhz: 3000, host: { region: 'here', id: 'a1b2' } })
+    try {
+      const owner = await h.user()
+      const created = await h.create(owner)
+      await h.until(created.id, 'running')
+      await h.settled(created.id)
+      const provision = (await h.operations(created.id)).find((op) => op.kind === 'provision')
+      const [row] = await h.db
+        .select({ steps: schema.serverOperations.steps })
+        .from(schema.serverOperations)
+        .where(eq(schema.serverOperations.id, provision?.id ?? ''))
+      const steps = (row?.steps ?? []).map((entry) => entry.step)
+      // On the operation's own record, before its players were let in.
+      expect(steps.slice(steps.indexOf('host_cpu:AMD EPYC@3000'))).toEqual(
+        expect.arrayContaining(['host:here/a1b2', 'let_in']),
+      )
+      const [event] = await kept(provision?.id ?? '')
+      expect(event).toMatchObject({ kind: 'provision', host_cpu: 'AMD EPYC@3000', host: 'here/a1b2' })
+      expect(String(event?.marks)).not.toContain('host')
+      // And in the table of hosts, under the runtime that read it.
+      expect(await h.db.select().from(schema.runtimeHosts)).toEqual([
+        expect.objectContaining({ provider: 'fake', region: 'here', host: 'a1b2', mhz: 3000, readings: 1 }),
+      ])
+    } finally {
+      delete reading.hostCpu
+    }
   }, 60_000)
 
   test('one that fails for good is kept too, as failed', async () => {

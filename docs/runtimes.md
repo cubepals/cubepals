@@ -219,6 +219,9 @@ The admin servers page shows each server's runtime, and any move under way.
 - `server_usage_days`: player-minutes, minutes with anyone online, and peak players, per server,
   day and runtime. The presence sync adds them once a minute.
 - `runtime_decisions`: where each server was placed, and why.
+- `runtime_hosts`: each host a server booted on, where its runtime names its hosts (Fly: a region
+  and a volume's zone), with the CPU clock read there. A boot's own record names its host too
+  ([waking.md](waking.md)).
 - `server_runtimes`: storage and disk used. Backup sizes are in `backups`.
 - A runtime that pays for machines reports them through `capacity()`. For the fleet that is every
   node: its `monthly_cost_cents` label, the memory and CPU held for the servers running on it, the

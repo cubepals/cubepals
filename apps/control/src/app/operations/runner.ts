@@ -14,6 +14,7 @@ import type { JobAttempt } from '../ports/jobs.ts'
 import type { RuntimeMark } from '../ports/runtime.ts'
 import { findServer, lockServer } from '../servers/persistence.ts'
 import type { ServerTransitions } from '../servers/transitions.ts'
+import type { HostMark } from './host-cpu.ts'
 import {
   finishOperation,
   loadOperation,
@@ -52,7 +53,8 @@ export type OperationStep =
  * sleep went (`SleepMark`), when a boot let its players in (`let_in`, `boot.ts`), and when a
  * restore's snapshot of the world it replaces was kept, as the backup came meanwhile (`saved`).
  * `own_mods_off`: the start failed with Cubepals' own performance mods and came up without them,
- * which are now off for the server (`boot.ts`).
+ * which are now off for the server (`boot.ts`). `host_cpu:<model>@<MHz>` and `host:<region>/<name>`:
+ * the CPU of the host a boot ran on and which host it is, where its runtime reads them (`host-cpu.ts`).
  */
 type OperationMark =
   | 'resume_observing'
@@ -70,6 +72,7 @@ type OperationMark =
   | SleepMark
   | ChangedMark
   | MachineMark
+  | HostMark
 
 /**
  * Why a wake booted where it could have resumed, after `other_spec`: one for each part of the

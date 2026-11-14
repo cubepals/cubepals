@@ -10,6 +10,7 @@ import { FakeRuntime } from '../../infra/fake/fake-runtime.ts'
 import type { ConsoleTarget, ReadinessProbe, ServerConsole } from '../ports/minecraft.ts'
 import type { LogSource } from '../ports/platform.ts'
 import {
+  type MinecraftRuntime,
   type ProgressSink,
   type RuntimeHandle,
   type RuntimeSpec,
@@ -193,5 +194,28 @@ describe('the runtime router restoring', () => {
     )
     expect(restore).toHaveBeenCalledTimes(1)
     await rm(root, { recursive: true, force: true })
+  })
+})
+
+describe('a host’s CPU', () => {
+  test('is read by the runtime that issued the handle, and is none where that one reads none', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'blockly-router-cpu-'))
+    try {
+      const made = (provider: string): MinecraftRuntime =>
+        new FakeRuntime({ provider, deploymentId: 'test', root, regionMap: { local: 'here' } })
+      const [reads, silent] = [made('fake-reads'), made('fake-silent')]
+      const router = new RuntimeRouter([reads, silent])
+      const a = await router.ensureProvisioned('fake-reads', runtimeKey('a'), place, spec, quiet)
+      const b = await router.ensureProvisioned('fake-silent', runtimeKey('b'), place, spec, quiet)
+      reads.hostCpu = async (handle) => ({
+        model: handle === a ? 'AMD EPYC' : 'another',
+        mhz: 3000,
+        host: null,
+      })
+      expect(await router.hostCpu(a)).toEqual({ model: 'AMD EPYC', mhz: 3000, host: null })
+      expect(await router.hostCpu(b)).toBeNull()
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
   })
 })

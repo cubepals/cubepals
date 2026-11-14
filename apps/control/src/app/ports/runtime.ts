@@ -153,6 +153,18 @@ type RuntimeStep = 'allocating' | 'waiting_for_room' | 'storage' | 'compute' | '
  */
 export type RuntimeMark = 'not_asleep' | 'other_spec' | 'no_compute' | 'moved_host' | `started_from:${string}`
 
+/**
+ * The CPU of the host a server's compute runs on, as the compute itself reads it: its model's
+ * name and its clock in MHz, either null where the host doesn't say. And which host that is, by
+ * the provider's own names, where it names its hosts: its region, and its name for the host
+ * there, which the provider also says of storage before any compute runs on it.
+ */
+export interface HostCpu {
+  model: string | null
+  mhz: number | null
+  host: { region: string; id: string } | null
+}
+
 export interface ProgressSink {
   step(name: RuntimeStep): Promise<void>
   /** Persist immediately, so a crash mid-provision leaves nothing unfindable. */
@@ -462,6 +474,14 @@ export interface MinecraftRuntime {
    * can't tell leaves this out.
    */
   wakesWouldBoot?(asleep: ReadonlyMap<RuntimeKey, RuntimeSpec>): Promise<ReadonlySet<RuntimeKey>>
+  /**
+   * The CPU of the host the server's compute runs on now, read from compute that is running or on
+   * its way up; null where it couldn't be read. Kept on each boot's record, and beside every other
+   * reading of the same host (`runtimes/hosts.ts`), for the platform: on a provider whose hosts
+   * differ, it says why one server boots and ticks slower than another. A runtime that doesn't
+   * read it leaves this out.
+   */
+  hostCpu?(handle: RuntimeHandle): Promise<HostCpu | null>
   /**
    * Pure, from the handle: what the provider calls what it holds for a server, for an operator
    * looking for it there, and a link to it in the provider's console where it has one.

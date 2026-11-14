@@ -5,12 +5,14 @@
 /**
  * Each finished operation, kept once as `operation_finished` and sent to PostHog by the worker with
  * the funnel events (`record.ts`, `service.ts`): its kind, how it ended, how long it took from being
- * asked, whether a start resumed or booted, and the marks that say why (`other_spec`, `changed:*`,
- * `memory_lost`, `slept`, …). How wakes go is then a chart in PostHog, resume rate and wake time
- * by day, not a query. Never sent for a test account, as no event is.
+ * asked, whether a start resumed or booted, the marks that say why (`other_spec`, `changed:*`,
+ * `memory_lost`, `slept`, …), and the host a boot ran on (`host_cpu`, `host`). How wakes go is
+ * then a chart in PostHog, resume rate and wake time by day or by host, not a query. Never sent for
+ * a test account, as no event is.
  */
 import { type Queryable, schema } from '@blockly/db'
 import { eq } from 'drizzle-orm'
+import { hostOf, isHostMark } from '../operations/host-cpu.ts'
 import { noteOnce } from './record.ts'
 
 /** The event's name, which PostHog's charts of operations read. */
@@ -61,8 +63,13 @@ export async function operationFinished(
       seconds: Math.round((at.getTime() - op.createdAt.getTime()) / 1000),
       way: wayOf(steps),
       attempts: steps.filter((step) => step === 'attempt').length,
-      // The machine is the operation's own (`machine:<id>`), not a value to count by.
-      marks: steps.filter((step) => !PLAIN.has(step) && !step.startsWith('machine:')).join(','),
+      // The machine is the operation's own (`machine:<id>`), not a value to count by. The host a
+      // boot ran on is counted by, as properties of its own: its CPU, and which host it is.
+      marks: steps
+        .filter((step) => !PLAIN.has(step) && !step.startsWith('machine:') && !isHostMark(step))
+        .join(','),
+      host_cpu: hostOf(steps).cpu,
+      host: hostOf(steps).host,
       server_id: op.serverId,
     },
   })

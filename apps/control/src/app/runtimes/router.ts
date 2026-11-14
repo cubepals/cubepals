@@ -16,6 +16,7 @@ import {
   type Endpoint,
   type ExecResult,
   type HeldStorage,
+  type HostCpu,
   type InstallSeed,
   type MinecraftRuntime,
   type Placement,
@@ -124,6 +125,8 @@ export interface Runtimes extends Pick<MinecraftRuntime, HandleVerbs> {
   capacity(provider: string): Promise<RuntimeCapacity | null>
   /** Of the servers given, those a wake would boot rather than resume, by every runtime that can say. */
   wakesWouldBoot(asleep: ReadonlyMap<RuntimeKey, RuntimeSpec>): Promise<ReadonlySet<RuntimeKey>>
+  /** `MinecraftRuntime.hostCpu`, by the runtime that issued `handle`; null where it has none. */
+  hostCpu(handle: RuntimeHandle): Promise<HostCpu | null>
 }
 
 /** Several listings read as one: every part is yielded, and a part that failed is thrown at the end. */
@@ -353,6 +356,10 @@ export class RuntimeRouter implements Runtimes {
     kept: readonly RuntimeHandle[] = [],
   ): Promise<readonly string[]> {
     return (await this.#of(handle).clearLeftovers?.(handle, worldElsewhere, kept)) ?? []
+  }
+
+  async hostCpu(handle: RuntimeHandle): Promise<HostCpu | null> {
+    return (await this.#of(handle).hostCpu?.(handle)) ?? null
   }
 
   observe(handle: RuntimeHandle): Promise<RuntimeObservation> {

@@ -62,8 +62,10 @@ import type { LoaderBuilds } from './ports/loaders.ts'
 import type { Locks } from './ports/locks.ts'
 import type { PlayerProfiles, ReadinessProbe, ServerConsole } from './ports/minecraft.ts'
 import type { LogSource, Mailer, PlayAddressing, RegionCatalog } from './ports/platform.ts'
+import type { HostCpu } from './ports/runtime.ts'
 import { RevisionService } from './revisions/service.ts'
 import { RuntimeEconomics } from './runtimes/economics.ts'
+import { hostSeen } from './runtimes/hosts.ts'
 import type { Runtimes } from './runtimes/router.ts'
 import { RuntimePlacement } from './runtimes/service.ts'
 import type { SecretKeyring } from './secrets.ts'
@@ -162,10 +164,14 @@ export interface ControlPlaneSettings {
   room?: { wakeReserve: number; createWaitSeconds: number }
 }
 
-/** What a start does about mods as it boots: marks the owner's that didn't load, and starts once without Cubepals' own. */
-const modsAtBoot = (db: Db) => ({
+/**
+ * What a start keeps and does as it boots: marks the owner's mods that didn't load, starts once
+ * without Cubepals' own, and keeps what it read of its host.
+ */
+const atBoot = (db: Db) => ({
   notLoaded: (serverId: string, names: string[]) => markNotLoaded(db, serverId, names),
   ownMods: ownModsOf(db),
+  hostSeen: (provider: string, cpu: HostCpu) => hostSeen(db, provider, cpu),
 })
 /**
  * The application, built once from its ports. The composition root builds it with real
@@ -316,7 +322,7 @@ export function composeControlPlane(ports: ControlPlanePorts, settings: ControlP
     packs: contents,
     console: ports.console,
     rconPasswords: (serverId) => specs.rconPasswords(serverId),
-    ...modsAtBoot(db),
+    ...atBoot(db),
   })
   const runner = new OperationRunner(
     { db, transitions, events },
