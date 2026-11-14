@@ -29,7 +29,7 @@ test('a child that exits is started again, its lines in the agent’s logs behin
   spy.mockRestore()
   expect(logged.filter((line) => line === '[geyser] hello').length).toBeGreaterThanOrEqual(2)
   expect(logged.some((line) => line.startsWith('[geyser] exited with 3'))).toBe(true)
-  // Told of each exit, so the relay can forget what that Geyser knew.
+  // Told of each exit, so what that Geyser had answered is forgotten.
   expect(exits).toBeGreaterThanOrEqual(2)
 })
 

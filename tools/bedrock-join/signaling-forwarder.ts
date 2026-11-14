@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * The NetherNet client's way to the edge's signaling (`nethernet-join.ts`): an HTTP door on this
+ * The NetherNet client's way to the edge's signaling (`join.ts`): an HTTP door on this
  * machine's loopback that passes each request to `origin` and its answer back.
  *
  * A Bedrock app joining by address asks the name it was given over HTTPS on TCP 19132, where Fly
@@ -12,7 +12,7 @@
  * as the app does: over HTTPS, at the play name, with the same method, path and body.
  *
  * Not for the game itself, which goes over WebRTC straight to the address the edge's answer names,
- * or for what a test asks of the edge (`nethernet-join.ts`).
+ * or for what a test asks of the edge (`join.ts`).
  */
 
 export interface SignalingForwarder {

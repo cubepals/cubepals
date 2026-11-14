@@ -12,12 +12,11 @@
  *
  * It makes one account and one Paper server, and takes them through:
  *
- *   edge       health, Bedrock's status and a RakNet ping at the play address
+ *   edge       health, Bedrock's status and a join probe at the play address
  *   server     Bedrock on, Floodgate loaded with its key file (never printed)
- *   join       the server asleep, a Bedrock join waking it: spawn, time to spawn, a chat line, and
- *              a Java ping that sees the same server
- *   nethernet  the server asleep again, a join over NetherNet, as Bedrock 26.60 and later join by
- *              address, waking it: spawn, time to spawn and a chat line
+ *   join       the server asleep, a Bedrock join over NetherNet waking it, as Bedrock players join
+ *              by address: spawn, time to spawn, a chat line, and a Java ping that sees the same
+ *              server
  *   whitelist  "Only people I add can join": an unlisted gamertag refused, an added one let in;
  *              then off again, so what follows tests what it names
  *   ban        a gamertag the server hasn't met: the ban waits, turns them out with its reason as
@@ -41,7 +40,7 @@ import { SQL } from 'bun'
 import { runScheduledNow } from '../apps/control/src/infra/pg/jobs.ts'
 import { GAME_PORT } from '../apps/control/src/minecraft/ports.ts'
 import { offeredVersions } from '../apps/control/src/minecraft/versions.ts'
-import { bedrockJoin, bedrockPing, knownGamertags } from './lib/bedrock-client.ts'
+import { bedrockJoin, bedrockProbe, knownGamertags } from './lib/bedrock-client.ts'
 import { type StepResult, seconds, summaryTable } from './lib/check-progress.ts'
 import { fly } from './lib/fly-async.ts'
 import { type Edge, join, login, status } from './lib/minecraft.ts'
@@ -158,11 +157,17 @@ async function until<T>(what: string, limitSeconds: number, read: () => Promise<
 const edgePage = async (path: string) =>
   fetch(`https://bedrock-check.${PLAY_DOMAIN}${path}`, { redirect: 'manual' })
 const bedrockStatus = async () =>
-  (await (await edgePage('/_health/bedrock')).json()) as { state: string; bound: boolean; restarts: number }
+  (await (await edgePage('/_health/bedrock')).json()) as {
+    state: string
+    signaling: boolean
+    restarts: number
+  }
+/** The join probe a Bedrock client sends the play address before it joins. */
+const probe = () => bedrockProbe(`https://bedrock-check.${PLAY_DOMAIN}:19132`)
 
 // ─── The run ─────────────────────────────────────────────────────────────────────────────────
 
-say(`bedrock check: ${WEB}, players at <server>.${PLAY_DOMAIN}, UDP 19132`)
+say(`bedrock check: ${WEB}, players at <server>.${PLAY_DOMAIN}, port 19132`)
 const owner = { email: `bedrock-${Date.now()}@${CHECK_DOMAIN}`, password: '' }
 let api: Awaited<ReturnType<ReturnType<typeof people>['person']>>['api'] = async () => {
   throw new Error('no account yet')
@@ -183,20 +188,17 @@ const consoleSays = async (command: string) =>
   String((await api('console.run', { serverId: server.id, command })).output ?? '')
 
 try {
-  await step('edge: healthy, Bedrock up, UDP 19132 answers a Bedrock ping', async () => {
+  await step('edge: healthy, Bedrock up, port 19132 answers a join probe', async () => {
     const health = await until('answered its health check', 180, async () => {
       const response = await edgePage('/_health')
       return response.status === 204 ? response : undefined
     })
     const bedrock = await until('Bedrock up', 240, async () => {
       const now = await bedrockStatus()
-      return now.state === 'up' && now.bound ? now : undefined
+      return now.state === 'up' && now.signaling ? now : undefined
     })
-    const motd = await until('answered a Bedrock ping', 120, () =>
-      bedrockPing(`bedrock-check.${PLAY_DOMAIN}`),
-    )
-    check(motd.startsWith('MCPE;'), `the ping answered "${motd.slice(0, 60)}"`)
-    return `health ${health.status}, Bedrock ${bedrock.state} (bound ${bedrock.bound}, ${bedrock.restarts} restarts), pong "${motd.split(';').slice(0, 3).join(';')}"`
+    const answer = await until('answered a join probe', 120, probe)
+    return `health ${health.status}, Bedrock ${bedrock.state} (signaling ${bedrock.signaling}, ${bedrock.restarts} restarts), probe "${answer.slice(0, 60)}"`
   })
 
   const signedUp = await step(
@@ -270,18 +272,10 @@ try {
     }
   }
 
-  /**
-   * A Bedrock player joins the sleeping server over `over`: it wakes, they spawn, and the chat line
-   * they say comes back to them.
-   */
-  const wakingJoin = async (over: 'raknet' | 'nethernet') => {
-    const chat = `hello from Bedrock over ${over} ${randomUUID().slice(0, 8)}`
-    const run = await bedrockJoin(
-      address(),
-      ['--chat', chat, '--hold', '15', '--timeout', '240'],
-      current,
-      over,
-    )
+  /** A Bedrock player joins the sleeping server: it wakes, they spawn, and the chat line they say comes back to them. */
+  const wakingJoin = async () => {
+    const chat = `hello from Bedrock ${randomUUID().slice(0, 8)}`
+    const run = await bedrockJoin(address(), ['--chat', chat, '--hold', '15', '--timeout', '240'], current)
     const [spawn] = run.spawnMs
     if (run.spawned !== 1 || typeof spawn !== 'number')
       throw new Error(`the player did not spawn: ${run.told[0]?.kicked ?? 'no answer'}`)
@@ -293,7 +287,7 @@ try {
       `no chat line with "${chat}" reached the player; they heard ${JSON.stringify(heard)}`,
     )
     const now = await waitFor((v) => v.status === 'running', 'running', 120)
-    facts.push(`Bedrock join over ${over} from a sleeping server: ${seconds(spawn)} to spawn`)
+    facts.push(`Bedrock join from a sleeping server: ${seconds(spawn)} to spawn`)
     return `woke and spawned ${seconds(spawn)} after the join began; chat arrived (${heard.length} lines heard); server ${now.status}`
   }
 
@@ -301,8 +295,8 @@ try {
 
   if (slept) {
     await step(
-      'a Bedrock player joins: the server wakes, they spawn, a chat line arrives',
-      () => wakingJoin('raknet'),
+      'a Bedrock player joins over NetherNet: the server wakes, they spawn, a chat line arrives',
+      wakingJoin,
       400,
     )
 
@@ -324,15 +318,6 @@ try {
       },
       200,
     )
-
-    // Bedrock 26.60 and later join by address over NetherNet alone, so the wake is proven that way too.
-    const asleepAgain = await step('the server goes to sleep on its own again', sleepsOnItsOwn, 1600)
-    if (asleepAgain)
-      await step(
-        'a Bedrock player joins over NetherNet: the server wakes, they spawn, a chat line arrives',
-        () => wakingJoin('nethernet'),
-        400,
-      )
   }
 
   let tags: [string, string][] = []
@@ -504,10 +489,8 @@ try {
           return now.state === 'up' && now.restarts > before.restarts ? now : undefined
         })
         const back = Date.now() - at
-        const motd = await until('answered a Bedrock ping again', 60, () =>
-          bedrockPing(`bedrock-check.${PLAY_DOMAIN}`),
-        )
-        // Bedrock reads up once the new Geyser has answered the relay. A join still gets three
+        const answer = await until('answered a join probe again', 60, probe)
+        // Bedrock reads up once the new Geyser's signaling has answered. A join still gets three
         // tries, half a minute apart, and the try that worked is reported.
         let again = await bedrockJoin(address(), ['--hold', '3', '--timeout', '120'], current)
         let tries = 1
@@ -521,7 +504,7 @@ try {
         facts.push(
           `Geyser killed: back ${seconds(back)} later (restarts ${before.restarts} to ${after.restarts})`,
         )
-        return `pid ${pids.join(', ')} killed; Bedrock ${down.state}, edge health ${health}, a Java join took ${seconds(javaTook)}; Geyser up again after ${seconds(back)}, pong "${motd.split(';').slice(0, 2).join(';')}", a Bedrock join spawned`
+        return `pid ${pids.join(', ')} killed; Bedrock ${down.state}, edge health ${health}, a Java join took ${seconds(javaTook)}; Geyser up again after ${seconds(back)}, probe "${answer.slice(0, 40)}", a Bedrock join spawned`
       },
       600,
     )

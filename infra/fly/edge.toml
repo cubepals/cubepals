@@ -1,5 +1,5 @@
 # The edge (§12): mc-router and Geyser, supervised by the edge agent, bly-<deployment>-edge. Java
-# players join <slug>.<play domain>:25565, and Bedrock players the same name on UDP 19132, whose
+# players join <slug>.<play domain>:25565, and Bedrock players the same name on port 19132 (NetherNet), whose
 # wildcard A/AAAA records point at this app's addresses.
 # Deploy from the repository root:
 #   fly deploy . --config infra/fly/edge.toml --dockerfile apps/edge/Dockerfile --app bly-<deployment>-edge
@@ -64,23 +64,12 @@ primary_region = "fra"
     timeout = "2s"
     grace_period = "15s"
 
-# Bedrock players (apps/edge/bedrock.ts). UDP reaches a machine only on a dedicated IPv4, at a
-# socket bound to fly-global-services, and Fly never starts a stopped machine for it: this is why
-# Geyser runs here, on the machine that is always up, and wakes a sleeping server through the Java
-# path. Fly doesn't rewrite UDP ports, so the internal and external ones are the same.
-[[services]]
-  protocol = "udp"
-  internal_port = 19132
-  auto_stop_machines = "off"
-  auto_start_machines = false
-
-  [[services.ports]]
-    port = 19132
-
-# NetherNet, the only way Bedrock 26.60 and later join (apps/edge/bedrock.ts). A client first asks
-# the name it was given over HTTPS on TCP 19132: Fly's proxy ends TLS with the app's certificate for
-# *.<play domain> (the one the browser service below uses) and hands plain HTTP, the player named in
-# X-Forwarded-For, to the agent's door, which passes it to Geyser's signaling.
+# Bedrock players (apps/edge/bedrock.ts), who join over NetherNet alone, as Bedrock 26.60 and later
+# do. A client first asks the name it was given over HTTPS on TCP 19132: Fly's proxy ends TLS with the
+# app's certificate for *.<play domain> (the one the browser service below uses) and hands plain
+# HTTP, the player named in X-Forwarded-For, to the agent's door, which passes it to Geyser's
+# signaling. Fly never starts a stopped machine for any of this: this is why Geyser runs here, on the
+# machine that is always up, and wakes a sleeping server through the Java path.
 [[services]]
   protocol = "tcp"
   internal_port = 19134
@@ -99,7 +88,8 @@ primary_region = "fra"
     handlers = ["tls", "http"]
 
 # Then the game itself, over WebRTC on UDP 19133, straight to Geyser, which tells the client this
-# port at the app's dedicated IPv4.
+# port at the app's dedicated IPv4. UDP reaches a machine only on a dedicated IPv4, at a socket bound
+# to fly-global-services, and Fly doesn't rewrite UDP ports, so the internal and external ones match.
 [[services]]
   protocol = "udp"
   internal_port = 19133

@@ -6,7 +6,8 @@
 
 import { afterEach, expect, test } from 'bun:test'
 import { type AddressInfo, connect, createServer, type Server, type Socket } from 'node:net'
-import { proxyHeader, readProxyHeader } from '../../packages/contracts/src/proxy-header.ts'
+import { stays, until } from '@blockly/contracts/waits'
+import { LOCAL_HEADER, proxyHeader, readProxyHeader } from '../../packages/contracts/src/proxy-header.ts'
 import { front, geyserDoor, playersOnline, readHandshake, readProxyLine } from './front.ts'
 import { turnAway } from './hold.ts'
 import { Gate, type Limits } from './limits.ts'
@@ -54,10 +55,12 @@ const listening = (server: Server) =>
     server.once('listening', () => resolve((server.address() as AddressInfo).port)),
   )
 
-/** A stand-in for mc-router: records what each connection sent it. */
-async function router(): Promise<{ port: number; received: string[] }> {
+/** A stand-in for mc-router: records what each connection sent it, and how many it has had. */
+async function router(): Promise<{ port: number; received: string[]; reached: () => number }> {
   const received: string[] = []
+  let reached = 0
   const server = createServer((socket) => {
+    reached++
     let got = ''
     socket.on('data', (chunk) => {
       got += chunk.toString('latin1')
@@ -66,7 +69,7 @@ async function router(): Promise<{ port: number; received: string[] }> {
     socket.on('error', () => undefined)
   }).listen(0, '127.0.0.1')
   open.push(server)
-  return { port: await listening(server), received }
+  return { port: await listening(server), received, reached: () => reached }
 }
 
 /** Sends `bytes` to the front door, and resolves with all it answered once it closes. */
@@ -456,19 +459,39 @@ test('an address holds only so many open connections, and a closed one frees its
   expect(behind.received).toHaveLength(4)
 })
 
-test('joins at Geyser’s door are not held to an address’s open connections', async () => {
+test('a Bedrock player at Geyser’s door is held to their own address’s open connections, as a Java player is', async () => {
   const limits: Limits = { ...ROOMY, address: { ...ROOMY.address, open: 1 } }
   const { options, behind } = await frontDoor(limits, true)
   const door = await geyserDoor(options)
   open.push(door.server)
-  const header = proxyHeader({ address: '198.51.100.9', port: 40000 }, { address: '127.0.0.1', port: 25565 })
-  const joins = [1, 2].map(() => connect(door.port, '127.0.0.1'))
-  for (const join of joins) {
-    join.on('error', () => undefined)
-    join.write(Uint8Array.from([...header, ...joinRequest('a.play.test')]))
+  /** A join Geyser makes, its header naming `address`, or nobody where it is null. */
+  const geyserJoin = (address: string | null) => {
+    const heard: Buffer[] = []
+    const socket = connect(door.port, '127.0.0.1')
+    socket.on('data', (chunk) => heard.push(chunk))
+    socket.on('error', () => undefined)
+    const header =
+      address === null
+        ? LOCAL_HEADER
+        : proxyHeader({ address, port: 40000 }, { address: '127.0.0.1', port: 25565 })
+    socket.write(Uint8Array.from([...header, ...joinRequest('a.play.test')]))
+    return { socket, heard: (): Uint8Array => new Uint8Array(Buffer.concat(heard)) }
   }
-  await Bun.sleep(150)
-  for (const join of joins) join.destroy()
-  await Bun.sleep(50)
-  expect(behind.received).toHaveLength(2)
+  const seen = { seen: () => `mc-router was reached ${behind.reached()} times` }
+  const first = geyserJoin('198.51.100.9')
+  await until('the first player’s join to reach mc-router', () => behind.reached() === 1, seen)
+  const second = geyserJoin('198.51.100.9')
+  await until('a second join from the same address to be turned away', () => second.heard().length > 0, seen)
+  expect(second.heard()).toEqual(turnAway('Busy'))
+  // Another player, and joins Geyser named nobody on, are counted per server only.
+  const elsewhere = geyserJoin('198.51.100.10')
+  const unnamed = [geyserJoin(null), geyserJoin(null)]
+  await until('the other three joins to reach mc-router', () => behind.reached() === 4, seen)
+  await stays(
+    'those three to stay unrefused',
+    () => [elsewhere, ...unnamed].every((join) => join.heard().length === 0),
+    200,
+  )
+  for (const join of [first, second, elsewhere, ...unnamed]) join.socket.destroy()
+  await until('mc-router to have seen the four let through close', () => behind.received.length === 4, seen)
 })
