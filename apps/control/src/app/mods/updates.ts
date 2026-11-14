@@ -52,6 +52,8 @@ export class ModUpdates {
   readonly #plan: Planner
   readonly #catalog: Pick<ModCatalog, 'versionsByIds'>
   readonly #kept = new Map<string, { until: number; found: Found }>()
+  /** Discoveries under way, by revision: asked again meanwhile, the same one answers. */
+  readonly #asked = new Map<string, Promise<Found>>()
 
   constructor(deps: { plan: Planner; catalog: Pick<ModCatalog, 'versionsByIds'> }) {
     this.#plan = deps.plan
@@ -66,6 +68,16 @@ export class ModUpdates {
     if (desired.modpack !== null || !desired.mods.some((m) => 'versionId' in m.source)) return NONE
     const kept = this.#kept.get(desired.id)
     if (kept !== undefined && kept.until > Date.now()) return kept.found
+    // However many ask at once, one discovery runs for a revision; one that fails isn't kept.
+    let asked = this.#asked.get(desired.id)
+    if (asked === undefined) {
+      asked = this.#discover(desired).finally(() => this.#asked.delete(desired.id))
+      this.#asked.set(desired.id, asked)
+    }
+    return asked
+  }
+
+  async #discover(desired: ServerRevision): Promise<Found> {
     const found = (await this.#together(desired)) ?? (await this.#oneByOne(desired))
     this.#keep(desired.id, found)
     return found
