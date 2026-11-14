@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import type { BillingTerm } from '@blockly/contracts'
+import { HOUR_S } from '@blockly/contracts/durations'
 import type { ArchiveTarget, DownloadTarget, UploadTarget } from './runtime.ts'
 
 /**
@@ -11,6 +12,13 @@ import type { ArchiveTarget, DownloadTarget, UploadTarget } from './runtime.ts'
  * by different names, and a link is signed for the name its user will call.
  */
 export type LinkAudience = 'runtime' | 'browser'
+
+/**
+ * How long the link an archive is uploaded through lasts. Packing a large world comes before its
+ * upload starts, so it is also the longest one attempt at an archive may take: the link is made
+ * as the attempt begins.
+ */
+export const ARCHIVE_UPLOAD_SECONDS = 3 * HOUR_S
 
 /**
  * Object storage, when a deployment has it. Generic primitives only: it knows nothing about

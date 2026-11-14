@@ -25,7 +25,10 @@ import { everyMinute } from './ticker.ts'
 
 /** The Postgres schema pg-boss keeps its tables in. */
 const SCHEMA = 'pgboss'
-/** One queue for every server operation: strict FIFO per server, parallel across servers. */
+/**
+ * One queue for every server operation: strict FIFO per server, parallel across servers. A
+ * server's work apart (`APART`) is a second such line of its own.
+ */
 const SERVER_OPS = 'server-ops'
 /**
  * The priority a start or a wake goes in at: fetched before everything else, and the least the
@@ -37,6 +40,11 @@ const WAKE_PRIORITY = 1
 const PAID_WAKE_PRIORITY = 2
 /** A new server's first build: behind everything for the servers people already have. */
 const CREATE_PRIORITY = -1
+/**
+ * What follows a server's id in the key of its work apart (`JobQueue.enqueue`): a key of its own,
+ * so pg-boss orders that work among itself and the server's queue never waits behind it.
+ */
+const APART = ':apart'
 /**
  * How often, in seconds, a worker's word that it still holds an operation may go unsaid before
  * the operation counts as cut off: pg-boss's floor. A worker says so every half of it.
@@ -301,6 +309,7 @@ export class PgBossJobs implements JobQueue {
       wakes: boolean
       paid?: boolean
       creates?: boolean
+      apart?: { deadlineSeconds: number }
     },
   ): Promise<void> {
     await this.#boss.send(
@@ -309,7 +318,8 @@ export class PgBossJobs implements JobQueue {
       { operationId: job.operationId, retryLimit: job.retryLimit },
       {
         id: job.operationId,
-        singletonKey: job.serverId,
+        singletonKey: job.apart ? `${job.serverId}${APART}` : job.serverId,
+        ...(job.apart ? { expireInSeconds: job.apart.deadlineSeconds } : {}),
         retryLimit: job.retryLimit,
         priority: job.wakes
           ? job.paid
@@ -366,12 +376,15 @@ export class PgBossJobs implements JobQueue {
   /** `key_strict_fifo` keeps a key's failed job at its head: that key is blocked. */
   async blockedOperations(): Promise<BlockedOperation[]> {
     const blocked: BlockedOperation[] = []
-    for (const serverId of await this.#boss.getBlockedKeys(SERVER_OPS)) {
-      for (const job of await this.#boss.findJobs(SERVER_OPS, { key: serverId })) {
+    for (const key of await this.#boss.getBlockedKeys(SERVER_OPS)) {
+      const apart = key.endsWith(APART)
+      const serverId = apart ? key.slice(0, -APART.length) : key
+      for (const job of await this.#boss.findJobs(SERVER_OPS, { key })) {
         if (job.state !== 'failed') continue
         blocked.push({
           operationId: job.id,
           serverId,
+          apart,
           failedAt: job.completedOn,
           error: failureOf(job.output) || null,
         })

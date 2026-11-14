@@ -51,7 +51,7 @@ export class StuckWork {
         status: op?.status ?? 'unknown',
         error: job.error ?? op?.detail ?? op?.error ?? null,
         failedAt: job.failedAt?.toISOString() ?? null,
-        waiting: waiting.get(job.serverId) ?? 0,
+        waiting: waiting.get(job.operationId) ?? 0,
       })
     }
     const purges: OverduePurgeView[] = []

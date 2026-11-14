@@ -949,8 +949,16 @@ through the wake flow, which starts it first (§12).
 ## 9. Operations and jobs
 
 One pg-boss queue, `server-ops`, with policy `key_strict_fifo` and `singletonKey = serverId`.
-Operations for one server run strictly in order, and different servers run in parallel. Each
-worker:
+Operations for one server run strictly in order, and different servers run in parallel.
+
+An `archive` is the exception. It only reads a snapshot the server already keeps, and packing a
+large world takes minutes to hours, so it is keyed apart (`<serverId>:apart`): it runs beside its
+server's queue, in order only with the server's other archives, and neither a stop nor a player's
+start waits for it. One attempt of it has as long as the link it uploads through lasts
+(`ARCHIVE_UPLOAD_SECONDS`), where an operation has half an hour. Retention already leaves a
+snapshot alone while an operation that reads it is queued or running.
+
+Each worker:
 1. re-reads the server
 2. re-validates the transition
 3. re-checks policy where it spends money

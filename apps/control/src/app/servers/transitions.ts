@@ -16,9 +16,10 @@ import type { MinecraftServer } from '../../domain/server/server.ts'
 import { loadStanding } from '../accounts/persistence.ts'
 import { shownStatus } from '../edge/routed.ts'
 import { AppError } from '../errors.ts'
-import { insertOperation, type OperationRecord } from '../operations/persistence.ts'
+import { APART, insertOperation, type OperationRecord } from '../operations/persistence.ts'
 import type { EventBus } from '../ports/events.ts'
 import type { JobQueue } from '../ports/jobs.ts'
+import { ARCHIVE_UPLOAD_SECONDS } from '../ports/optional.ts'
 import { saveLifecycle } from './persistence.ts'
 
 /** How many times the queue retries an operation before the domain records the failure. */
@@ -45,6 +46,13 @@ const RETRIES: Record<OperationKind, number> = {
 
 /** Operations a player waits on to play: they go ahead of everything else queued (ports/jobs.ts). */
 const WAKES: ReadonlySet<OperationKind> = new Set(['start', 'unstore'])
+
+/**
+ * What one attempt of work apart is given: an archive's, the only such work, has until the link
+ * it is sent through runs out. An operation's own half hour is less than packing a large world
+ * takes, and an attempt cut off there starts again from nothing.
+ */
+const APART_ATTEMPT = { deadlineSeconds: ARCHIVE_UPLOAD_SECONDS }
 
 export interface OperationRequest {
   requestedBy: string
@@ -149,6 +157,7 @@ export class ServerTransitions {
         wakes: WAKES.has(kind),
         paid: WAKES.has(kind) && (await paidPlan(tx, server)),
         creates: kind === 'provision',
+        ...(APART.includes(kind) ? { apart: APART_ATTEMPT } : {}),
       })
       await this.#events.publish(tx, {
         type: 'operation_progress',

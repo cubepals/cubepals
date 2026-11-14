@@ -27,7 +27,7 @@ import type { BackupService } from '../../backups/service.ts'
 import { inPlainWords, PermanentFailure } from '../../errors.ts'
 import type { EventBus } from '../../ports/events.ts'
 import type { ConsoleTarget, ServerConsole } from '../../ports/minecraft.ts'
-import type { ArchiveStore } from '../../ports/optional.ts'
+import { ARCHIVE_UPLOAD_SECONDS, type ArchiveStore } from '../../ports/optional.ts'
 import {
   type ArchiveTarget,
   type RuntimeHandle,
@@ -39,7 +39,7 @@ import { NoLongerApplies } from '../runner.ts'
 import type { GameConsole } from './game-console.ts'
 
 /** Packing a large world comes before its upload starts, so an export's link lasts a while. */
-export const EXPORT_LINK_SECONDS = 3 * HOUR_S
+export const EXPORT_LINK_SECONDS = ARCHIVE_UPLOAD_SECONDS
 /** A restore starts downloading its archive as soon as it has the link. */
 export const IMPORT_LINK_SECONDS = HOUR_S
 
