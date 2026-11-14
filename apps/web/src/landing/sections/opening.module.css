@@ -20,7 +20,9 @@
   display: none;
 }
 
+/* The first screen grows to fill the night it is on (landing.css), keeping the Runs strip at its foot. */
 .inner {
+  flex: 1 0 auto;
   display: grid;
   grid-template-columns: minmax(0, 0.92fr) minmax(0, 1fr);
   align-items: center;

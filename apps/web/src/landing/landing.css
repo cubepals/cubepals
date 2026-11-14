@@ -84,6 +84,21 @@
   padding-inline: var(--gutter);
 }
 
+/* A section on ink is the night: at least a whole screen tall, so whoever scrolls into it sees
+   nothing but night, its sheet's hairlines running top to bottom and what it says in the middle. */
+.lp section[data-tone="ink"] {
+  display: flex;
+  flex-direction: column;
+  min-height: 100lvh;
+}
+
+.lp section[data-tone="ink"] > .lp-sheet {
+  display: flex;
+  flex: 1 0 auto;
+  flex-direction: column;
+  justify-content: center;
+}
+
 /* A section's head: its mono label, the heading, and a sentence or two under it. */
 .lp-label {
   display: inline-flex;

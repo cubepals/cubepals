@@ -31,7 +31,8 @@ people ask; the button once more, beside the island asleep. It starts at night a
 inks: `--on-ground`, `--on-ground-muted`, `--on-ground-faint` and `--rule`. Grey is never a tint
 in a picture: where a picture needs one it is a dither of ink, as the island's print is, and as
 the day strip and the hours bar are. The one accent is the beta tag's. The page starts on ink, at
-night, and ends on ink.
+night, and ends on ink. A section on ink is at least a screen tall, with what it says in the
+middle, so whoever scrolls into the night sees nothing else.
 
 **The sheet.** Everything sits on one measure between two hairlines that run the page's height,
 with a printer's register mark wherever a section's edge crosses one (`.lp-sheet`). Cells share
