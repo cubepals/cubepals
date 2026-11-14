@@ -43,8 +43,8 @@ const NONE: Found = { versions: new Map(), upgrade: [] }
 const KEPT_MS = 5 * MINUTE_MS
 /** Revisions whose updates are kept at once; the oldest go first. */
 const MOST_KEPT = 1_000
-/** Rounds of narrowing the set to versions that are newer, before it is taken as it is. */
-const NARROWING_ROUNDS = 3
+/** Rounds of narrowing the set to what runs and moves forward, before one mod at a time is tried. */
+const NARROWING_ROUNDS = 6
 /** Mods tried one by one when the whole set can't update together. */
 const MOST_TRIED = 40
 
@@ -71,19 +71,34 @@ export class ModUpdates {
     return found
   }
 
-  /** Every update at once, narrowed to the ones that are newer; null when they can't run together. */
+  /**
+   * Every update at once, narrowed until it runs: a set that conflicts drops the mods its conflicts
+   * name and is planned again, so updates that only work as a pair stay together; a set that moves
+   * something back keeps only the moves forward. Null when narrowing can't find a set that runs.
+   */
   async #together(desired: ServerRevision): Promise<Found | null> {
-    let upgrade: ModChange['upgrade'] = 'all'
+    let upgrade: string[] | 'all' = 'all'
     for (let round = 0; round < NARROWING_ROUNDS; round++) {
       const plan = await this.#plan(desired, { upgrade })
-      if (plan.kind === 'conflicts') return null
-      const newer = await this.#newer(plan.updated)
-      if (newer.length === plan.updated.length)
-        return newer.length === 0 ? NONE : { versions: labels(newer), upgrade }
-      if (newer.length === 0) return NONE
-      upgrade = newer.map(({ to }) => identity(to))
+      const next: Found | string[] | null =
+        plan.kind === 'conflicts'
+          ? withoutNamed(upgrade === 'all' ? catalogIds(desired) : upgrade, plan.conflicts)
+          : await this.#forward(plan.updated, upgrade)
+      if (next === null || !Array.isArray(next)) return next
+      upgrade = next
     }
-    return NONE
+    return null
+  }
+
+  /**
+   * A plan that runs, held to its moves forward: what was found when every move goes forward, none
+   * when no move does, and otherwise the mods to ask again with.
+   */
+  async #forward(updated: Updated, upgrade: string[] | 'all'): Promise<Found | string[]> {
+    const newer = await this.#newer(updated)
+    if (newer.length === 0) return NONE
+    if (newer.length === updated.length) return { versions: labels(newer), upgrade }
+    return newer.map(({ to }) => identity(to))
   }
 
   /**
@@ -91,7 +106,7 @@ export class ModUpdates {
    * plans with the ones kept before it and moves nothing back.
    */
   async #oneByOne(desired: ServerRevision): Promise<Found> {
-    const tried = desired.mods.filter((m) => 'versionId' in m.source).map(identity)
+    const tried = catalogIds(desired)
     let kept: string[] = []
     let found = NONE
     for (const id of tried.slice(0, MOST_TRIED)) {
@@ -132,6 +147,23 @@ export class ModUpdates {
     }
   }
 }
+
+/**
+ * The mods asked to update, less those a conflict names; null when that leaves none, or drops
+ * none and so would be asked again unchanged.
+ */
+function withoutNamed(
+  asked: readonly string[],
+  conflicts: Extract<ModPlan, { kind: 'conflicts' }>['conflicts'],
+): string[] | null {
+  const named = new Set(conflicts.flatMap((c) => ('projectId' in c ? [c.projectId] : [])))
+  const left = asked.filter((id) => !named.has(id))
+  return left.length === 0 || left.length === asked.length ? null : left
+}
+
+/** The server's mods its catalog can update, by `identity`. */
+const catalogIds = (desired: ServerRevision): string[] =>
+  desired.mods.filter((m) => 'versionId' in m.source).map(identity)
 
 const versionOf = (mod: PinnedMod): string | null => ('versionId' in mod.source ? mod.source.versionId : null)
 

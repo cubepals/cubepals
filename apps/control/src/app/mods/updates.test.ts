@@ -166,6 +166,29 @@ describe.skipIf(!hasDatabase)('mod updates', () => {
     expect(await pinned(id)).toEqual(['anvil-2', 'forge-2'])
   })
 
+  test('updates that only work as a pair stay together when a third can’t come', async () => {
+    publish('lamp', [{ id: 'lamp-1' }])
+    publish('wick', [{ id: 'wick-1' }])
+    publish('oil', [{ id: 'oil-1' }])
+    const { owner, id } = await serverWith([
+      { projectId: 'lamp' },
+      { projectId: 'wick' },
+      { projectId: 'oil' },
+    ])
+    publish('lamp', [{ id: 'lamp-2', incompatibleVersions: ['wick-1'] }, { id: 'lamp-1' }])
+    publish('wick', [{ id: 'wick-2', incompatibleVersions: ['lamp-1'] }, { id: 'wick-1' }])
+    publish('oil', [{ id: 'oil-2', incompatible: ['lamp'] }, { id: 'oil-1' }])
+
+    // Neither lamp nor wick updates alone, and oil's update can't run beside the lamp at all.
+    expect(await offered(owner, id)).toEqual([
+      ['lamp', 'lamp-1', 'lamp-2'],
+      ['oil', 'oil-1', null],
+      ['wick', 'wick-1', 'wick-2'],
+    ])
+    await apply(owner, id, { upgrade: (await h.app.modQueries.updates(owner, id)).upgrade })
+    expect(await pinned(id)).toEqual(['lamp-2', 'oil-1', 'wick-2'])
+  })
+
   test('a catalog that can’t be asked shows no updates, and the list still answers', async () => {
     publish('bow', [{ id: 'bow-1' }])
     const { owner, id } = await serverWith([{ projectId: 'bow' }])

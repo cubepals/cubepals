@@ -311,8 +311,9 @@ on the catalog for it: the line appears when the answer does.
 - **Only forward.** A version counts as an update only when it was published after the pinned one,
   so a mod pinned on a beta is never moved back to an older release.
 - **Checked together.** The whole set, dependencies and what each jar asks for included, has to
-  resolve. When it doesn't, the largest set that does is built one mod at a time, and the rest
-  wait.
+  resolve. When it doesn't, the mods its conflicts name are dropped and the rest planned again,
+  so updates that only work as a pair stay together; failing that, a set is built one mod at a
+  time. What is dropped waits.
 - **Offered, never applied.** The Mods page marks each mod's version (`2.13.0 → 2.13.1`), and
   says above the list what is out, with one button (Update, or Update all) that applies the change
   that was checked (`ModUpdatesView.upgrade`). No mod is offered on its own: an update that works
