@@ -43,7 +43,7 @@ describe('the stack’s drawing', () => {
 
   test('the parts over a read plate rise clear of its whole top, pulled out as it is', () => {
     for (const print of prints) {
-      const stack = stackOf(print, { players: true, notes: NOTES })
+      const stack = stackOf(print, { players: true, bedrock: true, notes: NOTES })
       PARTS.forEach((part, k) => {
         if (k === 0) return
         const { lift, pull } = poseOf(stack, part)
@@ -64,11 +64,20 @@ describe('the stack’s drawing', () => {
       for (const room of ROOMS) {
         const { print } = printFor(room, ratio)
         expect([2, 3]).toContain(Math.round(print.unit * ratio * 1000) / 1000)
-        const stack = stackOf(print, { players: true, notes: NOTES })
+        const stack = stackOf(print, { players: true, bedrock: true, notes: NOTES })
         expect(Number.isInteger(Math.round((stack.print.x / print.unit) * 1000) / 1000)).toBe(true)
         expect(Number.isInteger(Math.round((stack.print.y / print.unit) * 1000) / 1000)).toBe(true)
       }
     }
+  })
+
+  test('the Bedrock player is drawn only where friends on Bedrock can join', () => {
+    const print = printFor(470, 2).print
+    const names = (bedrock: boolean) =>
+      stackOf(print, { players: true, bedrock, notes: NOTES }).players.map((player) => player.name)
+    expect(names(true)).toEqual(['java', 'bedrock'])
+    expect(names(false)).toEqual(['java'])
+    expect(stackOf(print, { players: false, bedrock: true, notes: null }).players).toEqual([])
   })
 
   test('a way travelled halfway stops halfway along it', () => {

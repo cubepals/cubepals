@@ -69,7 +69,7 @@ export function Handled({ bedrock, plus, kept }: { bedrock: boolean; plus: strin
             one, and how they’re run is public: <OutLink href={SOURCE_URL}>read the code</OutLink>.
           </p>
         </header>
-        <Stack steps={steps} told={{ plus, kept }} />
+        <Stack steps={steps} told={{ plus, kept }} bedrock={bedrock} />
       </div>
     </section>
   )

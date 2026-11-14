@@ -191,7 +191,7 @@ function playerReach(at: (place: Vec3) => Spot, player: Player): [number, number
  */
 export function stackOf(
   print: Print,
-  drawn: { players: boolean; notes: Record<Part, string> | null },
+  drawn: { players: boolean; bedrock: boolean; notes: Record<Part, string> | null },
 ): Stack {
   const camera = openingCamera(print.across / print.down)
   const size = { width: print.across * print.unit, height: print.down * print.unit }
@@ -212,7 +212,8 @@ export function stackOf(
   const rise = gap * RISE
   const closer = gap * CLOSER
   const up = Math.max(gap * WORLD, ...open.map((o, k) => (k === 0 ? 0 : o + rise)))
-  const players = drawn.players ? [JAVA, BEDROCK] : []
+  // The Bedrock player only where friends on Bedrock can join (`lib/bedrock.ts`), as the door's words say.
+  const players = drawn.players ? (drawn.bedrock ? [JAVA, BEDROCK] : [JAVA]) : []
   const lefts = [0, ...players.map((player) => playerReach(bare, player)[0])]
   const { notes } = drawn
   const names = notes
