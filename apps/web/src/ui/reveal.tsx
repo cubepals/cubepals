@@ -7,7 +7,8 @@
 /**
  * The design system's disclosure (`.bk-reveal`, components.css) as a component: a control that
  * opens a region in place, the region growing from nothing as its content fades in, and inert
- * while closed, so nothing in it takes focus or reaches a screen reader. The plan cards' "See
+ * while closed, so nothing in it takes focus or reaches a screen reader. Open, it is marked
+ * `data-open`, for a layout that makes room for it. The plan cards' "See
  * everything in Core" is one (plan-details.tsx). The sign-in page draws the same markup itself,
  * since it moves focus into the region as it opens (app/(auth)/auth-entry.tsx).
  */
@@ -28,7 +29,7 @@ export function Reveal({
   const [open, setOpen] = useState(false)
   const region = useId()
   return (
-    <div className={className}>
+    <div className={className} data-open={open || undefined}>
       <button
         type="button"
         className={toggleClassName}
