@@ -16,6 +16,8 @@
  *   server     Bedrock on, Floodgate loaded with its key file (never printed)
  *   join       the server asleep, a Bedrock join waking it: spawn, time to spawn, a chat line, and
  *              a Java ping that sees the same server
+ *   nethernet  the server asleep again, a join over NetherNet, as Bedrock 26.60 and later join by
+ *              address, waking it: spawn, time to spawn and a chat line
  *   whitelist  "Only people I add can join": an unlisted gamertag refused, an added one let in;
  *              then off again, so what follows tests what it names
  *   ban        a gamertag the server hasn't met: the ban waits, turns them out with its reason as
@@ -250,55 +252,57 @@ try {
       return `Paper on Minecraft ${release.id}, ${address()} (${server.id}) up in ${seconds(Date.now() - at)}; ${loaded.length} Floodgate log lines, none about its key`
     }))
 
-  const slept =
-    made &&
-    (await step(
-      'the server goes to sleep on its own',
-      async () => {
-        const account = `user_id = (select id from users where email = '${owner.email}')`
-        await sql(
-          `update account_standing set limit_overrides = limit_overrides || '{"idleShutdownAfterMinutes": ${SLEEP_AFTER_MINUTES}}' where ${account}`,
-        )
-        try {
-          const asleep = await waitFor((v) => v.status === 'stopped', 'went to sleep', 1500)
-          await waitFor((v) => v.activeOperation === null, 'settled', 600)
-          check(asleep.stopReason === 'idle', `it stopped for ${asleep.stopReason}`)
-          return `idle after ${SLEEP_AFTER_MINUTES} min on this account`
-        } finally {
-          await sql(
-            `update account_standing set limit_overrides = limit_overrides - 'idleShutdownAfterMinutes' where ${account}`,
-          )
-        }
-      },
-      1600,
-    ))
+  /** The server left alone until it sleeps, with this account's idle time shortened meanwhile. */
+  const sleepsOnItsOwn = async () => {
+    const account = `user_id = (select id from users where email = '${owner.email}')`
+    await sql(
+      `update account_standing set limit_overrides = limit_overrides || '{"idleShutdownAfterMinutes": ${SLEEP_AFTER_MINUTES}}' where ${account}`,
+    )
+    try {
+      const asleep = await waitFor((v) => v.status === 'stopped', 'went to sleep', 1500)
+      await waitFor((v) => v.activeOperation === null, 'settled', 600)
+      check(asleep.stopReason === 'idle', `it stopped for ${asleep.stopReason}`)
+      return `idle after ${SLEEP_AFTER_MINUTES} min on this account`
+    } finally {
+      await sql(
+        `update account_standing set limit_overrides = limit_overrides - 'idleShutdownAfterMinutes' where ${account}`,
+      )
+    }
+  }
+
+  /**
+   * A Bedrock player joins the sleeping server over `over`: it wakes, they spawn, and the chat line
+   * they say comes back to them.
+   */
+  const wakingJoin = async (over: 'raknet' | 'nethernet') => {
+    const chat = `hello from Bedrock over ${over} ${randomUUID().slice(0, 8)}`
+    const run = await bedrockJoin(
+      address(),
+      ['--chat', chat, '--hold', '15', '--timeout', '240'],
+      current,
+      over,
+    )
+    const [spawn] = run.spawnMs
+    if (run.spawned !== 1 || typeof spawn !== 'number')
+      throw new Error(`the player did not spawn: ${run.told[0]?.kicked ?? 'no answer'}`)
+    // A player turned out after they spawned is a launch blocker, not a flaw of the check.
+    check(run.told[0]?.kicked == null, `the player was kicked after spawning: "${run.told[0]?.kicked}"`)
+    const heard = run.told[0]?.chat ?? []
+    check(
+      heard.some((line) => line.includes(chat)),
+      `no chat line with "${chat}" reached the player; they heard ${JSON.stringify(heard)}`,
+    )
+    const now = await waitFor((v) => v.status === 'running', 'running', 120)
+    facts.push(`Bedrock join over ${over} from a sleeping server: ${seconds(spawn)} to spawn`)
+    return `woke and spawned ${seconds(spawn)} after the join began; chat arrived (${heard.length} lines heard); server ${now.status}`
+  }
+
+  const slept = made && (await step('the server goes to sleep on its own', sleepsOnItsOwn, 1600))
 
   if (slept) {
     await step(
       'a Bedrock player joins: the server wakes, they spawn, a chat line arrives',
-      async () => {
-        const chat = `hello from Bedrock ${randomUUID().slice(0, 8)}`
-        const run = await bedrockJoin(
-          address(),
-          ['--chat', chat, '--hold', '15', '--timeout', '240'],
-          current,
-        )
-        const [spawn] = run.spawnMs
-        check(
-          run.spawned === 1 && typeof spawn === 'number',
-          `the player did not spawn: ${run.told[0]?.kicked ?? 'no answer'}`,
-        )
-        // A player turned out after they spawned is a launch blocker, not a flaw of the check.
-        check(run.told[0]?.kicked == null, `the player was kicked after spawning: "${run.told[0]?.kicked}"`)
-        const heard = run.told[0]?.chat ?? []
-        check(
-          heard.some((line) => line.includes(chat)),
-          `no chat line with "${chat}" reached the player; they heard ${JSON.stringify(heard)}`,
-        )
-        const now = await waitFor((v) => v.status === 'running', 'running', 120)
-        facts.push(`Bedrock join from a sleeping server: ${seconds(spawn)} to spawn`)
-        return `woke and spawned ${seconds(spawn)} after the join began; chat arrived (${heard.length} lines heard); server ${now.status}`
-      },
+      () => wakingJoin('raknet'),
       400,
     )
 
@@ -320,6 +324,15 @@ try {
       },
       200,
     )
+
+    // Bedrock 26.60 and later join by address over NetherNet alone, so the wake is proven that way too.
+    const asleepAgain = await step('the server goes to sleep on its own again', sleepsOnItsOwn, 1600)
+    if (asleepAgain)
+      await step(
+        'a Bedrock player joins over NetherNet: the server wakes, they spawn, a chat line arrives',
+        () => wakingJoin('nethernet'),
+        400,
+      )
   }
 
   let tags: [string, string][] = []
