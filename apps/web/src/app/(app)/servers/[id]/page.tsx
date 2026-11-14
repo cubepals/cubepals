@@ -53,6 +53,7 @@ import { HoursLeft } from '../../hours-left'
 import { PlusOffer } from '../../plus-offer'
 import { BootLine } from './boot-line'
 import { firstJoinWays, onPhone } from './first-join-ways'
+import { ModUpdates } from './mod-updates'
 import { useChanged } from './settings/shared'
 import { requestId, useServer } from './use-server'
 import { useWakeRequest } from './wake'
@@ -123,6 +124,7 @@ function Overview({ server }: { server: ServerView }) {
         <Actions server={server} wake={wake} />
       )}
       {server.notLoaded.length > 0 && server.status !== 'failed' && <NotLoaded server={server} />}
+      <ModUpdates server={server} />
 
       <div className="bk-grid">
         <PlayersCard server={server} />

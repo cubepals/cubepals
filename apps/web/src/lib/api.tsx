@@ -31,6 +31,10 @@ const OUTSIDE = new Set([
   'servers.packFromLink',
   'servers.packVersions',
   'mods.search',
+  // The list asks the catalog for a pack's newer version, and the server's page reads it too.
+  'mods.list',
+  // Updates are found by planning against the catalog, apart from the list so it never waits on them.
+  'mods.updates',
 ])
 
 /**
