@@ -10,7 +10,8 @@
  * start resumes a suspended machine and a config update or a stop drops what it kept, an update can
  * take a moment to put in place, refusing another meanwhile, and a volume stays bound to its
  * machine until the machine is gone; a start can take a moment, and a command runs only in a
- * machine started; a first request can get a 429.
+ * machine started; a read of a helper job's result can be refused while the job runs on; a first
+ * request can get a 429.
  * It holds no tests: FlyRuntime's tests against it live in `fly-runtime*.test.ts`.
  */
 
@@ -32,6 +33,27 @@ import {
 export type Json = Record<string, unknown>
 /** A command in a machine Fly doesn't count as running, in the error body Fly's spec gives. */
 const NOT_RUNNING_REFUSAL: FlySchemas['ErrorResponse'] = { error: NOT_RUNNING_SAID }
+/**
+ * What a read of a helper job's result finds before the result is there: the job still `running`;
+ * the read `refused`, as Fly refused one while its job ran on; or the helper `lost`, that read and
+ * every one after it refused.
+ */
+type JobRead = 'running' | 'refused' | 'lost'
+/**
+ * What Fly said, 412, of a command it couldn't run in a started machine. The adapter reads a job
+ * again after any failed read, whatever its words, so these are the fake's to say, not
+ * `refusals.ts`'s to match.
+ */
+export const NO_CHILD_SAID = 'failed_precondition: exec request failed: No child process (os error 10)'
+const NO_CHILD_REFUSAL: FlySchemas['ErrorResponse'] = { error: NO_CHILD_SAID }
+const ran = (stdout: string) => Response.json({ exit_code: 0, stdout, stderr: '' })
+
+/** Fly's answer to a read of a job's result, where `reads` says what it finds; `lost` stays for the next. */
+function found(reads: JobRead[]): Response | null {
+  const read = reads[0] === 'lost' ? reads[0] : reads.shift()
+  if (read === undefined) return null
+  return read === 'running' ? ran('running\n') : Response.json(NO_CHILD_REFUSAL, { status: 412 })
+}
 interface FakeMachine {
   id: string
   name: string
@@ -168,6 +190,8 @@ export class FakeFly {
   snapshotReads = 0
   /** A helper job that ended without leaving a result. */
   jobGone = false
+  /** What the next reads of a helper job's result find, in turn, before the result is there. */
+  readonly jobReads: JobRead[] = []
   /** The archive an export job packs; and whether a job sending parts of it fails. */
   archiveBytes = 4096
   partsFail = false
@@ -552,8 +576,8 @@ export class FakeFly {
     // As Fly does: stdin is not passed on, so a script comes as the argument after `sh -c`.
     const [, , line = '', argument] = body.command as string[]
     if (line.startsWith('printf') && argument !== undefined) this.jobScripts.push(argument)
-    const stdout = line.includes('cat /tmp/job.result') ? `${this.#jobResult()}\n` : ''
-    return Response.json({ exit_code: 0, stdout, stderr: '' })
+    if (!line.includes('cat /tmp/job.result')) return ran('')
+    return found(this.jobReads) ?? ran(`${this.#jobResult()}\n`)
   }
 
   /** A stop, finished in the background; a suspended machine's memory goes, and nothing saves. */
