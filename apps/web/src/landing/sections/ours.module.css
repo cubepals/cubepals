@@ -3,7 +3,8 @@
  * SPDX-License-Identifier: LicenseRef-Cubepals-Reserved
  */
 
-/* Cubepals' own servers, on ink: a ruled cell each, with its state and its address to copy. */
+/* Cubepals' own servers, on ink: a ruled cell each (`bk-grid--ruled`), with its state and its
+   address to copy. */
 
 .ours {
   border-top: 1px solid var(--rule);
@@ -20,24 +21,11 @@
   max-width: 12em;
 }
 
-.list {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  border-top: 1px solid var(--rule);
-}
-
 .server {
   display: grid;
   align-content: start;
   gap: 12px;
   padding: 28px var(--gutter) 32px;
-}
-
-.server + .server {
-  border-left: 1px solid var(--rule);
 }
 
 .top {
@@ -71,15 +59,4 @@
   text-decoration: underline;
   text-decoration-thickness: 1px;
   text-underline-offset: 0.25em;
-}
-
-@media (max-width: 860px) {
-  .list {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .server + .server {
-    border-left: 0;
-    border-top: 1px solid var(--rule);
-  }
 }

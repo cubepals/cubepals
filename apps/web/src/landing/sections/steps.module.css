@@ -20,25 +20,12 @@
   max-width: 13em;
 }
 
-.grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  margin: 0;
-  padding: 0;
-  border-top: 1px solid var(--rule);
-  list-style: none;
-}
-
 .step {
   display: grid;
   grid-template-rows: auto auto auto 1fr;
   align-content: start;
   gap: 10px;
   padding: 28px var(--gutter) 36px;
-}
-
-.step + .step {
-  border-left: 1px solid var(--rule);
 }
 
 .count {
@@ -283,15 +270,6 @@
 }
 
 @media (max-width: 1060px) {
-  .grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .step + .step {
-    border-left: 0;
-    border-top: 1px solid var(--rule);
-  }
-
   .demo {
     max-width: 480px;
   }

@@ -30,7 +30,7 @@ export function Ours({ ours }: { ours: readonly PublicStatus[] }) {
             when you join, the way yours will.
           </p>
         </header>
-        <ul className={styles.list}>
+        <ul className="bk-grid bk-grid--ruled">
           {ours.map((server) => (
             <li key={server.address} className={`${styles.server} lp-arrive`}>
               <div className={styles.top}>

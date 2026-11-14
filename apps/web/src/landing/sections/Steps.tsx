@@ -34,7 +34,7 @@ export function Steps() {
             machine and the waking up are Cubepals’.
           </p>
         </header>
-        <ol className={styles.grid}>
+        <ol className="bk-grid bk-grid--three bk-grid--ruled">
           <li className={styles.step}>
             <p className={styles.count}>01</p>
             <h3 className="lp-h3">Pick what to play</h3>

@@ -2376,6 +2376,46 @@ textarea.bk-input {
 .bk-grid--two {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
+/*
+ * Cells that share their rules, as a drawing's title block does, rather than cards apart: no gap,
+ * a hairline over the grid, between the cells of a row and over every row after the first, in the
+ * ground's rule colour (`--rule` on the landing's grounds, the product's border elsewhere). The
+ * columns are the grid's own: one, two from 768px, three from 1280px with `bk-grid--three`.
+ */
+.bk-grid--ruled {
+  --bk-ruled: 1px solid var(--rule, var(--border));
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: var(--bk-ruled);
+}
+.bk-grid--ruled > :not(:first-child) {
+  border-top: var(--bk-ruled);
+}
+@media (min-width: 768px) {
+  .bk-grid--ruled > :not(:first-child) {
+    border-top: 0;
+  }
+  .bk-grid--ruled > :nth-child(n + 3) {
+    border-top: var(--bk-ruled);
+  }
+  .bk-grid--ruled > :nth-child(2n) {
+    border-left: var(--bk-ruled);
+  }
+}
+@media (min-width: 1280px) {
+  .bk-grid--three.bk-grid--ruled > :nth-child(n) {
+    border-top: 0;
+    border-left: 0;
+  }
+  .bk-grid--three.bk-grid--ruled > :nth-child(n + 4) {
+    border-top: var(--bk-ruled);
+  }
+  .bk-grid--three.bk-grid--ruled > :not(:nth-child(3n + 1)) {
+    border-left: var(--bk-ruled);
+  }
+}
 
 /*
  * Fields side by side line up. A field is three rows: its label, its control and its note (help
