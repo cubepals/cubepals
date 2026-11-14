@@ -318,18 +318,25 @@ try {
       bucketStore(state.bucket),
       sealingKey(state.authSecret),
       async (dir) => {
+        // A join that ends first (a sign-in to renew, a refusal) stops the polling below, so its
+        // own reason is what this step reports, not the poll's timeout.
+        let joinEnded = false
         const joining = bedrockJoin(
           address(),
           ['--xbox', dir, '--chat', said, '--hold', '30', '--timeout', '240'],
           current,
-        )
+        ).finally(() => {
+          joinEnded = true
+        })
+        joining.catch(() => {})
         // Once the player is in: who the server lists, then a line from its console to everyone.
-        const list = await until('listed a Bedrock player', 300, async () => {
+        const list = await until('listed a Bedrock player, or the join ended', 300, async () => {
+          if (joinEnded) return null
           const now = await consoleSays('list')
           return /:\s*\.\S/.test(now) ? now : undefined
         })
-        await consoleSays(`say ${told}`)
-        return { run: await joining, listed: list }
+        if (list !== null) await consoleSays(`say ${told}`)
+        return { run: await joining, listed: list ?? '' }
       },
     ).catch((error: unknown) => {
       if (error instanceof SignInMissing)
