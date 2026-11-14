@@ -4,8 +4,9 @@
 
 /**
  * Small pictures drawn in the game's pixels, 12 by 12, in the text's own colour: the plan cards'
- * lines and their details' chevron. Each is written as its rows, `#` for a pixel, and drawn with
- * square edges at any size. Not for the product's interface icons, which are Lucide's (`ICON`).
+ * lines and their details' chevron, and the landing's list of what Cubepals does. Each is written
+ * as its rows, `#` for a pixel, and drawn with square edges at any size. Not for the product's
+ * interface icons, which are Lucide's (`ICON`).
  */
 const ICONS = {
   friends: [
@@ -95,6 +96,30 @@ const ICONS = {
     '...##..##...',
     '....####....',
     '.....##.....',
+  ],
+  download: [
+    '.....##.....',
+    '.....##.....',
+    '.....##.....',
+    '..##.##.##..',
+    '...######...',
+    '....####....',
+    '.....##.....',
+    '............',
+    '##........##',
+    '############',
+    '############',
+  ],
+  eye: [
+    '............',
+    '............',
+    '...######...',
+    '.##......##.',
+    '#....##....#',
+    '#...####...#',
+    '#....##....#',
+    '.##......##.',
+    '...######...',
   ],
 } as const satisfies Record<string, readonly string[]>
 

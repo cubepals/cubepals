@@ -1,1340 +1,194 @@
-/*
- * SPDX-FileCopyrightText: 2026 The Cubepals Authors
+/* SPDX-FileCopyrightText: 2026 The Cubepals Authors
  *
  * SPDX-License-Identifier: LicenseRef-Cubepals-Reserved
  */
 
 /*
- * The landing page's own look, kept apart from the product's (ui/tokens.css): the page is a
- * cross-section of a Minecraft world, printed in ink on paper, that gets darker as it digs.
- *
- * Three colours and a light. Ink and paper are the brand's (brand/README.md). The night field is
- * the sky over a sleeping server. The torch, indigo, is the only other colour, and it only ever
- * means one thing: this is on. Underground and on ink it is a lighter step of the same indigo.
- *
- * Three voices. Geologica says what a player needs to know. The pixel face is the game talking
- * (the server list, the gauge). The mono face is the machine talking, and it is never used above
- * ground.
- *
- * Everything is built on one unit, `--px`: the size of one drawn pixel of the chunk. Lines are one
- * pixel thick, corners step by pixels, nothing is rounded.
+ * The landing page's look, shared by its sections (each section's own is in its module): the two
+ * grounds, the sheet the page is set on, the type, and how things arrive as they are scrolled to.
+ * Ink and paper and nothing else; grey only where the island's print makes it of ink. The design
+ * system's buttons, cards and status are the product's own (ui/components.css).
  */
 
-/* Registered so that reading them gives pixels, which the camera needs (views.ts). */
-@property --hero-x {
-  syntax: "<length>";
-  inherits: true;
-  initial-value: 0px;
-}
-@property --hero-c {
-  syntax: "<length>";
-  inherits: true;
-  initial-value: 0px;
-}
-
-.bl {
-  --stone: #e6e3dc;
-  --slate: #1c1c20;
-  --bedrock: #0e0e0f;
-
-  --gutter: clamp(20px, 4vw, 56px);
-  --rail: 0px;
-  --band: 36svh;
-  --gap: clamp(72px, 12vh, 140px);
-  --measure: 34rem;
-
-  /* The first screen's size, one curve for all of it. The headline is as large as the width and the
-     height let it be, and it stops growing at 100px only on screens that can't use more: the words
-     under it (film.module.css) and where the chunk stands follow it. Below 1536px wide the chunk is
-     where it always was, unless the words would reach it; past that it comes in toward the words, a
-     share of the room left over. */
-  --hero-h: min(5.4vw, 10.5vh);
-  --hero-w: max(min(46vw, 40rem), calc(var(--hero-h) * 6.4));
-  /* Where the words end, as far as they are written. */
-  --hero-r: calc(var(--gutter) + var(--rail) + var(--hero-w) * 0.9);
-  /* How wide the chunk is with room to spare. It is as tall as the screen's own 0.8 up to 1920px
-     wide; past that it grows with the width until the room left over is the same on either side of
-     it (a margin of 6% of the width), so the camera holds fewer blocks and the print is scaled the
-     same. */
-  --hero-c0: calc(100svh * 0.8);
-  --hero-free-c: calc(
-    var(--hero-c0) +
-    max(0px, min(100vw - var(--hero-r) - 12vw - var(--hero-c0), 100vw - 1920px))
-  );
-  /* What is left between the words and the screen's right edge, and the share of it that goes
-     between the words and the chunk: 0.4, and half of it once the chunk has grown to fit. */
-  --hero-left: calc(100vw - var(--hero-r) - var(--hero-free-c));
-  --hero-gap: calc(var(--hero-left) * 0.4 + clamp(0px, (100vw - 1920px) * 0.2, var(--hero-left) * 0.1));
-  /* The chunk's middle as the camera holds it sits a little right of what is drawn of it (the
-     house leans left), so past 1920px it is held that much further right to even the margins. */
-  --hero-mid: calc(
-    var(--hero-r) +
-    var(--hero-gap) +
-    var(--hero-free-c) *
-    0.5 +
-    clamp(0px, (100vw - 1920px) * 0.1, var(--hero-free-c) * 0.035)
-  );
-  --hero-in: min(25.4vw, max(0px, min(calc(75.4vw - var(--hero-mid)), calc((100vw - 1536px) * 0.6))));
-  /* Where across the screen the chunk's middle is with room to spare. */
-  --hero-free-x: calc(75.4vw - var(--hero-in));
-  /* The words never run onto the chunk. What is drawn of it starts 0.543 of its width left of its
-     middle, and a gutter clear of that the words stop: they wrap shorter, down to the headline in
-     four lines as a large screen sets it ("the address." is 5.6em, and its halo). On a screen too
-     narrow or too tall for even that, the chunk is drawn smaller to fill what is left up to the
-     right edge, its middle moves right with it, and it stands on the screen's foot (`.bl-first`). */
-  --hero-room: calc(var(--hero-free-x) - var(--hero-free-c) * 0.543 - var(--gutter) * 2 - var(--rail));
-  --hero-words: clamp(calc(max(3rem, var(--hero-h)) * 5.8), var(--hero-room), var(--hero-w));
-  --hero-ends: calc(var(--gutter) * 2 + var(--rail) + var(--hero-words));
-  /* How wide the chunk is, and where across the screen its middle is held: the camera reads both
-     (views.ts), and so does the print that stands in until the canvas has drawn. */
-  --hero-c: min(var(--hero-free-c), 100vw - var(--hero-ends));
-  --hero-x: max(var(--hero-free-x), var(--hero-ends) + var(--hero-c) * 0.543);
-
-  --machine: var(--font-plex-mono), ui-monospace, Menlo, monospace;
-
+.lp {
+  --gutter: clamp(20px, 4vw, 48px);
+  --wrap: 1240px;
+  --out-quart: cubic-bezier(0.25, 1, 0.5, 1);
+  --in-out-cubic: cubic-bezier(0.65, 0, 0.35, 1);
+  --mono: var(--font-plex-mono), ui-monospace, Menlo, monospace;
+  --pixel: var(--font-digits), var(--font-pixel), var(--font-plex-mono), monospace;
+  --paper: #f8f7f5;
+  --ink: #0d0d0d;
   position: relative;
-  background: var(--paper);
-  color: var(--ink);
-  font-family: var(--display);
-  font-variation-settings: "SHRP" 30;
-  font-size: 18px;
-  line-height: 1.5;
   overflow-x: clip;
-}
-
-@media (min-width: 1024px) {
-  .bl {
-    --rail: 56px;
-    --band: 0px;
-    /* Between two sections there is a whole screen of open ground: that is where the camera
-       flies, with nothing written in its way, and it has landed before the next words arrive. */
-    --gap: clamp(260px, 50vh, 560px);
-  }
-}
-
-.bl *,
-.bl *::before,
-.bl *::after {
-  box-sizing: border-box;
-}
-
-.bl :focus-visible {
-  outline: calc(var(--px) * 1.5) solid var(--fg);
-  outline-offset: calc(var(--px) * 2);
-}
-/* Inside a solid frame the ground is the ink itself, so the ring is drawn in what is written on it. */
-.bl .bl-frame--solid :focus-visible {
-  outline-color: var(--on-fg);
-}
-/* A section given the focus by a link to it is a place to carry on from, not a control. */
-.bl .bl-section:focus-visible,
-.bl .bl-section :is(h1, h2):focus-visible {
-  outline: none;
-}
-
-/* ─── Tones: what the ground is like at this depth ──────────────────────────────────────────── */
-
-/* The day is handed over in steps (Chunk.tsx), and the sky goes from one to the next evenly. */
-.bl-section[data-sky] {
-  transition: background-color 110ms linear;
-}
-.bl [data-tone="night"] {
-  /* The sky over the server: night while it sleeps, paper once someone is in. `--day` is set by
-     the chunk as it draws. The sky turns only in the last part of it, eased (Chunk.tsx turns the
-     print and its light by the same curve, `dawnOf`): the first part is the moon setting and the
-     stars going out against a sky that is still night, so neither is ever seen fading into it. */
-  --lit: clamp(0, calc((var(--day, 0) - 0.45) / 0.55), 1);
-  --field: color-mix(
-    in srgb,
-    var(--paper) calc(var(--lit) * var(--lit) * (3 - 2 * var(--lit)) * 100%),
-    var(--night)
-  );
-}
-/* The night over all the worlds at the end: night whatever the server above is doing. */
-.bl [data-tone="dusk"] {
-  --field: var(--night);
-}
-.bl [data-tone="paper"] {
-  --field: var(--paper);
-}
-.bl [data-tone="stone"] {
-  --field: var(--stone);
-  --panel: var(--paper);
-}
-.bl [data-tone="slate"],
-.bl [data-tone="bedrock"] {
-  --field: var(--slate);
-  --fg: var(--paper);
-  --line: #9a9aa6;
-  --muted: #a9a8b3;
-  --panel: #111113;
-  --on-fg: var(--ink);
-  --torch: #6a5cd3;
-}
-.bl [data-tone="bedrock"] {
-  --field: var(--bedrock);
-  --panel: #18181b;
-}
-
-/* ─── Layout: the chunk on one side of the screen, the words on the other ───────────────────── */
-
-/* The page's two forms (Layouts.tsx). Before anything has run, a screen under 1024 pixels wide
-   shows the phone's page and a wider one the film; once it runs, only the one shown is there. A
-   phone is sent its page alone, and keeps it at any width. */
-@media (max-width: 1023px) {
-  .bl:has(> [data-phone]) > :not([data-phone], footer) {
-    display: none;
-  }
-}
-@media (min-width: 1024px) {
-  .bl:has(> main:not([data-phone])) > [data-phone] {
-    display: none;
-  }
-}
-
-.bl-dig {
-  position: relative;
-}
-
-.bl-section {
-  position: relative;
-  background: var(--field);
-  color: var(--fg);
-  padding: var(--gap) var(--gutter);
-  padding-inline-start: calc(var(--gutter) + var(--rail));
-}
-
-/* A section as the proof of a beat of the film (film/): what it says, on its own ground, with no
-   place on the page. */
-@media (max-width: 1023px) {
-  .bl[data-film]:not([data-flat]) {
-    --band: 50svh;
-  }
-}
-.bl-proof__body {
-  min-height: 100%;
-  padding: clamp(28px, 5vh, 56px) clamp(20px, 3vw, 44px) clamp(40px, 8vh, 96px);
-  background: var(--field);
-  color: var(--fg);
-}
-
-/* A link to a section lands where the page rests on it: its words clear of the band on a narrow
-   screen, and on a wide one where a ride would stop (stops.ts). The page's own scrolling goes there
-   by itself; this is for the browser's own jump, which is what a phone gets, and anyone who asked
-   for less motion. */
-.bl-dig > .bl-section:has(> .bl-col) {
-  scroll-margin-top: calc(24px - var(--gap));
-}
-/* Whatever is brought into view on a narrow screen (a control given the focus, a link's target)
-   clears the band, which is as tall as `--band` says: the page scrolls under it. */
-@media (max-width: 1023px) {
-  html:has(.bl:not([data-flat]):not(:has(> [data-phone]))) {
-    scroll-padding-top: 36svh;
-  }
-}
-@media (min-width: 1024px) {
-  .bl-dig > .bl-section:has(> .bl-col) {
-    scroll-margin-top: calc(8svh + clamp(20px, 2.4vw, 40px) - var(--gap));
-  }
-}
-
-/* The page is scrolled by its own hand — Lenis on the wheel, touch and the keys — and the rail
-   beside it shows where it stands, so the window keeps no scrollbar of its own here and the page
-   fills it edge to edge. The webkit rule is for Safari and older Chromium. Only the page's own:
-   no scroller inside is touched, and every other page keeps the scrollbars globals.css gives. */
-html:has(.bl) {
-  scrollbar-width: none;
-}
-html:has(.bl)::-webkit-scrollbar {
-  display: none;
-}
-
-/* On a wide screen the words sit above the chunk's canvas and the ground they are written on sits
-   below it. On a narrow one the chunk is a band and everything scrolls under it. */
-.bl-col {
-  position: relative;
-  z-index: 1;
-  max-width: 52rem;
-}
-@media (min-width: 1024px) {
-  .bl-col {
-    z-index: 4;
-  }
-  /* The words keep to a little over half the screen, on the side the chunk isn't, and they are
-     set on a plate of the ground's own colour: the drawing is free to run behind them, and where
-     it does, it is cut away. */
-  .bl-dig .bl-section > .bl-col {
-    --plate: clamp(20px, 2.4vw, 40px);
-    isolation: isolate;
-    max-width: calc(min(52rem, 54vw - var(--rail) - var(--gutter)) + var(--plate) * 2);
-    margin: calc(var(--plate) * -1);
-    padding: var(--plate);
-  }
-  .bl-dig .bl-section > .bl-col::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    z-index: -1;
-    background: var(--field);
-    --step: calc(var(--px) * 3);
-    clip-path: polygon(
-      0 var(--step),
-      var(--step) var(--step),
-      var(--step) 0,
-      calc(100% - var(--step)) 0,
-      calc(100% - var(--step)) var(--step),
-      100% var(--step),
-      100% calc(100% - var(--step)),
-      calc(100% - var(--step)) calc(100% - var(--step)),
-      calc(100% - var(--step)) 100%,
-      var(--step) 100%,
-      var(--step) calc(100% - var(--step)),
-      0 calc(100% - var(--step))
-    );
-  }
-  /* The plate is a thing in the picture, not a hole in it: a slab standing a few pixels proud of
-     the drawing, the way a button stands proud of the page, with its shadow printed in the same
-     dots as everything else. */
-  .bl-dig .bl-section > .bl-col::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    z-index: -2;
-    translate: calc(var(--px) * 4) calc(var(--px) * 4);
-    background: var(--fg);
-    --step: calc(var(--px) * 3);
-    clip-path: polygon(
-      0 var(--step),
-      var(--step) var(--step),
-      var(--step) 0,
-      calc(100% - var(--step)) 0,
-      calc(100% - var(--step)) var(--step),
-      100% var(--step),
-      100% calc(100% - var(--step)),
-      calc(100% - var(--step)) calc(100% - var(--step)),
-      calc(100% - var(--step)) 100%,
-      var(--step) 100%,
-      var(--step) calc(100% - var(--step)),
-      0 calc(100% - var(--step))
-    );
-    -webkit-mask:
-      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 2 2' shape-rendering='crispEdges'%3E%3Cpath d='M0 0h1v1H0zM1 1h1v1H1z'/%3E%3C/svg%3E")
-      0 0 / calc(var(--px) * 2) calc(var(--px) * 2);
-    mask:
-      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 2 2' shape-rendering='crispEdges'%3E%3Cpath d='M0 0h1v1H0zM1 1h1v1H1z'/%3E%3C/svg%3E")
-      0 0 / calc(var(--px) * 2) calc(var(--px) * 2);
-    image-rendering: pixelated;
-    pointer-events: none;
-  }
-  .bl-dig .bl-section[data-side="left"] > .bl-col {
-    margin-inline-start: auto;
-  }
-  .bl-dig .bl-section[data-side="center"] > .bl-col {
-    max-width: none;
-  }
-}
-
-/* The words set on the picture keep it off their letters with a halo of their own ground, three
-   pixels round each letter and drawn under it, so the picture runs on behind them and none of it
-   is erased. A button, a field or the game's own lettering has a ground of its own and no halo. */
-.bl [data-over] {
-  -webkit-text-stroke: 6px var(--field);
-  paint-order: stroke fill;
-}
-.bl [data-over] :is(.bl-btn, .bl-game, button, input, [data-field]),
-.bl [data-over] :is(.bl-btn, .bl-game, button, input, [data-field]) * {
-  -webkit-text-stroke: 0;
-}
-
-/* The chunk's place. On a wide screen its canvas covers the whole view and stays there for as long
-   as the dig lasts, and the camera moves within it. On a narrow one it is a band pinned to the
-   top, and the page scrolls under it; the band takes the colour of whichever stratum is passing
-   its lower edge. */
-.bl-spine {
-  position: sticky;
-  top: 0;
-  z-index: 3;
-  height: var(--band);
-  background: var(--field);
-  border-bottom: var(--px) solid var(--line);
-  pointer-events: none;
-}
-.bl-chunk {
-  display: block;
-  width: 100%;
-  height: 100%;
-  image-rendering: pixelated;
-  /* Nothing inside the canvas lays anything else out, and the browser is told so. */
-  contain: strict;
-}
-@media (min-width: 1024px) {
-  .bl-spine {
-    position: absolute;
-    inset: 0;
-    height: auto;
-    background: none;
-    border: 0;
-  }
-  .bl-chunk {
-    position: sticky;
-    top: 0;
-    height: 100svh;
-  }
-}
-
-/* The hero's chunk as printed beforehand by the same print, 1440 by 900 at one and at two device
-   pixels to a CSS pixel (public/imagery/landing-hero*.png, one pixel a dot), over the canvas until
-   the canvas has drawn its first lit frame (`data-lit`, engine/gl.ts), and then dissolving into it.
-   The camera keeps the chunk as wide as `--hero-c` and its middle at `--hero-x` across, both of
-   which it reads from here, so a still scaled and placed by the same lengths lands where the live
-   print does at any size. Only on a wide screen, where the canvas is the whole screen; it scrolls
-   away with the hero. */
-.bl-first {
-  display: none;
-}
-@media (min-width: 1024px) {
-  .bl-first {
-    position: absolute;
-    /* Scaled with the chunk, about the place the camera holds (drop 0.202, Film.tsx); drawn
-       smaller than the screen it stands on its foot, so the column still runs off it (views.ts). */
-    top: max(0.202 * (100svh - var(--hero-c) / 0.8), 100svh - var(--hero-c) / 0.8);
-    left: var(--hero-x);
-    display: block;
-    width: auto;
-    max-width: none;
-    height: calc(var(--hero-c) / 0.8);
-    translate: -75.4% 0;
-    image-rendering: pixelated;
-    pointer-events: none;
-    transition:
-      opacity 240ms ease-out,
-      visibility 0s;
-  }
-  .bl-chunk[data-lit] ~ .bl-first {
-    visibility: hidden;
-    opacity: 0;
-    transition:
-      opacity 240ms ease-out,
-      visibility 0s 240ms;
-  }
-}
-
-/* Three letters over the chimney of the phone's sleeping server (phone/Still.tsx), rising a step
-   at a time. */
-.bl-snore {
-  position: absolute;
-  top: 0;
-  left: 0;
-  display: flex;
-  align-items: flex-end;
-  gap: calc(var(--px) * 2);
-  color: var(--ink);
-  opacity: 0;
-  transition: opacity 300ms steps(3);
-}
-.bl-snore i {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  font-style: normal;
-  line-height: 1;
-  opacity: 0;
-  animation: bl-snore 3s step-end infinite;
-}
-.bl-snore i:nth-child(1) {
-  font-size: 1.125rem;
-  translate: 6px -4px;
-}
-.bl-snore i:nth-child(2) {
-  font-size: 1.5rem;
-  translate: 20px -22px;
-  animation-delay: 0.5s;
-}
-.bl-snore i:nth-child(3) {
-  font-size: 2rem;
-  translate: 40px -46px;
-  animation-delay: 1s;
-}
-@keyframes bl-snore {
-  0% {
-    opacity: 0;
-  }
-  10% {
-    opacity: 1;
-  }
-  70% {
-    opacity: 0;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .bl-snore i {
-    animation: none;
-    opacity: 1;
-  }
-}
-
-.bl[data-flat] .bl-spine,
-.bl[data-flat] [data-drawn] {
-  display: none;
-}
-/* The first screen keeps its own form: the hero as it was printed beforehand (`.bl-first`) stands
-   where the chunk is, at the layout of the working page, and nothing of it moves with the scroll. */
-@media (min-width: 1024px) {
-  .bl[data-flat] .bl-spine {
-    display: block;
-  }
-  .bl[data-flat] .bl-chunk {
-    display: none;
-  }
-  /* The headline's lines are slid by the scroll (Type.tsx), inline; held where they are written. */
-  .bl[data-flat] #top .bl-line {
-    /* biome-ignore lint/complexity/noImportantStyles: the slide is written inline by the scroll */
-    transform: none !important;
-    /* biome-ignore lint/complexity/noImportantStyles: the slide is written inline by the scroll */
-    translate: none !important;
-  }
-}
-/* Without the drawing, the scenes that hold the screen still for it are plain sections: the words,
-   and under them the rooms as a list. */
-.bl[data-flat] .bl-section:not(#top, .bl-beat):has(> [data-scene]) {
-  min-height: 0;
-  padding: var(--gap) var(--gutter);
-  padding-inline-start: calc(var(--gutter) + var(--rail));
-}
-.bl[data-flat] .bl-section:not(#top) > [data-scene] {
-  position: static;
-  height: auto;
-  overflow: visible;
-}
-.bl[data-flat] [data-scene] > [data-words] {
-  position: static;
-  translate: none;
-  width: auto;
-  max-width: 44rem;
-}
-.bl[data-flat] [data-scene] > [data-rooms] {
-  display: grid;
-  max-width: 44rem;
-  margin-top: 32px;
-  border-top: var(--px) solid var(--line);
-}
-.bl[data-flat] [data-rooms] > li {
-  position: static;
-  opacity: 1;
-  border-bottom: var(--px) solid color-mix(in srgb, var(--line) 25%, transparent);
-}
-.bl[data-flat] [data-rooms] > li > a {
-  flex-direction: row-reverse;
-  justify-content: flex-end;
-  min-height: 48px;
-  translate: none;
-}
-.bl[data-flat] [data-rooms] > li > a::before {
-  display: none;
-}
-.bl[data-flat] {
-  --band: 0px;
-}
-/* The film without the drawing: each beat is its sentence and whatever it has to press, one under
-   another, as a page of plain statements. */
-.bl[data-flat] .bl-beat:not(#top) {
-  min-height: 0;
-  padding: clamp(28px, 6vh, 64px) var(--gutter);
-  padding-inline-start: calc(var(--gutter) + var(--rail));
-}
-.bl[data-flat] .bl-beat:not(#top) > [data-scene] {
-  display: grid;
-  justify-items: start;
-  gap: 18px;
-  min-height: 0;
-  padding: 0;
-}
-.bl[data-flat] .bl-beat:not(#top) [data-over] {
-  position: static;
-}
-/* With nothing drawn beside them, the words have no side to keep to and no picture to stand proud
-   of: every section starts at the same edge, at its full measure. */
-@media (min-width: 1024px) {
-  .bl[data-flat] .bl-dig .bl-section > .bl-col {
-    max-width: calc(52rem + var(--plate) * 2);
-    margin-inline: calc(var(--plate) * -1) auto;
-  }
-  .bl[data-flat] .bl-dig .bl-section > .bl-col::after {
-    display: none;
-  }
-}
-.bl[data-flat] [data-tone="night"] {
-  transition: background-color 1.2s steps(6);
-}
-
-/* ─── The sky: the moon ─────────────────────────────────────────────────────────────────────── */
-
-/* `--day` runs from 0, night, to 1, day (Chunk.tsx hands it over in small steps, and a short
-   transition carries each to the next). It is eased here, so the moon gathers speed and sheds it,
-   and nothing in the sky fades. The moon sets: down from its place, curving in behind the house,
-   which is drawn over it; at night it comes back up the same way. Day has nothing in its sky: it
-   is the plain page, and that is enough. */
-.bl-moon {
-  --m: clamp(0, calc(var(--day, 0) / 0.45), 1);
-  --e: calc(var(--m) * var(--m) * (3 - 2 * var(--m)));
-  position: absolute;
-  inset-block-start: 12svh;
-  inset-inline-end: 7vw;
-  width: calc(var(--px) * 14);
-  height: calc(var(--px) * 14);
-  pointer-events: none;
-  transition:
-    translate 110ms linear,
-    scale 110ms linear;
   background: var(--paper);
-  --s: calc(var(--px) * 3);
-  clip-path: polygon(
-    var(--s) 0,
-    calc(100% - var(--s)) 0,
-    calc(100% - var(--s)) var(--s),
-    100% var(--s),
-    100% calc(100% - var(--s)),
-    calc(100% - var(--s)) calc(100% - var(--s)),
-    calc(100% - var(--s)) 100%,
-    var(--s) 100%,
-    var(--s) calc(100% - var(--s)),
-    0 calc(100% - var(--s)),
-    0 var(--s),
-    var(--s) var(--s)
-  );
-  translate: calc((cos(var(--e) * 90deg) - 1) * 17vw) calc(sin(var(--e) * 90deg) * 43svh);
-  /* Gone once it is well behind the roof, in case the house isn't quite where it was. */
-  scale: clamp(0, calc((1 - var(--e)) * 40), 1);
-}
-/* On a narrow screen it would land on the headline; the band above has the sky. */
-@media (max-width: 1023px) {
-  .bl-moon {
-    display: none;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .bl-moon {
-    transition: none;
-  }
+  color: var(--ink);
+  font-family: var(--font-geologica), var(--font-figtree), system-ui, sans-serif;
+  font-variation-settings: "SHRP" 30;
 }
 
-/* ─── Type ──────────────────────────────────────────────────────────────────────────────────── */
-
-.bl-display,
-.bl-h2,
-.bl-h3 {
-  margin: 0;
-  font-family: var(--display);
-  font-variation-settings: "SHRP" 100;
-  font-weight: 800;
-  letter-spacing: -0.055em;
-  text-wrap: balance;
-  color: var(--fg);
-}
-.bl-display {
-  font-size: clamp(3.25rem, 8.6vw, 9.5rem);
-  line-height: 0.86;
-}
-.bl-h2 {
-  font-size: clamp(2.5rem, 5.4vw, 5.5rem);
-  line-height: 0.9;
-}
-.bl-h3 {
-  font-size: clamp(1.5rem, 2.2vw, 2rem);
-  line-height: 1;
-  letter-spacing: -0.04em;
-}
-.bl-lede {
-  margin: 0;
-  max-width: var(--measure);
-  font-size: clamp(1.125rem, 1.5vw, 1.375rem);
-  line-height: 1.4;
-  text-wrap: pretty;
-}
-.bl-body {
-  margin: 0;
-  max-width: var(--measure);
-  text-wrap: pretty;
-}
-.bl-small {
-  margin: 0;
-  font-size: 0.875rem;
-  line-height: 1.45;
-  color: var(--muted);
-}
-/* A note in the margin: what keeps a picture honest, said quietly, below everything it qualifies. */
-.bl-aside {
-  margin: 0;
-  font-family: var(--font-aside), Georgia, serif;
-  font-style: italic;
-  font-size: 1.0625rem;
-  line-height: 1.3;
-  letter-spacing: 0.005em;
-  opacity: 0.62;
-}
-.bl-muted {
-  color: var(--muted);
+/* The two grounds. A section says which it is (`data-tone`), and everything in it is drawn in
+   that ground's inks: the header reads the same attribute to take the ground under it. */
+.lp [data-tone="ink"] {
+  --ground: #0d0d0d;
+  --on-ground: #f8f7f5;
+  --on-ground-muted: #bdbab2;
+  --on-ground-faint: #6d6a64;
+  --rule: #2b2a28;
+  background: var(--ground);
+  color: var(--on-ground);
 }
 
-/* A heading's lines while they are being printed in (Type.tsx). The window each line rises in is
-   given room above and below, since the display type is set tighter than its own ascenders and
-   descenders. */
-.bl-line-mask {
-  padding-block: 0.14em;
-  margin-block: -0.14em;
-}
-/* Two masks' margins collapse into one, so the second takes back both paddings between them, and
-   a heading is as tall while it is being printed as it is afterwards. */
-.bl-line-mask + .bl-line-mask {
-  margin-top: -0.28em;
-}
-.bl-line {
-  will-change: transform;
+.lp [data-tone="paper"] {
+  --ground: #f8f7f5;
+  --on-ground: #0d0d0d;
+  --on-ground-muted: #3a3835;
+  --on-ground-faint: #a9a59c;
+  --rule: #dcd8d0;
+  background: var(--ground);
+  color: var(--on-ground);
 }
 
-/* The machine's voice: names, flags, log lines. Below ground only. */
-.bl-mono {
-  font-family: var(--machine);
-  font-variation-settings: normal;
-  font-size: 0.8125rem;
-  line-height: 1.55;
-  letter-spacing: 0;
+/* The sheet: the page's measure, between two hairlines that run its whole height, with a
+   printer's register mark wherever a section's edge crosses one. */
+.lp-sheet {
+  position: relative;
+  max-width: var(--wrap);
+  margin-inline: auto;
+  border-inline: 1px solid var(--rule);
 }
 
-.bl-num {
-  font-variant-numeric: tabular-nums;
+.lp-sheet::before,
+.lp-sheet::after {
+  content: "";
+  position: absolute;
+  z-index: 1;
+  top: -6px;
+  width: 11px;
+  height: 11px;
+  background:
+    linear-gradient(var(--on-ground-faint), var(--on-ground-faint)) center / 1px 100% no-repeat,
+    linear-gradient(var(--on-ground-faint), var(--on-ground-faint)) center / 100% 1px no-repeat;
+  pointer-events: none;
 }
 
-/* ─── Blocks: chips, with stepped corners (frames and buttons are in blocks.css) ────────────── */
+.lp-sheet::before {
+  left: -6px;
+}
 
-/* A chip: one of a few choices. The chosen one is filled. */
-.bl-chip {
+.lp-sheet::after {
+  right: -6px;
+}
+
+.lp-pad {
+  padding-inline: var(--gutter);
+}
+
+/* A section's head: its mono label, the heading, and a sentence or two under it. */
+.lp-label {
   display: inline-flex;
   align-items: center;
-  gap: 0.5em;
-  min-height: 36px;
-  padding: 0 calc(var(--px) * 6);
-  border: var(--px) solid var(--line);
-  background: transparent;
-  color: var(--fg);
-  font: inherit;
-  font-size: 0.9375rem;
+  gap: 10px;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 16px;
   font-weight: 500;
-  cursor: pointer;
-}
-.bl-chip[aria-pressed="true"],
-.bl-chip[aria-checked="true"],
-.bl-chip[aria-selected="true"] {
-  background: var(--fg);
-  border-color: var(--fg);
-  color: var(--on-fg);
-}
-.bl-chip:hover:not([aria-pressed="true"], [aria-checked="true"], [aria-selected="true"]) {
-  background: color-mix(in srgb, var(--fg) 10%, transparent);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--on-ground-muted);
 }
 
-.bl-rule {
-  height: var(--px);
-  margin: 0;
-  border: 0;
-  background: var(--line);
+.lp-label::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  background: currentcolor;
 }
 
-/* A tag: a few words of the game's or the machine's voice set on a block of ink. */
-.bl-tag {
-  display: inline-block;
-  padding: calc(var(--px) * 1) calc(var(--px) * 3);
-  background: var(--fg);
-  color: var(--on-fg);
-  font-family: var(--game);
-  font-variation-settings: normal;
-  font-weight: 400;
-  font-size: 0.9375rem;
-  line-height: 1.3;
-}
-.bl-tag--lit {
-  background: var(--torch);
-  color: var(--ink);
-}
-
-/* The edge between two strata: the lower one's colour arriving in rows of denser and denser dots. */
-.bl-strata {
-  display: grid;
-  background: var(--from, var(--stone));
-  color: var(--to, var(--slate));
-}
-.bl-strata > i {
-  display: block;
-  height: calc(var(--px) * 8);
-  --dot: calc(var(--px) * 2);
-}
-.bl-strata > i:last-child {
-  background-color: currentColor;
-}
-
-/* ─── The gauge: how deep you are, the way the game says it ─────────────────────────────────── */
-
-.bl-gauge {
-  position: fixed;
-  z-index: 5;
-  inset-block-start: calc(var(--band) - 30px);
-  inset-inline-start: 12px;
-  pointer-events: none;
-  /* Ink with a paper line round it, as the cursor and the following button are: over the night
-     sky a colour taken from the ground behind is nearly the colour of the sky. Each part draws
-     its own line (a filter over the whole rail would be drawn again on every frame of a flight,
-     since the depth changes on every one). */
-  color: var(--ink);
-}
-.bl-gauge__stops {
-  display: none;
-}
-.bl-gauge__y {
-  font-family: var(--game);
-  font-size: 1rem;
-  line-height: 1;
-  white-space: nowrap;
-  -webkit-text-stroke: 6px var(--paper);
-  paint-order: stroke fill;
-}
-.bl-gauge__dug {
-  display: none;
-}
-.bl[data-flat] .bl-gauge {
-  display: none;
-}
-@media (min-width: 1024px) {
-  .bl-gauge {
-    inset-block: 0;
-    inset-inline-start: 0;
-    width: var(--rail);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: calc(var(--px) * 10);
-  }
-  /* One mark for each stratum, the current one filled; its name appears beside it when asked. */
-  .bl-gauge__stops {
-    display: grid;
-    gap: calc(var(--px) * 3);
-    margin: 0;
-    padding: 0;
-    list-style: none;
-    pointer-events: auto;
-  }
-  .bl-gauge__stops a {
-    position: relative;
-    display: grid;
-    place-items: center;
-    width: calc(var(--px) * 12);
-    height: calc(var(--px) * 9);
-    color: inherit;
-    text-decoration: none;
-  }
-  .bl-gauge__stops a::before {
-    content: "";
-    width: calc(var(--px) * 3);
-    height: calc(var(--px) * 3);
-    background: currentColor;
-    /* A halo of the ground, as the words on the picture have, so the mark is never lost in it. */
-    box-shadow: 0 0 0 calc(var(--px) * 2) var(--paper);
-  }
-  .bl-gauge__stops a[aria-current]::before {
-    width: calc(var(--px) * 6);
-    height: calc(var(--px) * 6);
-    opacity: 1;
-  }
-  .bl-gauge__stops span {
-    position: absolute;
-    inset-inline-start: calc(100% + var(--px) * 2);
-    padding: calc(var(--px) * 1) calc(var(--px) * 3);
-    background: var(--ink);
-    color: var(--paper);
-    outline: var(--px) solid var(--paper);
-    font-family: var(--game);
-    font-size: 0.9375rem;
-    line-height: 1.3;
-    white-space: nowrap;
-    /* Not on show until asked for, but still the link's name for a screen reader. */
-    opacity: 0;
-    pointer-events: none;
-  }
-  .bl-gauge__stops a:hover span,
-  .bl-gauge__stops a:focus-visible span {
-    opacity: 1;
-  }
-  /* The dig is ink on stone all the way down, so the depth is told here: the Y is set large. */
-  .bl-gauge__y {
-    writing-mode: vertical-rl;
-    rotate: 180deg;
-    font-size: 1.5rem;
-  }
-  .bl-gauge__dug {
-    display: block;
-    position: absolute;
-    inset-block-end: calc(var(--px) * 30);
-  }
-}
-
-/* ─── The button that follows ───────────────────────────────────────────────────────────────── */
-
-/* An ink block with a paper line round it: on paper the line vanishes and it is a block, on the
-   dark ground the line is what shows, and over the chunk's dither it stays solid either way. */
-.bl-follow {
-  position: fixed;
-  z-index: 6;
-  inset-block-start: 14px;
-  inset-inline-end: var(--gutter);
-  display: inline-flex;
-  align-items: center;
-  min-height: 40px;
-  padding: 0 calc(var(--px) * 8);
-  background: var(--ink);
-  color: var(--paper);
-  outline: var(--px) solid var(--paper);
-  font-family: var(--display);
+.lp-display {
+  font-size: clamp(46px, 7.4vw, 108px);
+  line-height: 0.93;
+  font-weight: 640;
+  letter-spacing: -0.048em;
   font-variation-settings: "SHRP" 100;
-  font-weight: 700;
-  font-size: 0.9375rem;
-  letter-spacing: -0.02em;
-  text-decoration: none;
-  white-space: nowrap;
-  visibility: hidden;
-  translate: 0 calc(var(--px) * -4);
-  opacity: 0;
-  transition:
-    opacity 160ms steps(3),
-    translate 160ms steps(3),
-    visibility 0s 160ms;
-}
-.bl-follow[data-shown] {
-  visibility: visible;
-  translate: 0 0;
-  opacity: 1;
-  transition:
-    opacity 160ms steps(3),
-    translate 160ms steps(3);
-}
-/* Under a pointer it answers at once, as the button it stands in for does: the arrival's three
-   slow steps would show nothing for the first tenth of a second. */
-.bl-follow[data-shown]:hover,
-.bl-follow[data-shown]:active {
-  transition: translate 120ms cubic-bezier(0.25, 1, 0.5, 1);
-}
-/* Ink and paper both, so the ring shows on any ground. */
-.bl .bl-follow:focus-visible {
-  outline: calc(var(--px) * 1.5) solid var(--paper);
-  outline-offset: calc(var(--px) * 2);
-  box-shadow: 0 0 0 calc(var(--px) * 5.5) var(--ink);
-}
-.bl-follow:hover {
-  translate: 0 calc(var(--px) * -1);
-}
-.bl-follow:active {
-  translate: 0 var(--px);
-}
-/* The bar stands at the foot of the phone's screen: whatever the page brings into view keeps
-   72 px clear of it, so it never covers a heading. */
-html:has([data-phone]) {
-  scroll-padding-block-end: 72px;
-}
-/* On the phone's page it is a bar along the foot of the screen, where a thumb is. */
-.bl [data-phone] .bl-follow {
-  inset-block: auto max(14px, env(safe-area-inset-bottom));
-  inset-inline: var(--gutter);
-  justify-content: center;
-  min-height: 52px;
-  font-size: 1.0625rem;
-  translate: 0 calc(var(--px) * 4);
-}
-.bl [data-phone] .bl-follow[data-shown] {
-  translate: 0 0;
+  text-wrap: balance;
 }
 
-/* ─── What the chunk says ───────────────────────────────────────────────────────────────────── */
+.lp-h2 {
+  font-size: clamp(34px, 4.8vw, 68px);
+  line-height: 0.98;
+  font-weight: 620;
+  letter-spacing: -0.042em;
+  font-variation-settings: "SHRP" 100;
+  text-wrap: balance;
+}
 
-/* A line of chat at the lower left, where the game puts its own, when the chunk has something to
-   say about what was just done to it. It says it and goes. */
-.bl-chat {
-  position: fixed;
-  z-index: 6;
-  inset-block-end: clamp(14px, 3vh, 28px);
-  inset-inline-start: calc(var(--rail) + var(--gutter));
-  max-width: min(28rem, 60vw);
-  pointer-events: none;
+.lp-h3 {
+  font-size: 20px;
+  line-height: 26px;
+  font-weight: 620;
+  letter-spacing: -0.015em;
+  font-variation-settings: "SHRP" 100;
 }
-.bl-chat span {
-  display: inline-block;
-  padding: var(--px) calc(var(--px) * 3);
-  background: var(--ink);
-  color: var(--paper);
-  outline: var(--px) solid var(--paper);
-  font-size: 1rem;
-  animation: bl-chat 4.2s steps(8) both;
+
+.lp-lede {
+  max-width: 34em;
+  font-size: clamp(17px, 1.35vw, 20px);
+  line-height: 1.5;
+  color: var(--on-ground-muted);
+  text-wrap: pretty;
 }
-@keyframes bl-chat {
-  0% {
-    opacity: 0;
-    translate: 0 calc(var(--px) * 3);
+
+.lp-body {
+  font-size: 16px;
+  line-height: 24px;
+  color: var(--on-ground-muted);
+  text-wrap: pretty;
+}
+
+.lp-mono {
+  font-family: var(--mono);
+}
+
+.lp a:not([class]) {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.22em;
+}
+
+.lp :focus-visible {
+  outline: 2px solid var(--on-ground, var(--ink));
+  outline-offset: 3px;
+}
+
+/* The page's anchors land clear of the header. */
+.lp [id] {
+  scroll-margin-top: 80px;
+}
+
+/*
+ * Arriving: what is scrolled to comes up into place as it enters, driven by the scroll itself
+ * (no script, and no clock that runs on without the reader). Where the browser can't, or less
+ * motion is asked for, it is simply there.
+ */
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .lp-arrive {
+      animation: lp-arrive var(--out-quart) both;
+      animation-timeline: view();
+      animation-range: entry 0% entry 55%;
+    }
   }
-  5%,
-  82% {
+}
+
+@keyframes lp-arrive {
+  from {
+    opacity: 0;
+    translate: 0 28px;
+  }
+  to {
     opacity: 1;
     translate: 0 0;
   }
-  100% {
-    opacity: 0;
-  }
-}
-
-/* ─── The mark at a section's foot ──────────────────────────────────────────────────────────── */
-
-/* A few pixels of an arrow at the foot of the screen, where a push past the end of a section
-   leads on. It gives a little under the push and a second one grows in behind it. No box, no bar,
-   no name: a touch, for whoever is looking. Ink with a paper line round it, as the cursor is, so
-   it is there on any ground. Only a wide screen with a wheel is steered this way (Scroll.tsx). */
-.bl-next {
-  position: fixed;
-  z-index: 6;
-  inset-block-end: clamp(12px, 2.4vh, 22px);
-  inset-inline-start: 50%;
-  display: none;
-  gap: calc(var(--px) * 2);
-  justify-items: center;
-  color: var(--ink);
-  font-size: 0.9375rem;
-  line-height: 1;
-  white-space: nowrap;
-  text-shadow:
-    var(--px) 0 0 var(--paper),
-    calc(var(--px) * -1) 0 0 var(--paper),
-    0 var(--px) 0 var(--paper),
-    0 calc(var(--px) * -1) 0 var(--paper);
-  pointer-events: none;
-  translate: -50% 0;
-  scale: 0;
-  transition: scale 180ms cubic-bezier(0.22, 1, 0.36, 1);
-}
-@media (min-width: 1024px) {
-  .bl-next {
-    display: grid;
-  }
-}
-.bl-next[data-shown] {
-  scale: 1;
-}
-.bl-next__mark {
-  width: calc(var(--px) * 5);
-  height: calc(var(--px) * 3);
-  overflow: visible;
-  fill: var(--ink);
-  stroke: var(--paper);
-  stroke-width: 1;
-  paint-order: stroke;
-  translate: 0 calc(var(--push, 0) * var(--px) * 3);
-  transition:
-    translate 140ms cubic-bezier(0.22, 1, 0.36, 1),
-    scale 140ms cubic-bezier(0.22, 1, 0.36, 1);
-}
-/* The second one, behind the first, grown in proportion to the push. Nothing here fades. */
-.bl-next__echo {
-  margin-top: calc(var(--px) * -1);
-  scale: var(--push, 0);
-}
-/* With words (the first screen's "Scroll to join") it stands in the open field under the words'
-   column, clear of the picture on the right. */
-.bl-next:has([data-part="words"]:not(:empty)) {
-  inset-inline-start: calc(var(--gutter) + var(--rail));
-  justify-items: start;
-  translate: none;
-}
-/* Pushing back up, the same mark at the top of the screen, turned to point up. */
-.bl-next[data-way="up"] {
-  inset-block: clamp(12px, 2.4vh, 22px) auto;
-  rotate: 180deg;
-}
-.bl-next[data-way="up"] span {
-  rotate: 180deg;
-}
-
-/* ─── The cursor ────────────────────────────────────────────────────────────────────────────── */
-
-/* The game's crosshair. With a mouse it stands in for the arrow; `data-cursor` is only set once
-   the page's own cursor is running. */
-@media (hover: hover) and (pointer: fine) {
-  .bl[data-cursor],
-  .bl[data-cursor] * {
-    /* biome-ignore lint/complexity/noImportantStyles: every pointer and hand below gives way to the crosshair */
-    cursor: none !important;
-  }
-  .bl[data-cursor] :is(input, textarea, select) {
-    /* biome-ignore lint/complexity/noImportantStyles: a field you type in keeps the device's own cursor */
-    cursor: auto !important;
-  }
-}
-/* The crosshair is ink with a paper line round it, so it is there on any ground, the dither of
-   the chunk included. Nothing here takes the pointer: it is all drawn over the page. */
-.bl-cursor {
-  position: fixed;
-  inset: 0;
-  z-index: 50;
-  pointer-events: none;
-  contain: layout style;
-}
-.bl-cursor[data-state="away"] {
-  visibility: hidden;
-}
-.bl-cursor__cross {
-  position: absolute;
-  top: calc(var(--px) * -6.5);
-  left: calc(var(--px) * -6.5);
-  width: calc(var(--px) * 13);
-  height: calc(var(--px) * 13);
-  overflow: visible;
-  fill: var(--ink);
-  stroke: var(--paper);
-  stroke-width: 1;
-  stroke-linejoin: miter;
-  paint-order: stroke;
-}
-.bl-cursor__cross path {
-  transform-origin: 6.5px 6.5px;
-  transition: scale 90ms steps(3);
-}
-.bl-cursor__cross [data-for="dig"],
-.bl-cursor__cross [data-for="kept"],
-.bl-cursor[data-state="dig"] .bl-cursor__cross [data-for="aim"],
-.bl-cursor[data-state="kept"] .bl-cursor__cross [data-for="aim"] {
-  visibility: hidden;
-}
-.bl-cursor[data-state="dig"] .bl-cursor__cross [data-for="dig"],
-.bl-cursor[data-state="kept"] .bl-cursor__cross [data-for="kept"] {
-  visibility: visible;
-}
-.bl-cursor[data-state="press"] .bl-cursor__cross path {
-  scale: 0.5;
-}
-.bl-cursor[data-down] .bl-cursor__cross path {
-  scale: 0.7;
-}
-/* Round what can be pressed: four corners, as the game marks the block you are looking at. */
-.bl-cursor__box {
-  position: absolute;
-  top: 0;
-  left: 0;
-  visibility: hidden;
-  transition:
-    translate 110ms steps(4),
-    width 110ms steps(4),
-    height 110ms steps(4);
-}
-.bl-cursor[data-state="press"] .bl-cursor__box {
-  visibility: visible;
-}
-.bl-cursor__box svg {
-  position: absolute;
-  width: calc(var(--px) * 7);
-  height: calc(var(--px) * 7);
-  overflow: visible;
-  fill: var(--ink);
-  stroke: var(--paper);
-  stroke-width: 1;
-  paint-order: stroke;
-}
-.bl-cursor__box svg:nth-child(1) {
-  top: 0;
-  left: 0;
-}
-.bl-cursor__box svg:nth-child(2) {
-  top: 0;
-  right: 0;
-  rotate: 90deg;
-}
-.bl-cursor__box svg:nth-child(3) {
-  bottom: 0;
-  right: 0;
-  rotate: 180deg;
-}
-.bl-cursor__box svg:nth-child(4) {
-  bottom: 0;
-  left: 0;
-  rotate: 270deg;
-}
-/* What a click would do here, said once: it goes away with the first block dug. */
-.bl-cursor__hint {
-  position: absolute;
-  top: 0;
-  left: 0;
-  padding: var(--px) calc(var(--px) * 3);
-  background: var(--ink);
-  color: var(--paper);
-  outline: var(--px) solid var(--paper);
-  font-size: 0.9375rem;
-  white-space: nowrap;
-  visibility: hidden;
-}
-.bl-cursor[data-state="dig"][data-hint] .bl-cursor__hint {
-  visibility: visible;
-}
-
-/* ─── Motion ────────────────────────────────────────────────────────────────────────────────── */
-
-/* Someone who asked for less motion gets the same page, with every change arriving at once. The
-   demonstrations read this too and skip their own timers. */
-@media (prefers-reduced-motion: reduce) {
-  .bl *,
-  .bl *::before,
-  .bl *::after {
-    scroll-behavior: auto;
-  }
-  .bl-follow,
-  .bl-follow[data-shown],
-  .bl-snore,
-  .bl-cursor__box,
-  .bl-cursor__cross path,
-  .bl-section[data-sky] {
-    transition: none;
-  }
-  /* A line of chat appears and goes; it doesn't slide. */
-  .bl-chat span {
-    animation-name: bl-chat-still;
-  }
-}
-@keyframes bl-chat-still {
-  0%,
-  100% {
-    opacity: 0;
-  }
-  5%,
-  82% {
-    opacity: 1;
-  }
-}
-
-/* ─── A demonstration and the facts under it ────────────────────────────────────────────────── */
-
-.bl-demo {
-  margin: clamp(28px, 5vh, 48px) 0 0;
-}
-.bl-demo__body {
-  padding: clamp(16px, 2.4vw, 28px);
-  /* A demonstration that is playing changes its own insides every few seconds; the browser is
-     told that nothing outside it depends on how they are laid out. */
-  contain: layout style;
-}
-.bl-demo__note {
-  margin-top: calc(var(--px) * 5);
-  max-width: var(--measure);
-}
-
-.bl-facts {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
-  gap: 0 calc(var(--px) * 12);
-  margin: clamp(28px, 5vh, 48px) 0 0;
-  border-top: var(--px) solid var(--line);
-}
-.bl-facts > div {
-  padding: calc(var(--px) * 5) 0;
-  border-bottom: var(--px) solid color-mix(in srgb, var(--line) 30%, transparent);
-}
-.bl-facts dt {
-  margin: 0 0 2px;
-}
-.bl-facts dd {
-  margin: 0;
-  color: var(--fg);
-  overflow-wrap: anywhere;
-}
-.bl-facts .bl-said {
-  font-size: 0.8125rem;
-  line-height: 1.55;
-}
-
-/* ─── A demonstration playing itself: the hairline that says when the next step comes ───────── */
-
-/* Drawn just inside the top edge of the demonstration's own frame, so it takes no room and is
-   seen only by someone looking for it: the line is the time left, and it runs out to the left. */
-.bl-tour {
-  position: absolute;
-  z-index: 1;
-  inset-block-start: var(--w, var(--px));
-  inset-inline: calc(var(--step, 0px) + var(--px));
-  height: var(--px);
-  pointer-events: none;
-}
-.bl-tour__track {
-  display: block;
-  height: 100%;
-}
-.bl-tour__bar {
-  display: block;
-  height: 100%;
-  background: currentColor;
-  /* (A countdown drawn on a rule of its own is in full ink: it is the rule.) */
-  opacity: var(--tour-ink, 0.55);
-  transform-origin: 0 50%;
-  animation: bl-tour linear both;
-}
-@keyframes bl-tour {
-  from {
-    scale: 1 1;
-  }
-  to {
-    scale: 0 1;
-  }
-}
-/* Held for the person using it, or paused: no line at all. */
-.bl-tour:not([data-state="running"]) .bl-tour__bar {
-  animation: none;
-  opacity: 0;
-}
-/* Pause is two bars and play is a stepped wedge, in the frame's top corner; there for a keyboard
-   and for a pointer over the frame, and otherwise not on show. */
-.bl-tour__toggle {
-  position: absolute;
-  inset-block-start: calc(var(--px) * 2);
-  inset-inline-end: 0;
-  display: grid;
-  place-items: center;
-  width: 24px;
-  height: 24px;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: inherit;
-  cursor: pointer;
-  pointer-events: auto;
-  opacity: 0;
-}
-/* A finger has no hover: where there is none, the button is simply there. */
-@media (hover: none) {
-  .bl-tour__toggle {
-    opacity: 0.7;
-  }
-}
-.bl-tour__toggle i {
-  width: calc(var(--px) * 4);
-  height: calc(var(--px) * 5);
-  background: linear-gradient(90deg, currentColor 37.5%, transparent 0 62.5%, currentColor 0);
-}
-.bl-tour__toggle[aria-pressed="true"] i {
-  background: currentColor;
-  clip-path: polygon(0 0, 50% 0, 50% 20%, 100% 20%, 100% 80%, 50% 80%, 50% 100%, 0 100%);
-}
-/* A paused demonstration holds the sky still too, and so does a sky that is nowhere on screen. */
-.bl[data-paused] .bl-snore i {
-  animation-play-state: paused;
-}
-.bl-tour__toggle:focus-visible,
-.bl-tour[data-state="paused"] .bl-tour__toggle,
-:is(.bl-demo__body, [data-tour-frame]):hover > .bl-tour .bl-tour__toggle {
-  opacity: 0.7;
-}
-
-/* The words under a section's heading sit a fixed step below it. */
-.bl-h2 + .bl-lede,
-.bl-h2 + .bl-body {
-  margin-top: clamp(20px, 3vh, 32px);
 }

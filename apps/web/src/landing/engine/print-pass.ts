@@ -7,9 +7,8 @@
  * dots. Brightness goes through a tone curve (exposure, contrast, gamma) and then an 8 by 8
  * ordered dither between five tones; a line is drawn where two planes meet; what glows is printed
  * solid, and its blur (GLOW_FRAG, twice) as torch dots round it; the empty night sky gets a few
- * stars; and the dust in a beam of light is a scatter of dots that drifts. The picture runs on
- * under the words: they carry a halo of their own ground (landing.css), so nothing of it is erased
- * for them.
+ * stars; and the dust in a beam of light is a scatter of dots that drifts. No word is ever set on
+ * the picture: the page keeps its words on bare ground beside it.
  */
 
 export const PRINT_VERT = `#version 300 es

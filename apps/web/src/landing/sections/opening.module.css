@@ -1,0 +1,185 @@
+/* SPDX-FileCopyrightText: 2026 The Cubepals Authors
+ *
+ * SPDX-License-Identifier: LicenseRef-Cubepals-Reserved
+ */
+
+/* The first screen: the words on the left, the island on the right, both on ink. */
+
+.opening {
+  position: relative;
+  padding-top: 64px;
+}
+
+.sheet {
+  border-top: 0;
+}
+
+/* No register marks above the first screen: the header is there. */
+.sheet::before,
+.sheet::after {
+  display: none;
+}
+
+.inner {
+  display: grid;
+  grid-template-columns: minmax(0, 0.92fr) minmax(0, 1fr);
+  align-items: center;
+  gap: clamp(24px, 4vw, 64px);
+  min-height: min(calc(100svh - 64px), 940px);
+  padding-block: clamp(40px, 7vh, 96px) clamp(40px, 6vh, 80px);
+}
+
+.words {
+  display: grid;
+  justify-items: start;
+  gap: 0;
+}
+
+.words .headline {
+  margin-top: 22px;
+  max-width: 6.9em;
+  font-size: clamp(46px, 6.3vw, 94px);
+}
+
+.headline span {
+  display: block;
+}
+
+/* The second line is the server: it comes up, with the island's light, once someone has joined. */
+.late {
+  color: #6d6a64;
+  transition: color 900ms var(--in-out-cubic);
+}
+
+.opening:has([data-power="starting"]) .late,
+.opening:has([data-power="online"]) .late {
+  color: var(--on-ground);
+}
+
+.lede {
+  margin-top: 26px;
+}
+
+.go {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px 28px;
+  margin-top: 34px;
+}
+
+.price {
+  color: var(--on-ground);
+  font-weight: 600;
+  font-size: 16px;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.3em;
+}
+
+.facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  margin: 22px 0 0;
+  padding: 0;
+  list-style: none;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 18px;
+  letter-spacing: 0.04em;
+  color: var(--on-ground-muted);
+}
+
+.facts li {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.facts li::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  background: var(--on-ground-muted);
+}
+
+.arcade {
+  margin-top: 30px;
+  padding-top: 18px;
+  border-top: 1px solid var(--rule);
+  max-width: 34em;
+  font-size: 14px;
+  line-height: 22px;
+  color: var(--on-ground-muted);
+}
+
+.arcade button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--on-ground);
+  font: 500 13px / 22px var(--mono);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.25em;
+  cursor: pointer;
+}
+
+.figure {
+  position: relative;
+  align-self: center;
+}
+
+/* What a server runs, in a ruled row along the first screen's foot. */
+.runs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 10px 28px;
+  padding-block: 20px 22px;
+  border-top: 1px solid var(--rule);
+}
+
+.runsLabel,
+.runsList {
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 18px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.runsLabel {
+  font-weight: 600;
+  color: var(--on-ground);
+}
+
+.runsList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 22px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--on-ground-muted);
+}
+
+@media (max-width: 960px) {
+  .inner {
+    grid-template-columns: minmax(0, 1fr);
+    min-height: 0;
+    gap: 40px;
+    padding-block: 48px 56px;
+  }
+
+  .figure {
+    max-width: 560px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .late {
+    transition: none;
+  }
+}

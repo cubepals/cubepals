@@ -45,6 +45,7 @@ export const PUBLIC_EVENTS = {
 const CTAS = [
   // The landing page.
   'hero_create',
+  'island_join',
   'nav_pricing',
   'nav_browse',
   'nav_sign_in',

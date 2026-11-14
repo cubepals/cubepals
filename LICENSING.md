@@ -56,11 +56,12 @@ replace what is kept back:
   (`PLAY_DOMAIN` and the rest, [`docs/configuration.md`](docs/configuration.md)) and `infra/`.
 
 Other code imports some reserved files. From `apps/web/src/landing/`: the landing page itself
-(`apps/web/src/app/page.tsx`, which is reserved too), `apps/web/src/app/phone/page.tsx`,
-`apps/web/src/lib/edge-cache.ts`, `apps/web/next.config.ts`, and the arcade scripts
-`scripts/lib/arcade-ground.ts` and `scripts/lib/arcade-house.ts` (from `landing/engine/`). From
-`brand-art.ts`: `apps/control/src/minecraft/brand-pack.ts` and `map-art.ts`, and their tests. The
-root layout and the server settings layout import only `landing/fonts.ts`, which is not reserved.
+(`apps/web/src/app/page.tsx`, which is reserved too), a server's settings
+(`apps/web/src/app/(app)/servers/[id]/settings/reach-map.tsx`, from `landing/hooks.ts`), and the
+arcade scripts `scripts/lib/arcade-ground.ts` and `scripts/lib/arcade-house.ts` (from
+`landing/engine/`). From `brand-art.ts`: `apps/control/src/minecraft/brand-pack.ts` and
+`map-art.ts`, and their tests. The root layout, the pricing page and the server settings layout
+import only `landing/fonts.ts`, which is not reserved.
 A fork replaces each reserved file with its own of the same name, so those imports keep working.
 
 blocklyd is needed only by the `fleet` runtime, servers on hosts you run yourself; the other

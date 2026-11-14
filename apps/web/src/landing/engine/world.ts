@@ -485,26 +485,6 @@ export class Mesh {
   }
 }
 
-/**
- * Moves the sun over a packed world: the shadows of every block at or above `fromY` are worked
- * out again, in place. Blocks below never see the sky, so they are left alone.
- */
-export function relight(
-  world: World,
-  packed: { positions: Float32Array; data: Uint8Array; count: number },
-  sun: readonly [number, number, number],
-  fromY: number,
-): void {
-  for (let i = 0; i < packed.count; i++) {
-    const y = packed.positions[i * 3 + 1] as number
-    if (y < fromY) continue
-    if (packed.data[i * 8 + 3] === 0) continue
-    const x = packed.positions[i * 3] as number
-    const z = packed.positions[i * 3 + 2] as number
-    packed.data[i * 8 + 4] = world.sunOn(x, y, z, sun)
-  }
-}
-
 /** A repeatable pseudo-random number in [0, 1) from three integers. */
 export function hash3(x: number, y: number, z: number): number {
   let h = (x * 374761393 + y * 668265263 + z * 2147483647) | 0
