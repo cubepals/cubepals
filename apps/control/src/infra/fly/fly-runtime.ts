@@ -167,6 +167,8 @@ export class FlyRuntime implements MinecraftRuntime {
   readonly stableEndpoints = true
   /** A restore's world comes on a new volume, and the old one goes only in `#replace`. */
   readonly restoresBeside = true
+  /** A helper machine packs a volume made from the snapshot; the server's machine isn't touched. */
+  readonly archivesBeside = true
   /** Every machine counts against the organization's limit, stopped ones included. */
   readonly serverCeiling: number
   readonly #fly: FlyClient

@@ -76,6 +76,8 @@ export interface DockerRuntimeOptions {
 
 export class DockerRuntime implements MinecraftRuntime {
   readonly provider = 'docker'
+  /** A one-shot helper container packs a volume copied from the snapshot. */
+  readonly archivesBeside = true
   /** A container's name, on the deployment's own games network. */
   readonly stableEndpoints = true
   /** No limit of its own: only this machine's memory and its free host ports bound how many run. */

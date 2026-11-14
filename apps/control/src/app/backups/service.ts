@@ -607,6 +607,7 @@ export class BackupService {
       requestedBy: request.requestedBy,
       idempotencyKey: request.idempotencyKey,
       input: { archiveId, snapshotId: snapshot.id },
+      apart: snapshot.snapshotHandle !== null && this.#runtime.archivesBeside(snapshot.snapshotHandle),
     })
     if (op.input.archiveId !== archiveId) return
     await insertArchive(tx, {

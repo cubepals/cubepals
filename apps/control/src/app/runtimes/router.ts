@@ -91,6 +91,8 @@ export interface Runtimes extends Pick<MinecraftRuntime, HandleVerbs> {
   ceilingOf(provider: string): number | null
   /** How long the runtime that took `snapshot` keeps it; null when it keeps it until deleted. */
   snapshotLifetimeDays(snapshot: SnapshotHandle): number | null
+  /** Whether the runtime that took `snapshot` packs its archive beside the server (`archivesBeside`). */
+  archivesBeside(snapshot: SnapshotHandle): boolean
 
   hasRoom(
     provider: string,
@@ -325,6 +327,10 @@ export class RuntimeRouter implements Runtimes {
         new RuntimeUnsupported(member.provider, 'rebuilding from a snapshot another runtime took'),
       )
     return member.relocate(handle, to, spec, progress, from, options)
+  }
+
+  archivesBeside(snapshot: SnapshotHandle): boolean {
+    return this.#ofSnapshot(snapshot)?.archivesBeside === true
   }
 
   exportSnapshot(

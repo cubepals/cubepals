@@ -58,6 +58,12 @@ export interface OperationRequest {
   requestedBy: string
   idempotencyKey: string
   input?: Record<string, unknown>
+  /**
+   * Asked of an archive whose runtime packs it beside the server (`archivesBeside`): it runs apart
+   * from the server's queue. Any other operation, and an archive on a runtime that packs with the
+   * server's own compute, takes its turn in the queue.
+   */
+  apart?: boolean
 }
 
 /**
@@ -157,7 +163,7 @@ export class ServerTransitions {
         wakes: WAKES.has(kind),
         paid: WAKES.has(kind) && (await paidPlan(tx, server)),
         creates: kind === 'provision',
-        ...(APART.includes(kind) ? { apart: APART_ATTEMPT } : {}),
+        ...(request.apart === true && APART.includes(kind) ? { apart: APART_ATTEMPT } : {}),
       })
       await this.#events.publish(tx, {
         type: 'operation_progress',

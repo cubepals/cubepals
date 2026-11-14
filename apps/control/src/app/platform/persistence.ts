@@ -424,7 +424,9 @@ export async function failuresOf(
 
 /**
  * Operations waiting behind each blocked one, by its id; the blocked ones don't count themselves.
- * Behind one waits its server's queue, or, for one that runs apart, the server's other work apart.
+ * Behind one that runs apart waits the server's other work of its kinds. Behind any other waits
+ * everything else queued for its server: work apart is counted there too, since an operation's
+ * row doesn't say which line it took.
  */
 export async function queuedBehind(
   q: Queryable,
@@ -450,7 +452,7 @@ export async function queuedBehind(
     .groupBy(operations.serverId, operations.kind)
   const behind = (b: { serverId: string; apart: boolean }) =>
     rows
-      .filter((row) => row.serverId === b.serverId && APART.includes(row.kind) === b.apart)
+      .filter((row) => row.serverId === b.serverId && (!b.apart || APART.includes(row.kind)))
       .reduce((sum, row) => sum + row.n, 0)
   return new Map(blocked.map((b) => [b.operationId, behind(b)]))
 }

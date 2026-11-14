@@ -272,6 +272,13 @@ export interface MinecraftRuntime {
    * restore may overwrite the server's storage at once, and is asked only once `kept` is.
    */
   readonly restoresBeside?: boolean
+  /**
+   * An archive is packed from the snapshot alone, on compute and storage of its own: the server's
+   * own are neither woken, stopped nor read by it. Its archives then run apart from the server's
+   * queue (`JobQueue.enqueue`). Without it, packing may wake or use what the server runs on, and
+   * an archive takes its turn in the server's queue like any operation.
+   */
+  readonly archivesBeside?: boolean
 
   /** Pure: whether this runtime issued `handle`. Every handle it issues says so of itself. */
   owns(handle: RuntimeHandle): boolean
