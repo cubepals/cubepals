@@ -4,8 +4,8 @@
 
 /**
  * What the Bedrock check does as a Bedrock player does, from a machine that can send UDP: a RakNet
- * ping to the edge's port, a join by the headless client (`tools/bedrock-join`), and the Xbox user
- * ids behind the gamertags the access steps use.
+ * ping to the edge's port, a join by a headless client (`tools/bedrock-join`) over RakNet or over
+ * NetherNet, and the Xbox user ids behind the gamertags the access steps use.
  *
  * Not for the check's steps or its accounts (`scripts/bedrock-check.ts`).
  */
@@ -54,16 +54,21 @@ export interface BedrockJoin {
 }
 
 /**
- * Runs `tools/bedrock-join` against a play address, once with the options given. Its exit status
- * says whether every player spawned; a check that expects a refusal reads the answer instead.
+ * Runs `tools/bedrock-join` against a play address, once with the options given: over RakNet
+ * (`join.ts`), or over NetherNet (`nethernet-join.ts`), as Bedrock 26.60 and later join. Both take
+ * the same options (players, gamertag and XUID, chat, hold, timeout) and answer the same way. Its
+ * exit status says whether every player spawned; a check that expects a refusal reads the answer
+ * instead.
  */
 export async function bedrockJoin(
   address: string,
   options: string[] = [],
   signal?: AbortSignal,
+  over: 'raknet' | 'nethernet' = 'raknet',
 ): Promise<BedrockJoin> {
   const began = Date.now()
-  const child = Bun.spawn(['bun', 'join.ts', '--address', address, ...options], {
+  const script = over === 'raknet' ? 'join.ts' : 'nethernet-join.ts'
+  const child = Bun.spawn(['bun', script, '--address', address, ...options], {
     cwd: 'tools/bedrock-join',
     stdout: 'pipe',
     stderr: 'inherit',
