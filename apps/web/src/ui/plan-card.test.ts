@@ -54,8 +54,9 @@ const muted = [...theme.matchAll(/--ink-inverse-muted: (#[0-9a-f]{6});/g)].map((
 const print = { ...rule(blocks, '.bl-print'), '--ink-inverse-muted': muted[0] ?? '' }
 const paper = { ...print, ...rule(card, '.card') }
 const ink = { ...paper, ...rule(card, '.paid') }
-/** What a card is filled with: the frame's fill, or the panel (blocks.css, `.bl-frame::after`). */
-const fill = (tokens: Record<string, string>) => resolve(tokens['--frame-fill'] ?? 'var(--panel)', tokens)
+/** What a card is filled with: the frame's fill, or the panel's (blocks.css, `.bl-frame::after`). */
+const fill = (tokens: Record<string, string>) =>
+  resolve(tokens['--frame-fill'] ?? 'var(--panel-fill)', tokens)
 const lit = rule(card, '.paid .lit')
 
 const AA = 4.5

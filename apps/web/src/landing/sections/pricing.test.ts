@@ -190,7 +190,9 @@ describe('the landing’s plan cards', () => {
     // The year is said once, under the price.
     expect(plusCard.match(/\$250/g)).toHaveLength(1)
     expect(plusCard).not.toMatch(/vanilla|Paper/)
-    expect(html.match(/<details/g)).toHaveLength(2)
+    // Each card's details open in place, closed at first: a control saying so, over a region kept inert.
+    expect(html.match(/class="bk-plan-more__toggle" aria-expanded="false"/g)).toHaveLength(2)
+    expect(html.match(/class="bk-reveal" data-open="false" inert=""/g)).toHaveLength(2)
     // The hours keep their dashed-line explainer.
     expect(html).toContain('bk-tip')
   })

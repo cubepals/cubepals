@@ -77,7 +77,7 @@
   --plan-card-icon: var(--night);
 }
 .paid ::selection {
-  background: var(--panel);
+  background: var(--panel-fill);
   color: var(--ink);
 }
 
@@ -174,7 +174,7 @@
 }
 
 /* "See everything in Core": the rest of the plan, opened in place, at the card's foot. */
-.details summary {
+.details > button {
   min-height: var(--plan-card-target);
 }
 .details a {
