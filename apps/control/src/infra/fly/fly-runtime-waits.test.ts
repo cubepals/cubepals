@@ -216,6 +216,31 @@ describe('FlyRuntime while Fly puts an update in place', () => {
     expect(fake.leases.size).toBe(0)
   })
 
+  test('an update Fly’s API times out on is asked again under the same lease, and goes through', async () => {
+    const { fake } = await provisioned()
+    const machine = fake.machines.get(APP)?.[0]
+    if (machine === undefined) throw new Error('no machine')
+    // Fly answered a settings change with a 408 twice, its rollback's included (staging, 2026-11-14):
+    // the first two asks of the update time out before they reach the machine.
+    const update = new URL(`/v1/apps/${APP}/machines/${machine.id}`, 'https://api.machines.dev').pathname
+    let timeouts = 2
+    const timingOut = (request: Request) => {
+      if (request.method === 'POST' && new URL(request.url).pathname === update && timeouts > 0) {
+        timeouts -= 1
+        return Promise.resolve(Response.json({ error: 'timeout' }, { status: 408 }))
+      }
+      return fake.fetch(request)
+    }
+    const client = flyClient('token', { fetch: timingOut as never, pace: { perSecond: 1000, burst: 1000 } })
+    const leases = fake.count(`POST /v1/apps/${APP}/machines/${machine.id}/lease`)
+    const config = { ...machine.config, env: { VERSION: '26.4' } }
+    await updateMachine(client, 'test', APP, machine.id, config as never, undefined, false)
+    expect(timeouts).toBe(0)
+    expect(fake.count(`POST /v1/apps/${APP}/machines/${machine.id}/lease`)).toBe(leases + 1)
+    expect(machine.config.env).toEqual({ VERSION: '26.4' })
+    expect(fake.leases.size).toBe(0)
+  })
+
   test('an apply on a machine Fly replaced under a new id changes that one, and names it', async () => {
     const { fake, runtime, handle } = await provisioned()
     const machine = fake.machines.get(APP)?.[0]
