@@ -26,7 +26,7 @@
   --fg: var(--ink);
   --line: var(--ink);
   --muted: #5b5954;
-  --panel: #ffffff;
+  --panel-fill: #ffffff;
   --on-fg: var(--paper);
 
   --display: var(--font-geologica), var(--font-figtree), system-ui, sans-serif;
@@ -81,7 +81,7 @@
 }
 .bl-frame::after {
   inset: var(--w);
-  background: var(--frame-fill, var(--panel));
+  background: var(--frame-fill, var(--panel-fill));
   --s: calc(var(--step) - var(--w));
   clip-path: polygon(
     0 var(--step),

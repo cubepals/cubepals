@@ -19,14 +19,11 @@
  * - A page the render marked partial (lib/partial-render.ts: its plans couldn't be read) is
  *   answered as Next made it and never kept, and a good copy already kept stays when a new render
  *   comes back partial.
- * - The landing page has two forms, the film and a phone's own (next.config.ts sends a phone the
- *   second at the same address), so it is kept once for each.
  *
  * Not what Next renders, nor the scripts and pictures, which `_next/static` already serves
  * immutable.
  */
 import { DAY_S, MINUTE_S, SECOND_MS } from '@blockly/contracts/durations'
-import { PHONE_AGENT, PHONE_HINT } from '../landing/phone/agent'
 import { PARTIAL } from './partial-render'
 
 /** The landing page, pricing, the guides and the policies: the same for everyone signed out. */
@@ -50,11 +47,6 @@ export interface EdgeCache {
   put(key: Request, response: Response): Promise<void>
 }
 
-const PHONE = {
-  agent: new RegExp(`^${PHONE_AGENT}$`),
-  hint: new RegExp(`^${PHONE_HINT}$`),
-}
-
 /**
  * The key a request's page is kept under in this version of the Worker, or null when it is never
  * kept: not a public page, not a plain GET for the document, or from someone signed in.
@@ -66,13 +58,7 @@ function edgeKey(request: Request, version: string | undefined): Request | null 
   const headers = request.headers
   if (SESSION_COOKIE.test(headers.get('cookie') ?? '')) return null
   if (headers.has('rsc') || headers.has('next-router-prefetch') || url.searchParams.has('_rsc')) return null
-  const phone =
-    PHONE.agent.test(headers.get('user-agent') ?? '') ||
-    PHONE.hint.test(headers.get('sec-ch-ua-mobile') ?? '')
-  const form = url.pathname === '/' && phone ? 'phone' : 'page'
-  return new Request(
-    `${url.origin}/__edge/${encodeURIComponent(version)}/${form}${url.pathname}${url.search}`,
-  )
+  return new Request(`${url.origin}/__edge/${encodeURIComponent(version)}/page${url.pathname}${url.search}`)
 }
 
 /**

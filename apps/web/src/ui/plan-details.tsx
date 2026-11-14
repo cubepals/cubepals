@@ -22,6 +22,7 @@ import {
   sizesOf,
   TrialPoint,
 } from './plans'
+import { Reveal } from './reveal'
 
 /** The trial, the paid plans that get a card each, and the one the trial starts. */
 export function cardsOf(plans: readonly PublicPlan[]) {
@@ -103,8 +104,9 @@ function sizePoint(plan: PublicPlan, trial?: PublicPlan): string | null {
 }
 
 /**
- * "See everything in Core": the rest of a plan, opened in place. The hours sit on their dashed
- * line, which says what they come to; the trial's, on the plan it starts.
+ * "See everything in Core": the rest of a plan, opened in place, growing open as the design
+ * system's disclosures do (`Reveal`). The hours sit on their dashed line, which says what they come
+ * to; the trial's, on the plan it starts.
  */
 export function PlanDetails({
   plan,
@@ -118,17 +120,22 @@ export function PlanDetails({
   trial?: PublicPlan | undefined
   /** The year's line as a link to buy it, where the page has one; otherwise it is said. False: the card says it elsewhere. */
   year?: ReactNode | false
-  /** What turns as the details open, after the summary's words. */
+  /** What turns as the details open, after the control's words. */
   marker: ReactNode
   className?: string
 }) {
   const shared = eachOf(plan)
   return (
-    <details className={`bk-plan-more ${className}`}>
-      <summary>
-        See everything in {plan.name}
-        {marker}
-      </summary>
+    <Reveal
+      className={`bk-plan-more ${className}`}
+      toggleClassName="bk-plan-more__toggle"
+      summary={
+        <>
+          See everything in {plan.name}
+          {marker}
+        </>
+      }
+    >
       <ul className="bk-plan-more__list">
         <li>
           <PlanPoint plan={plan} point={hoursPoint(plan)} />
@@ -152,6 +159,6 @@ export function PlanDetails({
           </li>
         )}
       </ul>
-    </details>
+    </Reveal>
   )
 }

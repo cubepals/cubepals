@@ -19,9 +19,9 @@ const TURN = Math.PI * 2
 /** How fast someone in no hurry goes, in blocks a second. */
 export const STROLL = 1.5
 /** How long it takes to get up to pace, or to come to a stop, in seconds. */
-export const EASE = 0.45
+const EASE = 0.45
 /** The ground one full turn of the legs covers, in blocks: two steps. */
-export const FOOTFALL = 1.5
+const FOOTFALL = 1.5
 /** How fast someone turns round, in radians a second, and how quickly that is got up to. */
 const SPIN = 6.5
 const SPIN_GATHER = 45
@@ -124,12 +124,3 @@ export function walk(body: Body, to: Spot, cruise: number, dt: number, footfall 
 
 /** How long a stride to draw: none standing, a full one at pace. */
 export const strideOf = (body: Body, cruise: number) => clamp(body.pace / cruise) * 0.85
-
-/**
- * A way from one place to another along the grid: straight if they are on a line, and otherwise
- * round one corner, going `first` along the first axis ('x') or the second ('z').
- */
-export function routeTo(from: Spot, to: Spot, first: 'x' | 'z' = 'x'): Spot[] {
-  if (Math.abs(from[0] - to[0]) < 0.001 || Math.abs(from[1] - to[1]) < 0.001) return [to]
-  return [first === 'x' ? [to[0], from[1]] : [from[0], to[1]], to]
-}

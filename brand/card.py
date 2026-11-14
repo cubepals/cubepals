@@ -11,9 +11,9 @@
     uv run brand/card.py
 
 The card says what the landing's first screen says: "Minecraft server hosting for friends" over
-"Send your friends / the address. / They’re in.", set on the hero's lines (landing/film/Film.tsx)
-in Geologica 800 with its corners cut square, at the display type's tracking and leading
-(landing.css). Beside it is the chunk by day as the site already prints it
+"Your friends join. / Your server / wakes up.", the headline of the first screen
+(landing/sections/Opening.tsx) in Geologica 800 with its corners cut square, at the display type's
+tracking and leading (landing.css). Beside it is the chunk by day as the site already prints it
 (apps/web/public/imagery/chunk-awake.png), printed again at half its size in Ink on Paper. In the
 top right, over the print's empty sky, is the lockup as wordmark.py draws it, with the address
 under it. The bottom left holds nothing, since X lays the page's title over it.
@@ -50,7 +50,7 @@ PLEX_MONO = (
 )
 
 EYEBROW = 'Minecraft server hosting for friends'
-HEADLINE = ('Send your friends', 'the address.', 'They’re in.')
+HEADLINE = ('Your friends join.', 'Your server', 'wakes up.')
 ADDRESS = 'cubepals.com'
 
 LEFT = 64  # the words' edge

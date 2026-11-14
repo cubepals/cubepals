@@ -5,7 +5,8 @@
  */
 
 /* The one header (header.tsx): the same on the landing page and on every public page. Ink on the
-   ground it stands on; over the landing's picture it is fixed, and the picture opens behind it. */
+   ground it stands on; on the landing it stays at the top of the screen, on the ground of the
+   section under it. */
 .header {
   --out-quart: cubic-bezier(0.25, 1, 0.5, 1);
   display: flex;
@@ -15,20 +16,32 @@
   height: 72px;
   color: var(--ink);
 }
+/* On the landing it stays at the top of the screen, on the ground of the section passing under
+   it, a little clear so the page shows through as it scrolls; a hairline under it once it has. */
 .header[data-over-picture] {
   position: fixed;
   z-index: 7;
   inset-block-start: 0;
   inset-inline: 0;
-  padding-inline: calc(var(--gutter, 24px) + var(--rail, 0px)) var(--gutter, 24px);
-  pointer-events: none;
+  height: 64px;
+  padding-inline: max(
+    var(--gutter, 24px),
+    calc((100vw - var(--width-page, 1440px)) / 2 + var(--gutter, 24px))
+  );
+  background: color-mix(in srgb, var(--paper) 86%, transparent);
+  -webkit-backdrop-filter: blur(14px) saturate(1.1);
+  backdrop-filter: blur(14px) saturate(1.1);
+  box-shadow: 0 1px 0 0 transparent;
+  transition:
+    background-color 240ms var(--out-quart),
+    color 240ms var(--out-quart),
+    box-shadow 240ms var(--out-quart);
 }
-.header[data-over-picture] > * {
-  pointer-events: auto;
+.header[data-over-picture][data-scrolled] {
+  box-shadow: 0 1px 0 0 color-mix(in srgb, var(--ink) 14%, transparent);
 }
-/* Over the picture the ground changes: over the dark of the dig the header is paper. */
-.header[data-ground="slate"],
-.header[data-ground="bedrock"] {
+/* Over the ink grounds the header is paper on ink. */
+.header[data-ground="ink"] {
   /* Literal, since each would otherwise be read from the other on this same element. */
   --ink: #f8f7f5;
   --paper: #0d0d0d;
@@ -105,7 +118,7 @@
   outline: 2px solid var(--ink);
   outline-offset: 2px;
 }
-/* A phone has a bar of its own at the foot of the screen for it (Follow), and less room up here. */
+/* A phone has less room up here: its buttons are on the page. */
 @media (max-width: 1023px) {
   .create {
     display: none;
@@ -138,19 +151,8 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .create,
-  .create[data-shown] {
+  .create[data-shown],
+  .header[data-over-picture] {
     transition: none;
   }
-}
-
-/* Over the picture the words keep it off their letters with a halo of their ground, as the
-   words on the landing page do: the links by a stroke drawn under them, the lockup and its beta
-   mark (drawings) by an outline. */
-.header[data-over-picture] .link {
-  -webkit-text-stroke: 6px var(--paper);
-  paint-order: stroke fill;
-}
-.header[data-over-picture] > :first-child {
-  filter: drop-shadow(3px 0 0 var(--paper)) drop-shadow(-3px 0 0 var(--paper))
-    drop-shadow(0 3px 0 var(--paper)) drop-shadow(0 -3px 0 var(--paper));
 }

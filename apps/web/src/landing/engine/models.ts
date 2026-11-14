@@ -39,7 +39,7 @@ export type Box = (
 ) => void
 
 /**
- * The most a loose box reaches each way, in blocks: Chunk.tsx packs each reach into a byte, 255
+ * The most a loose box reaches each way, in blocks: loose.ts packs each reach into a byte, 255
  * for this, and a longer one is drawn cut short at it.
  */
 export const REACH = 2
@@ -138,11 +138,6 @@ export const NOOR: Skin = {
   trousers: 220,
   shoes: 40,
 }
-/** One of the dead: grey all over, in what is left of a shirt. */
-export const DEAD: Skin = { skin: 150, eyes: 20, shirt: 96, sleeves: false, trousers: 70, shoes: 70 }
-/** The one who does the work underground: pale overalls and a lamp on the helmet. */
-export const WORKER: Skin = { skin: 250, eyes: 30, shirt: 225, sleeves: true, trousers: 190, shoes: 60 }
-
 const TURN = Math.PI * 2
 const QUARTER = Math.PI / 2
 

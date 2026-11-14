@@ -139,12 +139,10 @@ const expectOffered = (text: string, where: string) => {
 describe('a public page states what a new subscriber is offered now', () => {
   let pricing: typeof import('../app/(public)/pricing/page')
   let home: typeof import('../app/page')
-  let phoneHome: typeof import('../app/phone/page')
 
   beforeAll(async () => {
     pricing = await import('../app/(public)/pricing/page')
     home = await import('../app/page')
-    phoneHome = await import('../app/phone/page')
   })
 
   test('the pricing page: its title, previews, structured data, cards and questions', async () => {
@@ -155,11 +153,10 @@ describe('a public page states what a new subscriber is offered now', () => {
     expect(text).not.toMatch(/for a year, paid once|a year of Plus/i)
   })
 
-  test('the landing page, in both its forms: its sections and structured data', async () => {
+  test('the landing page: its sections and structured data', async () => {
     controlPlane()
     const searchParams = Promise.resolve({})
-    for (const page of [home.default, phoneHome.default])
-      expectOffered(await rendered(await page({ searchParams })), 'the landing page')
+    expectOffered(await rendered(await home.default({ searchParams })), 'the landing page')
   })
 
   test('every guide: none states the plan table’s, and the cost guide states the offer', async () => {
