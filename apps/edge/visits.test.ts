@@ -11,6 +11,7 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { type AddressInfo, connect, createServer, type Server, type Socket } from 'node:net'
 import { join } from 'node:path'
+import { until } from '@blockly/contracts/waits'
 import { HOUR_MS } from '../../packages/contracts/src/durations.ts'
 import type { VisitReport } from '../../packages/contracts/src/join-records.ts'
 import { packet, statusRequest, string, varInt } from './notice.ts'
@@ -75,6 +76,28 @@ describe('visits', () => {
     kept.pinged('192.0.2.1:2', 'd.play.test')
     await settle()
     expect(kept.held().looks).toBe(1)
+  })
+
+  test('what mc-router says of a connection after it closed still reaches its visit', async () => {
+    const told: VisitReport[] = []
+    const book = new Visits((r) => told.push(r), EDGE, TIMES)
+    const [player, frontEnd] = ['192.0.2.7:4100', '127.0.0.1:51000']
+    const visit = book.arrived(player, { address: 'plain.play.test', protocol: 767 })
+    // A server that reads no PROXY header: mc-router knows the connection by the front door's end.
+    book.alias(frontEnd, player)
+    // mc-router found no backend and closed the connection, and the close came first.
+    book.closed(player, { up: 30, down: 0 })
+    book.update(frontEnd, { player: { name: 'Late' } })
+    book.update(frontEnd, { path: 'refused', leftReason: 'refused:failed-backend-connection' })
+    book.open(frontEnd)
+    await until('the visit’s close', () => told.some((r) => r.joinId === visit.joinId && r.phase === 'close'))
+    const mine = told.filter((r) => r.joinId === visit.joinId)
+    expect(mine.map((r) => [r.phase, r.player?.name, r.leftReason])).toEqual([
+      ['open', 'Late', 'refused:failed-backend-connection'],
+      ['close', 'Late', 'refused:failed-backend-connection'],
+    ])
+    // Once the visit is sent, its front-door end names nothing.
+    expect(book.byAddress(frontEnd)).toBeUndefined()
   })
 
   test('an IPv6 source is one key however it is spelt', () => {
