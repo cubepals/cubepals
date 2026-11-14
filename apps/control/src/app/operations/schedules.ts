@@ -36,6 +36,8 @@ import type { MinecraftServer } from '../../domain/server/server.ts'
 import type { BackupService } from '../backups/service.ts'
 import type { CatalogSync, CatalogTransition } from '../catalog/sync.ts'
 import type { ListingService } from '../listings/service.ts'
+import type { ModUpdates } from '../mods/updates.ts'
+import { UpdatesTold } from '../mods/updates-told.ts'
 import type { PlayerService } from '../players/service.ts'
 import type { EventBus } from '../ports/events.ts'
 import type { ServerConsole } from '../ports/minecraft.ts'
@@ -104,6 +106,8 @@ export class Schedules {
     listings: ListingService
     /** What waits for a player is delivered when a presence reading sees them join. */
     players: Pick<PlayerService, 'deliverWaiting'>
+    /** The updates found for servers' mods, which their operators are told of as they join. */
+    updates: Pick<ModUpdates, 'whenFound'>
     /** Whether the deployment keeps archives, which a resting world lives in. */
     storing: boolean
     mailer: Mailer
@@ -156,6 +160,12 @@ export class Schedules {
       events: deps.events,
       transitions: deps.transitions,
       players: deps.players,
+      updatesTold: new UpdatesTold({
+        db: deps.db,
+        console: deps.console,
+        updates: deps.updates,
+        webOrigin: deps.webOrigin,
+      }),
     })
     this.#sessionCheck = sessionCaps({
       db: deps.db,
