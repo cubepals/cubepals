@@ -25,6 +25,7 @@ import {
 } from '../../minecraft/stop-cheaters.ts'
 import { offeredVersions } from '../../minecraft/versions.ts'
 import { Cdn } from '../../testing/cdn.ts'
+import { catalogPins } from '../../testing/compat-pins.ts'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
 import type { UserActor } from '../actor.ts'
 import { recordStored } from '../artifacts/persistence.ts'
@@ -76,7 +77,7 @@ async function begin(options: Parameters<typeof startHarness>[0] = {}): Promise<
       },
     ],
   )
-  expect(await h.app.setups.compat.refresh()).toBeGreaterThan(0)
+  expect(await h.app.setups.compat.refresh(await catalogPins(h.catalog))).toBeGreaterThan(0)
 }
 
 async function end(): Promise<void> {
@@ -309,7 +310,7 @@ describe.skipIf(!hasDatabase)('what a start places', () => {
     expect(await applies(id)).toBe(0)
     expect((await view(id)).available).toEqual({ kind: 'release', release: revision.gameVersion })
     expect((await h.app.specs.desired(h.db, await h.server(id))).spec.env[STOP_CHEATERS_ENV]).toBeUndefined()
-    await h.app.setups.compat.refresh()
+    await h.app.setups.compat.refresh(await catalogPins(h.catalog))
   }, 60_000)
 
   test('without the join reporter, a start writes the public default: nothing removes nobody', async () => {
@@ -556,7 +557,7 @@ describe.skipIf(!hasDatabase)('STOP_CHEATERS unset in production', () => {
     expect(await raised()).toBe(false)
     // Grim pinned for its release again: it runs at the next start, and the alert says so. With no
     // join reporter stored, another says it removes nobody; once one is, that one clears.
-    await h.app.setups.compat.refresh()
+    await h.app.setups.compat.refresh(await catalogPins(h.catalog))
     const swept = await h.app.alerts.sweep()
     expect(swept.raised).toContain('stop_cheaters_default')
     expect(swept.raised).toContain('stop_cheaters_no_reporter')

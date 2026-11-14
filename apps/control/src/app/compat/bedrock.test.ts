@@ -20,6 +20,7 @@ import {
 import { VIABACKWARDS, VIAVERSION } from '../../minecraft/mods.ts'
 import { offeredVersions } from '../../minecraft/versions.ts'
 import { Cdn } from '../../testing/cdn.ts'
+import { catalogPins } from '../../testing/compat-pins.ts'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
 import { ArtifactLinks } from '../artifacts/links.ts'
 import { singleKey } from '../secrets.ts'
@@ -70,7 +71,7 @@ beforeAll(async () => {
   via(VIABACKWARDS, 'ViaBackwards')
   const file = cdn.file('floodgate-spigot')
   geyser.floodgate = { version: '2.2.5', build: 141, ...file }
-  expect(await h.app.setups.compat.refresh()).toBeGreaterThan(0)
+  expect(await h.app.setups.compat.refresh(await catalogPins(h.catalog, geyser.floodgate))).toBeGreaterThan(0)
 }, 30_000)
 
 afterAll(async () => {

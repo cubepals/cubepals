@@ -14,6 +14,7 @@ import { FLOODGATE, FLOODGATE_KEY_ENV } from '../../minecraft/bedrock.ts'
 import { VIAVERSION } from '../../minecraft/mods.ts'
 import { offeredVersions } from '../../minecraft/versions.ts'
 import { Cdn } from '../../testing/cdn.ts'
+import { catalogPins } from '../../testing/compat-pins.ts'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
 
 let h: Harness
@@ -49,7 +50,7 @@ beforeAll(async () => {
       },
     ],
   )
-  expect(await h.app.setups.compat.refresh()).toBeGreaterThan(0)
+  expect(await h.app.setups.compat.refresh(await catalogPins(h.catalog))).toBeGreaterThan(0)
 }, 30_000)
 
 afterAll(async () => {

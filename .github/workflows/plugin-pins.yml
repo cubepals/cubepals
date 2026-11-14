@@ -1,0 +1,36 @@
+# SPDX-FileCopyrightText: 2026 The Cubepals Authors
+#
+# SPDX-License-Identifier: AGPL-3.0-only
+
+name: Plugin pins
+
+# The plugins Cubepals places on Paper servers are pinned by release and hash
+# (apps/control/src/minecraft/compat-pins.json), so a release reaches servers only through a pull
+# request. This asks Modrinth and GeyserMC once a week whether a newer one is out, and fails while
+# one is: a player's game can move to a new Minecraft before the pinned ViaVersion knows it. The
+# fix is `bun scripts/compat-pins.ts bump` in a pull request of its own. Not required by anything,
+# and it reads only public APIs.
+on:
+  schedule:
+    - cron: '17 9 * * 1'
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  check:
+    name: Newer plugin releases than the pins
+    if: github.repository == 'cubepals/cubepals'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.3
+      - run: bun install --frozen-lockfile
+      - run: bun scripts/compat-pins.ts check

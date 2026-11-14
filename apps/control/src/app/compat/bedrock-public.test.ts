@@ -13,6 +13,7 @@ import { FakeGeyserMc } from '../../infra/fake/fake-geysermc.ts'
 import { VIAVERSION } from '../../minecraft/mods.ts'
 import { offeredVersions } from '../../minecraft/versions.ts'
 import { Cdn } from '../../testing/cdn.ts'
+import { catalogPins } from '../../testing/compat-pins.ts'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
 import type { UserActor } from '../actor.ts'
 
@@ -55,7 +56,7 @@ beforeAll(async () => {
     ],
   )
   geyser.floodgate = { version: '2.2.5', build: 141, ...cdn.file('floodgate-spigot') }
-  expect(await h.app.setups.compat.refresh()).toBeGreaterThan(0)
+  expect(await h.app.setups.compat.refresh(await catalogPins(h.catalog, geyser.floodgate))).toBeGreaterThan(0)
 }, 30_000)
 
 afterAll(async () => {
