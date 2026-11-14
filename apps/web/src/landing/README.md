@@ -5,7 +5,8 @@ one of the Site Assets in [`brand/LICENSE.md`](../../../../brand/LICENSE.md).
 
 The page says one thing and shows it: your friends join, and your server wakes up. It is one page
 for every screen, and the browser scrolls it the way it scrolls any page. Nothing holds the
-scroll, steers it or plays on a clock that runs ahead of the reader.
+scroll, steers it or plays on a clock that runs ahead of the reader. No scroll bar is drawn beside
+it (`landing.css`); every other page keeps its own.
 
 Top to bottom: the first screen, with the island playing the sentence; how a server is made and
 joined; what Cubepals does for it; what it costs; Cubepals' own servers to try; the questions

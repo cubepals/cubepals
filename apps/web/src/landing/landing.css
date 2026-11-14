@@ -167,6 +167,16 @@
   scroll-margin-top: 80px;
 }
 
+/* No scroll bar is drawn beside the landing: it scrolls as any page does, by wheel, trackpad,
+   keys and touch. Only while the landing is on the screen, so every other page keeps its own. */
+html:has([data-landing]) {
+  scrollbar-width: none;
+}
+
+html:has([data-landing])::-webkit-scrollbar {
+  display: none;
+}
+
 /*
  * Arriving: what is scrolled to comes up into place as it enters, driven by the scroll itself
  * (no script, and no clock that runs on without the reader). Where the browser can't, or less
