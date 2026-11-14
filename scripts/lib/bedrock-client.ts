@@ -10,6 +10,8 @@
  * Not for the check's steps or its accounts (`scripts/bedrock-check.ts`).
  */
 import { SECOND_MS } from '@blockly/contracts/durations'
+import { REAUTH_EXIT, SIGN_IN_COMMAND } from '../../tools/bedrock-join/exits.ts'
+import { SignInMissing } from './xbox-sign-in-store.ts'
 
 /**
  * What a Bedrock client asks before it joins by address: `GET /v1/join` on the server's signaling,
@@ -30,12 +32,23 @@ export interface BedrockJoin {
   told: { kicked: string | null; chat: string[] }[]
   /** From starting the client to its exit, which includes the time it holds in the world. */
   tookMs: number
+  /** With --xbox, the account the player signed in as, as Minecraft's services named it. */
+  signedInAs?: { name: string; xuid: string }
+}
+
+/** This process's environment, without what turns on prismarine-auth's token-printing debug output. */
+export function quietEnv(): Record<string, string> {
+  const env: Record<string, string> = {}
+  for (const [name, value] of Object.entries(process.env))
+    if (value !== undefined && name !== 'DEBUG' && name !== 'DEBUG_COLORS') env[name] = value
+  return env
 }
 
 /**
  * Runs `tools/bedrock-join` against a play address, once with the options given (players, gamertag
- * and XUID, chat, hold, timeout). Its exit status says whether every player spawned; a check that
- * expects a refusal reads the answer instead.
+ * and XUID, chat, hold, timeout, or --xbox and a sign-in's directory). Its exit status says whether
+ * every player spawned; a check that expects a refusal reads the answer instead. A signed-in
+ * player's sign-in that needs a person again is thrown as {@link SignInMissing}.
  */
 export async function bedrockJoin(
   address: string,
@@ -47,9 +60,12 @@ export async function bedrockJoin(
     cwd: 'tools/bedrock-join',
     stdout: 'pipe',
     stderr: 'inherit',
+    env: quietEnv(),
     ...(signal === undefined ? {} : { signal }),
   })
-  const [out] = await Promise.all([new Response(child.stdout).text(), child.exited])
+  const [out, exited] = await Promise.all([new Response(child.stdout).text(), child.exited])
+  if (exited === REAUTH_EXIT)
+    throw new SignInMissing(`the Bedrock test account must be signed in again: run ${SIGN_IN_COMMAND}`)
   const last = out.trim().split('\n').at(-1) ?? ''
   if (!last.startsWith('{')) throw new Error(`the Bedrock client printed no result: ${last.slice(0, 200)}`)
   return { ...(JSON.parse(last) as Omit<BedrockJoin, 'tookMs'>), tookMs: Date.now() - began }
