@@ -19,6 +19,8 @@ describe('what keeps the island drawing', () => {
     expect(keepsDrawing({ ...still, power: 'emptying' })).toBe(true)
     // Joined again before it slept: the light is still full, and the server isn't up yet.
     expect(keepsDrawing({ ...lit, power: 'starting' })).toBe(true)
+    // Everyone gone, and its world being saved before it sleeps.
+    expect(keepsDrawing({ ...still, power: 'stopping' })).toBe(true)
   })
 
   test('nothing more once the server is where it was going and all is still', () => {

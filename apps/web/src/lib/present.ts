@@ -26,6 +26,9 @@ import { outOfPlay } from './out-of-play'
 import { refreshJourney } from './refresh-journey'
 import { restoreSeconds } from './restore-pace'
 
+/** What a server says while it stops: it saves its world first. */
+export const STOPPING = { pill: 'stopped', label: 'Stopping', detail: 'Saving your world' } as const
+
 /**
  * How Blockly words a server's state. The API reports domain facts; the words people read are
  * decided here.
@@ -45,7 +48,7 @@ export function presentStatus(
     case 'running':
       return runningStatus(server, now)
     case 'stopping':
-      return { pill: 'stopped', label: 'Stopping', detail: 'Saving your world' }
+      return { ...STOPPING }
     case 'updating':
       return { pill: 'starting', label: 'Updating', detail: 'Applying your changes' }
     case 'restoring':
@@ -546,12 +549,15 @@ function runningStatus(
   return { pill: 'online', detail: players }
 }
 
+/** What an empty server says once its time to sleep has come: the idle check sees to it within the minute. */
+export const SLEEPS_SOON = 'Sleeps soon if nobody joins'
+
 /**
  * When an empty server goes to sleep. The idle check looks once a minute, so a time already gone
  * is "soon" rather than a clock that reads as late.
  */
 const bedtimeLine = (at: string, now: number): string =>
-  Date.parse(at) <= now ? 'Sleeps soon if nobody joins' : `Sleeps at ${clockTime(at)} if nobody joins`
+  Date.parse(at) <= now ? SLEEPS_SOON : `Sleeps at ${clockTime(at)} if nobody joins`
 
 /** A moment later today or tomorrow, as someone would say it: "tomorrow at 18:40". */
 export function whenItGoes(at: string, now: number): string {

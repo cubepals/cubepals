@@ -1583,6 +1583,19 @@ textarea.bk-input {
   gap: var(--space-12);
   margin-top: var(--space-4);
 }
+/* Its state changes while it is watched: the pill's colours pass from one to the next, and its
+   line says each change as the boot line does (`SaidLine`). */
+.bk-server--own .bk-status {
+  transition:
+    background-color var(--panel) var(--ease),
+    color var(--panel) var(--ease);
+}
+/* A line whose words change in place (`SaidLine`): the old and the new share one place. */
+.bk-said {
+  display: inline-grid;
+  min-width: 0;
+  max-width: 100%;
+}
 
 .bk-player {
   display: flex;

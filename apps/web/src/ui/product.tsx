@@ -7,6 +7,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 import type { ReactNode } from 'react'
 import { PlayerFace } from './face'
+import { SaidLine } from './said'
 import { type PillStatus, StatusPill } from './status'
 import { Badge } from './surfaces'
 
@@ -78,7 +79,7 @@ export function ServerCard(props: Shown & (Linked | Own)) {
 
 function OwnCard({ name, status, statusLabel, detail, address, action, live, ...runs }: Shown & Own) {
   return (
-    <div className="bk-server">
+    <div className="bk-server bk-server--own">
       <div className="bk-server__body">
         <div className="bk-server__head">
           <p className="bk-server__name">{name}</p>
@@ -88,7 +89,7 @@ function OwnCard({ name, status, statusLabel, detail, address, action, live, ...
         <span className="bk-server__addr">{address}</span>
         <div className="bk-server__foot">
           <p className="bk-server__detail bk-num" aria-live={live ? 'polite' : undefined}>
-            {detail}
+            <SaidLine text={detail} />
           </p>
           {action}
         </div>

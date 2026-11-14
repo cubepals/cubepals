@@ -27,8 +27,9 @@ import { STILL_MARKS } from './stills'
 
 /** How long the island shows the server asleep before someone joins it, unasked, in ms. */
 const JOINS_AFTER_MS = 1200
-/** How long the card's own server takes to start, without the drawing, in ms. */
+/** How long the card's own server takes to start, and to save its world and sleep, without the drawing, in ms. */
 const STARTS_MS = 1600
+const STOPS_MS = 1400
 
 export function Island({ address }: { address: string }) {
   const frame = useRef<HTMLDivElement>(null)
@@ -38,6 +39,11 @@ export function Island({ address }: { address: string }) {
   const [asked, setAsked] = useState<Asked>('leave')
   const [state, setState] = useState<{ power: Power; players: number }>({ power: 'sleeping', players: 0 })
   const [marks, setMarks] = useState<Marks>(STILL_MARKS)
+  // What the card last showed, for the card's own play to stop from it rather than from sleep.
+  const powered = useRef<Power>('sleeping')
+  useEffect(() => {
+    powered.current = state.power
+  }, [state.power])
   const { drawing, ask } = useDrawing(frame, canvas, (answer) => {
     if (answer.kind === 'state') setState({ power: answer.power, players: answer.players })
     else if (answer.kind === 'marks') setMarks(answer.marks)
@@ -55,8 +61,14 @@ export function Island({ address }: { address: string }) {
     ask({ asked })
     if (drawing === 'shown') return
     if (asked === 'leave') {
-      setState({ power: 'sleeping', players: 0 })
-      return
+      // Left while it ran: it saves its world, as a stopping server says, then sleeps.
+      if (still || powered.current === 'sleeping') {
+        setState({ power: 'sleeping', players: 0 })
+        return
+      }
+      setState({ power: 'stopping', players: 0 })
+      const timer = window.setTimeout(() => setState({ power: 'sleeping', players: 0 }), STOPS_MS)
+      return () => clearTimeout(timer)
     }
     setState({ power: still ? 'online' : 'starting', players: still ? HOLDS - 2 : 0 })
     if (still) return

@@ -9,9 +9,10 @@
  * Not the drawing it belongs to, which is Island.tsx.
  */
 import { ctaMark } from '../../app/(public)/steps'
-import { loaderLabel } from '../../lib/present'
+import { loaderLabel, SLEEPS_SOON, STOPPING } from '../../lib/present'
 import { Button } from '../../ui/Button'
 import { ServerCard } from '../../ui/product'
+import type { PillStatus } from '../../ui/status'
 import styles from './island.module.css'
 import type { Power } from './scene'
 
@@ -23,10 +24,28 @@ const SAID: Record<Power, (players: number) => string> = {
   sleeping: () => 'Wakes up when someone joins',
   starting: () => 'Waking your world',
   online: (players) => `${players} / ${HOLDS} players`,
-  emptying: (players) => `${players} / ${HOLDS} players`,
+  // Once its last friend has left, it says what an empty server says while it waits to sleep.
+  emptying: (players) =>
+    players ? `${players} / ${HOLDS} players` : `0 / ${HOLDS} players · ${SLEEPS_SOON}`,
+  stopping: () => STOPPING.detail,
 }
 
-const PILL = { sleeping: 'sleeping', starting: 'starting', online: 'online', emptying: 'online' } as const
+const PILL = {
+  sleeping: 'sleeping',
+  starting: 'starting',
+  online: 'online',
+  emptying: 'online',
+  stopping: STOPPING.pill,
+} as const
+
+/** The card's state for the drawn server's, as the product says each: a stopping server's included. */
+export function cardOf(
+  power: Power,
+  players: number,
+): { status: PillStatus; label?: string; detail: string } {
+  const shown = { status: PILL[power], detail: SAID[power](players) }
+  return power === 'stopping' ? { ...shown, label: STOPPING.label } : shown
+}
 
 export function Card({
   address,
@@ -45,13 +64,15 @@ export function Card({
   /** Whether a change of state is said aloud: only once the visitor has pressed, never on its own. */
   announce: boolean
 }) {
+  const shown = cardOf(power, players)
   return (
     <div className={styles.card}>
       <ServerCard
         name="Sunset Valley"
-        status={PILL[power]}
+        status={shown.status}
+        {...(shown.label ? { statusLabel: shown.label } : {})}
         loader={loaderLabel('vanilla')}
-        detail={SAID[power](players)}
+        detail={shown.detail}
         address={address}
         live={announce}
         action={

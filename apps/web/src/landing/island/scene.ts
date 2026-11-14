@@ -27,7 +27,7 @@ import { fitted } from './dots'
 export type Asked = 'join' | 'leave'
 
 /** What the server is doing, as its owner's page would say it, and how many are on it. */
-export type Power = 'sleeping' | 'starting' | 'online' | 'emptying'
+export type Power = 'sleeping' | 'starting' | 'online' | 'emptying' | 'stopping'
 
 /** What the page tells the scene. */
 export interface Input {
@@ -83,8 +83,8 @@ const DAWN = 1.8
 const DUSK = 1.4
 /** Seconds the server takes to start in the scene: the windows come on through it. */
 const STARTING = 1.6
-/** Seconds after the last friend has gone before it sleeps. */
-const SETTLES = 0.8
+/** Seconds after the last friend has gone before it sleeps: it saves its world as the light goes out. */
+const SETTLES = DUSK
 /** How many steps the light's way is taken in, between the moon and the sun: a shadow map each. */
 const SHADES = 6
 /** How long chips of wood and splashes of water last, in seconds. */
@@ -129,8 +129,8 @@ export const openingCamera = (aspect: number): Camera => cameraOf(BASE, aspect, 
 
 /**
  * Whether the island has to be drawn again: something moved, the light is still on its way, or the
- * server is between two states (started but not yet up, emptied but not yet asleep), which only
- * time moves on. Without the last, everyone leaving before a friend came would stop the drawing
+ * server is between two states (started but not yet up, emptying, or saving its world before it
+ * sleeps), which only time moves on. Without the last, everyone leaving before a friend came would stop the drawing
  * once the light had gone, with the server still emptying and its card showing it online.
  */
 export function keepsDrawing(now: {
@@ -146,7 +146,8 @@ export function keepsDrawing(now: {
     now.lamps % 1 !== 0 ||
     now.day % 1 !== 0 ||
     now.power === 'starting' ||
-    now.power === 'emptying'
+    now.power === 'emptying' ||
+    now.power === 'stopping'
   )
 }
 
@@ -164,6 +165,23 @@ export function marksOf(lens: Camera | null): Marks {
     grass: at([SIZE, GRASS, 0]),
     cut: at([SIZE, CUT, 0]),
   }
+}
+
+/**
+ * What the server does next, given what was asked: a join starts it and it comes up after its
+ * start; a leave empties it, and once the last friend has walked off the grass it stops, saving
+ * its world for `SETTLES` seconds as the light goes out, and sleeps. `held` is how long it has
+ * been as it is, and `about` whether any friend is still on the grass.
+ */
+export function nextPower(asked: Asked, now: { power: Power; held: number; about: boolean }): Power {
+  const { power, held, about } = now
+  if (asked === 'join') {
+    if (power === 'starting') return held >= STARTING ? 'online' : power
+    return power === 'online' ? power : 'starting'
+  }
+  if (power === 'starting' || power === 'online') return 'emptying'
+  if (power === 'emptying') return about ? power : 'stopping'
+  return power === 'stopping' && held >= SETTLES ? 'sleeping' : power
 }
 
 export class Island {
@@ -250,7 +268,7 @@ export class Island {
   /** The server's state, moved on by `dt` seconds: what the cast and the light follow. */
   private stepPower(dt: number): void {
     this.held += dt
-    const next = this.nextPower()
+    const next = nextPower(this.input.asked, { power: this.power, held: this.held, about: this.cast.about })
     if (next !== this.power) {
       this.power = next
       this.held = 0
@@ -259,20 +277,6 @@ export class Island {
     const lit = on || (this.power === 'emptying' && this.cast.about)
     this.lamps = clamp(this.lamps + (lit ? dt / STARTING : -dt / DUSK))
     this.day = clamp(this.day + (lit ? dt / DAWN : -dt / DUSK))
-  }
-
-  /**
-   * What the server does next, given what was asked: a join starts it and it comes up after its
-   * start; a leave empties it, and once the last friend has walked off it settles and sleeps.
-   */
-  private nextPower(): Power {
-    const { power, held } = this
-    if (this.input.asked === 'join') {
-      if (power === 'sleeping' || power === 'emptying') return 'starting'
-      return power === 'starting' && held >= STARTING ? 'online' : power
-    }
-    if (power === 'starting' || power === 'online') return 'emptying'
-    return power === 'emptying' && !this.cast.about && held >= SETTLES ? 'sleeping' : power
   }
 
   /**
