@@ -3,13 +3,15 @@
 // SPDX-License-Identifier: LicenseRef-Cubepals-Reserved
 
 /**
- * What each player's card in the stack shows on its top, so the card says which game it is: the
- * Java coffee cup on Java's, and the side of a grass block on Bedrock's, its grass dripping over
- * a few dots of dirt, each drawn flat on the card in the drawing's one ink (`currentColor`), at
- * the same line weight. The cup is the cup and steam of Oracle's Java logo, as Oracle publishes it,
- * without its wordmark, which can't be read at a card's size. Not where a card stands or what its
- * label says, which is geometry.ts.
+ * The marks the stack draws for who plays. A player's card shows which game it is: the Java coffee
+ * cup on Java's, and the side of a grass block on Bedrock's, its grass dripping over a few dots of
+ * dirt. The cup is the cup and steam of Oracle's Java logo, as Oracle publishes it, without its
+ * wordmark, which can't be read at a card's size. The door shows each friend it let in by the
+ * stand-in face the players page gives their name (`ui/face.tsx`). Each is drawn flat in the
+ * drawing's one ink (`currentColor`). Not where a mark stands, which is geometry.ts and tops.ts.
  */
+import { faceLetters } from '../../ui/face'
+
 /** The Java logo's cup and steam, in its own coordinates. */
 const CUP = [
   'M102.681,291.324c0,0-14.178,8.245,10.09,11.035c29.4,3.354,44.426,2.873,76.825-3.259c0,0,8.518,5.341,20.414,9.967C137.38,340.195,45.634,307.264,102.681,291.324',
@@ -44,6 +46,31 @@ function GrassFace({ size }: { size: number }) {
       <rect x={58} y={56} width={6} height={6} />
       <rect x={44} y={72} width={6} height={6} />
       <rect x={70} y={70} width={6} height={6} />
+    </svg>
+  )
+}
+
+/** The letters of a face (`ui/face.tsx`) that are inked: hair, headwear, eyes and mouth. */
+const INKED = new Set(['H', 'h', 'A', 'a', 'E', 'M'])
+
+/** A friend's face, `size` blocks wide and tall, drawn from its top-left corner. */
+export function FaceMark({ name, size }: { name: string; size: number }) {
+  const inked: string[] = []
+  faceLetters(name).forEach((row, y) => {
+    ;[...row].forEach((letter, x) => {
+      if (INKED.has(letter)) inked.push(`M${x} ${y}h1v1h-1z`)
+    })
+  })
+  return (
+    <svg
+      viewBox="0 0 8 8"
+      width={size}
+      height={size}
+      fill="currentColor"
+      shapeRendering="crispEdges"
+      aria-hidden
+    >
+      <path d={inked.join('')} />
     </svg>
   )
 }

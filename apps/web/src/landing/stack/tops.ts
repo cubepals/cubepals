@@ -9,14 +9,13 @@
  * sessions the plans keep. The near corner shows even when the stack is closed, so what matters
  * most sits toward it. Not where a plate is, which is geometry.ts.
  */
-import type { PixelIconName } from '../../ui/pixel-icon'
 import { ADDRESS, DAY, hoursOn, SHOWN } from '../sections/drawn'
 import { type Part, type Plate, widthOf } from './geometry'
 
 /** How a box is filled: not at all, as what was picked, or as a track something runs along. */
 type Fill = 'none' | 'picked' | 'track'
 
-/** One mark on a plate's top. Words and icons `on` a picked box are drawn in its reverse. */
+/** One mark on a plate's top. Words `on` a picked box are drawn in its reverse. */
 export type Mark =
   | {
       kind: 'box'
@@ -26,7 +25,7 @@ export type Mark =
     }
   | { kind: 'tick'; at: readonly [number, number, number, number] }
   | { kind: 'words'; text: string; u: number; v: number; size: number; fit?: number; on?: boolean }
-  | { kind: 'icon'; name: PixelIconName; u: number; v: number; size: number; on?: boolean }
+  | { kind: 'face'; name: string; u: number; v: number; size: number }
 
 /** What the tops are drawn from: the plan with mods, if any, and how many sessions the plans keep at most. */
 export interface Told {
@@ -34,8 +33,16 @@ export interface Told {
   kept: number
 }
 
-/** How many friends the drawn door has let in. */
-const ADDED = 3
+/**
+ * The friends the drawn door has let in, each drawn with the face the players page gives their
+ * name (`ui/face.tsx`): three names whose faces differ.
+ */
+const FRIENDS = ['kai', 'leo', 'mia'] as const
+const ADDED = FRIENDS.length
+
+/** How tall a friend's name is, in blocks, and how wide each of its letters, in a monospaced face. */
+const NAME = 0.56
+const LETTER = NAME * 0.6
 
 const box = (
   u0: number,
@@ -116,9 +123,11 @@ function door(): Mark[] {
   const marks: Mark[] = [words(ADDRESS, 1.2, 14.75, 0.86, { fit: 13.6 })]
   for (let i = 0; i < 5; i++) {
     const u = 1.2 + i * 2.8
-    const added = i < ADDED
-    marks.push(box(u, 9.7, u + 2.2, 12.5, added ? 'picked' : 'none', added ? 'solid' : 'dashed'))
-    if (added) marks.push({ kind: 'icon', name: 'friends', u: u + 0.35, v: 10.35, size: 1.5, on: true })
+    const friend = FRIENDS[i]
+    marks.push(box(u, 9.7, u + 2.2, 12.5, 'none', friend ? 'solid' : 'dashed'))
+    if (!friend) continue
+    marks.push({ kind: 'face', name: friend, u: u + 0.4, v: 9.95, size: 1.4 })
+    marks.push(words(friend, u + 1.1 - (friend.length * LETTER) / 2, 12.2, NAME))
   }
   const who = ['anyone with the address', 'only the people you add']
   who.forEach((text, k) => {

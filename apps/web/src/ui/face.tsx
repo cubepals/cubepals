@@ -130,11 +130,24 @@ const ACCENTS: readonly (readonly [string, string])[] = [
 
 const WHITES = '#f4f1ea'
 
-/** The face a name wears: its pixels as colours, row by row. Exported for the design page. */
-function fallbackPixels(name: string): string[][] {
+/**
+ * The stand-in face a name wears, as its letters (above), before any colour: what the landing's
+ * drawing draws a friend with, in its one ink.
+ */
+export function faceLetters(name: string): readonly string[] {
+  return fallbackPicks(name).style
+}
+
+/** The picks a name makes, in their order: the face's style first, then whatever fills it. */
+function fallbackPicks(name: string) {
   const next = random(name.toLowerCase())
   const pick = <T,>(list: readonly T[]): T => list[Math.floor(next() * list.length)] as T
-  const style = pick(STYLES)
+  return { style: pick(STYLES), pick }
+}
+
+/** The face a name wears: its pixels as colours, row by row. Exported for the design page. */
+function fallbackPixels(name: string): string[][] {
+  const { style, pick } = fallbackPicks(name)
   const [skin, skinShade, mouth] = pick(SKINS)
   const [hair, hairShade] = pick(HAIR)
   const eyes = pick(EYES)
