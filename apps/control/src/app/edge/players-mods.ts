@@ -15,10 +15,10 @@
  * server takes (`clients.ts`).
  */
 import type { EdgeRoute } from '@blockly/contracts/edge'
-import { type PinnedMod, runsPlugins } from '../../domain/mods/artifact.ts'
+import type { PinnedMod } from '../../domain/mods/artifact.ts'
 import type { PinnedModpack } from '../../domain/mods/modpack.ts'
 import type { Loader } from '../../domain/revision/revision.ts'
-import { installsAsDatapack } from '../../minecraft/mods.ts'
+import { inPlayersGames } from '../../minecraft/mods.ts'
 
 /**
  * Of one of a server's revisions, what its players' games have to match: each pin's name, version
@@ -35,17 +35,16 @@ export interface RevisionMods {
 /** The most a route lists: the edge shows these and says how many more. */
 export const MOST_LISTED = 8
 
-/** Which mods a player's game most likely carries too, in the order they are listed after those moved. */
-const SIDES: readonly PinnedMod['environment'][] = ['both', 'optional', 'server']
-
 const fileOf = (mod: { file: string }): string => mod.file
 
-/** Of `revision`, what goes in a player's game: its pack, or the jars it loads; null for neither. */
+/**
+ * Of `revision`, what goes in a player's game: its pack, or the jars it loads, by the one rule the
+ * server's page names them by too (`inPlayersGames`), in its order; null for neither.
+ */
 function carried(revision: RevisionMods): { pack: string } | { jars: RevisionMods['mods'] } | null {
-  if (runsPlugins(revision.loader)) return null
   if (revision.modpack !== null)
     return revision.modpack.environment === 'server' ? null : { pack: revision.modpack.versionId }
-  const jars = revision.mods.filter((mod) => !installsAsDatapack(mod, revision.loader))
+  const jars = inPlayersGames(revision.mods, revision.loader)
   return jars.length === 0 ? null : { jars }
 }
 
@@ -86,11 +85,11 @@ export function playersMods(history: readonly RevisionMods[]): EdgeRoute['mods']
     const changed = moved(`pack:${what.pack}`) ? { changed: true as const } : {}
     return { list: [{ name: pack.name, version: pack.versionLabel, ...changed }], ...changedAt, pack: true }
   }
-  const rank = (mod: RevisionMods['mods'][number]) =>
-    moved(fileOf(mod)) ? -1 : SIDES.indexOf(mod.environment)
-  const ordered = [...what.jars].sort(
-    (a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name, 'en', { sensitivity: 'base' }),
-  )
+  // What the last change moved goes first; each part keeps the rule's own order.
+  const ordered = [
+    ...what.jars.filter((mod) => moved(fileOf(mod))),
+    ...what.jars.filter((mod) => !moved(fileOf(mod))),
+  ]
   const list = ordered.slice(0, MOST_LISTED).map((mod) => ({
     name: mod.name,
     version: mod.versionLabel,
