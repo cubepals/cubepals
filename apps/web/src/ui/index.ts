@@ -11,6 +11,7 @@ export { Checkbox, FormRow, FormSection, Select, TextField, Toggle } from './fie
 export { CopyField, FileButton, Modal, NavTabs, ProgressBar, Tabs } from './interactive'
 export { ItemIcon, ItemSlot } from './items'
 export { BlockMeter } from './meter'
+export { GetMods } from './mods'
 export { OutLink } from './out-link'
 export { GetPack } from './pack'
 export { cardsOf, plansSaid } from './plan-details'

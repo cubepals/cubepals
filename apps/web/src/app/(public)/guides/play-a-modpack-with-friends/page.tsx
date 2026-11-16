@@ -90,8 +90,8 @@ export default async function Guide() {
         <Shot
           src={`${PICTURES}/what-you-need.png`}
           width={576}
-          height={208}
-          alt="The What you need first card on an invite: NeoForge 21.1.256 for Minecraft 1.21.1, and these in your own game, with a link to Create."
+          height={324}
+          alt="The What you need first card on an invite: NeoForge 21.1.266 for Minecraft 1.21.1, and these in your own game, at the versions this server runs. Create 6.0.10+mc1.21.1, linked to that version. Then: Get each at that version, then join, with a step each for the Modrinth App or CurseForge, Prism Launcher and the Minecraft Launcher."
           caption="What the invite to a Create server said a friend needs."
         />
       </Part>

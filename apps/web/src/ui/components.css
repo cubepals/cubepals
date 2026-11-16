@@ -798,6 +798,33 @@ textarea.bk-input {
   font-family: var(--font-mono);
   font-weight: 500;
 }
+/* The mods a player's game has, each at the version a server runs, and the way to it in each
+   launcher (ui/mods.tsx). */
+.bk-getmods {
+  display: grid;
+  gap: var(--space-16);
+}
+/* Spaced by the block's own gaps alone, not a list's or a paragraph's margins. */
+.bk-getmods :is(p, ul) {
+  margin: 0;
+}
+.bk-getmods__list {
+  display: grid;
+  gap: var(--space-8);
+  padding-inline-start: var(--space-20);
+}
+.bk-getmods__others {
+  display: grid;
+  gap: var(--space-12);
+  margin-block-start: var(--space-12);
+}
+.bk-getmods .bk-getmods__steps {
+  display: grid;
+  gap: var(--space-4);
+  margin-block-start: var(--space-4);
+  padding-inline-start: var(--space-16);
+}
+
 /* A pack a server plays, and the way into a player's launcher (ui/pack.tsx). */
 .bk-getpack {
   display: grid;

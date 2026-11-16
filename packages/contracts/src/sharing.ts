@@ -50,8 +50,26 @@ export interface JoinNeeds {
   modpack: PackView | null
   /** The loader players install too; null when plain Minecraft is enough. */
   loader: { label: string; version: string | null } | null
-  /** Mods players need in their own game, with where to get each. */
-  mods: Array<{ name: string; url: string | null }>
+  /** Mods players need in their own game, each at the version the server runs. */
+  mods: PlayersMod[]
+  /**
+   * The server's other mods, which a player's game joins without but can carry too: a game that
+   * has one joins only with the version the server runs. With `mods`, every mod a player's game can
+   * carry. Empty for a pack or plugins. Absent from older answers.
+   */
+  ifCarried?: PlayersMod[]
+}
+
+/** A mod in a player's game, at the exact version the server runs. */
+export interface PlayersMod {
+  name: string
+  /** The version the server runs, as its catalog labels it. Absent from older answers. */
+  version?: string
+  /**
+   * Where a player gets that exact version: its own page on its catalog, or its file where Cubepals
+   * has no page to give. Null for a jar its owner uploaded, which Cubepals never hands out.
+   */
+  url: string | null
 }
 
 /**
