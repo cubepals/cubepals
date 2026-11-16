@@ -159,11 +159,12 @@ describe.skipIf(!hasDatabase)('a route’s mods', () => {
         applied: sql`${schema.serverRuntimes.applied} || ${JSON.stringify({ revisionId: fabric.id })}::jsonb`,
       })
       .where(eq(schema.serverRuntimes.serverId, id))
-    // Plain Minecraft before it carried none: every one of them is what changed.
+    // Plain Minecraft before it carried none: every one of them is what changed, in the order the
+    // server's page lists them (`inPlayersGames`), what players' games need first.
     const booting = {
       list: [
-        { name: 'AppleSkin', version: '3.0.10', changed: true as const },
         { name: 'VeinMiner', version: '2.13.0', changed: true as const },
+        { name: 'AppleSkin', version: '3.0.10', changed: true as const },
       ],
       changedAt: await madeAt(fabric.id),
     }
