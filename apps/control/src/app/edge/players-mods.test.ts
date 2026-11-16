@@ -13,6 +13,7 @@ import { randomUUID } from 'node:crypto'
 import { schema } from '@blockly/db'
 import { eq, sql } from 'drizzle-orm'
 import type { PinnedMod } from '../../domain/mods/artifact.ts'
+import { inPlayersGames } from '../../minecraft/mods.ts'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
 import { insertRevision, loadRevision } from '../servers/persistence.ts'
 import { MOST_LISTED, playersMods, type RevisionMods } from './players-mods.ts'
@@ -115,6 +116,20 @@ describe('what a player’s game matches', () => {
       changedAt: at(9).toISOString(),
       pack: true,
     })
+  })
+})
+
+describe('the mods the server’s page names', () => {
+  test('a route lists every mod a game can carry, by the rule the page lists them by', () => {
+    const mods = [
+      mod('Terralith', '2.5.8', 'server', ['datapack']),
+      mod('VeinMiner', '2.14.0', 'server'),
+      mod('Create', '6.0.10', 'both'),
+      mod('Voice', '2.5'),
+    ]
+    const listed = playersMods([revision(16, mods)])?.list.map((m) => m.name)
+    expect(listed).toEqual(inPlayersGames(mods, 'fabric').map((m) => m.name))
+    expect(listed).toEqual(['Create', 'Voice', 'VeinMiner'])
   })
 })
 

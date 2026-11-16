@@ -7,18 +7,18 @@
  * or its mods with the versions it runs. The edge tells it to a player whose game left as it
  * joined (`apps/edge/left-at-once.ts`), which is what a game does with a mod older or newer than
  * the server's. The mods the server's last change of mods moved come first, with when that was:
- * a game that played before it has those to update. Every jar is listed, whatever its authors say
- * it asks of players, since a game can carry any of them. Plugins and datapacks never go in a
- * player's game, so a server that runs only those asks nothing.
+ * a game that played before it has those to update. Which mods a game can carry, and in what order
+ * after those, is `inPlayersGames`, the rule the server's page lists them by
+ * (`sharing/queries.ts`): every jar, whatever its authors say it asks of players; never a plugin or
+ * a datapack, so a server that runs only those asks nothing.
  *
- * Not for what the server's page lists for players (`sharing/queries.ts`), or for which games the
- * server takes (`clients.ts`).
+ * Not for which games the server takes (`clients.ts`).
  */
 import type { EdgeRoute } from '@blockly/contracts/edge'
 import { type PinnedMod, runsPlugins } from '../../domain/mods/artifact.ts'
 import type { PinnedModpack } from '../../domain/mods/modpack.ts'
 import type { Loader } from '../../domain/revision/revision.ts'
-import { installsAsDatapack } from '../../minecraft/mods.ts'
+import { CARRIED_FIRST, inPlayersGames } from '../../minecraft/mods.ts'
 
 /**
  * Of one of a server's revisions, what its players' games have to match: each pin's name, version
@@ -35,9 +35,6 @@ export interface RevisionMods {
 /** The most a route lists: the edge shows these and says how many more. */
 export const MOST_LISTED = 8
 
-/** Which mods a player's game most likely carries too, in the order they are listed after those moved. */
-const SIDES: readonly PinnedMod['environment'][] = ['both', 'optional', 'server']
-
 const fileOf = (mod: { file: string }): string => mod.file
 
 /** Of `revision`, what goes in a player's game: its pack, or the jars it loads; null for neither. */
@@ -45,7 +42,7 @@ function carried(revision: RevisionMods): { pack: string } | { jars: RevisionMod
   if (runsPlugins(revision.loader)) return null
   if (revision.modpack !== null)
     return revision.modpack.environment === 'server' ? null : { pack: revision.modpack.versionId }
-  const jars = revision.mods.filter((mod) => !installsAsDatapack(mod, revision.loader))
+  const jars = inPlayersGames(revision.mods, revision.loader)
   return jars.length === 0 ? null : { jars }
 }
 
@@ -87,7 +84,7 @@ export function playersMods(history: readonly RevisionMods[]): EdgeRoute['mods']
     return { list: [{ name: pack.name, version: pack.versionLabel, ...changed }], ...changedAt, pack: true }
   }
   const rank = (mod: RevisionMods['mods'][number]) =>
-    moved(fileOf(mod)) ? -1 : SIDES.indexOf(mod.environment)
+    moved(fileOf(mod)) ? -1 : CARRIED_FIRST.indexOf(mod.environment)
   const ordered = [...what.jars].sort(
     (a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name, 'en', { sensitivity: 'base' }),
   )

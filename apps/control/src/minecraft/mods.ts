@@ -30,8 +30,11 @@ export const catalogLoadersFor = (loader: Loader): readonly string[] => [...JAR_
 export const installsAsDatapack = (mod: { loaders: readonly string[] }, loader: Loader): boolean =>
   isDatapack(mod, JAR_LOADERS[loader])
 
-/** Which of a server's mods a player's game most likely carries too, the likeliest first. */
-const CARRIED_FIRST: readonly PinnedMod['environment'][] = ['both', 'optional', 'server']
+/**
+ * Which of a server's mods a player's game most likely carries too, the likeliest first: the order
+ * `inPlayersGames` lists them in, and the edge after the ones a change moved (`players-mods.ts`).
+ */
+export const CARRIED_FIRST: readonly PinnedMod['environment'][] = ['both', 'optional', 'server']
 
 /**
  * The mods a player's game can carry too: every jar the server loads, whatever its authors say it
