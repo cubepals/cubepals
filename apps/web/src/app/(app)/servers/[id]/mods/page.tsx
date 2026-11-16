@@ -51,6 +51,7 @@ import { useServer } from '../use-server'
 import { BedrockGoes } from './bedrock-goes'
 import { OwnDatapacks } from './own-datapacks'
 import { UploadRow, useOwnUploads } from './own-uploads'
+import { playersVersions } from './players-versions'
 
 type Change = Omit<ModChangeInput, 'serverId'>
 type Pending = { title: string; change: Change }
@@ -752,6 +753,7 @@ function PlanChange({
             {datapacksSaid(planned.added)}
             {planned.added.some((m) => m.environment === 'both') &&
               'Players need the ones marked for players too in their own game. '}
+            {playersVersions(planned.updated)}
             {whatHappens(view)}
           </p>
         </>
