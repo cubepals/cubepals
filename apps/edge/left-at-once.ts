@@ -123,9 +123,15 @@ export class LeftAtOnce {
       else break
   }
 
+  /** Whether `hostname`'s server runs, so a join let through now is handed to it at once, not held. */
+  running(hostname: string): boolean {
+    const route = this.#route(hostname)
+    return route !== undefined && route.state === undefined
+  }
+
   /** What a ping from `ip` to `hostname` goes back through, for a running server; null for its own answer. */
   status(hostname: string, ip: string): StatusRewrite | null {
-    if (this.#route(hostname)?.state !== undefined) return null
+    if (!this.running(hostname)) return null
     return this.#until(hostname, ip) === null ? null : new StatusRewrite(LEFT_STATUS)
   }
 

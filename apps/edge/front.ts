@@ -483,9 +483,12 @@ class Arrival {
         const client = this.#client
         const session = watchSession(client, toRouter)
         visits.watching(source, session)
+        // A join to a running server is handed over as it goes on to mc-router, whose own word of
+        // it may come after a game that left at once; a held one is handed over by the waiting room.
+        const direct = this.#left()?.running(handshake.hostname) ? new Date().toISOString() : undefined
         client.once('close', () => {
           const end = session.end()
-          const handedAt = visits.byAddress(source)?.handedAt
+          const handedAt = visits.byAddress(source)?.handedAt ?? direct
           visits.closed(source, { up: client.bytesRead, down: client.bytesWritten }, end)
           this.#left()?.left(handshake.hostname, this.#ip(), handedAt, end)
         })

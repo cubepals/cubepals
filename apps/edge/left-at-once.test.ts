@@ -12,7 +12,7 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 import { type AddressInfo, connect, createServer, type Server } from 'node:net'
 import type { EdgeRoute } from '@blockly/contracts/edge'
-import { until } from '@blockly/contracts/waits'
+import { stays, until } from '@blockly/contracts/waits'
 import { MINUTE_MS, SECOND_MS } from '../../packages/contracts/src/durations.ts'
 import { readProxyHeader } from '../../packages/contracts/src/proxy-header.ts'
 import { front } from './front.ts'
@@ -189,11 +189,15 @@ describe('through the front door', () => {
     string(JSON.stringify({ version: { name: '26.3', protocol: 776 }, description: 'Hi' })),
   )
 
-  test('a game that leaves as it joins hears why at its next ping and join, then goes through', async () => {
+  /**
+   * The front door before a stand-in mc-router, which answers a ping with the server's status and,
+   * where it `reports`, tells the visit it handed a join over, as its webhook does.
+   */
+  async function door(routes: EdgeRoute[], reports: boolean) {
     const visits = new Visits(() => undefined, { edgeId: 'edge-1', region: 'fra' })
     const joins: string[] = []
-    // A stand-in mc-router: tells the visit it handed the join over, as its webhook does, and
-    // answers a ping with the server's status.
+    const handed = (source: string) =>
+      reports && visits.update(source, { path: 'direct', handedAt: new Date().toISOString() })
     const router = createServer((socket) => {
       let got = new Uint8Array(0)
       socket.on('error', () => undefined)
@@ -203,13 +207,12 @@ describe('through the front door', () => {
         if (greeting === null) return
         if (greeting.intent === 1) return void socket.end(STATUS)
         if (!joins.includes(greeting.source)) joins.push(greeting.source)
-        visits.update(greeting.source, { path: 'direct', handedAt: new Date().toISOString() })
+        handed(greeting.source)
       })
     }).listen(0, '127.0.0.1')
     open.push(router)
-    const routes = [route()]
     const left = new LeftAtOnce((name) => routes.find((r) => r.hostname === name))
-    const door = front({
+    const listener = front({
       port: 0,
       router: await listening(router),
       proxied: false,
@@ -222,9 +225,8 @@ describe('through the front door', () => {
       visits,
       leftAtOnce: left,
     })
-    open.push(door)
-    const port = await listening(door)
-
+    open.push(listener)
+    const port = await listening(listener)
     /** Sends `bytes`, and resolves with all the door answered once it closed, or `afterMs` passed. */
     const dial = (bytes: Uint8Array, afterMs = 1_000) =>
       new Promise<Uint8Array>((resolve) => {
@@ -236,6 +238,11 @@ describe('through the front door', () => {
         const ending = setTimeout(() => socket.end(), afterMs)
         socket.once('close', () => clearTimeout(ending))
       })
+    return { joins, left, dial }
+  }
+
+  test('a game that leaves as it joins hears why at its next ping and join, then goes through', async () => {
+    const { joins, left, dial } = await door([route()], true)
 
     // Before anything happened, a ping hears the server's own answer.
     expect(new TextDecoder().decode(await dial(statusRequest('modded.play.test', 25565)))).toContain('Hi')
@@ -256,5 +263,21 @@ describe('through the front door', () => {
     // The next goes through: nothing is kept from a player on what the edge only infers.
     void dial(joinRequest('modded.play.test'), 300)
     await until('the join after to reach the server', () => joins.length === 2)
+  })
+
+  test('a join to a running server counts from its hand-off even when mc-router’s word of it comes late', async () => {
+    const { joins, left, dial } = await door([route()], false)
+    const first = dial(joinRequest('modded.play.test'), 300)
+    await until('the join to reach the server', () => joins.length === 1)
+    await first
+    await until('the game to be kept as one that left as it joined', () => left.held() === 1)
+  })
+
+  test('a join held for a sleeping server and never handed over isn’t kept', async () => {
+    const { joins, left, dial } = await door([route({ state: 'asleep' })], false)
+    const first = dial(joinRequest('modded.play.test'), 300)
+    await until('the join to reach the waiting room', () => joins.length === 1)
+    await first
+    await stays('nothing to be kept', () => left.held() === 0, 300)
   })
 })
