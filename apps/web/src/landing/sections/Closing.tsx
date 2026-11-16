@@ -18,19 +18,13 @@ import { lastSaid } from './said'
 
 export function Closing({ create, plans }: { create: string; plans: readonly PublicPlan[] }) {
   return (
-    <section
-      className={styles.closing}
-      data-tone="ink"
-      data-closing
-      aria-labelledby="closing"
-      {...seenMark('closing')}
-    >
+    <section className={styles.closing} data-tone="ink" aria-labelledby="closing" {...seenMark('closing')}>
       <div className="lp-sheet">
         <div className={`lp-pad ${styles.inner}`}>
           <h2 id="closing" className={`lp-display lp-arrive ${styles.title}`}>
             Start a world with your friends.
           </h2>
-          <div className={styles.go}>
+          <div className={styles.go} data-closing>
             <Link href={create} className="bk-btn bk-btn--lg bk-btn--inverse" {...ctaMark('last_create')}>
               Create a server
             </Link>

@@ -2634,10 +2634,44 @@ textarea.bk-input {
   background: currentColor;
   mask: var(--chevron-ink) center / contain no-repeat;
   rotate: -90deg;
-  transition: rotate 150ms ease;
 }
 details[open] > .bk-disclosure::before {
   rotate: 0deg;
+}
+/* Its words are a control: a quick second click opens it again rather than selecting them. */
+.bk-disclosure {
+  user-select: none;
+}
+/* What it opens grows open and folds away as every disclosure does (`.bk-reveal`), on the same
+   clock, while staying a native `<details>`, so the browser's find in page still opens it. Where
+   the browser can't animate to its height, it opens at once as before. */
+details:has(> .bk-disclosure)::details-content {
+  block-size: 0;
+  overflow: clip;
+  opacity: 0;
+}
+details[open]:has(> .bk-disclosure)::details-content {
+  block-size: auto;
+  opacity: 1;
+}
+@media (prefers-reduced-motion: no-preference) {
+  details:has(> .bk-disclosure) {
+    interpolate-size: allow-keywords;
+  }
+  details:has(> .bk-disclosure)::details-content {
+    translate: 0 -8px;
+    transition:
+      block-size var(--panel) var(--ease),
+      opacity var(--panel) var(--ease),
+      translate var(--panel) var(--ease),
+      content-visibility var(--panel) allow-discrete;
+  }
+  details[open]:has(> .bk-disclosure)::details-content {
+    translate: none;
+  }
+  .bk-disclosure::before {
+    transition: rotate var(--panel) var(--ease);
+  }
 }
 @media (hover: hover) {
   .bk-disclosure:hover {

@@ -6,8 +6,9 @@
 
 /**
  * The header's "Create a server": there once the page has been scrolled. On the landing page it
- * waits until the first screen, with its own button, has gone, and steps aside again where the
- * last screen's button is on screen; anywhere else, after the first scroll. On the landing it also
+ * waits until the first screen's own button has gone, and steps aside again only while the last
+ * screen's button is on screen, not the edge of its section, so a question opening above it
+ * doesn't make it come and go; anywhere else, after the first scroll. On the landing it also
  * tells the header which ground it stands on, so it can be paper on the ink, and when the page has
  * left its top, for the hairline under it.
  */

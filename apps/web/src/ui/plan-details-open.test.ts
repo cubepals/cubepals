@@ -76,7 +76,7 @@ afterAll(async () => {
   }
 })
 
-test('the details carry every state the plan card stylesheet reads, only while open', () => {
+test('the details carry every state the plan card stylesheet reads, only while open or folding', () => {
   expect(read.length).toBeGreaterThan(0)
   const host = browser.document.createElement('div')
   browser.document.body.appendChild(host)
@@ -92,4 +92,29 @@ test('the details carry every state the plan card stylesheet reads, only while o
   expect(carried()).toEqual(read)
   act(() => toggle.click())
   expect(carried()).toEqual([])
+})
+
+test('closing keeps the card its room until the details have folded away', () => {
+  const host = browser.document.createElement('div')
+  browser.document.body.appendChild(host)
+  const folding = createRoot(host as unknown as Element)
+  act(() => folding.render(createElement(PlanDetails, { plan: core, marker: null, className: 'details' })))
+  const details = host.querySelector('.details')
+  const toggle = host.querySelector('button')
+  const region = host.querySelector('.bk-reveal') as unknown as HTMLElement | null
+  if (!details || !toggle || !region) throw new Error('PlanDetails drew no details, control or region')
+  region.style.transitionDuration = '0.2s'
+
+  act(() => toggle.click())
+  act(() => toggle.click())
+  expect(toggle.getAttribute('aria-expanded')).toBe('false')
+  expect(read.filter((name) => details.hasAttribute(name))).toEqual(read)
+
+  const folded = new browser.Event('transitionend', { bubbles: true })
+  Object.defineProperty(folded, 'propertyName', { value: 'grid-template-rows' })
+  act(() => {
+    region.dispatchEvent(folded as unknown as Event)
+  })
+  expect(read.filter((name) => details.hasAttribute(name))).toEqual([])
+  act(() => folding.unmount())
 })
