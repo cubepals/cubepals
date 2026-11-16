@@ -259,9 +259,15 @@ test.skipIf(!hasDatabase)(
       joins: { oldest: '1.21.1', newer: false },
       modpack: null,
       loader: { label: 'Fabric', version: '0.19.5' },
+      // Each at the version the server runs: that version's page, or its file from a catalog
+      // Cubepals doesn't link.
       mods: [
-        { name: 'Moss Blocks', url: 'https://catalog.test/project/moss' },
-        { name: 'Optional Voice', url: null },
+        { name: 'Moss Blocks', version: '1', url: 'https://catalog.test/project/moss/version/moss-v1' },
+        { name: 'Optional Voice', version: '1', url: artifact.ref.url },
+      ],
+      // A game joins without it, but one that carries it needs this version.
+      ifCarried: [
+        { name: 'Server Tools', version: '1', url: 'https://catalog.test/project/moss/version/moss-v1' },
       ],
     })
     expect((await q.share(owner, server.id)).copying).toEqual({
@@ -302,6 +308,7 @@ test.skipIf(!hasDatabase)(
               },
         loader: null,
         mods: [],
+        ifCarried: [],
       })
       expect((await q.share(owner, server.id)).copying).toEqual({
         on: false,
@@ -337,6 +344,7 @@ function privatePage(slug: string): PublicServerView {
       modpack: null,
       loader: null,
       mods: [],
+      ifCarried: [],
     },
     bedrock: false,
     mods: [],

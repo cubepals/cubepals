@@ -238,6 +238,7 @@ describe.skipIf(!hasDatabase)('Blockly’s own packs', () => {
       modpack: null,
       loader: null,
       mods: [],
+      ifCarried: [],
     })
     const list = await harness().app.modQueries.list(owner, server.id)
     expect(list.packUploaded).toBe(false)

@@ -105,6 +105,8 @@ describe('HangarCatalog', () => {
       licence: 'MPL 2.0',
     })
     expect(catalog.projectPage('hangar:2087')).toBe('https://hangar.papermc.io/kernitus/OldCombatMechanics')
+    // A version is addressed by its name there, which its id doesn't give.
+    expect(catalog.versionPage('hangar:2087', 'hangar:1')).toBe(catalog.projectPage('hangar:2087'))
   })
 
   test('a project Hangar does not show is null', async () => {

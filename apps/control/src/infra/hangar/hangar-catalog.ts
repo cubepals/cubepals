@@ -74,6 +74,14 @@ export class HangarCatalog implements ModCatalog {
     return namespace === undefined ? 'https://hangar.papermc.io/' : `https://hangar.papermc.io/${namespace}`
   }
 
+  /**
+   * Hangar addresses a version by its name, which its id doesn't give, so this is the project's
+   * page. No player installs a plugin, so a page for players never shows it.
+   */
+  versionPage(projectId: string, _versionId: string): string {
+    return this.projectPage(projectId)
+  }
+
   packLinks(): PackLinks {
     throw new Error('Hangar publishes no modpacks')
   }

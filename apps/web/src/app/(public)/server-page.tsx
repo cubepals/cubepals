@@ -6,7 +6,7 @@
 
 import { type PublicServerView, versionsThatJoin } from '@blockly/contracts'
 import { useMutation } from '@tanstack/react-query'
-import { CopyPlus, ExternalLink } from 'lucide-react'
+import { CopyPlus } from 'lucide-react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { type SubmitEvent, useState } from 'react'
@@ -20,11 +20,11 @@ import {
   Button,
   CopyField,
   FormSection,
+  GetMods,
   GetPack,
   JavaAndBedrock,
   Note,
   OfficialSeal,
-  OutLink,
   TextField,
 } from '../../ui'
 import styles from './like-this.module.css'
@@ -116,9 +116,13 @@ export function ServerPage({ view, invitedBy }: { view: PublicServerView; invite
   )
 }
 
-/** What a player installs first, if anything. Most servers need nothing at all. */
+/**
+ * What a player installs first, if anything, each mod at the version the server runs. Most servers
+ * need nothing at all; a game that carries any of a server's mods anyway needs its version.
+ */
 function Needs({ view }: { view: PublicServerView }) {
   const { loader, mods, modpack } = view.needs
+  const others = view.needs.ifCarried ?? []
   if (modpack !== null)
     return (
       <FormSection
@@ -130,35 +134,26 @@ function Needs({ view }: { view: PublicServerView }) {
     )
   if (loader === null && mods.length === 0)
     return (
-      <p className="type-body-sm" style={{ color: 'var(--ink-muted)' }}>
-        Nothing to install: plain Minecraft {versionsThatJoin(view.gameVersion, view.needs.joins)} joins this
-        server.
-        {view.loader !== 'vanilla' &&
-          ` Its ${view.loader === 'paper' ? 'plugins' : 'mods'} run on the server only.`}
-      </p>
+      <div className="bk-stack" style={{ gap: 'var(--space-8)', maxWidth: 'var(--width-form)' }}>
+        <p className="type-body-sm" style={{ color: 'var(--ink-muted)' }}>
+          Nothing to install: plain Minecraft {versionsThatJoin(view.gameVersion, view.needs.joins)} joins
+          this server.
+          {view.loader !== 'vanilla' &&
+            ` Its ${view.loader === 'paper' ? 'plugins' : 'mods'} run on the server only.`}
+        </p>
+        {others.length > 0 && <GetMods mods={[]} others={others} />}
+      </div>
     )
   return (
     <FormSection
       title="What you need first"
       description={
         loader
-          ? `${loader.label}${loader.version ? ` ${loader.version}` : ''} for Minecraft ${view.gameVersion}, and these in your own game.`
-          : `These in your own game, on Minecraft ${view.gameVersion}.`
+          ? `${loader.label}${loader.version ? ` ${loader.version}` : ''} for Minecraft ${view.gameVersion}, and these in your own game, at the versions this server runs.`
+          : `These in your own game, at the versions this server runs, on Minecraft ${view.gameVersion}.`
       }
     >
-      <ul className="bk-stack type-body" style={{ gap: 'var(--space-8)', paddingLeft: 'var(--space-20)' }}>
-        {mods.map((mod) => (
-          <li key={mod.name}>
-            {mod.url ? (
-              <OutLink href={mod.url}>
-                {mod.name} <ExternalLink size={12} aria-hidden />
-              </OutLink>
-            ) : (
-              <>{mod.name} — ask the owner for it</>
-            )}
-          </li>
-        ))}
-      </ul>
+      <GetMods mods={mods} others={others} />
     </FormSection>
   )
 }

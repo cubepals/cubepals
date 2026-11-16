@@ -5,6 +5,7 @@
 import type {
   JoinNeeds,
   OpenedPage,
+  PlayersMod,
   PublicServerView,
   ReactionsView,
   RestingView,
@@ -17,6 +18,7 @@ import { forPlayers, type PinnedMod } from '../../domain/mods/artifact.ts'
 import type { ServerRevision } from '../../domain/revision/revision.ts'
 import type { MinecraftServer } from '../../domain/server/server.ts'
 import { formatJoinAddress } from '../../minecraft/address.ts'
+import { inPlayersGames } from '../../minecraft/mods.ts'
 import { LOADER_LABELS } from '../../minecraft/versions.ts'
 import { readAccess } from '../access/persistence.ts'
 import { loadControls } from '../accounts/persistence.ts'
@@ -299,8 +301,10 @@ export class SharingQueries {
   }
 
   /**
-   * What a player installs before joining. Plain Minecraft is enough unless a mod has to be in
-   * their game too: a server-side mod is the server's business, not theirs.
+   * What a player installs before joining, each mod at the version the server runs. Plain Minecraft
+   * is enough unless a mod has to be in their game too. The server's other mods follow: a game
+   * joins without them, and one that carries any joins only at the server's version of it, so the
+   * page names every mod a player's game can carry (`inPlayersGames`).
    */
   async #needs(
     revision: Pick<
@@ -313,7 +317,14 @@ export class SharingQueries {
     const alone = { oldest: revision.gameVersion, newer: false }
     // A pack the server runs on its own asks nothing of players: plain Minecraft joins.
     if (revision.modpack?.environment === 'server')
-      return { gameVersion: revision.gameVersion, joins: alone, modpack: null, loader: null, mods: [] }
+      return {
+        gameVersion: revision.gameVersion,
+        joins: alone,
+        modpack: null,
+        loader: null,
+        mods: [],
+        ifCarried: [],
+      }
     // Otherwise the pack is the whole answer: installing it brings the loader and every mod.
     if (revision.modpack !== null)
       return {
@@ -322,8 +333,11 @@ export class SharingQueries {
         modpack: packView(this.#catalog, revision),
         loader: null,
         mods: [],
+        ifCarried: [],
       }
-    const theirs = forPlayers(revision.mods, revision.loader)
+    const needed = new Set(forPlayers(revision.mods, revision.loader))
+    const carried = inPlayersGames(revision.mods, revision.loader)
+    const theirs = carried.filter((mod) => needed.has(mod))
     const loaderNeeded = theirs.length > 0 && revision.loader !== 'vanilla'
     const { joins } = await joinsNow(this.#db, revision, { running, applied })
     return {
@@ -333,14 +347,26 @@ export class SharingQueries {
       loader: loaderNeeded
         ? { label: LOADER_LABELS[revision.loader], version: revision.loaderVersion }
         : null,
-      mods: theirs.map((mod) => ({ name: mod.name, url: this.#page_(mod) })),
+      mods: theirs.map(this.#exactly),
+      ifCarried: carried.filter((mod) => !needed.has(mod)).map(this.#exactly),
     }
   }
 
-  #page_(mod: PinnedMod): string | null {
-    return 'projectId' in mod.source && (this.#catalog.ids ?? [this.#catalog.id]).includes(mod.source.catalog)
-      ? this.#catalog.projectPage(mod.source.projectId)
-      : null
+  /**
+   * A mod at the version the server runs, and where a player gets that version: its page on this
+   * catalog, or its public file from another. An upload is its owner's alone.
+   */
+  #exactly = (mod: PinnedMod): PlayersMod => {
+    const { source, artifact } = mod
+    const ours = (this.#catalog.ids ?? [this.#catalog.id]).includes(source.catalog)
+    const url = !('projectId' in source)
+      ? null
+      : ours
+        ? this.#catalog.versionPage(source.projectId, source.versionId)
+        : artifact.ref.kind === 'remote'
+          ? artifact.ref.url
+          : null
+    return { name: mod.name, version: mod.versionLabel, url }
   }
 }
 

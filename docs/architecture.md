@@ -2695,7 +2695,10 @@ everything about giving a server to someone: the invite link, the join address, 
 makes it public, and whether others may make one like it.
 - The public page, `/server/<slug>`, and the invitation, `/join/<code>`, are the same page
   (`app/sharing/queries.ts`), written for a player: what the server is, who is on, what to install
-  (usually nothing), and the address. It says nothing about machines, regions or sizes.
+  (usually nothing), and the address. It says nothing about machines, regions or sizes. Each mod it
+  names is at the version the server runs, linked to that version on its catalog, and with the ones
+  a player needs come, folded away, the server's other jars: a game that carries one anyway joins
+  only at the server's version (`inPlayersGames` in `minecraft/mods.ts`).
 - The page exists while the server is public (`published`), not removed by moderation, the
   directory switch is on, the owner's account is active and not restricted from public listing,
   and its name and address pass. Its owner sees it before anyone else can. Its status, badge and
