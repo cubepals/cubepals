@@ -101,7 +101,7 @@ test('closing keeps the card its room until the details have folded away', () =>
   act(() => folding.render(createElement(PlanDetails, { plan: core, marker: null, className: 'details' })))
   const details = host.querySelector('.details')
   const toggle = host.querySelector('button')
-  const region = host.querySelector<HTMLElement>('.bk-reveal')
+  const region = host.querySelector('.bk-reveal') as unknown as HTMLElement | null
   if (!details || !toggle || !region) throw new Error('PlanDetails drew no details, control or region')
   region.style.transitionDuration = '0.2s'
 
@@ -113,7 +113,7 @@ test('closing keeps the card its room until the details have folded away', () =>
   const folded = new browser.Event('transitionend', { bubbles: true })
   Object.defineProperty(folded, 'propertyName', { value: 'grid-template-rows' })
   act(() => {
-    region.dispatchEvent(folded)
+    region.dispatchEvent(folded as unknown as Event)
   })
   expect(read.filter((name) => details.hasAttribute(name))).toEqual([])
   act(() => folding.unmount())
