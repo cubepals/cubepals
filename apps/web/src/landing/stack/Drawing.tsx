@@ -9,7 +9,6 @@
  * (`data-under`, `data-over`, `data-lit` and the rest) for motion.ts to find and move. Where things
  * are comes from geometry.ts, what a plate's top shows from tops.ts.
  */
-import { PixelIcon } from '../../ui/pixel-icon'
 import { SIZE } from '../engine/chunk'
 import { BAYER, LEVELS } from './dither'
 import {
@@ -27,6 +26,7 @@ import {
   slabOf,
   TYPE,
 } from './geometry'
+import { CardMark, FaceMark } from './marks'
 import styles from './stack.module.css'
 import { type Mark, NOTES, type Told, topMarks } from './tops'
 
@@ -135,12 +135,13 @@ function Slab({
 
 type Drawn<M> = { stack: Stack; y: number; mark: M; look: Look; id: string }
 
-/** Words or an icon on a plate's top, laid on it. */
-function Laid({ stack, y, mark, look }: Drawn<Extract<Mark, { kind: 'words' | 'icon' }>>) {
+/** Words or a friend's face on a plate's top, laid on it. */
+function Laid({ stack, y, mark, look }: Drawn<Extract<Mark, { kind: 'words' | 'face' }>>) {
+  const on = mark.kind !== 'face' && mark.on
   return (
-    <g transform={planeOf(stack, y, mark.u, mark.v)} className={mark.on ? look.on : look.mark}>
-      {mark.kind === 'icon' ? (
-        <PixelIcon name={mark.name} size={mark.size} />
+    <g transform={planeOf(stack, y, mark.u, mark.v)} className={on ? look.on : look.mark}>
+      {mark.kind === 'face' ? (
+        <FaceMark name={mark.name} size={mark.size} />
       ) : (
         <text
           className={styles.words}
@@ -183,7 +184,7 @@ function Box({ stack, y, mark, look, id }: Drawn<Extract<Mark, { kind: 'box' }>>
 /** One mark on a plate's top, in a look. */
 function TopMark(props: Drawn<Mark>) {
   const { stack, y, mark, look } = props
-  if (mark.kind === 'words' || mark.kind === 'icon') return <Laid {...props} mark={mark} />
+  if (mark.kind === 'words' || mark.kind === 'face') return <Laid {...props} mark={mark} />
   if (mark.kind === 'box') return <Box {...props} mark={mark} />
   const [a, b] = [stack.at([mark.at[0], y, mark.at[1]]), stack.at([mark.at[2], y, mark.at[3]])]
   return <line className={strokeOf(look)} x1={a[0]} y1={a[1]} x2={b[0]} y2={b[1]} />
@@ -241,6 +242,9 @@ function Plate({
 }
 
 /** The players at the door, on its floor: each on a card, with their way to its corner and what they play on. */
+/** How wide a card's mark is, in blocks: as much of the card's narrow side as leaves it a margin. */
+const MARK = 2.1
+
 function Players({ stack, id }: { stack: Stack; id: string }) {
   return (
     <g data-players className={styles.players}>
@@ -268,8 +272,11 @@ function Players({ stack, id }: { stack: Stack; id: string }) {
               id={id}
               box={[x - half, z - across, x + half, z + across]}
             />
-            <g transform={planeOf(stack, FLOOR + CARD.high, x - 0.75, z - 0.75)} className={styles.markPaper}>
-              <PixelIcon name="friends" size={1.5} />
+            <g
+              transform={planeOf(stack, FLOOR + CARD.high, x - MARK / 2, z - MARK / 2)}
+              className={styles.markPaper}
+            >
+              <CardMark game={player.name} size={MARK} />
             </g>
             {player.label.map((line, k) => (
               <text
