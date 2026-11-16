@@ -208,7 +208,7 @@ export class EdgeService {
    */
   async listed(): Promise<{ routes: EdgeRoutes; from: Date; unrouted: boolean }> {
     const { print, inputs } = await this.#inputs()
-    const { servers: live, bindings, comingBack, booting, trials, motds, notices, plays } = inputs
+    const { servers: live, bindings, comingBack, booting, trials, motds, notices, plays, players } = inputs
     const restarting = restartingOf(live, comingBack)
     const unstoring = new Set(comingBack.filter((o) => o.kind === 'unstore').map((o) => o.serverId))
     const over = trialOver(trials)
@@ -237,6 +237,7 @@ export class EdgeService {
           ...operatorNotice(notices.get(server.id)),
           ...(binding?.proxyProtocol ? { proxyProtocol: true as const } : {}),
           ...joinsOf(plays, state, binding, server.desiredRevisionId),
+          ...modsOf(players, state, binding, server.desiredRevisionId),
         })
       }
     }
@@ -731,6 +732,18 @@ function joinsOf(
   if (range === null) return {}
   const { release, protocol, oldest, newest } = range
   return { joins: { release, protocol, oldest, ...(newest === null ? {} : { newest }) } }
+}
+
+/** What a player's game matches on a route's server: the run it booted while it runs, as `joinsOf`. */
+function modsOf(
+  players: RouteInputs['players'],
+  state: 'asleep' | 'restarting' | null,
+  binding: { revisionId: string | null } | undefined,
+  desired: string | null,
+): Pick<EdgeRoutes['routes'][number], 'mods'> {
+  const revisionId = (state === null ? binding?.revisionId : null) ?? desired
+  const mods = revisionId === null ? undefined : players.get(revisionId)
+  return mods === undefined ? {} : { mods }
 }
 
 /**

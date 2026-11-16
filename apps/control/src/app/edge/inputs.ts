@@ -15,14 +15,30 @@
  * messages, and what they run, go by the revision a server names. Not for building the routes (`service.ts`), or for
  * what the flags lead to (`routed.ts`).
  */
+import type { EdgeRoute } from '@blockly/contracts/edge'
 import { type Db, type Queryable, schema } from '@blockly/db'
-import { and, eq, inArray, isNotNull, isNull, type SQL, type SQLWrapper, sql } from 'drizzle-orm'
+import {
+  and,
+  desc,
+  eq,
+  gt,
+  inArray,
+  isNotNull,
+  isNull,
+  lte,
+  or,
+  type SQL,
+  type SQLWrapper,
+  sql,
+} from 'drizzle-orm'
 import type { PinnedMod } from '../../domain/mods/artifact.ts'
+import type { PinnedModpack } from '../../domain/mods/modpack.ts'
 import { type Loader, type OtherVersions, otherVersionsOf } from '../../domain/revision/revision.ts'
 import type { ServerStatus } from '../../domain/server/lifecycle.ts'
 import { trialStops } from '../accounts/play-total.ts'
 import type { RuntimeHandle } from '../ports/runtime.ts'
 import { motdsOf } from '../servers/persistence.ts'
+import { playersMods } from './players-mods.ts'
 
 const {
   accountStanding: standing,
@@ -70,6 +86,8 @@ export interface RouteInputs {
    * only those named like the Via plugins, which are all that decide which clients it takes.
    */
   plays: Map<string, Plays>
+  /** What a player's game has to match, by the same revisions, for those whose players need any (`players-mods.ts`). */
+  players: Map<string, NonNullable<EdgeRoute['mods']>>
 }
 
 /** A live server's binding, as far as its routes go. */
@@ -210,6 +228,64 @@ async function playsOf(q: Queryable, ids: readonly string[]): Promise<RouteInput
   )
 }
 
+/**
+ * How many of a server's revisions are read back for its last change of mods: one further back,
+ * behind this many changes of anything else, goes without its date.
+ */
+const MODS_HISTORY = 50
+
+/** What a player's game has to match to play the revisions `ids`, from each and those before it. */
+async function playersOf(q: Queryable, ids: readonly string[]): Promise<RouteInputs['players']> {
+  if (ids.length === 0) return new Map()
+  const routed = await q
+    .select({ id: revisions.id, serverId: revisions.serverId, number: revisions.number })
+    .from(revisions)
+    .where(inArray(revisions.id, [...ids]))
+  if (routed.length === 0) return new Map()
+  // Of each server, its revisions from as far back as its oldest routed one reads to its newest.
+  const spans = new Map<string, { from: number; to: number }>()
+  for (const { serverId, number } of routed) {
+    const span = spans.get(serverId)
+    spans.set(serverId, {
+      from: Math.min(span?.from ?? number, number - MODS_HISTORY),
+      to: Math.max(span?.to ?? number, number),
+    })
+  }
+  const rows = await q
+    .select({
+      serverId: revisions.serverId,
+      number: revisions.number,
+      loader: revisions.loader,
+      mods: revisions.mods,
+      modpack: revisions.modpack,
+      createdAt: revisions.createdAt,
+    })
+    .from(revisions)
+    .where(
+      or(
+        ...[...spans].map(([serverId, { from, to }]) =>
+          and(eq(revisions.serverId, serverId), gt(revisions.number, from), lte(revisions.number, to)),
+        ),
+      ),
+    )
+    .orderBy(desc(revisions.number))
+  const players: RouteInputs['players'] = new Map()
+  for (const { id, serverId, number } of routed) {
+    const history = rows
+      .filter((row) => row.serverId === serverId && row.number <= number)
+      .slice(0, MODS_HISTORY)
+      .map((row) => ({
+        loader: row.loader as Loader,
+        mods: (row.mods ?? []) as PinnedMod[],
+        modpack: row.modpack as PinnedModpack | null,
+        createdAt: row.createdAt,
+      }))
+    const theirs = playersMods(history)
+    if (theirs !== undefined) players.set(id, theirs)
+  }
+  return players
+}
+
 /** The rows of `query`, digested in a fixed order; an empty one digests to its place alone. */
 const digestOf = (query: SQLWrapper): SQL =>
   sql`coalesce((select string_agg(t::text, ';' order by t::text) from (${query}) t), '')`
@@ -241,6 +317,10 @@ export async function readInputs(
       const live = await serverRows(tx)
       const bindings = await bindingRows(tx, providers)
       const asleep = live.filter((s) => s.status !== 'running' && s.desiredRevisionId !== null)
+      const routedRevisions = [
+        ...live.flatMap((s) => (s.desiredRevisionId === null ? [] : [s.desiredRevisionId])),
+        ...bindings.flatMap((b) => (b.revisionId === null ? [] : [b.revisionId])),
+      ]
       return {
         fingerprint: print,
         inputs: {
@@ -268,10 +348,8 @@ export async function readInputs(
             asleep.flatMap((s) => (s.desiredRevisionId === null ? [] : [s.desiredRevisionId])),
           ),
           notices: new Map((await noticeRows(tx)).map((row) => [row.serverId, row.notice])),
-          plays: await playsOf(tx, [
-            ...live.flatMap((s) => (s.desiredRevisionId === null ? [] : [s.desiredRevisionId])),
-            ...bindings.flatMap((b) => (b.revisionId === null ? [] : [b.revisionId])),
-          ]),
+          plays: await playsOf(tx, routedRevisions),
+          players: await playersOf(tx, routedRevisions),
         },
       }
     },
