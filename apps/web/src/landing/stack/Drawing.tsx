@@ -27,6 +27,7 @@ import {
   slabOf,
   TYPE,
 } from './geometry'
+import { CardMark } from './marks'
 import styles from './stack.module.css'
 import { type Mark, NOTES, type Told, topMarks } from './tops'
 
@@ -241,6 +242,9 @@ function Plate({
 }
 
 /** The players at the door, on its floor: each on a card, with their way to its corner and what they play on. */
+/** How wide a card's mark is, in blocks: as much of the card's narrow side as leaves it a margin. */
+const MARK = 2.1
+
 function Players({ stack, id }: { stack: Stack; id: string }) {
   return (
     <g data-players className={styles.players}>
@@ -268,8 +272,11 @@ function Players({ stack, id }: { stack: Stack; id: string }) {
               id={id}
               box={[x - half, z - across, x + half, z + across]}
             />
-            <g transform={planeOf(stack, FLOOR + CARD.high, x - 0.75, z - 0.75)} className={styles.markPaper}>
-              <PixelIcon name="friends" size={1.5} />
+            <g
+              transform={planeOf(stack, FLOOR + CARD.high, x - MARK / 2, z - MARK / 2)}
+              className={styles.markPaper}
+            >
+              <CardMark game={player.name} size={MARK} />
             </g>
             {player.label.map((line, k) => (
               <text
