@@ -33,6 +33,8 @@ jobs:
       code: ${{ github.event_name == 'merge_group' && 'true' || steps.filter.outputs.code }}
       reporter: ${{ github.event_name == 'merge_group' && 'true' || steps.reporter.outputs.reporter }}
       tests: ${{ steps.groups.outputs.tests }}
+      # A pull request that changes nothing beyond the web app and prose (the `beyond` step below).
+      web_only: ${{ github.event_name == 'pull_request' && steps.beyond.outputs.web == 'false' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -242,10 +244,12 @@ jobs:
   # loads every module its start does and exits before configuration or a database are needed; the
   # edge agent, given nothing, must get as far as asking for its first variable. A package an image
   # leaves out, such as a peer its install omits, fails here and not at the next deploy.
+  # Neither image holds the web app (apps/control/Dockerfile, apps/edge/Dockerfile), so a pull
+  # request that changes nothing beyond it can't break them. Main and the merge queue build both.
   images:
     name: Images build and start
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.web_only != 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
