@@ -30,6 +30,28 @@ export const catalogLoadersFor = (loader: Loader): readonly string[] => [...JAR_
 export const installsAsDatapack = (mod: { loaders: readonly string[] }, loader: Loader): boolean =>
   isDatapack(mod, JAR_LOADERS[loader])
 
+/** Which of a server's mods a player's game most likely carries too, the likeliest first. */
+const CARRIED_FIRST: readonly PinnedMod['environment'][] = ['both', 'optional', 'server']
+
+/**
+ * The mods a player's game can carry too: every jar the server loads, whatever its authors say it
+ * asks of players, since a game can have any of them. A game with one at another version than the
+ * server's can't read what the server sends, and leaves as it joins (VeinMiner 2.13.0 was marked
+ * for both sides, 2.14.0 for the server alone). Plugins and datapacks never go in a player's game,
+ * so a plugin server has none. The ones a game most likely has come first (`both`, `optional`,
+ * then the server's own), each by name.
+ */
+export function inPlayersGames<T extends Pick<PinnedMod, 'name' | 'environment' | 'loaders'>>(
+  mods: readonly T[],
+  loader: Loader,
+): T[] {
+  if (runsPlugins(loader)) return []
+  const rank = (mod: T) => CARRIED_FIRST.indexOf(mod.environment)
+  return mods
+    .filter((mod) => !installsAsDatapack(mod, loader))
+    .sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name, 'en', { sensitivity: 'base' }))
+}
+
 /**
  * The server type a modpack needs, from the loader it declares. A pack names exactly one, and
  * only the mod loaders publish packs: a Paper server runs plugins, not a pack.

@@ -55,6 +55,10 @@ export class RoutedCatalog implements ModCatalog {
     return this.#of(projectId).projectPage(projectId)
   }
 
+  versionPage(projectId: string, versionId: string): string {
+    return this.#of(projectId).versionPage(projectId, versionId)
+  }
+
   packLinks(
     pack: { projectId: string; versionId: string; file: string },
     target: { gameVersion: string; loader: string },

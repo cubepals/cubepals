@@ -32,9 +32,13 @@ export class FakeCatalog implements ModCatalog {
     return `https://catalog.test/project/${projectId}`
   }
 
+  versionPage(projectId: string, versionId: string): string {
+    return `https://catalog.test/project/${projectId}/version/${versionId}`
+  }
+
   packLinks(pack: { projectId: string; versionId: string; file: string }): PackLinks {
     return {
-      page: `https://catalog.test/project/${pack.projectId}/version/${pack.versionId}`,
+      page: this.versionPage(pack.projectId, pack.versionId),
       file: pack.file,
       app: `catalog-app://version/${pack.versionId}`,
     }

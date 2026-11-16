@@ -63,6 +63,11 @@ export interface ModCatalog {
   /** Where people read about a project, on the catalog's own site. */
   projectPage(projectId: string): string
   /**
+   * One exact version's own page on the catalog's site, which says what is in it and downloads
+   * it: where a player gets the version a server runs rather than the newest.
+   */
+  versionPage(projectId: string, versionId: string): string
+  /**
    * How a player gets one exact version of a pack from the catalog itself: that version's page,
    * its file, carrying what the catalog asks a download it didn't start to say about itself, and
    * a link that installs it in the catalog's own launcher, where it has one.

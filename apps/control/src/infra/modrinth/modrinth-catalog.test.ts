@@ -388,3 +388,13 @@ describe('ModrinthCatalog', () => {
     await expect(refused).rejects.not.toBeInstanceOf(CatalogUnavailable)
   })
 })
+
+describe('a version on Modrinth’s own site', () => {
+  test('one exact version has its own page there, by ids', () => {
+    const { catalog, requests } = modrinth(() => Response.json({}))
+    expect(catalog.versionPage('gvQqBUqZ', 'ZSNsJrPI')).toBe(
+      'https://modrinth.com/project/gvQqBUqZ/version/ZSNsJrPI',
+    )
+    expect(requests).toEqual([])
+  })
+})

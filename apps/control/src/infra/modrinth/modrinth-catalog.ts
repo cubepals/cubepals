@@ -56,6 +56,11 @@ export class ModrinthCatalog implements ModCatalog {
     return `https://modrinth.com/project/${projectId}`
   }
 
+  versionPage(projectId: string, versionId: string): string {
+    // By ids, which never change; the site answers with its own address for that version.
+    return `https://modrinth.com/project/${projectId}/version/${versionId}`
+  }
+
   packLinks(
     pack: { projectId: string; versionId: string; file: string },
     target: { gameVersion: string; loader: string },
@@ -67,8 +72,7 @@ export class ModrinthCatalog implements ModCatalog {
     file.searchParams.set('mr_game_version', target.gameVersion)
     file.searchParams.set('mr_loader', target.loader)
     return {
-      // By ids, which never change; the site answers with its own address for that version.
-      page: `https://modrinth.com/project/${pack.projectId}/version/${pack.versionId}`,
+      page: this.versionPage(pack.projectId, pack.versionId),
       file: file.toString(),
       // The Modrinth App installs exactly this version from it (modrinth/code handler.rs, v0.21.5).
       app: `modrinth://version/${pack.versionId}`,
