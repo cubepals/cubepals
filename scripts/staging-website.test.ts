@@ -16,6 +16,7 @@ import {
   PREVIEW_DOMAIN,
   previewPattern,
   stagingSite,
+  workersSubdomain,
 } from './staging-website.ts'
 
 const CLOUDFLARE = { token: 'stand-in', accountId: 'stand-in' }
@@ -99,5 +100,36 @@ describe("staging's website and its previews", () => {
     expect(
       previewUpload(JSON.stringify({ type: 'version-upload', version_id: 'v', preview_alias_url: null })),
     ).toEqual({ url: undefined, version: 'v', versionUrl: undefined })
+  })
+})
+
+describe("the account's workers.dev subdomain", () => {
+  /** A stand-in for Cloudflare's API that gives `answers` in turn, and counts what was asked and waited. */
+  const cloudflareSaying = (...answers: (object | Error)[]) => {
+    const seen = { asks: 0, pauses: [] as number[] }
+    const ask = (async () => {
+      const answer = answers[Math.min(seen.asks++, answers.length - 1)]
+      if (answer instanceof Error) throw answer
+      return Response.json(answer, { status: 'success' in answer && answer.success ? 200 : 500 })
+    }) as unknown as typeof fetch
+    const pause = async (ms: number) => void seen.pauses.push(ms)
+    return { seen, ask, pause }
+  }
+  const NONE = { success: false, errors: [{ code: 10000, message: 'Internal error' }], result: null }
+  const NAMED = { success: true, errors: [], result: { subdomain: 'cubepals' } }
+
+  test('is asked again, a little later each time, when Cloudflare answers without one', async () => {
+    const { seen, ask, pause } = cloudflareSaying(NONE, new Error('socket hang up'), NAMED)
+    expect(await workersSubdomain(CLOUDFLARE, ask, pause)).toBe('cubepals')
+    expect(seen.asks).toBe(3)
+    expect(seen.pauses).toEqual([5000, 10000])
+  })
+
+  test('fails with what Cloudflare last said once it never names one', async () => {
+    const { seen, ask, pause } = cloudflareSaying(NONE)
+    await expect(workersSubdomain(CLOUDFLARE, ask, pause)).rejects.toThrow(
+      'asked 4 times: HTTP 500 [{"code":10000,"message":"Internal error"}]',
+    )
+    expect(seen.asks).toBe(4)
   })
 })
