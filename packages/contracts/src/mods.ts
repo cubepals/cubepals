@@ -163,7 +163,15 @@ export type ModPlanView =
       loader: Loader
       added: ModView[]
       removed: ModView[]
-      updated: Array<{ from: ModView; to: ModView }>
+      updated: Array<{
+        from: ModView
+        to: ModView
+        /**
+         * A player's game can carry it, whatever its authors say it asks of players: a game that
+         * has it joins only with `to`'s version once the change applies. Absent from older answers.
+         */
+        carried?: boolean
+      }>
       /** Mods taken down where they were published: applying needs `acknowledgeRevoked`. */
       revoked: ModView[]
       /** Send back with the change, so what is applied is what was shown. */

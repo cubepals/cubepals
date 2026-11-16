@@ -17,7 +17,12 @@ import { forPlayers, type PinnedMod } from '../../domain/mods/artifact.ts'
 import type { ModConflict } from '../../domain/mods/resolve.ts'
 import type { ServerRevision } from '../../domain/revision/revision.ts'
 import { datapackFits, madeFor } from '../../minecraft/datapack-files.ts'
-import { catalogLoadersFor, installsAsDatapack, projectTypesFor } from '../../minecraft/mods.ts'
+import {
+  catalogLoadersFor,
+  inPlayersGames,
+  installsAsDatapack,
+  projectTypesFor,
+} from '../../minecraft/mods.ts'
 import { modName } from '../../minecraft/pack-build.ts'
 import { releaseId } from '../../minecraft/plain-data.ts'
 import { fits } from '../../minecraft/uploads.ts'
@@ -77,13 +82,18 @@ export class ModQueries {
       return { kind: 'conflicts', conflicts: plan.conflicts.map(conflictView), movesTo: plan.movesTo ?? null }
     const revoked = new Set(plan.revoked.map(identity))
     const players = new Set(forPlayers(plan.mods, plan.loader).map(identity))
+    const carried = new Set(inPlayersGames(plan.mods, plan.loader).map(identity))
     const view = (mod: PinnedMod) => modView(mod, plan.loader, revoked, this.#page(mod), players)
     return {
       kind: 'ok',
       loader: plan.loader,
       added: plan.added.map(view),
       removed: plan.removed.map(view),
-      updated: plan.updated.map(({ from, to }) => ({ from: view(from), to: view(to) })),
+      updated: plan.updated.map(({ from, to }) => ({
+        from: view(from),
+        to: view(to),
+        carried: carried.has(identity(to)),
+      })),
       revoked: plan.revoked.map(view),
       expected: plan.mods.map((m) => m.artifact.sha512).sort(),
     }
