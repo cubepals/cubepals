@@ -104,31 +104,51 @@ describe("staging's website and its previews", () => {
 })
 
 describe("the account's workers.dev subdomain", () => {
+  /**
+   * Cloudflare's v4 answers to `GET /accounts/{account_id}/workers/subdomain`, as its API reference
+   * documents them (developers.cloudflare.com/api/resources/workers/subresources/subdomains/methods/get/):
+   * the envelope with the account's subdomain, and with error 10000, the API's authentication error,
+   * as a token without access gets it. No test can ask the real API, which needs the account's token.
+   */
+  const NAMED = () =>
+    Response.json({ success: true, errors: [], messages: [], result: { subdomain: 'cubepals' } })
+  const REFUSED = () =>
+    Response.json(
+      {
+        success: false,
+        errors: [{ code: 10000, message: 'Authentication error' }],
+        messages: [],
+        result: null,
+      },
+      { status: 403 },
+    )
+  /** What a gateway in front of the API answers when it can't reach it: a page, not JSON. */
+  const GATEWAY = () => new Response('<html><body>502 Bad Gateway</body></html>', { status: 502 })
+
   /** A stand-in for Cloudflare's API that gives `answers` in turn, and counts what was asked and waited. */
-  const cloudflareSaying = (...answers: (object | Error)[]) => {
+  const cloudflareSaying = (...answers: (() => Response | Error)[]) => {
     const seen = { asks: 0, pauses: [] as number[] }
     const ask = (async () => {
-      const answer = answers[Math.min(seen.asks++, answers.length - 1)]
+      const answer = (answers[Math.min(seen.asks++, answers.length - 1)] ?? GATEWAY)()
       if (answer instanceof Error) throw answer
-      return Response.json(answer, { status: 'success' in answer && answer.success ? 200 : 500 })
+      return answer
     }) as unknown as typeof fetch
     const pause = async (ms: number) => void seen.pauses.push(ms)
     return { seen, ask, pause }
   }
-  const NONE = { success: false, errors: [{ code: 10000, message: 'Internal error' }], result: null }
-  const NAMED = { success: true, errors: [], result: { subdomain: 'cubepals' } }
 
   test('is asked again, a little later each time, when Cloudflare answers without one', async () => {
-    const { seen, ask, pause } = cloudflareSaying(NONE, new Error('socket hang up'), NAMED)
+    const dropped = () => new TypeError('fetch failed')
+    const { seen, ask, pause } = cloudflareSaying(GATEWAY, dropped, NAMED)
     expect(await workersSubdomain(CLOUDFLARE, ask, pause)).toBe('cubepals')
     expect(seen.asks).toBe(3)
     expect(seen.pauses).toEqual([5000, 10000])
   })
 
   test('fails with what Cloudflare last said once it never names one', async () => {
-    const { seen, ask, pause } = cloudflareSaying(NONE)
+    const { seen, ask, pause } = cloudflareSaying(REFUSED)
     await expect(workersSubdomain(CLOUDFLARE, ask, pause)).rejects.toThrow(
-      'asked 4 times: HTTP 500 [{"code":10000,"message":"Internal error"}]',
+      'asked 4 times: HTTP 403 [{"code":10000,"message":"Authentication error"}]',
     )
     expect(seen.asks).toBe(4)
   })
