@@ -17,17 +17,18 @@ import { type Harness, hasDatabase, startHarness } from '../../testing/harness.t
 import { insertRevision, loadRevision } from '../servers/persistence.ts'
 import { MOST_LISTED, playersMods, type RevisionMods } from './players-mods.ts'
 
-/** A pin of `name` at `version`, as its catalog's version `name@version`. */
+/** A pin of `name` at `version`, as its catalog's version `name@version`, read as `inputs.ts` reads it. */
 const mod = (
   name: string,
   version: string,
   environment: PinnedMod['environment'] = 'optional',
   loaders = ['fabric'],
-): RevisionMods['mods'][number] => ({
+): RevisionMods['mods'][number] & Pick<PinnedMod, 'source'> => ({
   name,
   versionLabel: version,
   environment,
   loaders,
+  file: `${name}@${version}`,
   source: { catalog: 'modrinth', projectId: name, versionId: `${name}@${version}` },
 })
 
@@ -148,7 +149,7 @@ describe.skipIf(!hasDatabase)('a route’s mods', () => {
     // It boots on Fabric with two mods; then one of them moves, saved for its next start.
     const booted = await loadRevision(h.db, (await h.server(id)).desiredRevisionId)
     const { id: _id, serverId: _server, number: _number, createdBy: _by, ...draft } = booted
-    const first = [mod('VeinMiner', '2.13.0', 'both'), mod('AppleSkin', '3.0.10')] as PinnedMod[]
+    const first = [mod('VeinMiner', '2.13.0', 'both'), mod('AppleSkin', '3.0.10')] as unknown as PinnedMod[]
     const fabric = await h.db.transaction((tx) =>
       insertRevision(tx, id, { ...draft, loader: 'fabric', mods: first }, owner.userId),
     )
@@ -172,7 +173,11 @@ describe.skipIf(!hasDatabase)('a route’s mods', () => {
       insertRevision(
         tx,
         id,
-        { ...draft, loader: 'fabric', mods: [mod('VeinMiner', '2.14.0', 'server'), first[1]] as PinnedMod[] },
+        {
+          ...draft,
+          loader: 'fabric',
+          mods: [mod('VeinMiner', '2.14.0', 'server'), first[1]] as unknown as PinnedMod[],
+        },
         owner.userId,
       ),
     )
@@ -192,5 +197,34 @@ describe.skipIf(!hasDatabase)('a route’s mods', () => {
       ],
       changedAt: await madeAt(moved.id),
     })
+  }, 30_000)
+
+  test('are read cut short: an owner’s long names never make a read of the routes large', async () => {
+    const owner = await h.user()
+    const { id, slug } = await h.create(owner)
+    await h.until(id, 'running')
+    await h.settled(id)
+    await h.app.servers.stop(owner, id, randomUUID(), 'idle')
+    await h.until(id, 'stopped')
+    await h.settled(id)
+    const booted = await loadRevision(h.db, (await h.server(id)).desiredRevisionId)
+    const { id: _id, serverId: _server, number: _number, createdBy: _by, ...draft } = booted
+    // An upload names itself: here, far longer than any name a person reads.
+    const upload = {
+      name: 'N'.repeat(100_000),
+      versionLabel: 'V'.repeat(100_000),
+      environment: 'optional',
+      loaders: Array.from({ length: 1000 }, () => 'fabric'),
+      source: { catalog: 'upload', uploadId: 'U'.repeat(10_000) },
+    } as unknown as PinnedMod
+    const long = await h.db.transaction((tx) =>
+      insertRevision(tx, id, { ...draft, loader: 'fabric', mods: [upload] }, owner.userId),
+    )
+    await h.db
+      .update(schema.minecraftServers)
+      .set({ desiredRevisionId: long.id })
+      .where(eq(schema.minecraftServers.id, id))
+    const route = (await h.app.edge.routes()).routes.find((r) => r.hostname === `${slug}.play.test`)
+    expect(route?.mods?.list).toEqual([{ name: 'N'.repeat(64), version: 'V'.repeat(64), changed: true }])
   }, 30_000)
 })

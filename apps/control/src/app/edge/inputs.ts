@@ -32,13 +32,12 @@ import {
   sql,
 } from 'drizzle-orm'
 import type { PinnedMod } from '../../domain/mods/artifact.ts'
-import type { PinnedModpack } from '../../domain/mods/modpack.ts'
 import { type Loader, type OtherVersions, otherVersionsOf } from '../../domain/revision/revision.ts'
 import type { ServerStatus } from '../../domain/server/lifecycle.ts'
 import { trialStops } from '../accounts/play-total.ts'
 import type { RuntimeHandle } from '../ports/runtime.ts'
 import { motdsOf } from '../servers/persistence.ts'
-import { playersMods } from './players-mods.ts'
+import { playersMods, type RevisionMods } from './players-mods.ts'
 
 const {
   accountStanding: standing,
@@ -234,6 +233,47 @@ async function playsOf(q: Queryable, ids: readonly string[]): Promise<RouteInput
  */
 const MODS_HISTORY = 50
 
+/**
+ * What is read of each pin for `players-mods.ts`, and how much: the first jars of a revision, each
+ * name, version and file cut to a few characters, and a few of its loaders. Names are an owner's
+ * (an upload's own), and every live server's recent revisions are read whenever a route moves, so
+ * nothing read here grows with what an owner writes.
+ */
+const MOST_PINS = 1000
+const MOST_CHARS = 64
+const MOST_LOADERS = 8
+
+/** A revision's pins, as `RevisionMods['mods']`, each field cut to its most. */
+const pinsOf = (column: SQLWrapper) => sql<RevisionMods['mods']>`(
+  select coalesce(jsonb_agg(jsonb_build_object(
+    'name', left(p.m->>'name', ${sql.raw(String(MOST_CHARS))}),
+    'versionLabel', left(p.m->>'versionLabel', ${sql.raw(String(MOST_CHARS))}),
+    'environment', left(p.m->>'environment', 16),
+    'file', left(coalesce(p.m->'source'->>'versionId', p.m->'source'->>'uploadId', ''), ${sql.raw(String(MOST_CHARS))}),
+    'loaders', (
+      select coalesce(jsonb_agg(left(l.tag, 32)), '[]'::jsonb)
+      from (
+        select t.tag from jsonb_array_elements_text(
+          case when jsonb_typeof(p.m->'loaders') = 'array' then p.m->'loaders' else '[]'::jsonb end
+        ) as t(tag) limit ${sql.raw(String(MOST_LOADERS))}
+      ) l
+    )
+  ) order by p.at), '[]'::jsonb)
+  from (
+    select m, at from jsonb_array_elements(${column}) with ordinality as e(m, at)
+    order by at limit ${sql.raw(String(MOST_PINS))}
+  ) p
+)`
+
+/** A revision's pack, as `RevisionMods['modpack']`, each field cut to its most; null for none. */
+const packOf = (column: SQLWrapper) => sql<RevisionMods['modpack']>`case when ${column} is null then null else
+  jsonb_build_object(
+    'name', left(${column}->>'name', ${sql.raw(String(MOST_CHARS))}),
+    'versionLabel', left(${column}->>'versionLabel', ${sql.raw(String(MOST_CHARS))}),
+    'versionId', left(${column}->>'versionId', ${sql.raw(String(MOST_CHARS))}),
+    'environment', left(${column}->>'environment', 16)
+  ) end`
+
 /** What a player's game has to match to play the revisions `ids`, from each and those before it. */
 async function playersOf(q: Queryable, ids: readonly string[]): Promise<RouteInputs['players']> {
   if (ids.length === 0) return new Map()
@@ -256,8 +296,8 @@ async function playersOf(q: Queryable, ids: readonly string[]): Promise<RouteInp
       serverId: revisions.serverId,
       number: revisions.number,
       loader: revisions.loader,
-      mods: revisions.mods,
-      modpack: revisions.modpack,
+      mods: pinsOf(revisions.mods),
+      modpack: packOf(revisions.modpack),
       createdAt: revisions.createdAt,
     })
     .from(revisions)
@@ -274,12 +314,7 @@ async function playersOf(q: Queryable, ids: readonly string[]): Promise<RouteInp
     const history = rows
       .filter((row) => row.serverId === serverId && row.number <= number)
       .slice(0, MODS_HISTORY)
-      .map((row) => ({
-        loader: row.loader as Loader,
-        mods: (row.mods ?? []) as PinnedMod[],
-        modpack: row.modpack as PinnedModpack | null,
-        createdAt: row.createdAt,
-      }))
+      .map((row) => ({ ...row, loader: row.loader as Loader }))
     const theirs = playersMods(history)
     if (theirs !== undefined) players.set(id, theirs)
   }

@@ -20,10 +20,14 @@ import type { PinnedModpack } from '../../domain/mods/modpack.ts'
 import type { Loader } from '../../domain/revision/revision.ts'
 import { installsAsDatapack } from '../../minecraft/mods.ts'
 
-/** Of one of a server's revisions, what its players' games have to match. */
+/**
+ * Of one of a server's revisions, what its players' games have to match: each pin's name, version
+ * and the exact file it is (a catalog's version, or an upload), cut to a few characters each as
+ * they are read (`inputs.ts`), so no owner's names can make a read of the routes large.
+ */
 export interface RevisionMods {
   loader: Loader
-  mods: Pick<PinnedMod, 'name' | 'versionLabel' | 'environment' | 'source' | 'loaders'>[]
+  mods: (Pick<PinnedMod, 'name' | 'versionLabel' | 'environment' | 'loaders'> & { file: string })[]
   modpack: Pick<PinnedModpack, 'name' | 'versionLabel' | 'versionId' | 'environment'> | null
   createdAt: Date
 }
@@ -34,9 +38,7 @@ export const MOST_LISTED = 8
 /** Which mods a player's game most likely carries too, in the order they are listed after those moved. */
 const SIDES: readonly PinnedMod['environment'][] = ['both', 'optional', 'server']
 
-/** The exact file a pin is: a catalog's version, or an upload. */
-const fileOf = (mod: Pick<PinnedMod, 'source'>): string =>
-  'versionId' in mod.source ? mod.source.versionId : mod.source.uploadId
+const fileOf = (mod: { file: string }): string => mod.file
 
 /** Of `revision`, what goes in a player's game: its pack, or the jars it loads; null for neither. */
 function carried(revision: RevisionMods): { pack: string } | { jars: RevisionMods['mods'] } | null {
