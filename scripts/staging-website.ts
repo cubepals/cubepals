@@ -31,6 +31,7 @@
  * `url` when there is one, its version's id as `version`, and its commit's address as `commit_url`.
  */
 import { appendFileSync } from 'node:fs'
+import { SECOND_MS } from '../packages/contracts/src/durations.ts'
 import { pointRecord, zoneAccount } from './lib/cloudflare-dns.ts'
 import { commitsNamespace, recordCommit } from './lib/preview-commits.ts'
 import { buildWorker, deployRouter, deployWorker, uploadPreview, type WorkerSite } from './lib/web-worker.ts'
@@ -107,17 +108,45 @@ export async function previewOrigins(cloudflare: Cloudflare): Promise<string[]> 
   return [...(await pullPatterns(cloudflare)), COMMIT_PATTERN]
 }
 
-/** The account's workers.dev subdomain, which the previews' aliases are under. */
-async function workersSubdomain(cloudflare: Cloudflare): Promise<string> {
-  const response = await fetch(
-    `https://api.cloudflare.com/client/v4/accounts/${cloudflare.accountId}/workers/subdomain`,
-    { headers: { authorization: `Bearer ${cloudflare.token}` } },
+/**
+ * How often the account's subdomain is asked for, and how long apart, more each time: Cloudflare's
+ * API now and then answers it without one, and a moment later with it.
+ */
+const SUBDOMAIN_TRIES = 4
+const SUBDOMAIN_PAUSE_MS = 5 * SECOND_MS
+
+/**
+ * The account's workers.dev subdomain, which the previews' aliases are under. An answer without
+ * one is asked again a few times; past those, the last answer's words are said.
+ */
+export async function workersSubdomain(
+  cloudflare: Cloudflare,
+  ask: typeof fetch = fetch,
+  pause: (ms: number) => Promise<unknown> = (ms) => Bun.sleep(ms),
+): Promise<string> {
+  let said = ''
+  for (let attempt = 1; attempt <= SUBDOMAIN_TRIES; attempt++) {
+    if (attempt > 1) await pause(SUBDOMAIN_PAUSE_MS * (attempt - 1))
+    const response = await ask(
+      `https://api.cloudflare.com/client/v4/accounts/${cloudflare.accountId}/workers/subdomain`,
+      { headers: { authorization: `Bearer ${cloudflare.token}` } },
+    ).catch((error: unknown) => error)
+    if (!(response instanceof Response)) {
+      said = String(response)
+      continue
+    }
+    const answer = (await response.json().catch(() => null)) as {
+      success?: boolean
+      result?: { subdomain?: string }
+      errors?: unknown
+    } | null
+    const subdomain = answer?.result?.subdomain
+    if (answer?.success && subdomain) return subdomain
+    said = `HTTP ${response.status} ${JSON.stringify(answer?.errors ?? null)}`
+  }
+  throw new Error(
+    `Cloudflare named no workers.dev subdomain for the account, asked ${SUBDOMAIN_TRIES} times: ${said}`,
   )
-  const answer = (await response.json()) as { success: boolean; result?: { subdomain?: string } }
-  const subdomain = answer.result?.subdomain
-  if (!answer.success || !subdomain)
-    throw new Error('Cloudflare named no workers.dev subdomain for the account')
-  return subdomain
 }
 
 /** Whether a preview answers at an address within a minute: a new branded one may take that long. */
