@@ -8,6 +8,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.LongSupplier;
+import org.bukkit.Bukkit;
 import org.bukkit.Chunk;
 import org.bukkit.NamespacedKey;
 import org.bukkit.World;
@@ -130,21 +131,19 @@ final class Chunks implements Listener {
 
     /** Stamps every followed chunk as it is, for a stop: Paper saves them after plugins are disabled. */
     void stampAll() {
-        for (Map.Entry<World, Map<Long, Followed>> world : followed.entrySet()) {
-            for (Followed f : world.getValue().values()) stamp(f.chunk, f);
-            mark(world.getKey());
-        }
+        for (Map<Long, Followed> chunks : followed.values()) for (Followed f : chunks.values()) stamp(f.chunk, f);
+        markAll(clock.getAsLong());
     }
 
     /**
-     * Once a second: moves every ticked chunk on to now, queueing what a gap owes it, and marks each
-     * world as seen at its game time.
+     * Once a second: marks each world as seen at its game time, and moves every ticked chunk on to
+     * now, queueing what a gap owes it.
      */
     void pass() {
         long now = clock.getAsLong();
+        markAll(now);
         for (Map.Entry<World, Map<Long, Followed>> entry : followed.entrySet()) {
             World world = entry.getKey();
-            mark(world);
             for (Followed f : entry.getValue().values()) {
                 Chunk.LoadLevel level = f.chunk.getLoadLevel();
                 boolean blocks = level == Chunk.LoadLevel.TICKING || level == Chunk.LoadLevel.ENTITY_TICKING;
@@ -201,6 +200,19 @@ final class Chunks implements Listener {
         PersistentDataContainer data = chunk.getPersistentDataContainer();
         data.set(STAMP, PersistentDataType.LONG, f.kept());
         data.set(ANIMALS, PersistentDataType.LONG, f.keptAnimals());
+    }
+
+    /**
+     * Marks every world, with a chunk loaded or none: a world's game time runs on while nobody is in
+     * it (a server keeps no spawn chunks loaded), and a world left unmarked would read, at the next
+     * start, as one that ran without the plugin. Its floor is read first, before the mark hides
+     * what it says.
+     */
+    private void markAll(long now) {
+        for (World world : Bukkit.getWorlds()) {
+            floor(world, now);
+            mark(world);
+        }
     }
 
     private static void mark(World world) {

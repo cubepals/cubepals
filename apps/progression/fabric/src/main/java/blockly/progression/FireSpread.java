@@ -11,8 +11,6 @@ import java.util.Set;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.chunk.LevelChunk;
-import net.minecraft.world.level.chunk.LevelChunkSection;
 
 /**
  * Fire made up for a gap: fire's ticks are scheduled, every 30 to 40 game ticks, not random, so each
@@ -36,23 +34,6 @@ final class FireSpread {
     private FireSpread() {}
 
     /** The fires in a chunk, as it is now. */
-    static List<BlockPos> firesIn(LevelChunk chunk) {
-        List<BlockPos> fires = new java.util.ArrayList<>();
-        LevelChunkSection[] sections = chunk.getSections();
-        int minX = chunk.getPos().getMinBlockX();
-        int minZ = chunk.getPos().getMinBlockZ();
-        for (int index = 0; index < sections.length; index++) {
-            LevelChunkSection section = sections[index];
-            if (section.hasOnlyAir() || !section.maybeHas(FireSpread::isFire)) continue;
-            int bottom = chunk.getSectionYFromSectionIndex(index) * 16;
-            for (int y = 0; y < 16; y++)
-                for (int x = 0; x < 16; x++)
-                    for (int z = 0; z < 16; z++)
-                        if (isFire(section.getBlockState(x, y, z))) fires.add(new BlockPos(minX + x, bottom + y, minZ + z));
-        }
-        return fires;
-    }
-
     static boolean isFire(BlockState state) {
         return Part.isFire(RandomTicking.classes(state.getBlock()));
     }

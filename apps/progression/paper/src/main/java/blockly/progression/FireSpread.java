@@ -5,14 +5,10 @@
 package blockly.progression;
 
 import java.util.ArrayDeque;
-import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
-import org.bukkit.Chunk;
-import org.bukkit.ChunkSnapshot;
 import org.bukkit.Material;
-import org.bukkit.World;
 import org.bukkit.block.Block;
 
 /**
@@ -31,24 +27,6 @@ final class FireSpread {
     private static final int MOST_ROUNDS = 150;
 
     private FireSpread() {}
-
-    static List<Block> firesIn(Chunk chunk) {
-        World world = chunk.getWorld();
-        ChunkSnapshot snapshot = chunk.getChunkSnapshot(false, false, false);
-        List<Block> fires = new ArrayList<>();
-        int min = world.getMinHeight();
-        int max = world.getMaxHeight();
-        for (int section = 0; section * 16 + min < max; section++) {
-            if (snapshot.isSectionEmpty(section)) continue;
-            int bottom = min + section * 16;
-            for (int y = bottom; y < bottom + 16 && y < max; y++)
-                for (int x = 0; x < 16; x++)
-                    for (int z = 0; z < 16; z++)
-                        if (snapshot.getBlockType(x, y, z) == Material.FIRE)
-                            fires.add(world.getBlockAt(chunk.getX() * 16 + x, y, chunk.getZ() * 16 + z));
-        }
-        return fires;
-    }
 
     static Work.Job job(List<Block> fires, long owed, Totals totals) {
         return new Work.Job() {

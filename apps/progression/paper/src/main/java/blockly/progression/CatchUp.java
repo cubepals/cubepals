@@ -5,6 +5,7 @@
 package blockly.progression;
 
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
@@ -13,6 +14,7 @@ import java.util.SplittableRandom;
 import org.bukkit.Chunk;
 import org.bukkit.ChunkSnapshot;
 import org.bukkit.GameRule;
+import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockState;
@@ -24,8 +26,9 @@ import org.bukkit.block.data.BlockData;
  * look for first: furnaces, brewing stands and campfires (`Cooking`); then blocks that change on
  * random ticks, a set of rounds for each part in `Part`'s order (`RandomTicking`, `Rounds`), with
  * the animals themselves (`Herds`) after the animals' blocks; then fire (`FireSpread`). What it finds
- * is read as it starts, from the chunk as it is then, so a chunk that unloads before its turn is
- * left owing what it didn't get (`Chunks` keeps its old stamp for it). The same as the Fabric mod's.
+ * is read as it starts, a section at a time within the same budget, so a chunk that unloads before
+ * its turn is left owing what it didn't get (`Chunks` keeps its old stamp for it). The same as the
+ * Fabric mod's.
  */
 final class CatchUp implements Work.Job {
     /** Ticks to wait for a chunk's animals to load after its blocks before going on without them. */
@@ -53,6 +56,12 @@ final class CatchUp implements Work.Job {
     private boolean started;
     private boolean ended;
     private boolean cancelled;
+    /** The chunk as it was as its catch-up began, while its blocks are being read (`scan`). */
+    private ChunkSnapshot snapshot;
+    private int nextSection;
+    private int speed;
+    private final Map<Part, Rounds<Block>> rounds = new EnumMap<>(Part.class);
+    private final List<Block> fires = new ArrayList<>();
 
     CatchUp(World world, int chunkX, int chunkZ, long owed, long animalsOwed, Set<Part> parts, Cooking cooking,
             RandomTicking ticking, Totals totals) {
@@ -111,6 +120,7 @@ final class CatchUp implements Work.Job {
             plan(world.getChunkAt(chunkX, chunkZ));
             totals.chunk(Math.max(owed, animalsOwed));
         }
+        if (snapshot != null && !scan(deadline)) return false;
         while (!phases.isEmpty()) {
             if (!phases.peek().step(deadline)) return false;
             phases.poll();
@@ -118,7 +128,10 @@ final class CatchUp implements Work.Job {
         return true;
     }
 
-    /** Reads what the chunk holds of the parts that are on, as it is now, into its phases. */
+    /**
+     * Begins reading what the chunk holds of the parts that are on, as it is now: its furnaces and
+     * the like at once (there are few), its blocks a section at a time (`scan`).
+     */
     private void plan(Chunk chunk) {
         if (owed == 0) {
             if (parts.contains(Part.ANIMALS)) phases.add(animals());
@@ -127,41 +140,49 @@ final class CatchUp implements Work.Job {
         if (cooking != null && parts.contains(Part.FURNACES))
             for (BlockState state : chunk.getTileEntities(block -> true, false))
                 if (Cooking.cooks(state)) phases.add(cooking.job(state.getBlock(), owed, totals));
-        Map<Part, Rounds<Block>> rounds = randomTicks(chunk);
+        Integer rule = world.getGameRuleValue(GameRule.RANDOM_TICK_SPEED);
+        speed = rule == null ? 0 : rule;
+        snapshot = chunk.getChunkSnapshot(false, false, false);
+    }
+
+    /**
+     * Reads the chunk's blocks, a section at a time until `deadline` (at least one each step), into
+     * a set of rounds for each part and the fires; true once all are read and queued as phases.
+     */
+    private boolean scan(long deadline) {
+        int min = world.getMinHeight();
+        int max = world.getMaxHeight();
+        while (nextSection * 16 + min < max) {
+            scanSection(nextSection++, min, max);
+            if (System.nanoTime() >= deadline && nextSection * 16 + min < max) return false;
+        }
+        snapshot = null;
         for (Part part : Part.values()) {
             if (rounds.containsKey(part)) phases.add(rounds.get(part));
             if (part == Part.ANIMALS && parts.contains(Part.ANIMALS) && animalsOwed > 0) phases.add(animals());
         }
-        if (parts.contains(Part.FIRE)) {
-            List<Block> fires = FireSpread.firesIn(chunk);
-            if (!fires.isEmpty()) phases.add(FireSpread.job(fires, owed, totals));
-        }
+        if (!fires.isEmpty()) phases.add(FireSpread.job(fires, owed, totals));
+        return true;
     }
 
-    /** A set of rounds for each part, of every block in the chunk random ticks change. */
-    private Map<Part, Rounds<Block>> randomTicks(Chunk chunk) {
-        Integer rule = world.getGameRuleValue(GameRule.RANDOM_TICK_SPEED);
-        int speed = rule == null ? 0 : rule;
-        Map<Part, Rounds<Block>> rounds = new EnumMap<>(Part.class);
-        ChunkSnapshot snapshot = chunk.getChunkSnapshot(false, false, false);
-        int min = world.getMinHeight();
-        int max = world.getMaxHeight();
-        for (int section = 0; section * 16 + min < max; section++) {
-            if (snapshot.isSectionEmpty(section)) continue;
-            int bottom = min + section * 16;
-            for (int y = bottom; y < bottom + 16 && y < max; y++)
-                for (int x = 0; x < 16; x++)
-                    for (int z = 0; z < 16; z++) {
-                        if (!ticking.mayTick(snapshot.getBlockType(x, y, z), parts)) continue;
-                        BlockData data = snapshot.getBlockData(x, y, z);
-                        if (!ticking.ticks(data, parts)) continue;
-                        Part part = ticking.partOf(data);
-                        rounds.computeIfAbsent(part, p -> new Rounds<>(ticking.ticker(parts), this::count))
-                                .add(world.getBlockAt(chunkX * 16 + x, y, chunkZ * 16 + z),
-                                        RandomTicks.count(owed, speed, random), ticking.spreads(data), part);
-                    }
-        }
-        return rounds;
+    /** One section's blocks that random ticks change, and its fires where fire is on. */
+    private void scanSection(int section, int min, int max) {
+        if (snapshot.isSectionEmpty(section)) return;
+        boolean fire = parts.contains(Part.FIRE);
+        int bottom = min + section * 16;
+        for (int y = bottom; y < bottom + 16 && y < max; y++)
+            for (int x = 0; x < 16; x++)
+                for (int z = 0; z < 16; z++) {
+                    Material type = snapshot.getBlockType(x, y, z);
+                    if (fire && type == Material.FIRE) fires.add(world.getBlockAt(chunkX * 16 + x, y, chunkZ * 16 + z));
+                    if (!ticking.mayTick(type, parts)) continue;
+                    BlockData data = snapshot.getBlockData(x, y, z);
+                    if (!ticking.ticks(data, parts)) continue;
+                    Part part = ticking.partOf(data);
+                    rounds.computeIfAbsent(part, p -> new Rounds<>(ticking.ticker(parts), this::count))
+                            .add(world.getBlockAt(chunkX * 16 + x, y, chunkZ * 16 + z),
+                                    RandomTicks.count(owed, speed, random), ticking.spreads(data), part);
+                }
     }
 
     /** The chunk's animals, once its entities have loaded, or a few seconds on without them. */
