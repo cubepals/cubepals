@@ -23,7 +23,7 @@ import { iconSrc } from '../../lib/pictures'
 import { ICON } from '../../ui'
 import { SMALL } from './account-menu'
 import type { NavEntry } from './more-menu'
-import { type ListedServer, NOTHING_PRESSED, pressRow, rowsShown, unfolded } from './server-nav'
+import { type ListedServer, NOTHING_PRESSED, pressRow, sidebarRows } from './server-nav'
 
 export function ServerRows({
   servers,
@@ -47,8 +47,7 @@ export function ServerRows({
     setAt(pathname)
     setPressed(NOTHING_PRESSED)
   }
-  const open = unfolded(here, pressed)
-  const { rows, more } = rowsShown(servers, open)
+  const { rows, more, open } = sidebarRows(servers, here, pressed)
   return (
     <div className="bk-appnav__tree">
       {rows.map((server) => {

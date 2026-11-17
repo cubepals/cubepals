@@ -16,6 +16,7 @@ import {
   pressRow,
   rowsShown,
   serverPages,
+  sidebarRows,
   unfolded,
 } from './server-nav'
 
@@ -89,12 +90,26 @@ describe('the rows shown', () => {
     expect(lines(20)).toBe(MOST_ROWS)
   })
 
-  test('keep the open server in place of the last when it falls past them', () => {
+  test("keep the page's own server in place of the last when it falls past them", () => {
     expect(ids(rowsShown(many, 's17'))).toEqual(['s0', 's17'])
   })
 
-  test('leave the open server where it is when it is already among them', () => {
+  test("leave the page's own server where it is when it is already among them", () => {
     expect(ids(rowsShown(many, 's0'))).toEqual(['s0', 's1'])
+  })
+
+  test("keep the page's own server's row when it is folded", () => {
+    const folded = pressRow('s17', NOTHING_PRESSED, 's17')
+    const shown = sidebarRows(many, 's17', folded)
+    expect(shown.open).toBeUndefined()
+    expect(ids(shown)).toEqual(['s0', 's17'])
+  })
+
+  test("keep the page's own server's row while another server is unfolded", () => {
+    const other = pressRow('s17', NOTHING_PRESSED, 's0')
+    const shown = sidebarRows(many, 's17', other)
+    expect(shown.open).toBe('s0')
+    expect(ids(shown)).toEqual(['s0', 's17'])
   })
 })
 

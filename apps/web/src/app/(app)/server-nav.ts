@@ -64,19 +64,32 @@ export function listedServers(
 
 /**
  * The rows the sidebar shows, and how many servers are left to the Servers page. Up to MOST_ROWS
- * servers, every one. Past that, one row fewer, in the list's order with the open one kept in
- * place of the last when it falls past them, and a last row for the rest: the sidebar is never
- * taller than with MOST_ROWS servers, however many an account has.
+ * servers, every one. Past that, one row fewer, in the list's order with the server whose page
+ * this is kept in place of the last when it falls past them, and a last row for the rest: the
+ * sidebar is never taller than with MOST_ROWS servers, however many an account has.
  */
 export function rowsShown(
   servers: readonly ListedServer[],
-  open: string | undefined,
+  here: string | undefined,
 ): { rows: ListedServer[]; more: number } {
   if (servers.length <= MOST_ROWS) return { rows: [...servers], more: 0 }
   const rows = servers.slice(0, MOST_ROWS - 1)
-  const kept = servers.find((server) => server.id === open)
+  const kept = servers.find((server) => server.id === here)
   if (kept !== undefined && !rows.includes(kept)) rows[rows.length - 1] = kept
   return { rows, more: servers.length - rows.length }
+}
+
+/**
+ * The rows for this page, and which is unfolded after what was pressed on it. Which rows show
+ * depends on the page alone, so folding or unfolding one never takes another away: the page's
+ * own server keeps its row while it is folded, or while another is open.
+ */
+export function sidebarRows(
+  servers: readonly ListedServer[],
+  here: string | undefined,
+  pressed: Unfolding,
+): { rows: ListedServer[]; more: number; open: string | undefined } {
+  return { ...rowsShown(servers, here), open: unfolded(here, pressed) }
 }
 
 /** What someone did to the rows on this page: opened one by hand, or closed the page's own. */
