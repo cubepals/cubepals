@@ -97,8 +97,11 @@ game time stands still while a server is stopped or suspended, which is exactly 
 - **A little each tick.** Catch-up waits a second after a chunk starts ticking (so ticks it had
   scheduled run first, as leaves learn they are cut off), then goes in a queue that each tick spends
   at most 5 ms on (`Work`): a world that wakes owing hours spreads the work over the ticks after the
-  join rather than stalling the one a player joins on. Furnaces and brewing go first, then blocks,
-  then animals, then fire.
+  join rather than stalling the one a player joins on. Reading what a chunk holds goes a section at
+  a time, and fire a fire at a time, within the same budget. Furnaces and brewing go first, then
+  blocks, the animals before their own blocks (so a turtle hatched in the catch-up is born then,
+  and grows on its own), then fire. A chunk that goes, or is owed more, before its catch-up has
+  given it anything still owes all of it.
 - **Only ticked chunks, and their neighbours loaded.** A chunk the game loads but doesn't tick (the
   edge of what players see) isn't caught up until it is; until then it owes the time. A ticked
   chunk's neighbours are loaded, so a stem, a tree or a fire at its edge never loads another chunk.
@@ -169,5 +172,9 @@ each against the same world without the plugin or mod, and with each part switch
 - **The default speed**: stopped and started with the clock six hours on, and 40-minute stops.
 - **The cost**: a wake owing six hours on a 25-chunk base of wheat fields and 100 stuffed furnaces,
   with tick times sampled through the catch-up.
+- **What stamps survive**: a server killed after a save makes up nothing again; one turned off,
+  back on, and restarted before a chunk is visited makes up only the time since it came back; a
+  calf in a chunk that ticked blocks and not entities is made up that time; twenty turtle eggs
+  hatch at the game's own rate.
 
 The numbers are in the pull request that added it.
