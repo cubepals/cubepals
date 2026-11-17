@@ -98,10 +98,12 @@ game time stands still while a server is stopped or suspended, which is exactly 
   scheduled run first, as leaves learn they are cut off), then goes in a queue that each tick spends
   at most 5 ms on (`Work`): a world that wakes owing hours spreads the work over the ticks after the
   join rather than stalling the one a player joins on. Reading what a chunk holds goes a section at
-  a time, and fire a fire at a time, within the same budget. Furnaces and brewing go first, then
-  blocks, the animals before their own blocks (so a turtle hatched in the catch-up is born then,
-  and grows on its own), then fire. A chunk that goes, or is owed more, before its catch-up has
-  given it anything still owes all of it.
+  a time, and fire a fire at a time, within the same budget. A chunk's animals go first, the
+  moment its entities tick, so only those that missed its time are made up, not one that wanders in
+  from a chunk that didn't, and a turtle hatched later in the catch-up is born then and grows on
+  its own. Then furnaces and brewing, then blocks, then fire. A chunk players leave waits until it
+  ticks again; one that goes, or is owed more, before its catch-up has given it anything still owes
+  all of it.
 - **Only ticked chunks, and their neighbours loaded.** A chunk the game loads but doesn't tick (the
   edge of what players see) isn't caught up until it is; until then it owes the time. A ticked
   chunk's neighbours are loaded, so a stem, a tree or a fire at its edge never loads another chunk.

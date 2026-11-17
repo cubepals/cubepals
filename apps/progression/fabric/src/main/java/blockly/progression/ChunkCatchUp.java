@@ -21,15 +21,16 @@ import net.minecraft.world.level.gamerules.GameRules;
 
 /**
  * One chunk made up for one gap, in the parts that are on (`Part`), as a job done over as many ticks
- * as it needs (`Work`), once it has ticked for a second. Its work is a queue of phases, what players
+ * as it needs (`Work`), while the chunk ticks. Its animals go first, as soon as its entities tick
+ * (`Herds`), before any wander in. The rest waits a second, then is a queue of phases, what players
  * look for first: furnaces, brewing stands and campfires (`Cooking`); then blocks that change on
- * random ticks, a set of rounds for each part in `Part`'s order (`RandomTicking`, `Rounds`), with
- * the animals themselves (`Herds`) before the animals' blocks; then fire (`FireSpread`). What it finds
- * is read as it starts, a section at a time within the same budget; a chunk that unloads before its
- * turn is left owing what it didn't get (`Level` keeps its old stamp for it).
+ * random ticks, a set of rounds for each part in `Part`'s order (`RandomTicking`, `Rounds`); then
+ * fire (`FireSpread`). What it finds is read as it starts, a section at a time within the same
+ * budget, so a chunk that unloads before its turn is left owing what it didn't get (`Level` keeps
+ * its old stamp for it).
  */
 final class ChunkCatchUp implements Work.Job {
-    /** Ticks to wait for a chunk's animals to load after its blocks before going on without them. */
+    /** Ticks to wait for a chunk's animals to load and tick before going on without them. */
     private static final int ANIMALS_WAIT = 200;
 
     /**
@@ -51,6 +52,8 @@ final class ChunkCatchUp implements Work.Job {
     private boolean started;
     private boolean ended;
     private boolean cancelled;
+    private boolean herded;
+    private int waited;
     /** While its blocks are being read (`scan`): where it is, and what it found. */
     private boolean scanning;
     private int nextSection;
@@ -114,6 +117,10 @@ final class ChunkCatchUp implements Work.Job {
     private boolean run(long deadline) {
         if (cancelled) return true;
         if (level.getChunkSource().getChunkNow(chunk.getPos().x(), chunk.getPos().z()) != chunk) return true;
+        // A chunk players left waits until it ticks again: its edge blocks reach into neighbours
+        // that may no longer be loaded.
+        if (!level.shouldTickBlocksAt(chunk.getPos().pack())) return false;
+        if (!herded) herd();
         if (!started) {
             if (++settled < SETTLE) return false;
             started = true;
@@ -125,7 +132,24 @@ final class ChunkCatchUp implements Work.Job {
             if (!phases.peek().step(deadline)) return false;
             phases.poll();
         }
-        return true;
+        return herded;
+    }
+
+    /**
+     * The chunk's animals, first and at once, as soon as its entities tick and are loaded: the
+     * animals in it then are the ones that missed its time, before any wanders in from a chunk that
+     * didn't. Without them a few seconds on, it goes on without them.
+     */
+    private void herd() {
+        if (animalsOwed == 0 || !parts.contains(Part.ANIMALS)) {
+            herded = true;
+        } else if (level.isPositionEntityTicking(chunk.getPos().getWorldPosition())
+                && level.areEntitiesLoaded(chunk.getPos().pack())) {
+            totals.animals += Herds.catchUp(level, chunk, animalsOwed, System.currentTimeMillis(), random);
+            herded = true;
+        } else if (++waited >= ANIMALS_WAIT) {
+            herded = true;
+        }
     }
 
     /**
@@ -133,10 +157,7 @@ final class ChunkCatchUp implements Work.Job {
      * the like at once (there are few), its blocks a section at a time (`scan`).
      */
     private void plan() {
-        if (owed == 0) {
-            if (parts.contains(Part.ANIMALS)) phases.add(animals());
-            return;
-        }
+        if (owed == 0) return;
         if (parts.contains(Part.FURNACES))
             for (BlockEntity entity : chunk.getBlockEntities().values())
                 if (Cooking.cooks(entity)) phases.add(Cooking.job(level, entity.getBlockPos(), owed, totals));
@@ -155,12 +176,7 @@ final class ChunkCatchUp implements Work.Job {
             if (System.nanoTime() >= deadline && nextSection < sections.length) return false;
         }
         scanning = false;
-        // The animals before their blocks: one hatched from an egg in the catch-up is born then,
-        // and grows on its own from there, not by the whole gap.
-        for (Part part : Part.values()) {
-            if (part == Part.ANIMALS && parts.contains(Part.ANIMALS) && animalsOwed > 0) phases.add(animals());
-            if (rounds.containsKey(part)) phases.add(rounds.get(part));
-        }
+        for (Part part : Part.values()) if (rounds.containsKey(part)) phases.add(rounds.get(part));
         if (!fires.isEmpty()) phases.add(FireSpread.job(level, fires, owed, totals));
         return true;
     }
@@ -185,20 +201,6 @@ final class ChunkCatchUp implements Work.Job {
                             .add(new BlockPos(minX + x, bottom + y, minZ + z), RandomTicks.count(owed, speed, random),
                                     RandomTicking.spreads(state), part);
                 }
-    }
-
-    /** The chunk's animals, once its entities have loaded, or a few seconds on without them. */
-    private Work.Job animals() {
-        return new Work.Job() {
-            private int waited;
-
-            @Override
-            public boolean step(long deadline) {
-                if (!level.areEntitiesLoaded(chunk.getPos().pack()) && ++waited < ANIMALS_WAIT) return false;
-                totals.animals += Herds.catchUp(level, chunk, animalsOwed, System.currentTimeMillis(), random);
-                return true;
-            }
-        };
     }
 
     private void count(Part part) {
