@@ -64,6 +64,8 @@ import type { Locks } from './ports/locks.ts'
 import type { PlayerProfiles, ReadinessProbe, ServerConsole } from './ports/minecraft.ts'
 import type { LogSource, Mailer, PlayAddressing, RegionCatalog } from './ports/platform.ts'
 import type { HostCpu } from './ports/runtime.ts'
+import { progressionAtStart } from './progression/progression.ts'
+import { ProgressionSwitch } from './progression/switch.ts'
 import { RevisionService } from './revisions/service.ts'
 import { RuntimeEconomics } from './runtimes/economics.ts'
 import { hostSeen } from './runtimes/hosts.ts'
@@ -171,7 +173,7 @@ export interface ControlPlaneSettings {
  */
 const atBoot = (db: Db) => ({
   notLoaded: (serverId: string, names: string[]) => markNotLoaded(db, serverId, names),
-  ownMods: ownModsOf(db),
+  ownMods: [ownModsOf(db), progressionAtStart(db)],
   hostSeen: (provider: string, cpu: HostCpu) => hostSeen(db, provider, cpu),
 })
 /**
@@ -467,5 +469,6 @@ function serverChoices(db: Db, events: EventBus) {
     afkKick: new AfkKick(db, events),
     tellPlayers: new TellPlayers(db, events),
     performanceMods: new PerformanceSwitch(db, events),
+    progression: new ProgressionSwitch(db, events),
   }
 }

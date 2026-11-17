@@ -68,6 +68,7 @@ jobs:
           filters: |
             reporter:
               - 'apps/reporter/**'
+              - 'apps/progression/**'
               - '.github/workflows/ci.yml'
       # Whether a pull request changes anything beyond the web app and prose. Nothing outside apps/web
       # imports it (scripts/ci-test-groups.test.ts holds the tree to that), so its tests alone can't
@@ -285,8 +286,10 @@ jobs:
           echo "$out"
           grep -q 'CONTROL_URL is required' <<<"$out"
 
-  # The reporter plugin Cubepals places on Paper servers (apps/reporter): Java, with Gradle's own
-  # wrapper. Built with JDK 21 for Java 17, the oldest Paper Cubepals offers runs on.
+  # The Java plugins Cubepals places on servers, each with Gradle's own wrapper: the reporter
+  # (apps/reporter), built with JDK 21 for Java 17, the oldest Paper Cubepals offers runs on; and
+  # Offline world progression (apps/progression), whose Fabric mod is for Minecraft 26.3 and so
+  # builds with JDK 25. The job keeps its first name, which branch protection knows it by.
   reporter:
     name: Reporter plugin builds and passes its tests
     needs: changes
@@ -302,6 +305,13 @@ jobs:
           java-version: '21'
       - name: Build and test
         working-directory: apps/reporter
+        run: ./gradlew build --no-daemon --console=plain
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: '25'
+      - name: Build and test Offline world progression
+        working-directory: apps/progression
         run: ./gradlew build --no-daemon --console=plain
 
   # The suite spends most of its time waiting on the job queue's half-second poll, test after test,

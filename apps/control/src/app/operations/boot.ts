@@ -116,13 +116,14 @@ const stoppedAnswering = (error: unknown) =>
 export const notUpHere = (error: unknown): boolean =>
   error instanceof Stuck || error instanceof NotReady || error instanceof Unreadable
 
-/** What of a revision says whether Cubepals' own performance mods are placed on its server. */
+/** What of a revision says whether Cubepals' own mods are placed on its server. */
 type OwnModsRevision = Pick<ServerRevision, 'gameVersion' | 'loader' | 'modpack' | 'mods'>
 
 /**
- * Cubepals' own performance mods on a server (`app/compat/performance.ts`), as a start that fails
- * with them needs them: whether its start placed any, turning them off, and taking that back where
- * it still stands (an owner's choice made meanwhile is kept).
+ * A group of Cubepals' own mods on a server (the performance mods, `app/compat/performance.ts`;
+ * Offline world progression's mod, `app/progression/progression.ts`), as a start that fails with
+ * them needs them: whether its start placed any, turning them off, and taking that back where it
+ * still stands (an owner's choice made meanwhile is kept).
  */
 export interface OwnMods {
   placed(serverId: string, revision: OwnModsRevision): Promise<boolean>
@@ -164,7 +165,7 @@ export class BootSequence {
   readonly #console: ServerConsole
   readonly #passwords: (serverId: string) => string[]
   readonly #notLoaded: (serverId: string, names: string[]) => Promise<void>
-  readonly #ownMods: OwnMods | null
+  readonly #ownMods: OwnMods[]
   readonly #hostSeen: HostNotes['seen']
 
   constructor(deps: {
@@ -185,8 +186,11 @@ export class BootSequence {
     rconPasswords: (serverId: string) => string[]
     /** Keeps what a start that came up left out of what it was told to load, by name. */
     notLoaded?: (serverId: string, names: string[]) => Promise<void>
-    /** Cubepals' own performance mods, for a start that fails with them; absent, none are placed. */
-    ownMods?: OwnMods
+    /**
+     * Cubepals' own mods, each group as a start that fails with it asks (the performance mods,
+     * Offline world progression's mod); absent, none are placed.
+     */
+    ownMods?: OwnMods[]
     /** Keeps what a boot read of its host beside every other reading of it (`HostNotes`). */
     hostSeen?: HostNotes['seen']
   }) {
@@ -201,7 +205,7 @@ export class BootSequence {
     this.#console = deps.console
     this.#passwords = deps.rconPasswords
     this.#notLoaded = deps.notLoaded ?? (async () => undefined)
-    this.#ownMods = deps.ownMods ?? null
+    this.#ownMods = deps.ownMods ?? []
     this.#hostSeen = deps.hostSeen
   }
 
@@ -405,15 +409,16 @@ export class BootSequence {
     reprovision: (() => Promise<RuntimeHandle>) | undefined,
     heard: string[],
   ): Promise<RuntimeHandle> {
-    const own = this.#ownMods
-    const placed = own !== null && (await own.placed(serverId, revision))
+    // Which group let it down can't be told, so it starts without every group this start placed,
+    // and takes back only those: a group already off (for an earlier clash) stays as it was.
+    const placed = await this.#placedOwn(serverId, revision)
     try {
       return await up(first)
     } catch (error) {
       const asItIs =
         stoppedAnswering(error) || error instanceof Unreadable || error instanceof NoLongerApplies
-      if (own === null || !placed || asItIs) throw error
-      await own.turnOff(serverId)
+      if (placed.length === 0 || asItIs) throw error
+      for (const own of placed) await own.turnOff(serverId)
       const said = `operation ${ctx.op.kind} ${ctx.op.id}: didn't start with Cubepals' own mods`
       if (reprovision === undefined) {
         console.warn(`${said}, its next start is without them (${inFull(error)})`)
@@ -426,10 +431,16 @@ export class BootSequence {
         await ctx.mark('own_mods_off')
         return handle
       } catch {
-        await own.turnOn(serverId)
+        for (const own of placed) await own.turnOn(serverId)
         throw error
       }
     }
+  }
+
+  /** The groups of Cubepals' own mods this start placed. */
+  async #placedOwn(serverId: string, revision: OwnModsRevision): Promise<OwnMods[]> {
+    const placed = await Promise.all(this.#ownMods.map((own) => own.placed(serverId, revision)))
+    return this.#ownMods.filter((_, i) => placed[i])
   }
 
   /**

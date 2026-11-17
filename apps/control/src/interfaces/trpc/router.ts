@@ -95,6 +95,7 @@ import { chipIns } from './chip-ins.ts'
 import { gifts } from './gifts.ts'
 import { insight } from './insight.ts'
 import { ownIcon } from './own-icon.ts'
+import { serverProgression } from './progression.ts'
 import { sharing } from './sharing.ts'
 import { authedProcedure, ownerOrAdminProcedure, publicProcedure, router, sessionOf } from './trpc.ts'
 
@@ -102,6 +103,7 @@ import { authedProcedure, ownerOrAdminProcedure, publicProcedure, router, sessio
 
 const servers = router({
   ...serverIdleKick,
+  ...serverProgression,
   list: authedProcedure.query(({ ctx }) => ctx.services.queries.list(ctx.actor)),
   get: authedProcedure
     .input(ServerRef)

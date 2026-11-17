@@ -43,6 +43,7 @@ import { procedureServed } from '../../app/platform/telemetry.ts'
 import type { PlayerService } from '../../app/players/service.ts'
 import type { SessionSwitch } from '../../app/ports/auth.ts'
 import type { RealtimeTickets } from '../../app/ports/tickets.ts'
+import type { ProgressionSwitch } from '../../app/progression/switch.ts'
 import type { RevisionService } from '../../app/revisions/service.ts'
 import type { ServerIcons } from '../../app/server-icons/service.ts'
 import type { AfkKick } from '../../app/servers/afk-kick.ts'
@@ -62,6 +63,7 @@ export interface Services {
     afkKick: AfkKick
     tellPlayers: TellPlayers
     performanceMods: PerformanceSwitch
+    progression: ProgressionSwitch
   }
   /** A new address goes through here, so its owner hears when someone else gave it. */
   notices: OwnerNotices

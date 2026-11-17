@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "id": "cubepals_progression",
+  "version": "1",
+  "name": "Cubepals Progression",
+  "description": "Furnaces finish smelting and crops keep growing while nobody is near them, and while the server sleeps. Cubepals places it on Fabric servers while their owner leaves Offline world progression on.",
+  "license": "AGPL-3.0-only",
+  "environment": "server",
+  "mixins": ["cubepals_progression.mixins.json"],
+  "depends": {
+    "fabricloader": ">=0.20.1",
+    "minecraft": "~26.3",
+    "java": ">=25"
+  }
+}

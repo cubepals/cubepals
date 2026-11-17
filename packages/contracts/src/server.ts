@@ -406,6 +406,46 @@ export interface BedrockView {
  */
 export const SetPerformanceModsInput = z.object({ serverId: ServerId, on: z.boolean() })
 
+/** Offline world progression on or off; like the performance mods, it applies at the next start. */
+export const SetProgressionInput = z.object({ serverId: ServerId, on: z.boolean() })
+
+/**
+ * The parts of Offline world progression its owner can turn off one by one: furnaces and brewing,
+ * crops and plants, animals growing up, world changes (copper, leaves, grass, ice and snow), and
+ * fire and lava spreading.
+ */
+export const PROGRESSION_PARTS = ['furnaces', 'plants', 'animals', 'world', 'fire'] as const
+export const ProgressionPart = z.enum(PROGRESSION_PARTS)
+export type ProgressionPart = z.infer<typeof ProgressionPart>
+
+/** Cubepals' own choice for each part: all on but fire, which would only do damage while nobody is there. */
+export const PROGRESSION_DEFAULTS: Readonly<Record<ProgressionPart, boolean>> = {
+  furnaces: true,
+  plants: true,
+  animals: true,
+  world: true,
+  fire: false,
+}
+
+/** One part of Offline world progression on or off, at the next start. */
+export const SetProgressionPartInput = z.object({
+  serverId: ServerId,
+  part: ProgressionPart,
+  on: z.boolean(),
+})
+
+/**
+ * Offline world progression, Cubepals' plugin or mod that catches a world up on the time its chunks
+ * weren't ticked: whether its next start has it (`on`), and who turned it off: its `owner`, or
+ * Cubepals after a start that failed with it and came up without (`clash`); and which of its parts
+ * are on (`parts`). A control plane from before parts sends none.
+ */
+export interface ProgressionView {
+  on: boolean
+  turnedOff: 'owner' | 'clash' | null
+  parts?: Record<ProgressionPart, boolean>
+}
+
 /**
  * The performance mods Cubepals adds to a Fabric server as it starts: whether its next start has
  * them (`on`), and who turned them off: its `owner`, or Cubepals after a start that failed with
@@ -623,6 +663,11 @@ export interface ServerView {
   bedrock: BedrockView | null | false
   /** The performance mods Cubepals adds, on Fabric with no pack; null on any other server. */
   performanceMods: PerformanceModsView | null
+  /**
+   * Offline world progression, on Paper, plain Minecraft on Paper, and Fabric 26.3, with no pack;
+   * null on any other server. A control plane from before it sends none.
+   */
+  progression?: ProgressionView | null
   partySize: PartySize
   /** Stopped with changes that apply when it next starts. */
   pendingRestart: boolean

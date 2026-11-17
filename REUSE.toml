@@ -171,9 +171,17 @@ precedence = "closest"
 SPDX-FileCopyrightText = ["PROP11TH (NetherGames)", "2026 The Cubepals Authors"]
 SPDX-License-Identifier = "CC-BY-4.0"
 
-# Gradle's wrapper, as `gradle wrapper` writes it for the join reporter's build.
+# Gradle's wrapper, as `gradle wrapper` writes it for the join reporter's build and Offline world
+# progression's.
 [[annotations]]
-path = ["apps/reporter/gradlew", "apps/reporter/gradlew.bat", "apps/reporter/gradle/wrapper/**"]
+path = [
+  "apps/reporter/gradlew",
+  "apps/reporter/gradlew.bat",
+  "apps/reporter/gradle/wrapper/**",
+  "apps/progression/gradlew",
+  "apps/progression/gradlew.bat",
+  "apps/progression/gradle/wrapper/**",
+]
 precedence = "override"
 SPDX-FileCopyrightText = "2015 the original authors"
 SPDX-License-Identifier = "Apache-2.0"

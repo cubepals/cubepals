@@ -5,6 +5,11 @@
 **/.turbo
 **/dist
 **/target
+# Gradle's own state and outputs from a local build of the Java plugins (apps/reporter,
+# apps/progression): an image builds them again from their sources.
+**/.gradle
+apps/*/build
+apps/progression/*/build
 .git
 .github
 .claude

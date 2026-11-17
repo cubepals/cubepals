@@ -52,8 +52,9 @@ export type OperationStep =
  * `memory_lost` where its last sleep kept its memory and the provider stopped it since), how a
  * sleep went (`SleepMark`), when a boot let its players in (`let_in`, `boot.ts`), and when a
  * restore's snapshot of the world it replaces was kept, as the backup came meanwhile (`saved`).
- * `own_mods_off`: the start failed with Cubepals' own performance mods and came up without them,
- * which are now off for the server (`boot.ts`). `host_cpu:<model>@<MHz>` and `host:<region>/<name>`:
+ * `own_mods_off`: the start failed with Cubepals' own mods (the performance mods, Offline world
+ * progression's mod) and came up without those it placed, which are now off for the server
+ * (`boot.ts`). `host_cpu:<model>@<MHz>` and `host:<region>/<name>`:
  * the CPU of the host a boot ran on and which host it is, where its runtime reads them (`host-cpu.ts`).
  */
 type OperationMark =

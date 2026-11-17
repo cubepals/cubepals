@@ -140,6 +140,44 @@ export const serverPerformanceOff = pgTable('server_performance_off', {
   createdAt: createdAt(),
 })
 
+// ─── Offline world progression ───────────────────────────────────────────────────────────────
+
+/**
+ * The servers that run without Offline world progression, Cubepals' plugin or mod that catches
+ * a world up on the time its chunks weren't ticked (`app/progression/`): kept beside
+ * the server as the performance mods are, so its owner's switch and a start that failed with it
+ * change it without a new revision. A server with no row runs it, where its type can.
+ */
+export const serverProgressionOff = pgTable('server_progression_off', {
+  serverId: uuid('server_id')
+    .primaryKey()
+    .references(() => minecraftServers.id),
+  /** `owner`: its owner's switch. `clash`: a start that failed with it and came up without. */
+  reason: text('reason').$type<'owner' | 'clash'>().notNull(),
+  createdAt: createdAt(),
+})
+
+/**
+ * Which parts of Offline world progression a server runs, where its owner changed any (no row:
+ * Cubepals' default, every part on but fire). Read at each start, as the main switch is.
+ */
+export const serverProgressionParts = pgTable('server_progression_parts', {
+  serverId: uuid('server_id')
+    .primaryKey()
+    .references(() => minecraftServers.id),
+  /** Furnaces, smokers, blast furnaces, brewing stands and campfires. */
+  furnaces: boolean('furnaces').notNull().default(true),
+  /** Crops and plants, saplings included. */
+  plants: boolean('plants').notNull().default(true),
+  /** Baby animals growing up, breeding waiting out, sheep's wool, turtle eggs. */
+  animals: boolean('animals').notNull().default(true),
+  /** Copper aging, leaves decaying, grass spreading, ice and snow melting, amethyst, dripstone. */
+  world: boolean('world').notNull().default(true),
+  /** Lava setting things alight, and fire spreading: off unless its owner turns it on. */
+  fire: boolean('fire').notNull().default(false),
+  updatedAt: updatedAt(),
+})
+
 /** Each player Stop cheaters removed from a server, as the server's reporter told it. */
 export const serverRemovals = pgTable(
   'server_removals',

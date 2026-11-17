@@ -29,6 +29,7 @@ import {
   unreferencedStored,
   worldStartingOn,
 } from './persistence.ts'
+import { PROGRESSION_JARS } from './progression-jar.ts'
 import { keepReporterStored, reporterJar, reporterPin } from './reporter.ts'
 
 export type UnavailableReason = 'no_archive_store' | 'not_stored' | 'revoked'
@@ -114,8 +115,10 @@ export class ArtifactService {
     this.#mirror = deps.mirror
     this.#jobs = deps.jobs
     this.#locks = deps.locks
-    // The join reporter this build carries, kept where servers fetch it from, as it starts.
+    // The join reporter and the progression plugin this build carries, kept where servers fetch
+    // them from, as it starts.
     keepReporterStored(this.#db, this.#archive)
+    for (const jar of PROGRESSION_JARS) jar.keepStored(this.#db, this.#archive)
   }
 
   /**
@@ -151,10 +154,13 @@ export class ArtifactService {
       if (cleared) uploads++
     }
     let blobs = 0
-    // No revision pins the join reporter: it is placed at each start (`reporter.ts`).
-    const reporter = (await reporterJar())?.sha512
+    // No revision pins the jars Cubepals builds: each is placed at a start (`built-jar.ts`).
+    const built = [
+      (await reporterJar())?.sha512,
+      ...(await Promise.all(PROGRESSION_JARS.map(async (jar) => (await jar.identity())?.sha512))),
+    ]
     for (const blob of await unreferencedStored(this.#db, new Date(now.getTime() - GC_GRACE_MS))) {
-      if (blob.sha512 === reporter) continue
+      if (built.includes(blob.sha512)) continue
       if (!(await this.#db.transaction((tx) => forgetStored(tx, blob.sha512)))) continue
       await store.delete(blob.key)
       blobs++
@@ -239,18 +245,24 @@ export class ArtifactService {
   }
 
   /**
-   * A Via plugin of Cubepals' compatibility layer, the join reporter, or else the archive a world
-   * starts on.
+   * A Via plugin of Cubepals' compatibility layer, a jar Cubepals builds (the join reporter,
+   * Offline world progression's plugin and mod), or else the archive a world starts on.
    */
   async #compat(serverId: string, sha512: string): Promise<LocatedArtifact> {
     const via = await compatPinned(this.#db, sha512)
-    const reporter = via === null ? await reporterPin(this.#db) : null
+    const built =
+      via === null
+        ? [
+            await reporterPin(this.#db),
+            ...(await Promise.all(PROGRESSION_JARS.map((jar) => jar.pin(this.#db)))),
+          ].find((pin) => pin?.artifact.sha512 === sha512)
+        : undefined
     // Its name on disk changes with its bytes, so a copy a server has is never older than it.
-    if (reporter?.artifact.sha512 === sha512)
+    if (built !== undefined && built !== null)
       return {
-        artifact: reporter.artifact,
-        pinned: reporter,
-        name: diskName(reporter.artifact),
+        artifact: built.artifact,
+        pinned: built,
+        name: diskName(built.artifact),
         lastModified: new Date(0),
       }
     if (via === null) return this.#starter(serverId, sha512)

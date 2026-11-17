@@ -22,6 +22,17 @@ COPY apps/reporter/settings.gradle.kts apps/reporter/build.gradle.kts ./
 COPY apps/reporter/src src
 RUN gradle jar --no-daemon --console=plain
 
+# Offline world progression's Paper plugin and Fabric mod (apps/progression), the same way. The
+# Fabric mod is for Minecraft 26.3, which needs Java 25, so this build has its own Gradle and JDK.
+# Loom fetches that Minecraft from Mojang to compile against; nothing of it goes in the jar.
+FROM mirror.gcr.io/library/gradle:9.8.2-jdk25@sha256:e46e15353757ef9c9be0197a243653e88d25ebcd4c3c841057cf839c11fcf898 AS progression
+WORKDIR /build
+COPY apps/progression/settings.gradle.kts ./
+COPY apps/progression/reckoning reckoning
+COPY apps/progression/paper paper
+COPY apps/progression/fabric fabric
+RUN gradle :paper:jar :fabric:jar --no-daemon --console=plain
+
 FROM mirror.gcr.io/library/node:22.23.4-trixie-slim@sha256:8eb619e402eaede1748a3c8173bffab391592812e85136452f781741c7242ddf AS deps
 COPY --from=mirror.gcr.io/oven/bun:1.4.3@sha256:ec06c3b6cea04192ae6770c434f668ca41d343ad19fa6472216c7b48be39c598 /usr/local/bin/bun /usr/local/bin/bun
 WORKDIR /app
@@ -53,6 +64,8 @@ COPY apps/control/src apps/control/src
 # The server icons game runtimes download as they start: without them every server fails to boot.
 COPY apps/control/assets apps/control/assets
 COPY --from=reporter /build/build/libs/cubepals-reporter.jar apps/control/assets/reporter/cubepals-reporter.jar
+COPY --from=progression /build/paper/build/libs/cubepals-progression.jar apps/control/assets/progression/cubepals-progression.jar
+COPY --from=progression /build/fabric/build/libs/cubepals-progression-fabric.jar apps/control/assets/progression/cubepals-progression-fabric.jar
 # Cubepals' lockup, which every shared link's picture carries (src/interfaces/http/card.ts).
 COPY brand/png/lockup-horizontal.png brand/png/lockup-horizontal.png
 # What the node endpoint serves joining hosts: join.sh and daemon.json are in src/infra/fleet, and
