@@ -105,6 +105,11 @@ final class ChunkCatchUp implements Work.Job {
     void owe(long more, long moreAnimals) {
         owed += more;
         animalsOwed += moreAnimals;
+        // Animals owed later than it began, once their entities tick: their turn comes again.
+        if (moreAnimals > 0) {
+            herded = false;
+            waited = 0;
+        }
     }
 
     @Override
