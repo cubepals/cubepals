@@ -26,7 +26,6 @@ import { type FrontOptions, front, geyserDoor, pipe, playersOnline } from './fro
 import { forServer, Unwrap } from './header.ts'
 import { Held, LOGIN_QUERIES, sendAway, turnAway } from './hold.ts'
 import { JoinTrace } from './join-trace.ts'
-import { LeftAtOnce } from './left-at-once.ts'
 import { Gate } from './limits.ts'
 import { mappings } from './mappings.ts'
 import { holdBegun, observeGeyser, polled } from './metrics.ts'
@@ -774,7 +773,6 @@ const door: FrontOptions = {
   timeouts: TIMEOUTS,
   ready: poll.firstHold,
   notice: (name) => runningNotice(routes.find((r) => r.hostname === name)),
-  leftAtOnce: new LeftAtOnce((name) => routes.find((r) => r.hostname === name)),
 }
 front(door)
 await router.ready(30_000, WAITING)
