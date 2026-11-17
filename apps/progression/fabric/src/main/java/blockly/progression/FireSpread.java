@@ -81,8 +81,11 @@ final class FireSpread {
         }
 
         private void tick(BlockPos pos) {
+            // Loaded first: a fire spread into a neighbour may be in a chunk unloaded since, and
+            // reading its block would load it.
+            if (!neighboursLoaded(level, pos)) return;
             BlockState state = level.getBlockState(pos);
-            if (!isFire(state) || !neighboursLoaded(level, pos)) return;
+            if (!isFire(state)) return;
             state.tick(level, pos, level.getRandom());
             for (BlockPos near : BlockPos.betweenClosed(pos.offset(-1, -1, -1), pos.offset(1, 4, 1)))
                 if (isFire(level.getBlockState(near))) next.add(near.immutable());

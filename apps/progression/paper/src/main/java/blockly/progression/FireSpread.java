@@ -68,7 +68,9 @@ final class FireSpread {
         }
 
         private void tick(Block fire) {
-            if (fire.getType() != Material.FIRE || !neighboursLoaded(fire)) return;
+            // Loaded first: a fire spread into a neighbour may be in a chunk unloaded since, and
+            // reading its block would load it.
+            if (!neighboursLoaded(fire) || fire.getType() != Material.FIRE) return;
             fire.tick();
             for (int dx = -1; dx <= 1; dx++)
                 for (int dy = -1; dy <= 4; dy++)
