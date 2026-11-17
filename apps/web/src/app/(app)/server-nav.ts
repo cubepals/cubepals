@@ -5,13 +5,15 @@
 'use client'
 
 /**
- * The account's servers in the app's navigation, on every page and not only on a server's own:
- * each server by name, and under the open one its pages, so a server's Players or Mods is one
- * press from the Account page or Browse rather than three.
+ * One of the account's servers in the app's navigation on every page, not only on a server's own:
+ * its name over its pages, so a server's Players or Mods is one press from the Account page or
+ * Browse rather than three. Only one server's pages are ever shown, so the navigation is the same
+ * height for an account with one server and one with hundreds; the rest are a press away in the
+ * switch over them (./server-switch.tsx).
  *
  * The open server is the one whose page this is. Away from a server, it is the one last opened in
- * this visit, else the newest: for an account with one server, that is always it.
- * Nothing is kept past the visit, so the first paint draws what the server drew.
+ * this visit, else the newest: for an account with one server, that is always it. Nothing is kept
+ * past the visit, so the first paint draws what the server drew.
  *
  * It decides what is listed and open; the frame (./frame.tsx) draws it, in the sidebar and in
  * the phone's bottom bar.
@@ -77,12 +79,24 @@ export function serverPages(
 }
 
 /**
- * The servers the navigation lists, which is open, and the open one's pages. `here` is the server
+ * Where choosing a server in the switch goes: the same page of it as the one open now, Mods to
+ * Mods, so two servers are compared a press apart. From one player's page, the other server's
+ * Players, since that player may never have joined it. From a page of no server, its Overview.
+ */
+export function switchTo(serverId: string, pathname: string): string {
+  const [, section, , page] = pathname.split('/')
+  const same = `/servers/${serverId}/${page}`
+  const isPage = serverPages(serverId, undefined).some((entry) => entry.href === same)
+  return section === 'servers' && isPage ? same : `/servers/${serverId}`
+}
+
+/**
+ * The servers the navigation lists, which is open, its name, and its pages. `here` is the server
  * whose page this is, and `current` what its page read of it, fresher than the list.
  */
 export function useServerNav(here: string | undefined, current: ServerView | undefined) {
   const trpc = useTRPC()
-  // In the first paint (lib/first-paint.ts), so the list is drawn with the page.
+  // In the first paint (lib/first-paint.ts), so the navigation is drawn with the page.
   const owned = useQuery(trpc.servers.list.queryOptions()).data ?? []
   // Kept while the app stays open: the frame isn't drawn again as its pages change.
   const [last, setLast] = useState(here)
@@ -93,7 +107,8 @@ export function useServerNav(here: string | undefined, current: ServerView | und
     owned,
     here === undefined ? undefined : { id: here, name: current?.name ?? listedName(owned, here) },
   )
-  return { servers, open, pages: open === undefined ? [] : serverPages(open, view) }
+  const name = servers.find((server) => server.id === open)?.name ?? 'Your server'
+  return { servers, open, name, pages: open === undefined ? [] : serverPages(open, view) }
 }
 
 /** A server's name from the list, before its own page has read it. */

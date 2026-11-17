@@ -3,11 +3,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Which of the account's servers the navigation lists and opens on every page, and the pages it
- * shows under the open one (./server-nav.ts).
+ * Which of the account's servers the navigation lists and opens on every page, the pages it shows
+ * under the open one, and where its switch goes (./server-nav.ts).
  */
 import { describe, expect, test } from 'bun:test'
-import { listedServers, openServer, serverPages } from './server-nav'
+import { listedServers, openServer, serverPages, switchTo } from './server-nav'
 
 const newest = { id: 'newest', name: 'Arcade' }
 const older = { id: 'older', name: 'Maple Hollow' }
@@ -71,5 +71,26 @@ describe("a server's pages", () => {
     const pages = serverPages('older', { loader: 'paper', players: { online: 2, people: [] } })
     expect(pages.map((page) => page.label)).toContain('Plugins')
     expect(pages.find((page) => page.label === 'Players')?.trailing).toBe('2')
+  })
+})
+
+describe('choosing a server in the switch', () => {
+  test('opens the same page of it as the one open now', () => {
+    expect(switchTo('newest', '/servers/older/mods')).toBe('/servers/newest/mods')
+    expect(switchTo('newest', '/servers/older/settings')).toBe('/servers/newest/settings')
+  })
+
+  test("opens its Overview from a server's Overview", () => {
+    expect(switchTo('newest', '/servers/older')).toBe('/servers/newest')
+  })
+
+  test("opens its Players from one player's page, as that player may never have joined it", () => {
+    expect(switchTo('newest', '/servers/older/players/some-uuid')).toBe('/servers/newest/players')
+  })
+
+  test('opens its Overview from a page of no server', () => {
+    expect(switchTo('newest', '/account')).toBe('/servers/newest')
+    expect(switchTo('newest', '/servers/new')).toBe('/servers/newest')
+    expect(switchTo('newest', '/admin/accounts/settings')).toBe('/servers/newest')
   })
 })
