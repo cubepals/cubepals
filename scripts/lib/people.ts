@@ -8,11 +8,13 @@
  */
 import { randomUUID } from 'node:crypto'
 import { TERMS_VERSION } from '@blockly/contracts'
+import { onceMoreIfDropped } from './dropped-connection.ts'
 
 // The shapes these answer with are the app's own contracts; a script that only reads a field or
 // two of each is clearer left loose than restating them.
 // biome-ignore lint/suspicious/noExplicitAny: read loosely on purpose, see above
 export type Api = (path: string, input?: unknown, method?: 'GET' | 'POST') => Promise<any>
+
 export interface Person {
   email: string
   password: string
@@ -54,11 +56,16 @@ export function people(web: string, mailpit: string, origin = web) {
         method === 'GET'
           ? `${web}/api/trpc/${path}?batch=1&input=${encodeURIComponent(JSON.stringify({ 0: input }))}`
           : `${web}/api/trpc/${path}?batch=1`
-      const response = await fetch(url, {
-        method,
-        headers: { cookie: cookie(), origin, 'content-type': 'application/json' },
-        ...(method === 'POST' ? { body: JSON.stringify({ 0: input }) } : {}),
-      })
+      const send = () =>
+        fetch(url, {
+          method,
+          headers: { cookie: cookie(), origin, 'content-type': 'application/json' },
+          ...(method === 'POST' ? { body: JSON.stringify({ 0: input }) } : {}),
+        })
+      // Staging's API can reset a request as one of its machines wakes (dropped-connection.ts). A
+      // query is asked once more; a change is sent once, since its requestId doesn't make every
+      // change safe to send twice (a restart whose first operation had finished would run again).
+      const response = await (method === 'GET' ? onceMoreIfDropped(send) : send())
       const body = await response.text()
       // The dev web app answers a page instead of JSON while it recompiles; it should not do that
       // for long, and a page that never becomes JSON is a failure worth seeing.

@@ -573,7 +573,10 @@ async function rests(j: Journey): Promise<void> {
   await j.step(
     'rests in the archive store once nobody has played for weeks, and lets go of Fly',
     async () => {
-      await j.api('servers.stop', { serverId: j.server.id, requestId: randomUUID() })
+      // A stop asked again of a server stopping or stopped does nothing (domain/server/lifecycle.ts),
+      // so one whose connection dropped is asked once more.
+      const stop = { serverId: j.server.id, requestId: randomUUID() }
+      await onceMoreIfDropped(() => j.api('servers.stop', stop))
       await j.waitFor((v) => v.status === 'stopped', 'stopped', 300)
       await j.settled()
       // Two weeks without play, as far as the sweep can tell, then the sweep itself, rather than
