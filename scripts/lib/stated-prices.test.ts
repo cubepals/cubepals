@@ -37,8 +37,7 @@ const offered = offeredNow(TABLE, OFFER)
 /** A pricing page as the site writes it: title, previews, structured data and cards. */
 function pricingPage(said: { core: [string, number]; plus: [string, number]; title?: string }) {
   const title =
-    said.title ??
-    `Pricing: a free trial, then Core for $${said.core[0]} a month or Plus for $${said.plus[0]} a month`
+    said.title ?? `Pricing: Core for $${said.core[0]} a month or Plus for $${said.plus[0]} a month`
   const offer = (name: string, [price, hours]: [string, number]) =>
     `{"@type":"Offer","name":"${name}","price":"${price}","description":"Up to 3 servers. ${hours} hours of play each month, then 25¢ an hour."}`
   return `<html><head><title>${title} · Cubepals</title>
@@ -60,8 +59,8 @@ describe('a priced page', () => {
 
   test('that states the plan table’s anywhere names the page, the place and both numbers', () => {
     const page = pricingPage({ core: ['7.77', 55], plus: ['13', 150] }).replace(
-      '<title>Pricing: a free trial, then Core for $7.77 a month or Plus for $13',
-      '<title>Pricing: a free trial, then Core for $7.77 a month or Plus for $22.22',
+      '<title>Pricing: Core for $7.77 a month or Plus for $13',
+      '<title>Pricing: Core for $7.77 a month or Plus for $22.22',
     )
     expect(pricedProblems('/pricing', page, offered)).toEqual([
       '/pricing: Plus is $22.22 a month in its title, but $13 from /api/public/offer.',
