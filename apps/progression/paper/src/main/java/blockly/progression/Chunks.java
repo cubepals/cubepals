@@ -172,11 +172,13 @@ final class Chunks implements Listener {
     /** Queues what a chunk is owed, or adds it to the catch-up already waiting for it. */
     private void queue(World world, Followed f, long owed, long animals) {
         if (f.waiting()) {
-            if (!f.queued.ended()) {
+            if (!f.queued.ended() && !f.queued.planned()) {
                 f.queued.owe(owed, animals);
                 return;
             }
-            // Its chunk went before it began, and came back: what it never gave is still owed.
+            // It gave nothing yet: its chunk went and came back, or it is still reading the chunk
+            // with what it was first owed. One catch-up of all of it starts over.
+            f.queued.cancel();
             owed += f.queued.owed();
             animals += f.queued.animalsOwed();
         } else {

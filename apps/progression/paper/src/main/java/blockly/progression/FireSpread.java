@@ -29,34 +29,54 @@ final class FireSpread {
     private FireSpread() {}
 
     static Work.Job job(List<Block> fires, long owed, Totals totals) {
-        return new Work.Job() {
-            private final ArrayDeque<Block> burning = new ArrayDeque<>(fires);
-            private long rounds = Math.min(owed / TICKS_A_ROUND, MOST_ROUNDS);
+        return new Burn(fires, Math.min(owed / TICKS_A_ROUND, MOST_ROUNDS), totals);
+    }
 
-            @Override
-            public boolean step(long deadline) {
-                while (rounds > 0 && !burning.isEmpty()) {
-                    if (System.nanoTime() >= deadline) return false;
-                    rounds--;
-                    Set<Block> next = new LinkedHashSet<>();
-                    for (Block fire : burning) {
-                        if (fire.getType() != Material.FIRE || !neighboursLoaded(fire)) continue;
-                        fire.tick();
-                        for (int dx = -1; dx <= 1; dx++)
-                            for (int dy = -1; dy <= 4; dy++)
-                                for (int dz = -1; dz <= 1; dz++) {
-                                    Block near = fire.getRelative(dx, dy, dz);
-                                    if (near.getType() == Material.FIRE) next.add(near);
-                                }
-                    }
-                    int before = burning.size();
-                    burning.clear();
+    /** The rounds of a chunk's fires, a fire at a time within the deadline: a round can be large. */
+    private static final class Burn implements Work.Job {
+        private final ArrayDeque<Block> burning;
+        private final Set<Block> next = new LinkedHashSet<>();
+        private final Totals totals;
+        private long rounds;
+        private boolean inRound;
+        private int before;
+
+        Burn(List<Block> fires, long rounds, Totals totals) {
+            this.burning = new ArrayDeque<>(fires);
+            this.rounds = rounds;
+            this.totals = totals;
+        }
+
+        @Override
+        public boolean step(long deadline) {
+            while (true) {
+                if (inRound && burning.isEmpty()) {
+                    totals.fires += Math.max(0, next.size() - before);
                     burning.addAll(next);
-                    totals.fires += Math.max(0, burning.size() - before);
+                    next.clear();
+                    inRound = false;
                 }
-                return true;
+                if (!inRound) {
+                    if (rounds == 0 || burning.isEmpty()) return true;
+                    rounds--;
+                    before = burning.size();
+                    inRound = true;
+                }
+                if (System.nanoTime() >= deadline) return false;
+                tick(burning.poll());
             }
-        };
+        }
+
+        private void tick(Block fire) {
+            if (fire.getType() != Material.FIRE || !neighboursLoaded(fire)) return;
+            fire.tick();
+            for (int dx = -1; dx <= 1; dx++)
+                for (int dy = -1; dy <= 4; dy++)
+                    for (int dz = -1; dz <= 1; dz++) {
+                        Block near = fire.getRelative(dx, dy, dz);
+                        if (near.getType() == Material.FIRE) next.add(near);
+                    }
+        }
     }
 
     private static boolean neighboursLoaded(Block fire) {

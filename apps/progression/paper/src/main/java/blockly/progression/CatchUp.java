@@ -76,8 +76,16 @@ final class CatchUp implements Work.Job {
         this.totals = totals;
     }
 
-    /** Whether it has begun, after which its chunk has had some of what it was owed. */
+    /**
+     * Whether it has begun to give its chunk what it was owed: once its blocks are read, since
+     * reading them gives nothing, and a chunk that goes while they are read still owes it all.
+     */
     boolean started() {
+        return started && snapshot == null;
+    }
+
+    /** Whether it has begun reading its chunk, which a later gap can't be added to. */
+    boolean planned() {
         return started;
     }
 

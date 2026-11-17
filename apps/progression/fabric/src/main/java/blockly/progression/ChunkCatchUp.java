@@ -50,6 +50,7 @@ final class ChunkCatchUp implements Work.Job {
     private int settled;
     private boolean started;
     private boolean ended;
+    private boolean cancelled;
     /** While its blocks are being read (`scan`): where it is, and what it found. */
     private boolean scanning;
     private int nextSection;
@@ -66,7 +67,16 @@ final class ChunkCatchUp implements Work.Job {
         this.totals = totals;
     }
 
+    /**
+     * Whether it has begun to give its chunk what it was owed: once its blocks are read, since
+     * reading them gives nothing, and a chunk that goes while they are read still owes it all.
+     */
     boolean started() {
+        return started && !scanning;
+    }
+
+    /** Whether it has begun reading its chunk, which a later gap can't be added to. */
+    boolean planned() {
         return started;
     }
 
@@ -83,6 +93,11 @@ final class ChunkCatchUp implements Work.Job {
         return animalsOwed;
     }
 
+    /** Ends it where it is: what it never gave is carried by whoever cancels it. */
+    void cancel() {
+        cancelled = true;
+    }
+
     /** Adds a later gap to one that hasn't begun. */
     void owe(long more, long moreAnimals) {
         owed += more;
@@ -97,6 +112,7 @@ final class ChunkCatchUp implements Work.Job {
     }
 
     private boolean run(long deadline) {
+        if (cancelled) return true;
         if (level.getChunkSource().getChunkNow(chunk.getPos().x(), chunk.getPos().z()) != chunk) return true;
         if (!started) {
             if (++settled < SETTLE) return false;
