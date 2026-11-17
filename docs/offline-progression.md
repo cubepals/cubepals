@@ -70,14 +70,21 @@ game time stands still while a server is stopped or suspended, which is exactly 
 - **A stamp per chunk.** Each chunk has the moment up to which the game itself ticked it. While the
   game ticks a chunk, its stamp moves on to now; a chunk that ticks again after a gap is owed the
   gap (`Clock`). What stopped it doesn't matter: unloaded, the server stopped or paused, or the
-  machine suspended with the chunk in memory.
-- **Kept with the world.** On Paper in the chunk's own persistent data, saved with its blocks; on
-  Fabric in each dimension's saved data (`data/cubepals/progression.dat`). Either way it survives an
-  unload, a stop and a crash. An animal keeps its own stamp, so one that walks into another chunk
-  isn't made up twice.
+  machine suspended with the chunk in memory. Its animals have a stamp of their own, moved only
+  while the game ticks the chunk's entities too: the ring of chunks at the edge of the simulation
+  distance ticks blocks and not entities, so an animal standing there is owed that time.
+- **Kept with the world.** On Paper in the chunk's own persistent data, written every second while
+  it ticks, so whenever Paper saves the chunk's blocks it saves a stamp as new as them; on Fabric in
+  each dimension's saved data (`data/cubepals/progression.dat`), written with each save of the
+  level. Either way it survives an unload, a stop and a crash; after a crash, Fabric can make up
+  again at most the time between a chunk unloading and the level's next save (an autosave is every
+  five minutes). An animal keeps its own stamp, so one that walks into another chunk isn't made up
+  twice.
 - **A world that ran without it.** Each world keeps the game time it was last seen at. A world
   whose game time moved on more than a minute without it starts fresh: nothing from before is made
-  up, so turning it on, or back on, never makes up the time it was off.
+  up, so turning it on, or back on, never makes up the time it was off. Where it starts fresh is
+  kept with the world too, so a chunk nobody visits until a later start is still owed only from
+  there.
 - **Random ticks by count, in rounds.** Minecraft picks `random_tick_speed` blocks per 16³ section
   each tick, so one block's random ticks over a gap are Poisson with mean `ticks × speed ÷ 4096`:
   about 53 an hour at the default speed (`RandomTicks`, at most 512). Every block's count is drawn,

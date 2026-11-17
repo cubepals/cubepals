@@ -23,32 +23,51 @@ import org.bukkit.persistence.PersistentDataType;
 /**
  * Each loaded chunk's stamp (`Clock`), kept with the chunk while it is unloaded, in its own
  * persistent data, which Paper saves in the chunk's file: so a stamp survives an unload, a stop and
- * a crash with the blocks it describes. Each world also keeps the game time the plugin last saw it
- * at, in its own persistent data, which tells a world that ran without the plugin (`Clock.floor`).
+ * a crash with the blocks it describes. A ticked chunk's is written every second, so whenever Paper
+ * saves the chunk, on an unload or an autosave, the stamp saved is as new as its blocks. Writing it
+ * marks the chunk for saving, so a ticked chunk is written at each autosave: a few kilobytes, for a
+ * crash that never makes up time a chunk already ticked. Each world
+ * also keeps the game time the plugin last saw it at, and its floor, in its own persistent data,
+ * which tell a world that ran without the plugin (`Clock.floor`).
  *
  * Once a second, every loaded chunk the game ticks is moved on to now, and one that was owed a gap
  * gets its catch-up queued (`CatchUp`). A chunk that loads but isn't ticked (one at the edge of what
- * players see) owes the time until it is.
+ * players see) owes the time until it is. A chunk has a second stamp for its animals, moved only
+ * while the game ticks its entities too: the ring of chunks at the edge of the simulation distance
+ * ticks blocks and not entities, and its animals are owed that time.
  */
 final class Chunks implements Listener {
     static final NamespacedKey STAMP = new NamespacedKey("cubepals", "progressed");
     static final NamespacedKey SEEN = new NamespacedKey("cubepals", "progressed_game_time");
+    static final NamespacedKey FLOOR = new NamespacedKey("cubepals", "progressed_floor");
+    static final NamespacedKey ANIMALS = new NamespacedKey("cubepals", "progressed_animals");
 
-    /** A chunk the plugin follows: its stamp, and the catch-up queued for it, if any. */
+    /** A chunk the plugin follows: its stamps, and the catch-up queued for it, if any. */
     private static final class Followed {
         final Chunk chunk;
         long until;
+        long animalsUntil;
         CatchUp queued;
         long queuedFrom;
+        long animalsQueuedFrom;
 
-        Followed(Chunk chunk, long until) {
+        Followed(Chunk chunk, long until, long animalsUntil) {
             this.chunk = chunk;
             this.until = until;
+            this.animalsUntil = animalsUntil;
+        }
+
+        private boolean waiting() {
+            return queued != null && !queued.started();
         }
 
         /** The stamp to keep: the one before a catch-up that never began, which is still owed. */
         long kept() {
-            return queued != null && !queued.started() ? queuedFrom : until;
+            return waiting() ? queuedFrom : until;
+        }
+
+        long keptAnimals() {
+            return waiting() ? animalsQueuedFrom : animalsUntil;
         }
     }
 
@@ -81,9 +100,12 @@ final class Chunks implements Listener {
     void follow(Chunk chunk) {
         World world = chunk.getWorld();
         long now = clock.getAsLong();
-        Long kept = chunk.getPersistentDataContainer().get(STAMP, PersistentDataType.LONG);
-        long until = Clock.start(kept, floor(world, now), now);
-        chunks(world).put(chunk.getChunkKey(), new Followed(chunk, until));
+        PersistentDataContainer data = chunk.getPersistentDataContainer();
+        Long kept = data.get(STAMP, PersistentDataType.LONG);
+        Long animals = data.get(ANIMALS, PersistentDataType.LONG);
+        long floor = floor(world, now);
+        chunks(world).put(chunk.getChunkKey(),
+                new Followed(chunk, Clock.start(kept, floor, now), Clock.start(animals != null ? animals : kept, floor, now)));
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
@@ -95,13 +117,13 @@ final class Chunks implements Listener {
     public void onUnload(ChunkUnloadEvent event) {
         Chunk chunk = event.getChunk();
         Followed gone = chunks(chunk.getWorld()).remove(chunk.getChunkKey());
-        if (gone != null) stamp(chunk, gone.kept());
+        if (gone != null) forget(gone);
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
     public void onWorldUnload(WorldUnloadEvent event) {
         Map<Long, Followed> gone = followed.remove(event.getWorld());
-        if (gone != null) for (Followed f : gone.values()) stamp(f.chunk, f.kept());
+        if (gone != null) for (Followed f : gone.values()) forget(f);
         mark(event.getWorld());
         floors.remove(event.getWorld());
     }
@@ -109,7 +131,7 @@ final class Chunks implements Listener {
     /** Stamps every followed chunk as it is, for a stop: Paper saves them after plugins are disabled. */
     void stampAll() {
         for (Map.Entry<World, Map<Long, Followed>> world : followed.entrySet()) {
-            for (Followed f : world.getValue().values()) stamp(f.chunk, f.kept());
+            for (Followed f : world.getValue().values()) stamp(f.chunk, f);
             mark(world.getKey());
         }
     }
@@ -124,14 +146,16 @@ final class Chunks implements Listener {
             World world = entry.getKey();
             mark(world);
             for (Followed f : entry.getValue().values()) {
-                if (!ticked(f.chunk)) continue;
+                Chunk.LoadLevel level = f.chunk.getLoadLevel();
+                boolean blocks = level == Chunk.LoadLevel.TICKING || level == Chunk.LoadLevel.ENTITY_TICKING;
+                if (!blocks) continue;
+                boolean entities = level == Chunk.LoadLevel.ENTITY_TICKING;
                 long owed = Clock.owedTicks(f.until, now);
-                if (owed > 0) {
-                    f.queuedFrom = f.until;
-                    f.queued = new CatchUp(world, f.chunk.getX(), f.chunk.getZ(), owed, parts, cooking, ticking, totals);
-                    work.add(f.queued);
-                }
+                long animals = entities ? Clock.owedTicks(f.animalsUntil, now) : 0;
+                if (owed > 0 || animals > 0) queue(world, f, owed, animals);
                 f.until = now;
+                if (entities) f.animalsUntil = now;
+                stamp(f.chunk, f);
             }
         }
     }
@@ -146,13 +170,37 @@ final class Chunks implements Listener {
         return done;
     }
 
-    private static boolean ticked(Chunk chunk) {
-        Chunk.LoadLevel level = chunk.getLoadLevel();
-        return level == Chunk.LoadLevel.TICKING || level == Chunk.LoadLevel.ENTITY_TICKING;
+    /** Queues what a chunk is owed, or adds it to the catch-up already waiting for it. */
+    private void queue(World world, Followed f, long owed, long animals) {
+        if (f.waiting()) {
+            if (!f.queued.ended()) {
+                f.queued.owe(owed, animals);
+                return;
+            }
+            // Its chunk went before it began, and came back: what it never gave is still owed.
+            owed += f.queued.owed();
+            animals += f.queued.animalsOwed();
+        } else {
+            f.queuedFrom = f.until;
+            f.animalsQueuedFrom = f.animalsUntil;
+        }
+        f.queued = new CatchUp(world, f.chunk.getX(), f.chunk.getZ(), owed, animals, parts, cooking, ticking, totals);
+        work.add(f.queued);
     }
 
-    private static void stamp(Chunk chunk, long until) {
-        chunk.getPersistentDataContainer().set(STAMP, PersistentDataType.LONG, until);
+    /**
+     * Keeps an unloading chunk's stamp, and ends its queued catch-up, which belongs to that load: the
+     * next load is owed from the stamp kept, and queues its own.
+     */
+    private static void forget(Followed f) {
+        stamp(f.chunk, f);
+        if (f.queued != null) f.queued.cancel();
+    }
+
+    private static void stamp(Chunk chunk, Followed f) {
+        PersistentDataContainer data = chunk.getPersistentDataContainer();
+        data.set(STAMP, PersistentDataType.LONG, f.kept());
+        data.set(ANIMALS, PersistentDataType.LONG, f.keptAnimals());
     }
 
     private static void mark(World world) {
@@ -163,11 +211,14 @@ final class Chunks implements Listener {
         return followed.computeIfAbsent(world, w -> new HashMap<>());
     }
 
-    /** The world's floor, read once, as it is first seen, before anything marks it. */
+    /** The world's floor, read once, as it is first seen, before anything marks it, and kept with it. */
     private long floor(World world, long now) {
         return floors.computeIfAbsent(world, w -> {
             PersistentDataContainer data = w.getPersistentDataContainer();
-            return Clock.floor(data.get(SEEN, PersistentDataType.LONG), w.getGameTime(), now);
+            long floor = Clock.floor(data.get(SEEN, PersistentDataType.LONG), data.get(FLOOR, PersistentDataType.LONG),
+                    w.getGameTime(), now);
+            if (floor != Long.MIN_VALUE) data.set(FLOOR, PersistentDataType.LONG, floor);
+            return floor;
         });
     }
 }

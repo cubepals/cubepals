@@ -40,7 +40,9 @@ final class CatchUp implements Work.Job {
     private final World world;
     private final int chunkX;
     private final int chunkZ;
-    private final long owed;
+    /** Ticks owed to its blocks, and to its animals (`Chunks`: the two can differ). */
+    private long owed;
+    private long animalsOwed;
     private final Set<Part> parts;
     private final Cooking cooking;
     private final RandomTicking ticking;
@@ -49,13 +51,16 @@ final class CatchUp implements Work.Job {
     private final ArrayDeque<Work.Job> phases = new ArrayDeque<>();
     private int settled;
     private boolean started;
+    private boolean ended;
+    private boolean cancelled;
 
-    CatchUp(World world, int chunkX, int chunkZ, long owed, Set<Part> parts, Cooking cooking, RandomTicking ticking,
-            Totals totals) {
+    CatchUp(World world, int chunkX, int chunkZ, long owed, long animalsOwed, Set<Part> parts, Cooking cooking,
+            RandomTicking ticking, Totals totals) {
         this.world = world;
         this.chunkX = chunkX;
         this.chunkZ = chunkZ;
         this.owed = owed;
+        this.animalsOwed = animalsOwed;
         this.parts = parts;
         this.cooking = cooking;
         this.ticking = ticking;
@@ -67,14 +72,44 @@ final class CatchUp implements Work.Job {
         return started;
     }
 
+    /** Whether it is over, begun or not. */
+    boolean ended() {
+        return ended;
+    }
+
+    long owed() {
+        return owed;
+    }
+
+    long animalsOwed() {
+        return animalsOwed;
+    }
+
+    /** Adds a later gap to one that hasn't begun. */
+    void owe(long more, long moreAnimals) {
+        owed += more;
+        animalsOwed += moreAnimals;
+    }
+
+    /** Ends it where it is: its chunk unloaded, and a load after is owed from the stamp kept (`Chunks`). */
+    void cancel() {
+        cancelled = true;
+    }
+
     @Override
     public boolean step(long deadline) {
-        if (!world.isChunkLoaded(chunkX, chunkZ)) return true;
+        if (ended) return true;
+        ended = run(deadline);
+        return ended;
+    }
+
+    private boolean run(long deadline) {
+        if (cancelled || !world.isChunkLoaded(chunkX, chunkZ)) return true;
         if (!started) {
             if (++settled < SETTLE) return false;
             started = true;
             plan(world.getChunkAt(chunkX, chunkZ));
-            totals.chunk(owed);
+            totals.chunk(Math.max(owed, animalsOwed));
         }
         while (!phases.isEmpty()) {
             if (!phases.peek().step(deadline)) return false;
@@ -85,13 +120,17 @@ final class CatchUp implements Work.Job {
 
     /** Reads what the chunk holds of the parts that are on, as it is now, into its phases. */
     private void plan(Chunk chunk) {
+        if (owed == 0) {
+            if (parts.contains(Part.ANIMALS)) phases.add(animals());
+            return;
+        }
         if (cooking != null && parts.contains(Part.FURNACES))
             for (BlockState state : chunk.getTileEntities(block -> true, false))
                 if (Cooking.cooks(state)) phases.add(cooking.job(state.getBlock(), owed, totals));
         Map<Part, Rounds<Block>> rounds = randomTicks(chunk);
         for (Part part : Part.values()) {
             if (rounds.containsKey(part)) phases.add(rounds.get(part));
-            if (part == Part.ANIMALS && parts.contains(Part.ANIMALS)) phases.add(animals());
+            if (part == Part.ANIMALS && parts.contains(Part.ANIMALS) && animalsOwed > 0) phases.add(animals());
         }
         if (parts.contains(Part.FIRE)) {
             List<Block> fires = FireSpread.firesIn(chunk);
@@ -134,7 +173,7 @@ final class CatchUp implements Work.Job {
             public boolean step(long deadline) {
                 Chunk chunk = world.getChunkAt(chunkX, chunkZ);
                 if (!chunk.isEntitiesLoaded() && ++waited < ANIMALS_WAIT) return false;
-                if (chunk.isEntitiesLoaded()) totals.animals += Herds.catchUp(chunk, owed, System.currentTimeMillis(), random);
+                if (chunk.isEntitiesLoaded()) totals.animals += Herds.catchUp(chunk, animalsOwed, System.currentTimeMillis(), random);
                 return true;
             }
         };

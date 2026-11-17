@@ -51,13 +51,15 @@ final class Clock {
     }
 
     /**
-     * The world's floor, from the game time the plugin last saw it at (`marked`) and its game time
-     * as it loads: where the world ran on without the plugin, or never had it, every stamp before
-     * now is untrue, so the floor is now. Otherwise there is none.
+     * The world's floor, from the game time the plugin last saw it at (`marked`), the floor kept
+     * from an earlier start (`kept`), and its game time as it loads: where the world ran on without
+     * the plugin, or never had it, every stamp before now is untrue, so the floor is now. Otherwise
+     * it is the kept one, since a chunk not visited since a floor was set still holds a stamp from
+     * before it, or none at all. The caller keeps what this returns with the world.
      */
-    static long floor(Long marked, long gameTime, long now) {
+    static long floor(Long marked, Long kept, long gameTime, long now) {
         if (marked == null || gameTime < marked || gameTime - marked > UNSEEN_TICKS) return now;
-        return Long.MIN_VALUE;
+        return kept == null ? Long.MIN_VALUE : Math.min(kept, now);
     }
 
     /** The game ticks owed to a chunk ticking now whose stamp is `until`: none for a short gap. */

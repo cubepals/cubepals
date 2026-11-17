@@ -15,7 +15,7 @@ import net.minecraft.world.level.saveddata.SavedDataType;
 
 /**
  * A level's stamps (`Clock`) for its chunks while they are unloaded, and the game time the mod
- * last saw the level at (`Clock.floor`), kept as the level's own saved data, which Minecraft writes
+ * last saw the level at and its floor (`Clock.floor`), kept as the level's own saved data, which Minecraft writes
  * with the level each time it saves: sixteen bytes a chunk the mod has seen ticked.
  */
 final class Stamps extends SavedData {
@@ -24,7 +24,10 @@ final class Stamps extends SavedData {
 
     private static final Codec<Stamps> CODEC = RecordCodecBuilder.create(fields -> fields.group(
                     Codec.LONG.fieldOf("seen").forGetter(stamps -> stamps.seen == null ? NEVER : stamps.seen),
-                    Codec.LONG_STREAM.fieldOf("chunks").forGetter(Stamps::flat))
+                    Codec.LONG.optionalFieldOf("floor", NEVER).forGetter(stamps -> stamps.floor == null ? NEVER : stamps.floor),
+                    Codec.LONG_STREAM.fieldOf("chunks").forGetter(stamps -> flat(stamps.chunks)),
+                    Codec.LONG_STREAM.optionalFieldOf("animals", LongStream.empty())
+                            .forGetter(stamps -> flat(stamps.animals)))
             .apply(fields, Stamps::new));
 
     /**
@@ -38,19 +41,38 @@ final class Stamps extends SavedData {
             DataFixTypes.SAVED_DATA_COMMAND_STORAGE);
 
     private final Long2LongOpenHashMap chunks = new Long2LongOpenHashMap();
+    private final Long2LongOpenHashMap animals = new Long2LongOpenHashMap();
     private Long seen;
+    private Long floor;
 
     Stamps() {}
 
-    private Stamps(long seen, LongStream stream) {
+    private Stamps(long seen, long floor, LongStream chunks, LongStream animals) {
         this.seen = seen == NEVER ? null : seen;
+        this.floor = floor == NEVER ? null : floor;
+        unflat(chunks, this.chunks);
+        unflat(animals, this.animals);
+    }
+
+    private static void unflat(LongStream stream, Long2LongOpenHashMap into) {
         long[] flat = stream.toArray();
-        for (int i = 0; i + 1 < flat.length; i += 2) chunks.put(flat[i], flat[i + 1]);
+        for (int i = 0; i + 1 < flat.length; i += 2) into.put(flat[i], flat[i + 1]);
     }
 
     /** The game time the mod last saw the level at; null where it never has. */
     Long seen() {
         return seen;
+    }
+
+    /** The floor kept from an earlier start; null where none was set. */
+    Long floor() {
+        return floor;
+    }
+
+    void floorAt(long at) {
+        if (at == NEVER) return;
+        floor = at;
+        setDirty();
     }
 
     void seenAt(long gameTime) {
@@ -63,22 +85,21 @@ final class Stamps extends SavedData {
         return chunks.containsKey(chunk) ? chunks.get(chunk) : null;
     }
 
-    void keep(long chunk, long until) {
+    /** A chunk's stamp for its animals; null for one without. */
+    Long animalsOf(long chunk) {
+        return animals.containsKey(chunk) ? animals.get(chunk) : null;
+    }
+
+    void keep(long chunk, long until, long animalsUntil) {
         chunks.put(chunk, until);
+        animals.put(chunk, animalsUntil);
         setDirty();
     }
 
-    void forget(long chunk) {
-        if (chunks.containsKey(chunk)) {
-            chunks.remove(chunk);
-            setDirty();
-        }
-    }
-
-    private LongStream flat() {
-        long[] flat = new long[chunks.size() * 2];
+    private static LongStream flat(Long2LongOpenHashMap stamps) {
+        long[] flat = new long[stamps.size() * 2];
         int i = 0;
-        for (Long2LongOpenHashMap.Entry entry : chunks.long2LongEntrySet()) {
+        for (Long2LongOpenHashMap.Entry entry : stamps.long2LongEntrySet()) {
             flat[i++] = entry.getLongKey();
             flat[i++] = entry.getLongValue();
         }

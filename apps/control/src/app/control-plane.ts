@@ -36,7 +36,7 @@ import { JarChecks } from './mods/jar-checks.ts'
 import { ModQueries } from './mods/queries.ts'
 import { ModService } from './mods/service.ts'
 import { updatesOf } from './mods/updates.ts'
-import { BootSequence, type BootTimeouts, type OwnMods } from './operations/boot.ts'
+import { BootSequence, type BootTimeouts } from './operations/boot.ts'
 import { createHandlers } from './operations/handlers.ts'
 import { OperationRunner } from './operations/runner.ts'
 import { Schedules } from './operations/schedules.ts'
@@ -171,26 +171,9 @@ export interface ControlPlaneSettings {
  * What a start keeps and does as it boots: marks the owner's mods that didn't load, starts once
  * without Cubepals' own, and keeps what it read of its host.
  */
-/**
- * Cubepals' own mods as a start that fails with them asks of them (`operations/boot.ts`'s
- * `OwnMods`): the performance mods and Offline world progression's mod together. Which of them a
- * failing start was let down by can't be told, so it starts again without both and takes back
- * only what it turned off itself.
- */
-const bothOwn = (...own: OwnMods[]): OwnMods => ({
-  placed: async (serverId, revision) =>
-    (await Promise.all(own.map((one) => one.placed(serverId, revision)))).some(Boolean),
-  turnOff: async (serverId) => {
-    for (const one of own) await one.turnOff(serverId)
-  },
-  turnOn: async (serverId) => {
-    for (const one of own) await one.turnOn(serverId)
-  },
-})
-
 const atBoot = (db: Db) => ({
   notLoaded: (serverId: string, names: string[]) => markNotLoaded(db, serverId, names),
-  ownMods: bothOwn(ownModsOf(db), progressionAtStart(db)),
+  ownMods: [ownModsOf(db), progressionAtStart(db)],
   hostSeen: (provider: string, cpu: HostCpu) => hostSeen(db, provider, cpu),
 })
 /**

@@ -29,9 +29,10 @@ public final class FabricProgression {
 
     private FabricProgression() {}
 
-    /** A chunk the game is about to tick. */
+    /** A chunk the game is about to tick: its blocks, and its entities where those tick too. */
     public static void ticked(ServerLevel level, LevelChunk chunk) {
-        of(level).ticked(chunk, System.currentTimeMillis());
+        boolean entities = level.isPositionEntityTicking(chunk.getPos().getWorldPosition());
+        of(level).ticked(chunk, entities, System.currentTimeMillis());
     }
 
     /** The level's tick is over: some catch-up, within the tick's budget. */

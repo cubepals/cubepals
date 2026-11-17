@@ -26,26 +26,34 @@ class ClockTest {
 
     @Test
     void aWorldThatRanWithoutThePluginOwesNothingFromBefore() {
-        long floor = Clock.floor(1_000L, 1_000L + Clock.UNSEEN_TICKS + 1, NOW);
+        long floor = Clock.floor(1_000L, null, 1_000L + Clock.UNSEEN_TICKS + 1, NOW);
         assertEquals(0, Clock.owedTicks(Clock.start(NOW - 2 * HOUR, floor, NOW), NOW));
     }
 
     @Test
     void aWorldNeverMarkedOwesNothingFromBefore() {
-        long floor = Clock.floor(null, 50_000L, NOW);
+        long floor = Clock.floor(null, null, 50_000L, NOW);
         assertEquals(0, Clock.owedTicks(Clock.start(NOW - 2 * HOUR, floor, NOW), NOW));
     }
 
     @Test
     void aWorldStoppedWithThePluginKeepsItsStamps() {
         // Marked a second before the stop; the world's game time stood still while it was stopped.
-        long floor = Clock.floor(1_000L, 1_020L, NOW);
+        long floor = Clock.floor(1_000L, null, 1_020L, NOW);
         assertEquals(2 * HOUR / Clock.TICK_MS, Clock.owedTicks(Clock.start(NOW - 2 * HOUR, floor, NOW), NOW));
     }
 
     @Test
+    void aFloorKeptFromAnEarlierStartHoldsAfterACleanRestart() {
+        // Run without it, then with it: the floor was set at the start with it, an hour ago. A chunk
+        // not visited since still holds a stamp from before; the world was marked as it stopped.
+        long floor = Clock.floor(1_000L, NOW - HOUR, 1_020L, NOW);
+        assertEquals(HOUR / Clock.TICK_MS, Clock.owedTicks(Clock.start(NOW - 3 * HOUR, floor, NOW), NOW));
+    }
+
+    @Test
     void aWorldWhoseGameTimeWentBackOwesNothingFromBefore() {
-        long floor = Clock.floor(5_000L, 1_000L, NOW);
+        long floor = Clock.floor(5_000L, null, 1_000L, NOW);
         assertEquals(0, Clock.owedTicks(Clock.start(NOW - HOUR, floor, NOW), NOW));
     }
 

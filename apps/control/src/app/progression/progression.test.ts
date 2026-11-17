@@ -9,7 +9,7 @@
  * whose type can't run it.
  */
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
-import { createHash } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -23,6 +23,7 @@ import { MemoryStore } from '../../testing/memory-store.ts'
 import { requestedBy } from '../actor.ts'
 import { storedArtifact } from '../artifacts/persistence.ts'
 import { PROGRESSION_MOD, PROGRESSION_PLUGIN } from '../artifacts/progression-jar.ts'
+import { ownModsOf, performanceOff } from '../compat/performance.ts'
 import { AppError } from '../errors.ts'
 import { deriveServerSecret, singleKey } from '../secrets.ts'
 import { loadRevision } from '../servers/persistence.ts'
@@ -235,6 +236,36 @@ describe.skipIf(!hasDatabase)('Offline world progression', () => {
     await atStart.turnOn(id)
     expect(await progressionOff(h.db, id)).toBe('owner')
   }, 60_000)
+})
+
+describe.skipIf(!hasDatabase)('a start that fails with the mod', () => {
+  const restart = async (owner: Awaited<ReturnType<typeof fabric>>['owner'], id: string) => {
+    await h.app.servers.restart(owner, id, randomUUID())
+    await h.settled(id)
+  }
+
+  test('comes up without it, and leaves the performance mods off as an earlier start left them', async () => {
+    const { owner, id } = await fabric('Holly')
+    // An earlier start failed with the performance mods: they are off, and this start places none.
+    await ownModsOf(h.db).turnOff(id)
+    h.minecraft.breakOn((env) => (env.BLOCKLY_JARS?.includes(sha(mod)) ? 'it clashed with a mod' : null))
+    await restart(owner, id)
+    h.minecraft.breakOn(() => null)
+    expect((await h.server(id)).lifecycle.status).toBe('running')
+    expect(await progressionOff(h.db, id)).toBe('clash')
+    expect(await performanceOff(h.db, id)).toBe('clash')
+  }, 120_000)
+
+  test('that fails without it too takes back only what it turned off', async () => {
+    const { owner, id } = await fabric('Ivy')
+    await ownModsOf(h.db).turnOff(id)
+    h.minecraft.breakOn(() => 'its world would not open')
+    await restart(owner, id)
+    h.minecraft.breakOn(() => null)
+    expect(await progressionOff(h.db, id)).toBeNull()
+    // Not this start's to take back: the performance mods stay off.
+    expect(await performanceOff(h.db, id)).toBe('clash')
+  }, 120_000)
 })
 
 describe.skipIf(!hasDatabase)('Offline world progression’s parts, and its jars', () => {
