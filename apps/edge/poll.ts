@@ -5,7 +5,10 @@
 /**
  * Asking the control plane for routes (`edge-poll.ts`): the list comes only when it changed, with
  * its version. The version said back is the edge's word that it holds every route of that list, so
- * it is kept only once the list is applied, and given at once by asking again.
+ * it is kept only once the list is applied, and given at once by asking again. An answer that the
+ * list held is still the newest carries a later version of it, which is held as well: an edge that
+ * said only the version it was last sent would, on the ask after a change, say one as old as that
+ * list, and the control plane would read it as fallen behind (`edge_behind`).
  *
  * Not for applying a list, which the caller does (`router.ts`).
  */
@@ -18,6 +21,12 @@ import {
 
 /** When this agent started: the control plane gives a restarted edge time to catch up. */
 const STARTED_AT = Date.now()
+
+/** The later of a version held and one an answer gave, which may be missing or not a version. */
+function newer(held: string, given: string | null): string {
+  const version = Number(given)
+  return given !== null && Number.isFinite(version) && version > Number(held) ? given : held
+}
 
 export class RoutesPoll {
   /** Asks for the routes with these headers. */
@@ -47,7 +56,12 @@ export class RoutesPoll {
       ...(this.#version === null ? {} : { [ROUTES_HELD_HEADER]: this.#version }),
     })
     if (response.status === 304) {
-      if (this.#version !== null) this.#currentAt = Date.now()
+      if (this.#version === null) return false
+      this.#currentAt = Date.now()
+      // The list held is the newest still, so it holds this answer's version too: said next, it is
+      // never older than the last word the control plane wrote for this edge (`routed.ts`).
+      if (this.#etag !== null)
+        this.#version = newer(this.#version, response.headers.get(ROUTES_VERSION_HEADER))
       return false
     }
     if (!response.ok) throw new Error(`routes answered ${response.status}`)
