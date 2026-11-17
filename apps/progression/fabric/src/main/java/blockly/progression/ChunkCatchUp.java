@@ -24,7 +24,7 @@ import net.minecraft.world.level.gamerules.GameRules;
  * as it needs (`Work`), once it has ticked for a second. Its work is a queue of phases, what players
  * look for first: furnaces, brewing stands and campfires (`Cooking`); then blocks that change on
  * random ticks, a set of rounds for each part in `Part`'s order (`RandomTicking`, `Rounds`), with
- * the animals themselves (`Herds`) after the animals' blocks; then fire (`FireSpread`). What it finds
+ * the animals themselves (`Herds`) before the animals' blocks; then fire (`FireSpread`). What it finds
  * is read as it starts, a section at a time within the same budget; a chunk that unloads before its
  * turn is left owing what it didn't get (`Level` keeps its old stamp for it).
  */
@@ -155,9 +155,11 @@ final class ChunkCatchUp implements Work.Job {
             if (System.nanoTime() >= deadline && nextSection < sections.length) return false;
         }
         scanning = false;
+        // The animals before their blocks: one hatched from an egg in the catch-up is born then,
+        // and grows on its own from there, not by the whole gap.
         for (Part part : Part.values()) {
-            if (rounds.containsKey(part)) phases.add(rounds.get(part));
             if (part == Part.ANIMALS && parts.contains(Part.ANIMALS) && animalsOwed > 0) phases.add(animals());
+            if (rounds.containsKey(part)) phases.add(rounds.get(part));
         }
         if (!fires.isEmpty()) phases.add(FireSpread.job(level, fires, owed, totals));
         return true;
