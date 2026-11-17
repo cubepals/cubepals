@@ -7,7 +7,9 @@
  * runs on machines that stop when idle and wake on a request, and Fly's proxy can reset a request
  * that arrives as one wakes: a nightly's check lost one sign-up of six that way, with
  * `ECONNRESET: The socket connection was closed unexpectedly`, while the five beside it went
- * through. Only for work that is safe to make again, such as signing up under a new address.
+ * through; a later check lost three requests the same way, a server's stop among them. Only for
+ * work that is safe to make again: signing up under a new address, and the API calls people.ts
+ * can send twice (a query, or a change keyed by its requestId).
  *
  * Not for an answer that came back, whatever it says: only a connection that gave none.
  */
