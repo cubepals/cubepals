@@ -8,7 +8,8 @@ import { RedeemGift } from './redeem-gift'
 
 export const metadata: Metadata = pageMetadata({
   title: 'Redeem a gift',
-  description: 'Got a Cubepals gift code? Redeem it on your account.',
+  description:
+    'Got a Cubepals gift code? Redeem it here and Plus starts on the account you’re signed in to. It doesn’t renew, so there’s nothing to cancel.',
   path: '/redeem',
 })
 

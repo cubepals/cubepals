@@ -4,11 +4,17 @@
 
 import type { Metadata } from 'next'
 import Link from 'next/link'
+import { pageMetadata } from '../../../lib/site'
 import { ctaMark } from '../../(public)/steps'
 import styles from '../auth.module.css'
 import { ForgotPasswordForm } from './forgot-password-form'
 
-export const metadata: Metadata = { title: 'Reset your password' }
+export const metadata: Metadata = pageMetadata({
+  title: 'Reset your password',
+  description:
+    'Forgot your Cubepals password? Enter the email you sign in with, and we’ll send you a link to choose a new one.',
+  path: '/forgot-password',
+})
 
 export default function ForgotPasswordPage() {
   return (

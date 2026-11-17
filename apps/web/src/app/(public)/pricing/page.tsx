@@ -27,7 +27,7 @@ export async function generateMetadata(): Promise<Metadata> {
   return pageMetadata({
     title:
       paid.length > 0
-        ? `Pricing: a free trial, then ${paid.map((plan) => `${plan.name} for ${priceOf(plan.monthlyPriceCents)}`).join(' or ')}`
+        ? `Pricing: ${paid.map((plan) => `${plan.name} for ${priceOf(plan.monthlyPriceCents)}`).join(' or ')}`
         : 'Pricing',
     description:
       free && core
