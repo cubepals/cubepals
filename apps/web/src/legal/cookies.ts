@@ -62,7 +62,7 @@ export const COOKIES: Policy = {
       id: 'third-parties',
       heading: 'Other websites',
       blocks: [
-        'When you browse modpacks, mods or plugins, your browser loads their pictures from Modrinth, or from Hangar (hangar.papermc.io) for plugins, which see your IP address as any website you load something from does. {brand} doesn’t add any tracking to them. Payment pages are Polar’s, and use Polar’s own cookies under [Polar’s policies](https://polar.sh/legal/privacy).',
+        'When you browse modpacks, mods or plugins, your browser loads their pictures from Modrinth, or from Hangar (hangar.papermc.io) for plugins, which see your IP address as any website you load something from does. {brand} doesn’t add any tracking to them. Payment pages are Polar’s, and use Polar’s own cookies under [Polar’s policies](https://polar.sh/legal/privacy-policy).',
       ],
     },
     {

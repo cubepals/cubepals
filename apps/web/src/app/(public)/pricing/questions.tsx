@@ -7,6 +7,7 @@
  * plans the cards above are made from (`pricedPlans`). Not for the plans themselves: the cards.
  */
 import type { PublicPlan } from '@blockly/contracts'
+import Link from 'next/link'
 import { dollars, EXTRA_HOUR_CENTS } from '../../../legal/figures'
 import { bedrockLive } from '../../../lib/bedrock'
 import { daysSaid, hoursAgainSaid } from '../../../lib/plans'
@@ -120,7 +121,8 @@ export function Questions({ plans }: { plans: readonly PublicPlan[] }) {
         <Question which="everyone_pays" title="Does everyone need to pay?">
           No. One person has {paid.name} and their friends just join. If {shared.friends} of you share it,
           that’s {shared.each} each. Hours count while the server runs, not for each player, so an evening
-          with everyone on uses the same hours as an evening alone.
+          with everyone on uses the same hours as an evening alone. Someone else can also{' '}
+          <Link href="/paying-for-others">pay for the owner’s server</Link>.
         </Question>
       )}
       <Question which="run_out" title="What if we run out?">

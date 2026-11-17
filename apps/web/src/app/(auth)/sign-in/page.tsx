@@ -10,12 +10,18 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { currentSession } from '../../../lib/session'
+import { pageMetadata } from '../../../lib/site'
 import { ctaMark } from '../../(public)/steps'
 import { AuthEntry } from '../auth-entry'
 import { authMethods, firstParam, localPath } from '../auth-methods'
 import { SignInForm } from './sign-in-form'
 
-export const metadata: Metadata = { title: 'Sign in' }
+/** One address and description whatever `?next=` carries: where someone is headed isn't another page. */
+export const metadata: Metadata = pageMetadata({
+  title: 'Sign in',
+  description: 'Sign in to Cubepals to start your Minecraft servers, invite friends and manage your plan.',
+  path: '/sign-in',
+})
 
 export default async function SignInPage({
   searchParams,

@@ -13,6 +13,7 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { currentSession } from '../../../lib/session'
+import { pageMetadata } from '../../../lib/site'
 import { sourceOf, withSource } from '../../../lib/source'
 import { ctaMark } from '../../(public)/steps'
 import { AuthEntry } from '../auth-entry'
@@ -21,7 +22,13 @@ import { SignupsFull } from './full'
 import { SignUpForm } from './sign-up-form'
 import { SignupsUnknown } from './unknown'
 
-export const metadata: Metadata = { title: 'Create your account' }
+/** One address and description whatever `?next=` carries: where someone is headed isn't another page. */
+export const metadata: Metadata = pageMetadata({
+  title: 'Create your account',
+  description:
+    'Make a Cubepals account and start a Minecraft server for you and your friends. Start with a free trial. No card needed.',
+  path: '/sign-up',
+})
 
 export default async function SignUpPage({
   searchParams,

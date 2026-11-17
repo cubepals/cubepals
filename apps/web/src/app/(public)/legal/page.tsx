@@ -12,7 +12,7 @@ import { pageMetadata } from '../../../lib/site'
 
 export const metadata: Metadata = pageMetadata({
   title: 'Legal',
-  description: `The policies ${OPERATOR.brand} works by, and who runs it.`,
+  description: `The policies ${OPERATOR.brand} works by in one place (${POLICIES.map((policy) => policy.title).join(', ')}) and who runs it.`,
   path: '/legal',
 })
 

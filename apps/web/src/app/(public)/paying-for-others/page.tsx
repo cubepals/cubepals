@@ -8,6 +8,7 @@
  */
 import type { Metadata } from 'next'
 import Link from 'next/link'
+import type { ReactNode } from 'react'
 import { FREE, PLUS } from '../../../legal/figures'
 import { pageMetadata } from '../../../lib/site'
 import { Button } from '../../../ui'
@@ -24,12 +25,16 @@ export const metadata: Metadata = pageMetadata({
  * same figures the Terms state, so this page never says more than they do.
  */
 export default function PayingForOthersPage() {
-  const sections: Array<{ heading: string; lines: string[] }> = [
+  const sections: Array<{ heading: string; lines: ReactNode[] }> = [
     {
       heading: 'How it works',
       lines: [
         `A server belongs to one account, and that account’s plan covers it for everyone who plays. To pay for a friend’s server, or the one your group plays on, give ${PLUS.name} to whoever owns it.`,
-        `Buy a gift here, at the price the gift page shows, and we email you a code. Pass it on however you like. They redeem it signed in to their own account, and ${PLUS.name} starts then.`,
+        <>
+          Buy a gift here, at the price the gift page shows, and we email you a code. Pass it on however you
+          like. They <Link href="/redeem">redeem it</Link> signed in to their own account, and {PLUS.name}{' '}
+          starts then.
+        </>,
         `It’s still their server and their world. You don’t get access to their account, and they don’t see your card.`,
         `If they already pay for ${PLUS.name}, they set it to end in Manage billing first, and the gift starts when their paid time does. A second gift runs on from the first.`,
       ],
@@ -67,7 +72,12 @@ export default function PayingForOthersPage() {
             {section.heading}
           </h2>
           {section.lines.map((line) => (
-            <p key={line} className="type-body" style={{ color: 'var(--ink-muted)' }}>
+            // The one line that carries a link is the one that says how a code is used.
+            <p
+              key={typeof line === 'string' ? line : 'redeem'}
+              className="type-body"
+              style={{ color: 'var(--ink-muted)' }}
+            >
               {line}
             </p>
           ))}

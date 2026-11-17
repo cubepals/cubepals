@@ -32,6 +32,7 @@ export function PolicyLinks() {
           {policy.title}
         </Link>
       ))}
+      <Link href="/legal">All policies</Link>
     </>
   )
 }
