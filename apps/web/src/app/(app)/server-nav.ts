@@ -5,18 +5,17 @@
 'use client'
 
 /**
- * One of the account's servers in the app's navigation on every page, not only on a server's own:
- * its name over its pages, so a server's Players or Mods is one press from the Account page or
- * Browse rather than three. Only one server's pages are ever shown, so the navigation is the same
- * height for an account with one server and one with hundreds; the rest are a press away in the
- * switch over them (./server-switch.tsx).
+ * The account's servers in the app's navigation, on every page and not only on a server's own:
+ * each server as one row, its picture and its name, whose pages unfold under it when it is open
+ * (./server-rows.tsx). A server is open while this is one of its pages, or once someone presses
+ * its row, until they go somewhere else; everywhere else the rows are closed, so a page like
+ * Account stays as calm as it was. At most a few rows show, the last of them counting the rest, so
+ * the navigation is the same height for an account with a few servers and one with hundreds.
  *
- * The open server is the one whose page this is. Away from a server, it is the one last opened in
- * this visit, else the newest: for an account with one server, that is always it. Nothing is kept
- * past the visit, so the first paint draws what the server drew.
+ * The phone's bottom bar has no rows to open: it shows the pages of the server whose page this
+ * is, else of the one last opened in this visit, else of the newest.
  *
- * It decides what is listed and open; the frame (./frame.tsx) draws it, in the sidebar and in
- * the phone's bottom bar.
+ * It decides what is listed and open; ./server-rows.tsx and the frame (./frame.tsx) draw it.
  */
 import type { ServerView } from '@blockly/contracts'
 import { useQuery } from '@tanstack/react-query'
@@ -25,12 +24,19 @@ import { useState } from 'react'
 import { useTRPC } from '../../lib/api'
 import type { NavEntry } from './more-menu'
 
-/** A server as the navigation lists it. */
-export type ListedServer = { id: string; name: string }
+/** A server as the navigation lists it: its name and its picture. */
+export type ListedServer = Pick<ServerView, 'id' | 'name' | 'icon' | 'ownIcon'>
 
 /**
- * Which server is open: the one whose page this is, else the last one opened while it is still
- * the account's, else the newest. The list comes newest first, as the control plane sends it.
+ * The most server rows the sidebar shows: every server any plan includes, and few enough that one
+ * server's pages still fit under them on a laptop's screen.
+ */
+export const MOST_ROWS = 3
+
+/**
+ * The server the phone's bar shows the pages of: the one whose page this is, else the last one
+ * opened while it is still the account's, else the newest. The list comes newest first, as the
+ * control plane sends it.
  */
 export function openServer(
   here: string | undefined,
@@ -50,10 +56,60 @@ export function listedServers(
   owned: readonly ListedServer[],
   here: ListedServer | undefined,
 ): ListedServer[] {
-  const listed = owned.map(({ id, name }) => ({ id, name }))
+  const listed = owned.map(({ id, name, icon, ownIcon }) => ({ id, name, icon, ownIcon }))
   if (here === undefined) return listed
   if (!listed.some((server) => server.id === here.id)) return [here, ...listed]
   return listed.map((server) => (server.id === here.id ? here : server))
+}
+
+/**
+ * The rows the sidebar shows, and how many servers are left to the Servers page. Up to MOST_ROWS
+ * servers, every one. Past that, one row fewer, in the list's order with the server whose page
+ * this is kept in place of the last when it falls past them, and a last row for the rest: the
+ * sidebar is never taller than with MOST_ROWS servers, however many an account has.
+ */
+export function rowsShown(
+  servers: readonly ListedServer[],
+  here: string | undefined,
+): { rows: ListedServer[]; more: number } {
+  if (servers.length <= MOST_ROWS) return { rows: [...servers], more: 0 }
+  const rows = servers.slice(0, MOST_ROWS - 1)
+  const kept = servers.find((server) => server.id === here)
+  if (kept !== undefined && !rows.includes(kept)) rows[rows.length - 1] = kept
+  return { rows, more: servers.length - rows.length }
+}
+
+/**
+ * The rows for this page, and which is unfolded after what was pressed on it. Which rows show
+ * depends on the page alone, so folding or unfolding one never takes another away: the page's
+ * own server keeps its row while it is folded, or while another is open.
+ */
+export function sidebarRows(
+  servers: readonly ListedServer[],
+  here: string | undefined,
+  pressed: Unfolding,
+): { rows: ListedServer[]; more: number; open: string | undefined } {
+  return { ...rowsShown(servers, here), open: unfolded(here, pressed) }
+}
+
+/** What someone did to the rows on this page: opened one by hand, or closed the page's own. */
+export type Unfolding = { opened: string | null; closedHere: boolean }
+
+export const NOTHING_PRESSED: Unfolding = { opened: null, closedHere: false }
+
+/** The open row: one opened by hand, else the server whose page this is unless it was closed. */
+export function unfolded(here: string | undefined, pressed: Unfolding): string | undefined {
+  if (pressed.opened !== null) return pressed.opened
+  return pressed.closedHere ? undefined : here
+}
+
+/**
+ * A press on a server's row: the open row closes, any other opens in its place, so one server's
+ * pages show at a time.
+ */
+export function pressRow(here: string | undefined, pressed: Unfolding, serverId: string): Unfolding {
+  if (unfolded(here, pressed) !== serverId) return { opened: serverId, closedHere: false }
+  return { opened: null, closedHere: serverId === here }
 }
 
 /** A server's pages, in the order the navigation shows them. */
@@ -79,20 +135,8 @@ export function serverPages(
 }
 
 /**
- * Where choosing a server in the switch goes: the same page of it as the one open now, Mods to
- * Mods, so two servers are compared a press apart. From one player's page, the other server's
- * Players, since that player may never have joined it. From a page of no server, its Overview.
- */
-export function switchTo(serverId: string, pathname: string): string {
-  const [, section, , page] = pathname.split('/')
-  const same = `/servers/${serverId}/${page}`
-  const isPage = serverPages(serverId, undefined).some((entry) => entry.href === same)
-  return section === 'servers' && isPage ? same : `/servers/${serverId}`
-}
-
-/**
- * The servers the navigation lists, which is open, its name, and its pages. `here` is the server
- * whose page this is, and `current` what its page read of it, fresher than the list.
+ * The servers the navigation lists, the one the phone's bar shows, and any server's pages. `here`
+ * is the server whose page this is, and `current` what its page read of it, fresher than the list.
  */
 export function useServerNav(here: string | undefined, current: ServerView | undefined) {
   const trpc = useTRPC()
@@ -102,15 +146,20 @@ export function useServerNav(here: string | undefined, current: ServerView | und
   const [last, setLast] = useState(here)
   if (here !== undefined && here !== last) setLast(here)
   const open = openServer(here, last, owned)
-  const view = open === here && current !== undefined ? current : owned.find((s) => s.id === open)
-  const servers = listedServers(
-    owned,
-    here === undefined ? undefined : { id: here, name: current?.name ?? listedName(owned, here) },
-  )
-  const name = servers.find((server) => server.id === open)?.name ?? 'Your server'
-  return { servers, open, name, pages: open === undefined ? [] : serverPages(open, view) }
+  const viewOf = (serverId: string) =>
+    serverId === here && current !== undefined ? current : owned.find((s) => s.id === serverId)
+  const servers = listedServers(owned, here === undefined ? undefined : hereListed(here, current, owned))
+  const pagesOf = (serverId: string) => serverPages(serverId, viewOf(serverId))
+  return { servers, open, pages: open === undefined ? [] : pagesOf(open), pagesOf }
 }
 
-/** A server's name from the list, before its own page has read it. */
-const listedName = (owned: readonly ListedServer[], id: string) =>
-  owned.find((server) => server.id === id)?.name ?? 'Your server'
+/** The server whose page this is, as its page read it, else as the list has it. */
+function hereListed(id: string, current: ServerView | undefined, owned: readonly ListedServer[]) {
+  const listed = current ?? owned.find((server) => server.id === id)
+  return {
+    id,
+    name: listed?.name ?? 'Your server',
+    icon: listed?.icon ?? null,
+    ownIcon: listed?.ownIcon ?? null,
+  }
+}

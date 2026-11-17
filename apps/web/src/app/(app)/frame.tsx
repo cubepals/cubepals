@@ -29,7 +29,7 @@ import { MomentCard } from './moment'
 import { MoreMenu, type NavEntry } from './more-menu'
 import { usePrefetch } from './prefetch'
 import { useServerNav } from './server-nav'
-import { ServerSwitch } from './server-switch'
+import { ServerRows } from './server-rows'
 import { UsingAs } from './using-as'
 
 export function AppFrame({
@@ -113,7 +113,8 @@ function Shell({ user, children }: { user: Session['user']; children: ReactNode 
     refetchInterval: 120_000,
   })
 
-  // One of the account's servers on every page: its pages are one press from anywhere.
+  // The account's servers on every page, under Servers, each a row that unfolds into its pages
+  // (./server-rows.tsx).
   const nav = useServerNav(serverId, view)
 
   // Every link here starts its page's reads as soon as someone heads for it (./prefetch.ts).
@@ -158,24 +159,21 @@ function Shell({ user, children }: { user: Session['user']; children: ReactNode 
         </WithBeta>
         <div className="bk-appnav__group">
           {item(servers)}
+          {/* The account's servers sit under Servers, as what is in it. */}
+          {nav.servers.length > 0 && (
+            <ServerRows
+              servers={nav.servers}
+              here={serverId}
+              pathname={pathname}
+              pagesOf={nav.pagesOf}
+              item={item}
+            />
+          )}
           {item(browse)}
           {item(guides)}
           {item(account)}
           {me.data?.admin && item(admin)}
         </div>
-        {nav.open !== undefined && (
-          <div className="bk-appnav__group">
-            {/* One server's pages, whichever is open; with more than one, its name switches. */}
-            {nav.servers.length > 1 ? (
-              <ServerSwitch servers={nav.servers} open={nav.open} name={nav.name} pathname={pathname} />
-            ) : (
-              <div className="bk-appnav__heading">
-                <span>{nav.name}</span>
-              </div>
-            )}
-            {nav.pages.map(item)}
-          </div>
-        )}
         <div className="bk-appnav__spacer" />
         <div className="bk-appnav__foot">
           <AccountMenu email={user.email} />
