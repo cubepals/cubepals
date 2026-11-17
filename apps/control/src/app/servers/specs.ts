@@ -41,6 +41,7 @@ import { loadListing } from '../listings/persistence.ts'
 import { quarantinedOf } from '../mods/jar-check-records.ts'
 import { loadPackContents } from '../packs/persistence.ts'
 import type { InstallSeed, RuntimeSpec } from '../ports/runtime.ts'
+import { progressionEnv, progressionFor, progressionParts } from '../progression/progression.ts'
 import { acceptedSecrets, deriveServerSecret, type SecretKeyring } from '../secrets.ts'
 import { stopCheatersAtStart, withRemovals } from '../stop-cheaters/start.ts'
 import { tuning } from '../tuning.ts'
@@ -208,6 +209,10 @@ export class RuntimeSpecs {
     )
     // On Fabric, the performance mods Cubepals adds, unless its owner or a start turned them off.
     const tuned = await performanceFor(q, server.id, revision)
+    // Offline world progression's plugin or mod, unless its owner or a start turned it off, with
+    // the parts its owner left on, which only a start reads.
+    const progressing = await progressionFor(q, server.id, revision)
+    const progressed = progressing.length === 0 ? {} : progressionEnv(await progressionParts(q, server.id))
     // Stop cheaters where it is on: Grim, unless the owner runs their own, and its punishments
     // file, an official server's own where its files name one (`stop-cheaters/start.ts`).
     const officialFiles = official ? this.#official.forStart(server) : []
@@ -231,13 +236,20 @@ export class RuntimeSpecs {
     const built = toRuntimeSpec({
       ...input,
       revision: starting,
-      compat: [...placed, ...tuned, ...reporter, ...(stop.placed?.jar ? [stop.placed.jar] : [])],
+      compat: [
+        ...placed,
+        ...tuned,
+        ...progressing,
+        ...reporter,
+        ...(stop.placed?.jar ? [stop.placed.jar] : []),
+      ],
       floodgateKey: this.#floodgateKey,
     })
     // With the punishments file its step writes (`minecraft/stop-cheaters.ts`) where it runs.
     const env = {
       ...built.env,
       ...report,
+      ...progressed,
       ...stopCheatersEnv(withRemovals(stop.placed, reporter.length > 0)),
     }
     const labelled = label(withCompressedFiles({ ...built, env }))
@@ -248,11 +260,12 @@ export class RuntimeSpecs {
     // which come, left waiting for everyone to leave, drift brings by its revision (`waiting.ts`).
     const drifting = withoutPlanLimits(label(toRuntimeSpec(input)))
     const driftDigest = specDigest(drifting)
-    const compat = projectsOf([...placed, ...tuned])
+    const compat = projectsOf([...placed, ...tuned, ...progressing])
     // What drift leaves for the next start, a machine asleep can leave too: it wakes as it slept.
     // But not without the Via plugins it should have, or with ones turned off: a sleeping server
     // may never stop, so its wake boots once to place them. A newer pin of the same ones waits
-    // for its next boot. One that places none adds nothing for them.
+    // for its next boot. One that places none adds nothing for them. The performance mods and
+    // Offline world progression count the same way: on or off, a sleeping server boots once.
     // How they are named on disk is in it too: one asleep on jars named as the image names its
     // own, which the image could remove as it started (`carried.ts`), boots once to have them.
     // So do the files Cubepals owns, where they are newer than its revision's: a server that only
@@ -266,7 +279,10 @@ export class RuntimeSpecs {
     // one asleep on others boots for them, which a change to either does at once in the background
     // (`refresh.ts`), so a player's wake still resumes. One asleep on the same wakes as it slept.
     const shown = `identity:${identityDigest(labelled.env)}`
-    const compatPart = compat.length === 0 ? [] : [compat.join(','), COMPAT_PREFIX]
+    // Which parts of Offline world progression run is a start's too: a sleeping server boots once for a change.
+    const parts = Object.values(progressed)
+    const compatPart =
+      compat.length === 0 ? [] : [compat.join(','), COMPAT_PREFIX, ...parts.map((p) => `progression:${p}`)]
     const startOnly = [...compatPart, ...grim, ...newer, shown]
     const resumesOn = createHash('sha256')
       .update(`${driftDigest} ${startOnly.join(' ')}`)

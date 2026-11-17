@@ -1,0 +1,13 @@
+# SPDX-FileCopyrightText: 2026 The Cubepals Authors
+#
+# SPDX-License-Identifier: AGPL-3.0-only
+
+# Cubepals places this plugin on Paper servers while their owner leaves Offline world progression
+# on: furnaces and crops catch up on the time their chunks weren't ticking.
+name: CubepalsProgression
+version: "1"
+main: blockly.progression.Progression
+api-version: "1.20"
+load: STARTUP
+folia-supported: false
+description: Furnaces finish smelting and crops keep growing while nobody is near them, and while the server sleeps.

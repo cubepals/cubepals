@@ -63,6 +63,7 @@ import type { PackService } from '../packs/service.ts'
 import { idleMinutesFor } from '../platform/room.ts'
 import type { CatalogHit, ModCatalog } from '../ports/catalog.ts'
 import type { PlayAddressing, RegionCatalog } from '../ports/platform.ts'
+import { progressionView } from '../progression/view.ts'
 import { hasDatapacks, isModded } from '../revisions/caps.ts'
 import { pictureOf } from '../server-icons/view.ts'
 import { loadPackChecks } from '../setups/persistence.ts'
@@ -730,6 +731,7 @@ async function addedAtStart(
   return {
     ...(await compat.joins(db, revision, run)),
     performanceMods: await performanceModsView(db, serverId, revision),
+    progression: await progressionView(db, serverId, revision),
   }
 }
 
