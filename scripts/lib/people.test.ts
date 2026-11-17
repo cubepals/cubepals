@@ -8,8 +8,9 @@
  * stand-ins; the stand-in refuses a sign-up as the control plane does, without the agreement.
  */
 import { afterAll, beforeAll, expect, test } from 'bun:test'
-import { createServer, type Server } from 'node:net'
+import { connect, createServer, type Server } from 'node:net'
 import { signUpAgreementOf, TERMS_VERSION } from '@blockly/contracts'
+import { answered } from '@blockly/control/testing/answered'
 import { droppedConnection } from './dropped-connection.ts'
 import { people } from './people.ts'
 
@@ -61,61 +62,67 @@ test('signs up agreeing to the Terms in force, as the sign-up page does', async 
 })
 
 /**
- * The API as a signed-in person calls it, against a server of the test's own that closes its first
- * `drops` connections with no answer, as staging's API did to a stop, and then answers as tRPC does.
+ * The API as a signed-in person calls it, answered by the control plane's own router
+ * (`@blockly/control/testing/answered`), behind a door of the test's own that closes its first
+ * `drops` connections with no answer, as staging's API did to a nightly's requests.
  */
-let dropping: Server
+let router: ReturnType<typeof Bun.serve>
+let door: Server
 let drops = 0
 let asked = 0
+const serverId = crypto.randomUUID()
 beforeAll(async () => {
-  dropping = createServer((socket) => {
+  const answer = answered((_service, method) =>
+    method === 'get' ? { id: serverId, status: 'running' } : null,
+  )
+  // Each answer closes its connection, so every call comes to the door anew, as the drops need.
+  router = Bun.serve({
+    port: 0,
+    async fetch(request) {
+      const given = await answer(request.url, request)
+      const headers = new Headers(given.headers)
+      headers.set('connection', 'close')
+      return new Response(given.body, { status: given.status, headers })
+    },
+  })
+  door = createServer((socket) => {
     asked += 1
     if (drops > 0) {
       drops -= 1
       return void socket.destroy()
     }
-    const body = JSON.stringify([{ result: { data: { ok: true } } }])
-    socket.once('data', () =>
-      socket.end(`HTTP/1.1 200 OK\r\ncontent-length: ${body.length}\r\nconnection: close\r\n\r\n${body}`),
-    )
+    const behind = connect(Number(router.port), '127.0.0.1')
+    socket.pipe(behind).pipe(socket)
   })
-  await new Promise<void>((resolve) => dropping.listen(0, '127.0.0.1', resolve))
+  await new Promise<void>((resolve) => door.listen(0, '127.0.0.1', resolve))
 })
-afterAll(() => dropping.close())
+afterAll(() => {
+  door.close()
+  router.stop(true)
+})
 
-const apiOnDropping = () => {
-  const { port } = dropping.address() as { port: number }
-  return people(`http://127.0.0.1:${port}`, '').apiAs(() => '')
-}
+const api = () => people(`http://127.0.0.1:${(door.address() as { port: number }).port}`, '').apiAs(() => '')
 const thrownBy = (call: Promise<unknown>) =>
   call.then(
     () => null,
     (error: unknown) => error,
   )
 
-test('a query whose connection was dropped is asked once more', async () => {
+test('a query whose connection was dropped is asked once more, and no more than once', async () => {
   drops = 1
   asked = 0
-  expect(await apiOnDropping()('servers.get', { serverId: 's' }, 'GET')).toEqual({ ok: true })
-  expect(asked).toBe(2)
-})
-
-test('a change keyed by its requestId is sent once more after a drop, and no more than once', async () => {
-  drops = 1
-  asked = 0
-  expect(await apiOnDropping()('servers.stop', { serverId: 's', requestId: 'r' })).toEqual({ ok: true })
+  expect(await api()('servers.get', { serverId }, 'GET')).toEqual({ id: serverId, status: 'running' })
   expect(asked).toBe(2)
   drops = 2
   asked = 0
-  expect(
-    droppedConnection(await thrownBy(apiOnDropping()('servers.stop', { serverId: 's', requestId: 'r' }))),
-  ).toBe(true)
+  expect(droppedConnection(await thrownBy(api()('servers.get', { serverId }, 'GET')))).toBe(true)
   expect(asked).toBe(2)
 })
 
-test('a change without a requestId is sent once, and its dropped connection is the failure', async () => {
+test('a change is sent once, even with a requestId, and its dropped connection is the failure', async () => {
   drops = 1
   asked = 0
-  expect(droppedConnection(await thrownBy(apiOnDropping()('servers.delete', { serverId: 's' })))).toBe(true)
+  const restart = api()('servers.restart', { serverId, requestId: crypto.randomUUID() })
+  expect(droppedConnection(await thrownBy(restart))).toBe(true)
   expect(asked).toBe(1)
 })

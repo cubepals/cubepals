@@ -15,15 +15,6 @@ import { onceMoreIfDropped } from './dropped-connection.ts'
 // biome-ignore lint/suspicious/noExplicitAny: read loosely on purpose, see above
 export type Api = (path: string, input?: unknown, method?: 'GET' | 'POST') => Promise<any>
 
-/**
- * Whether a call can be sent again after its connection dropped with no answer: a query, or a
- * change the control plane keys by the `requestId` it carries, so that a second one is the same
- * change. Any other change is sent once.
- */
-function repeatable(method: 'GET' | 'POST', input: unknown): boolean {
-  return method === 'GET' || typeof (input as { requestId?: unknown } | null)?.requestId === 'string'
-}
-
 export interface Person {
   email: string
   password: string
@@ -71,8 +62,10 @@ export function people(web: string, mailpit: string, origin = web) {
           headers: { cookie: cookie(), origin, 'content-type': 'application/json' },
           ...(method === 'POST' ? { body: JSON.stringify({ 0: input }) } : {}),
         })
-      // Staging's API can reset a request as one of its machines wakes (dropped-connection.ts).
-      const response = await (repeatable(method, input) ? onceMoreIfDropped(send) : send())
+      // Staging's API can reset a request as one of its machines wakes (dropped-connection.ts). A
+      // query is asked once more; a change is sent once, since its requestId doesn't make every
+      // change safe to send twice (a restart whose first operation had finished would run again).
+      const response = await (method === 'GET' ? onceMoreIfDropped(send) : send())
       const body = await response.text()
       // The dev web app answers a page instead of JSON while it recompiles; it should not do that
       // for long, and a page that never becomes JSON is a failure worth seeing.

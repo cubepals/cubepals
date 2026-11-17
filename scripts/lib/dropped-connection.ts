@@ -8,8 +8,8 @@
  * that arrives as one wakes: a nightly's check lost one sign-up of six that way, with
  * `ECONNRESET: The socket connection was closed unexpectedly`, while the five beside it went
  * through; a later check lost three requests the same way, a server's stop among them. Only for
- * work that is safe to make again: signing up under a new address, and the API calls people.ts
- * can send twice (a query, or a change keyed by its requestId).
+ * work that is safe to make again: signing up under a new address, a query (people.ts), and a
+ * change whose second asking does nothing, such as a server's stop.
  *
  * Not for an answer that came back, whatever it says: only a connection that gave none.
  */
