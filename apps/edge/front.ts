@@ -81,8 +81,8 @@ export interface FrontOptions {
    */
   notice?: (hostname: string) => Rewrite | null
   /**
-   * Who a Java player's game left a modded server as it joined, and what their next ping and join
-   * hear (`left-at-once.ts`); nothing is said, without it.
+   * Who a Java player's game left a modded server as it joined, and what their server list says
+   * of it (`left-at-once.ts`); nothing is said, without it. No join is turned away for it.
    */
   leftAtOnce?: LeftAtOnce
 }
@@ -379,13 +379,6 @@ class Arrival {
       visit?.refused('wrong_game')
       this.#count('refused', 'wrong_game')
       return void this.#client.end(turnAway(refused))
-    }
-    // A game that left this server as it joined hears why, once, before it tries again.
-    const told = handshake.joining ? this.#left()?.join(handshake.hostname, this.#ip()) : null
-    if (told) {
-      visit?.refused('mods_differ')
-      this.#count('refused', 'mods_differ')
-      return void this.#client.end(turnAway(told))
     }
     const admitted = gate.admit(known(handshake.hostname) ? handshake.hostname : '', this.#countedAs())
     if (!admitted) {

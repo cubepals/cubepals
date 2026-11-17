@@ -1490,9 +1490,10 @@ the control plane's **internal listener**: 6PN on Fly, loopback or the compose n
   with the version its run loads, those its last change of mods moved first, with when; or its
   pack. A Java game that closes its own connection within 20 s of its hand-off to such a server is
   kept by address for ten minutes (`apps/edge/left-at-once.ts`): a ping there is answered "Your
-  mods don't match this server's. Join to see which to update.", and the next join is turned away
-  once with the versions and what to do in each launcher (`refused:mods_differ`). The join after
-  goes through: the edge can't see a game's mods, and keeps no one out on what it only infers.
+  mods may not match. It runs …", with as many of the versions as the list's two lines hold, those
+  the last change moved first. It is said as a possibility, and no join is turned away for it: the
+  edge can't see a game's mods, a game can leave that soon for other reasons, and an address can
+  be a whole household's. The server's page lists every version, with what to do in each launcher.
 - The agent polls `/edge/v1/routes` every second, naming itself in `x-edge-id`
   (`packages/contracts/src/edge-poll.ts`). It changes mc-router's routes one hostname at a time
   through mc-router's API (`apps/edge/router.ts`): a route added, replaced or removed on its own,

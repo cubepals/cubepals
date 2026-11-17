@@ -4,20 +4,19 @@
 
 /**
  * A player whose game left a modded server as it joined (`left-at-once.ts`): which ends are kept,
- * what the server list and the next join hear, and for how long; then, through the front door to
- * a stand-in mc-router, a game that hangs up on its own a moment after its hand-off, whose next
- * ping says the mods differ, whose next join is told which and goes no further, and whose join
- * after that goes through.
+ * what the server list says, and for how long; then, through the front door to a stand-in
+ * mc-router, a game that hangs up on its own a moment after its hand-off, whose next ping says its
+ * mods may not match, and whose next join goes through: no join is turned away on a guess.
  */
 import { afterEach, describe, expect, test } from 'bun:test'
 import { type AddressInfo, connect, createServer, type Server } from 'node:net'
 import type { EdgeRoute } from '@blockly/contracts/edge'
 import { stays, until } from '@blockly/contracts/waits'
 import { MINUTE_MS, SECOND_MS } from '../../packages/contracts/src/durations.ts'
+import { motdLayout } from '../../packages/contracts/src/motd-layout.ts'
 import { readProxyHeader } from '../../packages/contracts/src/proxy-header.ts'
 import { front } from './front.ts'
-import { turnAway } from './hold.ts'
-import { LEFT_STATUS, LEFT_TIMES, LeftAtOnce, leftWords } from './left-at-once.ts'
+import { LEFT_TIMES, LeftAtOnce, leftStatus } from './left-at-once.ts'
 import { Gate, type Limits } from './limits.ts'
 import { packet, readVarInt, statusRequest, string, varInt } from './notice.ts'
 import type { SessionEnd } from './session-end.ts'
@@ -83,69 +82,42 @@ describe('who left as they joined', () => {
     left.left('modded.play.test', '203.0.113.6', handed(6), ended())
     expect(left.held()).toBe(1)
     // Another address, or another server, hears nothing of it.
-    expect(left.join('modded.play.test', '203.0.113.7')).toBeNull()
+    expect(left.status('modded.play.test', '203.0.113.7')).toBeNull()
     expect(left.status('plain.play.test', '203.0.113.6')).toBeNull()
   })
 
-  test('its server list says so, and its next join is told which, once', () => {
-    const { left, handed } = setUp()
-    left.left('modded.play.test', '203.0.113.1', handed(3), ended())
-    expect(left.status('modded.play.test', '203.0.113.1')).not.toBeNull()
-    expect(left.status('modded.play.test', '203.0.113.1')).not.toBeNull()
-    expect(left.join('modded.play.test', '203.0.113.1')).toBe(leftWords(MODS, new Date(at)))
-    expect(left.join('modded.play.test', '203.0.113.1')).toBeNull()
-    expect(left.status('modded.play.test', '203.0.113.1')).toBeNull()
-  })
-
-  test('it is said for ten minutes, while the server still lists mods, and the list only while it runs', () => {
+  test('its server list says so for ten minutes, while the server runs and still lists mods', () => {
     const { clock, held, left, handed } = setUp()
     left.left('modded.play.test', '203.0.113.1', handed(3), ended())
     left.left('modded.play.test', '203.0.113.2', handed(3), ended())
-    left.left('modded.play.test', '203.0.113.3', handed(3), ended())
+    // As often as the list asks: a ping uses nothing up.
+    expect(left.status('modded.play.test', '203.0.113.1')).not.toBeNull()
+    expect(left.status('modded.play.test', '203.0.113.1')).not.toBeNull()
+    // A sleeping server's list is the agent's own.
     held.routes = [route({ state: 'asleep' })]
-    // A sleeping server's list is the agent's own; its join is still told.
     expect(left.status('modded.play.test', '203.0.113.1')).toBeNull()
-    expect(left.join('modded.play.test', '203.0.113.1')).not.toBeNull()
     held.routes = [route({ mods: undefined })]
-    expect(left.join('modded.play.test', '203.0.113.2')).toBeNull()
+    expect(left.status('modded.play.test', '203.0.113.2')).toBeNull()
     held.routes = [route()]
+    expect(left.status('modded.play.test', '203.0.113.1')).not.toBeNull()
     clock.now += 10 * MINUTE_MS
-    expect(left.join('modded.play.test', '203.0.113.3')).toBeNull()
+    expect(left.status('modded.play.test', '203.0.113.1')).toBeNull()
     expect(left.held()).toBe(0)
   })
 
-  test('the words say which versions, what changed when, and what to do in each launcher', () => {
-    expect(leftWords(MODS, new Date(at)).split('\n')).toEqual([
-      'Your mods don’t match this server’s.',
-      'That’s why your game left as soon as it joined.',
-      '',
-      'Its mods changed on 16 Nov. It runs:',
-      'Collective 26.3.0-8.87-fabric+forge+neo',
-      'VeinMiner 2.14.0',
-      'AppleSkin 3.0.10+mc26.3',
-      'and 5 more',
-      '',
-      'Update yours to these versions, then join again:',
-      'Modrinth App or CurseForge: open the profile, update its mods.',
-      'Prism Launcher: Edit, Mods, Check for updates.',
-      'Minecraft Launcher: put each at that version in your mods folder.',
-    ])
-    // A change from another year says its year; a server whose mods never changed says none.
-    expect(leftWords({ ...MODS, changedAt: '2025-03-02T10:00:00Z' }, new Date(at))).toContain(
-      'Its mods changed on 2 Mar 2025. It runs:',
+  test('the words say the mods may not match, and which versions, as many as the list holds', () => {
+    // What the last change moved comes first; what doesn't fit is counted.
+    expect(leftStatus(MODS)).toBe(
+      'Your mods may not match. It runs Collective 26.3.0-8.87-fabric+forge+neo and 7 more.',
     )
-    const { changedAt: _, ...unchanged } = MODS
-    expect(leftWords(unchanged, new Date(at)).split('\n')[3]).toBe('It runs:')
+    const short = { list: [MODS.list[1], { name: 'AppleSkin', version: '3.0.10' }] } as typeof MODS
+    expect(leftStatus(short)).toBe('Your mods may not match. It runs VeinMiner 2.14.0 and AppleSkin 3.0.10.')
     const pack = { list: [{ name: 'Better MC', version: 'v52' }], pack: true as const }
-    expect(leftWords(pack, new Date(at)).split('\n')).toEqual([
-      'Your pack doesn’t match this server’s.',
-      'That’s why your game left as soon as it joined.',
-      '',
-      'It plays:',
-      'Better MC v52',
-      '',
-      'Update the pack to that version in your launcher, then join again.',
-    ])
+    expect(leftStatus(pack)).toBe('Your pack may not match. It plays Better MC v52.')
+    // A name too long for the list is counted rather than cut.
+    const long = { list: [{ name: 'X'.repeat(64), version: 'Y'.repeat(64) }] }
+    expect(leftStatus(long)).toBe('Your mods may not match. It runs one mod.')
+    for (const mods of [MODS, short, pack, long]) expect(motdLayout(leftStatus(mods)).cutCount).toBe(0)
   })
 })
 
@@ -241,7 +213,7 @@ describe('through the front door', () => {
     return { joins, left, dial }
   }
 
-  test('a game that leaves as it joins hears why at its next ping and join, then goes through', async () => {
+  test('a game that leaves as it joins hears at its next ping that its mods may not match, and its next join goes through', async () => {
     const { joins, left, dial } = await door([route()], true)
 
     // Before anything happened, a ping hears the server's own answer.
@@ -254,15 +226,13 @@ describe('through the front door', () => {
     await until('the game to be kept as one that left as it joined', () => left.held() === 1)
 
     const ping = await dial(statusRequest('modded.play.test', 25565))
-    expect(new TextDecoder().decode(ping)).toContain(JSON.stringify(LEFT_STATUS).slice(1, -1))
+    expect(new TextDecoder().decode(ping)).toContain(JSON.stringify(leftStatus(MODS)).slice(1, -1))
 
-    const told = await dial(joinRequest('modded.play.test'))
-    expect(told).toEqual(turnAway(leftWords(MODS, new Date())))
-    expect(joins).toHaveLength(1)
-
-    // The next goes through: nothing is kept from a player on what the edge only infers.
+    // The next join goes straight through: the edge can't see a game's mods, and turns nobody
+    // away on what it only infers.
     void dial(joinRequest('modded.play.test'), 300)
-    await until('the join after to reach the server', () => joins.length === 2)
+    await until('the next join to reach the server', () => joins.length === 2)
+    expect(left.held()).toBe(1)
   })
 
   test('a join to a running server counts from its hand-off even when mc-router’s word of it comes late', async () => {
