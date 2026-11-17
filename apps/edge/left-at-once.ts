@@ -3,21 +3,23 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * A player whose game left a modded server as it joined, and what the edge tells them next. A
+ * A player whose game may have left a modded server for its mods, and what the edge says of it. A
  * game whose mods differ from the server's gets a packet it can't read and hangs up on its own a
  * moment after joining, saying only what its code saw ("found 1 bytes extra whilst reading packet
  * custom_payload"); the server sees nothing but the player leaving. So when a game closes its own
  * connection that soon after it was handed to a server whose route lists the mods its players'
- * games match (`mods`), the edge keeps its address for that server a few minutes: the server list
- * there says the mods differ, and the next join is turned away once with which versions the
- * server runs and what to do in each launcher. The join after goes through as any other: the
- * edge can't see a game's mods, and never keeps a player out on what it only infers.
+ * games match (`mods`), the edge keeps its address for that server a few minutes, and the server
+ * list there says the mods may not match and which versions the server runs. It is said as a
+ * possibility, and no join is ever turned away for it: the edge can't see a game's mods, a game
+ * can leave that soon for other reasons (a crash, a player who changed their mind), and an address
+ * can be a whole household's.
  *
  * Not for passing the connection on (`front.ts`), or for which mods a route lists (the control
  * plane's `players-mods.ts`).
  */
 import type { EdgeRoute } from '@blockly/contracts/edge'
 import { MINUTE_MS, SECOND_MS } from '../../packages/contracts/src/durations.ts'
+import { motdLayout } from '../../packages/contracts/src/motd-layout.ts'
 import { StatusRewrite } from './ping-notice.ts'
 import type { SessionEnd } from './session-end.ts'
 
@@ -28,7 +30,7 @@ export interface LeftTimes {
    * seconds, and a game that can't read the server leaves the moment play begins.
    */
   atOnceMs: number
-  /** How long the server list says so, and the next join waits to be told. */
+  /** How long the server list says so. */
   toldForMs: number
 }
 
@@ -37,51 +39,32 @@ export const LEFT_TIMES: LeftTimes = { atOnceMs: 20 * SECOND_MS, toldForMs: 10 *
 /** The most addresses kept at once: the oldest goes first past it. */
 const MOST_KEPT = 10_000
 
-/** What the server list says, in two short lines. */
-export const LEFT_STATUS = 'Your mods don’t match this server’s.\nJoin to see which to update.'
-
 type Mods = NonNullable<EdgeRoute['mods']>
 
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-
-/** A day as the game's screen says it: "16 Nov", with the year only when it isn't this one. */
-function day(iso: string, now: Date): string | null {
-  const at = new Date(iso)
-  if (Number.isNaN(at.getTime())) return null
-  const year = at.getUTCFullYear() === now.getUTCFullYear() ? '' : ` ${at.getUTCFullYear()}`
-  return `${at.getUTCDate()} ${MONTHS[at.getUTCMonth()]}${year}`
+/** Names as a sentence lists them: "A, B and C", or "A, B and 6 more". */
+function listed(names: readonly string[], more: number): string {
+  if (more > 0) return `${names.join(', ')} and ${more} more`
+  return names.length === 1 ? (names[0] ?? '') : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`
 }
 
 /**
- * What the next join is told: that the game left as it joined, which mods the server runs at
- * which versions (those its last change moved first), and what to do in each launcher.
+ * What the server list says to an address whose game left as it joined: that its mods may not
+ * match, then what the server runs at which versions, those its last change moved first, as many
+ * as the list's two lines hold, and how many more.
  */
-export function leftWords(mods: Mods, now: Date): string {
-  const changed = mods.changedAt === undefined ? null : day(mods.changedAt, now)
-  const what = mods.pack ? 'pack' : 'mods'
-  const differ = mods.pack ? 'Your pack doesn’t match this server’s.' : 'Your mods don’t match this server’s.'
-  const runs = mods.list.map((mod) => `${mod.name} ${mod.version}`)
-  if (mods.more !== undefined) runs.push(`and ${mods.more} more`)
-  const steps = mods.pack
-    ? ['Update the pack to that version in your launcher, then join again.']
-    : [
-        'Update yours to these versions, then join again:',
-        'Modrinth App or CurseForge: open the profile, update its mods.',
-        'Prism Launcher: Edit, Mods, Check for updates.',
-        'Minecraft Launcher: put each at that version in your mods folder.',
-      ]
-  return [
-    differ,
-    'That’s why your game left as soon as it joined.',
-    '',
-    changed === null ? (mods.pack ? 'It plays:' : 'It runs:') : `Its ${what} changed on ${changed}. It runs:`,
-    ...runs,
-    '',
-    ...steps,
-  ].join('\n')
+export function leftStatus(mods: Mods): string {
+  const opening = mods.pack ? 'Your pack may not match. It plays' : 'Your mods may not match. It runs'
+  const named = mods.list.map((mod) => `${mod.name} ${mod.version}`)
+  const all = named.length + (mods.more ?? 0)
+  for (let shown = named.length; shown > 0; shown--) {
+    const status = `${opening} ${listed(named.slice(0, shown), all - shown)}.`
+    if (motdLayout(status).cutCount === 0) return status
+  }
+  if (mods.pack) return 'Your pack may not match this server’s.'
+  return `Your mods may not match. It runs ${all === 1 ? 'one mod' : `${all} mods`}.`
 }
 
-/** The addresses whose game left a server as it joined, and what each is still to be told. */
+/** The addresses whose game left a server as it joined, and until when each one's server list says so. */
 export class LeftAtOnce {
   readonly #route: (hostname: string) => EdgeRoute | undefined
   readonly #times: LeftTimes
@@ -131,16 +114,9 @@ export class LeftAtOnce {
 
   /** What a ping from `ip` to `hostname` goes back through, for a running server; null for its own answer. */
   status(hostname: string, ip: string): StatusRewrite | null {
-    if (!this.running(hostname)) return null
-    return this.#until(hostname, ip) === null ? null : new StatusRewrite(LEFT_STATUS)
-  }
-
-  /** What a join from `ip` to `hostname` is told in place of going on, once; null for going on. */
-  join(hostname: string, ip: string): string | null {
-    if (this.#until(hostname, ip) === null) return null
-    this.#kept.delete(`${ip} ${hostname}`)
+    if (!this.running(hostname) || this.#until(hostname, ip) === null) return null
     const mods = this.#modsOf(hostname)
-    return mods === null ? null : leftWords(mods, new Date(this.#now()))
+    return mods === null ? null : new StatusRewrite(leftStatus(mods))
   }
 
   /** Until when `ip` is told at `hostname`; null when it isn't, any more, or the server lists no mods now. */
