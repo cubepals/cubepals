@@ -2195,6 +2195,9 @@ textarea.bk-input {
   flex-direction: column;
   gap: var(--space-24);
   color: var(--ink-inverse);
+  /* A screen too short for every server's pages scrolls them inside the sidebar, never past it. */
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 .bk-appnav__brand {
   font-size: 20px;
@@ -2225,6 +2228,30 @@ textarea.bk-input {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+/* The account's servers, on every page: the open one's name over its pages, and each other one's
+   name alone, a link to it with a chevron. They sit closer than the nav's groups, as one list. */
+.bk-appnav__servers {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+.bk-appnav__server {
+  justify-content: space-between;
+  border-radius: var(--radius-md);
+  text-decoration: none;
+  transition-property: background-color, color;
+  transition-duration: var(--quick);
+  transition-timing-function: var(--ease);
+}
+.bk-appnav__server svg {
+  flex: none;
+}
+@media (hover: hover) and (pointer: fine) {
+  .bk-appnav__server:hover {
+    background: rgba(244, 248, 245, 0.08);
+    color: var(--ink-inverse);
+  }
 }
 .bk-appnav__item {
   display: flex;

@@ -6,20 +6,7 @@
 
 import { ownEmail } from '@blockly/contracts'
 import { type DehydratedState, useMutation, useQuery } from '@tanstack/react-query'
-import {
-  Archive,
-  BookOpen,
-  Box,
-  Compass,
-  Globe,
-  LayoutGrid,
-  Puzzle,
-  Settings,
-  ShieldCheck,
-  SquareTerminal,
-  UserRound,
-  Users,
-} from 'lucide-react'
+import { BookOpen, Box, ChevronRight, Compass, ShieldCheck, UserRound } from 'lucide-react'
 import Link from 'next/link'
 import { useParams, usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { type ReactNode, Suspense, useEffect, useLayoutEffect, useRef } from 'react'
@@ -35,12 +22,13 @@ import { BetaBanner, WithBeta } from '../../ui/beta'
 import { Lockup } from '../../ui/brand'
 import { ResendConfirmation } from '../(auth)/resend-confirmation'
 import { Presses } from '../(public)/presses'
-import { AccountMenu } from './account-menu'
+import { AccountMenu, SMALL } from './account-menu'
 import { Feedback } from './feedback'
 import styles from './insight.module.css'
 import { MomentCard } from './moment'
 import { MoreMenu, type NavEntry } from './more-menu'
 import { usePrefetch } from './prefetch'
+import { useServerNav } from './server-nav'
 import { UsingAs } from './using-as'
 
 export function AppFrame({
@@ -124,34 +112,8 @@ function Shell({ user, children }: { user: Session['user']; children: ReactNode 
     refetchInterval: 120_000,
   })
 
-  const serverItems: NavEntry[] = serverId
-    ? [
-        { href: `/servers/${serverId}`, label: 'Overview', icon: LayoutGrid },
-        {
-          href: `/servers/${serverId}/players`,
-          label: 'Players',
-          icon: Users,
-          trailing: view?.players ? String(view.players.online) : undefined,
-        },
-        {
-          href: `/servers/${serverId}/mods`,
-          label: view?.loader === 'paper' ? 'Plugins' : 'Mods',
-          icon: Puzzle,
-        },
-        { href: `/servers/${serverId}/world`, label: 'World', icon: Globe },
-        { href: `/servers/${serverId}/backups`, label: 'Backups', icon: Archive },
-        {
-          href: `/servers/${serverId}/console`,
-          label: 'Console',
-          icon: SquareTerminal,
-        },
-        {
-          href: `/servers/${serverId}/settings`,
-          label: 'Settings',
-          icon: Settings,
-        },
-      ]
-    : []
+  // The account's servers, on every page: the open one's pages are one press from anywhere.
+  const nav = useServerNav(serverId, view)
 
   // Every link here starts its page's reads as soon as someone heads for it (./prefetch.ts).
   const prefetch = usePrefetch()
@@ -200,12 +162,30 @@ function Shell({ user, children }: { user: Session['user']; children: ReactNode 
           {item(account)}
           {me.data?.admin && item(admin)}
         </div>
-        {serverId && (
-          <div className="bk-appnav__group">
-            <div className="bk-appnav__heading">
-              <span>{view?.name ?? 'Your server'}</span>
-            </div>
-            {serverItems.map(item)}
+        {nav.servers.length > 0 && (
+          <div className="bk-appnav__servers">
+            {nav.servers.map((listed) =>
+              listed.id === nav.open ? (
+                <div key={listed.id} className="bk-appnav__group">
+                  <div className="bk-appnav__heading">
+                    <span>{listed.name}</span>
+                  </div>
+                  {nav.pages.map(item)}
+                </div>
+              ) : (
+                // Another of the account's servers: its name, one press from its page.
+                <Link
+                  key={listed.id}
+                  href={`/servers/${listed.id}`}
+                  prefetch
+                  className="bk-appnav__heading bk-appnav__server"
+                  {...prefetch.intent(`/servers/${listed.id}`)}
+                >
+                  <span>{listed.name}</span>
+                  <ChevronRight {...SMALL} aria-hidden />
+                </Link>
+              ),
+            )}
           </div>
         )}
         <div className="bk-appnav__spacer" />
@@ -246,13 +226,13 @@ function Shell({ user, children }: { user: Session['user']; children: ReactNode 
         <MomentCard />
       </div>
 
-      {/* The bar holds five: Servers, a server's first three pages, and More for the rest and the
-          account, which the sidebar's foot holds on a wider screen. */}
+      {/* The bar holds five: Servers, the open server's first three pages, and More for the rest
+          and the account, which the sidebar's foot holds on a wider screen. */}
       <nav className="bk-bottombar bk-on-dark" aria-label="Cubepals">
-        {[servers, ...serverItems.slice(0, BAR_PAGES)].map(item)}
+        {[servers, ...nav.pages.slice(0, BAR_PAGES)].map(item)}
         <MoreMenu
           email={user.email}
-          pages={serverItems.slice(BAR_PAGES)}
+          pages={nav.pages.slice(BAR_PAGES)}
           guides={guides}
           account={account}
           admin={admin}

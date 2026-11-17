@@ -32,7 +32,7 @@ export function MoreMenu({
   pathname,
 }: {
   email: string
-  /** The server's pages the bar has no room for; empty away from a server. */
+  /** The open server's pages the bar has no room for; empty for an account with no server. */
   pages: readonly NavEntry[]
   /** The how-tos on the site. */
   guides: NavEntry
