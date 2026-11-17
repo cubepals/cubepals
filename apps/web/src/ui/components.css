@@ -2195,6 +2195,9 @@ textarea.bk-input {
   flex-direction: column;
   gap: var(--space-24);
   color: var(--ink-inverse);
+  /* A screen too short for every server's pages scrolls them inside the sidebar, never past it. */
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 .bk-appnav__brand {
   font-size: 20px;
@@ -2225,6 +2228,34 @@ textarea.bk-input {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.bk-appnav__heading svg {
+  flex: none;
+}
+/* The open server's name as a switch, once the account has more than one: the heading's look,
+   pressed as the account at the foot is, and held lit while its menu is open. */
+.bk-appnav__switch {
+  width: 100%;
+  justify-content: space-between;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: none;
+  font-family: inherit;
+  text-align: start;
+  cursor: pointer;
+  transition-property: background-color, color;
+  transition-duration: var(--quick);
+  transition-timing-function: var(--ease);
+}
+.bk-appnav__switch[data-open] {
+  background: rgba(244, 248, 245, 0.08);
+  color: var(--ink-inverse);
+}
+@media (hover: hover) and (pointer: fine) {
+  .bk-appnav__switch:hover {
+    background: rgba(244, 248, 245, 0.08);
+    color: var(--ink-inverse);
+  }
 }
 .bk-appnav__item {
   display: flex;
@@ -3143,6 +3174,27 @@ a.bk-menu__item {
   font-size: 13px;
   font-variant-numeric: tabular-nums;
   color: var(--ink-subtle);
+}
+/* A list in a menu that can grow without end, as the switch's servers: past eight rows it scrolls,
+   and what follows stays in view under a rule. A long name ends in an ellipsis. */
+.bk-menu__list {
+  /* What its rows' offsets are measured from, so the switch can scroll to the open one. */
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  max-width: 288px;
+  max-height: min(352px, 50dvh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--border);
+}
+.bk-menu__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 /* Links to pages first, then whose account it is: the note opens its own part under a rule. */
 .bk-menu__item + .bk-menu__note {
