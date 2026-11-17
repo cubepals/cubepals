@@ -35,12 +35,11 @@ import {
 } from '../../packages/contracts/src/proxy-header.ts'
 import { withoutForwarding } from './forwarding.ts'
 import { turnAway } from './hold.ts'
-import type { LeftAtOnce } from './left-at-once.ts'
 import type { Gate } from './limits.ts'
 import { connectionClosed, connectionEnded, type Edition, firstByteAfter } from './metrics.ts'
 import { hostnameOf, readVarInt } from './notice.ts'
 import { watchSession } from './session-end.ts'
-import { ipOf, sourceKey, type Visits } from './visits.ts'
+import { sourceKey, type Visits } from './visits.ts'
 
 export interface FrontOptions {
   port: number
@@ -80,11 +79,6 @@ export interface FrontOptions {
    * player, for an operator's notice on its owner (`ping-notice.ts`); null, or left out, for none.
    */
   notice?: (hostname: string) => Rewrite | null
-  /**
-   * Who a Java player's game left a modded server as it joined, and what their server list says
-   * of it (`left-at-once.ts`); nothing is said, without it. No join is turned away for it.
-   */
-  leftAtOnce?: LeftAtOnce
 }
 
 /** What changes a server's bytes on their way back to the player: what of each goes on, and what is left at its end. */
@@ -409,24 +403,10 @@ class Arrival {
     visit?.admitted(toRouter)
   }
 
-  /**
-   * What a ping's answer goes back through: why this address's game left the server as it joined,
-   * or else its server's owner's notice, if any. A join's goes as it is.
-   */
+  /** What a ping's answer goes back through: its server's owner's notice, if any. A join's goes as it is. */
   #back(handshake: Handshake): Rewrite | null {
-    if (handshake.joining) return null
-    const left = this.#left()?.status(handshake.hostname, this.#ip()) ?? null
-    return left ?? this.#options.notice?.(handshake.hostname) ?? null
-  }
-
-  /** Who left as they joined, for a Java player's connection, whose address is known: Geyser's are Bedrock's. */
-  #left(): LeftAtOnce | null {
-    return this.#geyser || this.#source === null ? null : (this.#options.leftAtOnce ?? null)
-  }
-
-  /** The connecting address, as the edge keeps addresses apart from their ports. */
-  #ip(): string {
-    return ipOf(sourceKey(this.#source?.address ?? '', 0))
+    if (handshake.joining || this.#options.notice === undefined) return null
+    return this.#options.notice(handshake.hostname)
   }
 
   /**
@@ -476,15 +456,9 @@ class Arrival {
         const client = this.#client
         const session = watchSession(client, toRouter)
         visits.watching(source, session)
-        // A join to a running server is handed over as it goes on to mc-router, whose own word of
-        // it may come after a game that left at once; a held one is handed over by the waiting room.
-        const direct = this.#left()?.running(handshake.hostname) ? new Date().toISOString() : undefined
-        client.once('close', () => {
-          const end = session.end()
-          const handedAt = visits.byAddress(source)?.handedAt ?? direct
-          visits.closed(source, { up: client.bytesRead, down: client.bytesWritten }, end)
-          this.#left()?.left(handshake.hostname, this.#ip(), handedAt, end)
-        })
+        client.once('close', () =>
+          visits.closed(source, { up: client.bytesRead, down: client.bytesWritten }, session.end()),
+        )
       },
     }
   }

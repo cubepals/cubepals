@@ -24,8 +24,7 @@ export function sourceKey(address: string, port: number): string {
   return `${new URL(`http://[${ip}]/`).hostname}:${port}`
 }
 
-/** The address of a source key, without its port. */
-export const ipOf = (source: string) =>
+const ipOf = (source: string) =>
   source.startsWith('[') ? source.slice(0, source.indexOf(']') + 1) : source.slice(0, source.lastIndexOf(':'))
 
 /** What a visit has gathered so far: the report it becomes, less the phase. */

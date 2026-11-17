@@ -7,10 +7,14 @@
  * notice as its message on its way through the front door, keeping everything else it said, however
  * the answer is cut into chunks; an answer that isn't a status goes on as it came; only a running
  * server's route with a notice is rewritten; and a sleeping server shows the notice in its own
- * message's place.
+ * message's place. Nothing else in the edge changes what a running server says in the list: its
+ * message is its owner's, and only an operator's notice, set on purpose for that server, takes its
+ * place.
  */
 import { afterEach, expect, test } from 'bun:test'
+import { readdirSync, readFileSync } from 'node:fs'
 import { type AddressInfo, connect, createServer, type Server } from 'node:net'
+import { join } from 'node:path'
 import type { EdgeRoute } from '@blockly/contracts/edge'
 import { asleepMessage, LIST_WIDTH, noticedMessage, width } from './asleep.ts'
 import { front } from './front.ts'
@@ -145,4 +149,19 @@ test('a ping to a running server through the front door shows its owner’s noti
   const port = await listening(listener)
   expect(read(await ping(port, 'noticed.play.test'))).toEqual({ ...ANSWER, description: { text: NOTICE } })
   expect(read(await ping(port, 'other.play.test'))).toEqual(ANSWER)
+})
+
+test('nothing but an operator’s notice changes what a running server says in the list', () => {
+  const sources = readdirSync(import.meta.dir).filter(
+    (file) => file.endsWith('.ts') && !file.endsWith('.test.ts'),
+  )
+  const read = (file: string) => readFileSync(join(import.meta.dir, file), 'utf8')
+  // A guess about a player, or anything else the edge works out, never reaches the owner's message.
+  expect(sources.filter((file) => /\b(StatusRewrite|withNotice)\b/.test(read(file)))).toEqual([
+    'ping-notice.ts',
+  ])
+  expect(read('agent.ts')).toContain(
+    'notice: (name) => runningNotice(routes.find((r) => r.hostname === name)),',
+  )
+  expect(read('agent.ts').match(/\bnotice: \(/g)).toHaveLength(1)
 })

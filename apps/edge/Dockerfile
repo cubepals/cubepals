@@ -36,8 +36,7 @@ RUN set -e; \
 FROM mirror.gcr.io/oven/bun:1.4.3@sha256:ec06c3b6cea04192ae6770c434f668ca41d343ad19fa6472216c7b48be39c598 AS agent
 WORKDIR /build
 # The agent imports only types from the contracts, plus durations.ts, edge-poll.ts, proxy-header.ts,
-# server-list.ts, motd-layout.ts with the font widths it reads (minecraft-font.ts) and Minecraft's
-# ports, which import nothing else. Its one dependency is OpenTelemetry, for the metrics it serves (metrics.ts): only
+# server-list.ts and Minecraft's ports, which import nothing else. Its one dependency is OpenTelemetry, for the metrics it serves (metrics.ts): only
 # the edge's workspace is installed, at the versions bun.lock pins, as in apps/control/Dockerfile.
 COPY package.json bun.lock bunfig.toml ./
 COPY apps/edge/package.json apps/edge/
@@ -45,8 +44,8 @@ COPY packages/contracts/package.json packages/contracts/
 RUN bun -e 'const p = await Bun.file("package.json").json(); p.workspaces = ["apps/edge", "packages/contracts"]; delete p.devDependencies; await Bun.write("package.json", JSON.stringify(p))' \
  && bun install --lockfile-only \
  && bun install --production --frozen-lockfile
-COPY apps/edge/agent.ts apps/edge/asleep.ts apps/edge/bedrock.ts apps/edge/browser-redirect.ts apps/edge/clients.ts apps/edge/drain.ts apps/edge/example-address.ts apps/edge/forwarding.ts apps/edge/front.ts apps/edge/geyser-config.ts apps/edge/geyser.ts apps/edge/header.ts apps/edge/hold.ts apps/edge/join-trace.ts apps/edge/left-at-once.ts apps/edge/limits.ts apps/edge/mappings.ts apps/edge/metrics.ts apps/edge/nethernet-identity.ts apps/edge/notice.ts apps/edge/ping-notice.ts apps/edge/ping-wake.ts apps/edge/poll.ts apps/edge/resting.ts apps/edge/router.ts apps/edge/router-session.ts apps/edge/session-end.ts apps/edge/visit-reporter.ts apps/edge/visits.ts apps/edge/waking-line.ts apps/edge/
-COPY packages/contracts/src/durations.ts packages/contracts/src/edge-poll.ts packages/contracts/src/example-address.ts packages/contracts/src/minecraft-font.ts packages/contracts/src/motd-layout.ts packages/contracts/src/proxy-header.ts packages/contracts/src/server-list.ts packages/contracts/src/
+COPY apps/edge/agent.ts apps/edge/asleep.ts apps/edge/bedrock.ts apps/edge/browser-redirect.ts apps/edge/clients.ts apps/edge/drain.ts apps/edge/example-address.ts apps/edge/forwarding.ts apps/edge/front.ts apps/edge/geyser-config.ts apps/edge/geyser.ts apps/edge/header.ts apps/edge/hold.ts apps/edge/join-trace.ts apps/edge/limits.ts apps/edge/mappings.ts apps/edge/metrics.ts apps/edge/nethernet-identity.ts apps/edge/notice.ts apps/edge/ping-notice.ts apps/edge/ping-wake.ts apps/edge/poll.ts apps/edge/resting.ts apps/edge/router.ts apps/edge/router-session.ts apps/edge/session-end.ts apps/edge/visit-reporter.ts apps/edge/visits.ts apps/edge/waking-line.ts apps/edge/
+COPY packages/contracts/src/durations.ts packages/contracts/src/edge-poll.ts packages/contracts/src/example-address.ts packages/contracts/src/proxy-header.ts packages/contracts/src/server-list.ts packages/contracts/src/
 COPY apps/control/src/minecraft/ports.ts apps/control/src/minecraft/
 RUN bun build apps/edge/agent.ts --compile --outfile /build/edge-agent
 

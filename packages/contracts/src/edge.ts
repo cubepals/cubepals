@@ -89,21 +89,6 @@ export const EdgeRoute = z.object({
       newest: z.number().int().optional(),
     })
     .optional(),
-  /**
-   * What a player's game has to match to play, for the edge to tell a player whose game left as
-   * it joined: the pack (`pack`), or the server's mods with the versions it runs, those its last
-   * change of mods moved (`changed`) first, at most a few, and how many more it runs (`more`).
-   * `changedAt` is when that change was, where it had one. Absent where players need nothing:
-   * plain Minecraft, plugins, or a pack that runs on the server alone.
-   */
-  mods: z
-    .object({
-      list: z.array(z.object({ name: z.string(), version: z.string(), changed: z.literal(true).optional() })),
-      more: z.number().int().positive().optional(),
-      changedAt: z.string().optional(),
-      pack: z.literal(true).optional(),
-    })
-    .optional(),
 })
 export type EdgeRoute = z.infer<typeof EdgeRoute>
 export const EdgeRoutes = z.object({
