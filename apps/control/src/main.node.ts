@@ -37,7 +37,6 @@ import { scheduledJobs } from './app/scheduled-jobs.ts'
 import { ServerIcons } from './app/server-icons/service.ts'
 import { presenceFor } from './app/servers/usage.ts'
 import { installTuning } from './app/tuning.ts'
-import { capabilitiesFor } from './main/capabilities.node.ts'
 import { hostPort } from './config/host-port.ts'
 import { loadConfig, tuningOf } from './config/load.ts'
 import { ConfiguredPlayAddressing, ConfiguredRegionCatalog } from './config/play-addressing.ts'
@@ -119,6 +118,7 @@ import { operatorApis } from './interfaces/operator/mount.ts'
 import { startRealtime } from './interfaces/realtime/server.node.ts'
 import { createRuntimeApp } from './interfaces/runtime/artifacts.ts'
 import type { Services } from './interfaces/trpc/trpc.ts'
+import { capabilitiesFor } from './main/capabilities.node.ts'
 
 /**
  * The composition root: the only file that reads configuration and constructs adapters.
