@@ -16,7 +16,9 @@
  *   bun scripts/production.ts apply   check, the website built from this checkout, then Terraform
  *                                     (it saves the plan, has it reviewed by production-guard.ts,
  *                                     asks, and applies that file), then the control, realtime and
- *                                     edge apps deployed from this checkout, then this commit pushed
+ *                                     edge apps deployed from this checkout, the server image built
+ *                                     for each Java where its tag is new (production-server-images.ts),
+ *                                     then this commit pushed
  *                                     as the `production` branch, the website deployed, and the
  *                                     commit released as the next vX.Y.Z (versions.ts).
  *                                     Only a commit a nightly passed on staging goes, unless
@@ -68,6 +70,7 @@ import {
 import { buildEdgeImage, machinesOf, rollEdgeApp } from './production-edge-deploy.ts'
 import { missing, type Part, REQUIREMENTS, whyNot } from './production-guard.ts'
 import { besideTheWebsite } from './production-route.ts'
+import { productionServerImages } from './production-server-images.ts'
 import { bringUpToDate } from './production-tfvars.ts'
 import {
   backendConfig,
@@ -465,6 +468,7 @@ async function apply(): Promise<void> {
     if (skipped === null) await deployApp(app, env, { label })
     else say(skipped)
   }
+  await productionServerImages('bly-prod-control', 'infra/fly/control.toml', env, say)
   await deployChecked(site, head, say)
   moveProduction(env)
   await signInGuard()
