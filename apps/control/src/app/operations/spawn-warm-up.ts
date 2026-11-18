@@ -64,6 +64,13 @@ export const LOADED_CHECK = `execute ${Array.from({ length: SQUARE_CHUNKS }, (_,
   return `if loaded ~${dx} ~ ~${dz}`
 }).join(' ')}`
 
+/**
+ * How long `forceload add` and `remove` are given to answer. On a world still being made the game's
+ * thread can take longer than a console command usually gets (Nightly 268 and 269), and an answer
+ * that comes after its session ended would be the next session's to deal with.
+ */
+const MARKED_WITHIN_MS = 60 * SECOND_MS
+
 /** How often the square is asked whether it is loaded. */
 const ASKED_EVERY_MS = SECOND_MS
 /**
@@ -210,9 +217,15 @@ export function warmingSpawn(deps: {
     return online.online > 0 ? 'players_on' : null
   }
 
+  /** `forceload add` or `remove`, answered within its own session or failed. */
+  const marking = async (target: ConsoleTarget, command: string): Promise<void> => {
+    const [answer] = await deps.console.runAll(target, [command], { commandMs: MARKED_WITHIN_MS })
+    if (!answer?.ok) throw new Error(`The console did not answer ${command}: ${answer?.error ?? 'nothing'}`)
+  }
+
   /** Takes the square off and checks it is gone: one left behind would load on every boot. */
   const takeOff = async (target: ConsoleTarget): Promise<void> => {
-    await deps.console.run(target, FORCELOAD_REMOVE)
+    await marking(target, FORCELOAD_REMOVE)
     const corners = await Promise.all(CORNERS.map((query) => deps.console.run(target, query)))
     if (corners.some(marked)) throw new Error('The spawn’s force-load is still on after taking it off')
   }
@@ -243,7 +256,7 @@ export function warmingSpawn(deps: {
         if (before === null) {
           // Said first: a later attempt takes a square off only where this was said.
           await ctx.mark(ADDING)
-          await deps.console.run(target, FORCELOAD_ADD)
+          await marking(target, FORCELOAD_ADD)
         }
         found = (await loaded(target, ctx, until)) ? 'ready' : 'unready'
       } finally {

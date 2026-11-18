@@ -14,6 +14,7 @@ import { schema } from '@blockly/db'
 import { and, eq } from 'drizzle-orm'
 import { forcedChunks, stallChunks } from '../../infra/fake/fake-minecraft/chunks.ts'
 import { hasDatabase, startHarness } from '../../testing/harness.ts'
+import type { ServerConsole } from '../ports/minecraft.ts'
 import { RuntimeRouter } from '../runtimes/router.ts'
 import { serverBinding } from './handlers/binding.ts'
 import { gameConsole } from './handlers/game-console.ts'
@@ -35,6 +36,8 @@ afterAll(async () => {
     () => undefined,
   )
 }, 30 * SECOND_MS)
+
+type FakeConsole = Pick<ServerConsole, 'run' | 'runAll'>
 
 /** The marks an operation's attempts left, in order. */
 async function marksOf(h: Awaited<ReturnType<typeof startHarness>>, operationId: string) {
@@ -62,7 +65,7 @@ async function anotherOf(h: Awaited<ReturnType<typeof startHarness>>, ctx: Opera
 }
 
 /** A server whose first boot and its warm-up are done, and the warm-up handler to run again. */
-async function warmed(options: { waitMs?: number } = {}) {
+async function warmed(options: { waitMs?: number; console?: (game: FakeConsole) => FakeConsole } = {}) {
   harness ??= startHarness()
   const h = await harness
   const created = await h.create(await h.user(), { gameVersion: '26.3' })
@@ -73,11 +76,11 @@ async function warmed(options: { waitMs?: number } = {}) {
   const game = gameConsole({ runtime, specs: h.app.specs, console: h.minecraft, access: h.app.reconciler })
   const handler = warmingSpawn({
     db: h.db,
-    console: h.minecraft,
+    console: options.console?.(h.minecraft) ?? h.minecraft,
     consoleTarget: game.consoleTarget,
     bindingOf: binding.bindingOf,
     pollMs: 0,
-    ...options,
+    waitMs: options.waitMs,
   })
   const warmOp = ops.find((op) => op.kind === 'warm_spawn')
   if (warmOp === undefined) throw new Error('A new server’s first boot queues its warm-up')
@@ -157,6 +160,27 @@ describe.skipIf(!hasDatabase)('a new world’s spawn', () => {
     expect(h.minecraft.heard(server.id).slice(before)).toContain(FORCELOAD_ADD)
     expect(forcedChunks(dir)).toEqual([])
     expect(marks).toEqual(['spawn:forced', 'spawn:unready'])
+  })
+
+  // On a world still being made the game can take longer than a command usually gets; an answer
+  // that came after its session ended would reach the next one.
+  test('gives the force-load as long as it takes to answer, in its own session', async () => {
+    const given: Array<[string, number | undefined]> = []
+    const { handler, ctx, dir } = await warmed({
+      console: (game) => ({
+        run: (target, command) => game.run(target, command),
+        runAll: (target, commands, options) => {
+          for (const command of commands) given.push([command, options?.commandMs])
+          return game.runAll(target, commands, options)
+        },
+      }),
+    })
+    await handler.run({ ...ctx, op: { ...ctx.op, id: randomUUID(), idempotencyKey: 'warm_spawn:slow' } })
+    expect(forcedChunks(dir)).toEqual([])
+    const add = given.find(([command]) => command === FORCELOAD_ADD)
+    const remove = given.find(([command]) => command === FORCELOAD_REMOVE)
+    expect(add?.[1]).toBe(60 * SECOND_MS)
+    expect(remove?.[1]).toBe(60 * SECOND_MS)
   })
 
   test('left on with the console unreadable, fails until an attempt takes it off', async () => {
