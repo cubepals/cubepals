@@ -418,7 +418,7 @@ const PACK_STEP = [
  * leaves out. Where curl can't fetch it, an image that has ImageMagick fetches it itself, as it
  * did; one without keeps the icon the server had.
  */
-const ICON_STEP = [
+export const ICON_STEP: readonly string[] = [
   'if [ -n "$ICON" ] && curl -fsSL --max-time 10 -o /tmp/blockly-icon "$ICON"; then',
   `cmp -s /tmp/blockly-icon ${DATA_DIR}/server-icon.png || install -m 644 -o 1000 -g 1000 /tmp/blockly-icon ${DATA_DIR}/server-icon.png || exit 1;`,
   'unset ICON OVERRIDE_ICON;',
