@@ -67,6 +67,9 @@ async function start(image: string): Promise<{ said: string; java: string[] }> {
   rmSync(join(root, 'java.log'), { force: true })
   const container = await docker.createContainer({
     Image: image,
+    // As whoever runs the test, not the image's root, so what the script writes is the test's own
+    // to remove, and the script runs as no server's does: without root.
+    User: `${process.getuid?.() ?? 1000}:${process.getgid?.() ?? 1000}`,
     Entrypoint: ['/bin/sh', '-c'],
     Cmd: [
       'export PATH=/t/bin:$PATH JAVA_HOME=/t BLOCKLY_START_KEY=key; cd /t/data && sh /t/start-cache --stop-duration 60s -- java -Xmx1024M -jar server.jar nogui',
