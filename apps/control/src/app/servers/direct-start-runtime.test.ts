@@ -235,7 +235,8 @@ describe('a record on a volume the server can write', () => {
 
   test('is left alone where the image runs the server as root, or keeps the volume’s owner: nothing starts at once as root', () => {
     if (!AS_ROOT) return
-    for (const env of [{ UID: '0', GID: '0' }, { SKIP_CHOWN_DATA: 'true' }]) {
+    const kept: Record<string, string>[] = [{ UID: '0', GID: '0' }, { SKIP_CHOWN_DATA: 'true' }]
+    for (const env of kept) {
       chownSync(join(root, 'data'), 0, 0)
       boot(env)
       rmSync(join(root, 'gosu.log'), { force: true })
