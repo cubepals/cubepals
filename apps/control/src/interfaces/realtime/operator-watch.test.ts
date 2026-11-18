@@ -11,11 +11,11 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { randomUUID } from 'node:crypto'
 import { createServer as listenOn } from 'node:net'
 import { type RealtimeMap, realtimeContract } from '@blockly/contracts/realtime'
-import { until } from '@blockly/contracts/waits'
+import { stays, until } from '@blockly/contracts/waits'
 import { Client } from 'transport-io'
 import { connectWebSocket } from 'transport-io/websocket-transport'
 import type { ConsoleFeed, ConsoleLine } from '../../app/console/feed.ts'
-import type { EventBus } from '../../app/ports/events.ts'
+import type { DomainEvent, EventBus } from '../../app/ports/events.ts'
 import { JoseRealtimeTickets } from '../../infra/realtime/jose-tickets.ts'
 import { mintPinnedCertificate } from '../../infra/realtime/pinned-certificate.ts'
 import { startRealtime } from './server.node.ts'
@@ -45,6 +45,8 @@ describe('an operator watching a console', () => {
   let realtime: { stop(): Promise<void> }
   let fallbackPort: number
   const tickets = new JoseRealtimeTickets('ticket-secret-0123456789abcdef', 'test')
+  /** Hands a domain event to the realtime role, as the database's NOTIFY does. */
+  let publish: (event: DomainEvent) => void = () => undefined
   /** Every check a person's watch makes; an operator's makes none of them. */
   const asked: string[] = []
   const NativeWebSocket = globalThis.WebSocket
@@ -57,7 +59,13 @@ describe('an operator watching a console', () => {
     } as typeof WebSocket
     const cert = await mintPinnedCertificate('127.0.0.1')
     fallbackPort = await freePort()
-    const events: EventBus = { publish: async () => {}, subscribe: async () => async () => {} }
+    const events: EventBus = {
+      publish: async () => {},
+      subscribe: async (handler) => {
+        publish = handler
+        return async () => {}
+      },
+    }
     const feed = {
       canWatch: async () => {
         asked.push('canWatch')
@@ -163,4 +171,26 @@ describe('an operator watching a console', () => {
       globalThis.WebSocket = PagesWebSocket
     }
   }, 20_000)
+
+  test('is sent none of the hints for the server’s owner, even about the server it watches', async () => {
+    const o = await operator()
+    const hints: string[] = []
+    o.client.on('serverChanged', ({ serverId }) => void hints.push(serverId))
+    o.client.on('presence', ({ serverId }) => void hints.push(serverId))
+    o.client.emit('watch', { serverId: WATCHED, topic: 'console', batched: true })
+    await until('the watched console', () => o.histories.length === 1, { seen: () => o.histories.join(',') })
+    publish({ type: 'server_changed', serverId: WATCHED, ownerId: 'owner-1', status: 'running', version: 2 })
+    publish({ type: 'presence', serverId: WATCHED, ownerId: 'owner-1', online: 1 })
+    await stays('no hint for the owner reaching the operator', () => hints.length === 0, 500)
+    o.client.disconnect()
+  }, 20_000)
+
+  test('can send nothing to a server: a realtime session sends only watch and unwatch', () => {
+    // A console command goes through the web's API, signed in, or the operators' own API with
+    // OPERATOR_TOKEN; no realtime session, an operator's or a person's, can send one.
+    const sent = Object.entries(realtimeContract)
+      .filter(([, event]) => (event as { from: string }).from === 'client')
+      .map(([name]) => name)
+    expect(sent.sort()).toEqual(['unwatch', 'watch'])
+  })
 })

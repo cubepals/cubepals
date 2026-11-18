@@ -108,6 +108,12 @@ describe('JoseRealtimeTickets', () => {
       expect(await tickets.verify(await signed('operator:ops-agent', { sid: 'session-1' }))).toBeNull()
     })
 
+    test('is refused past its minute, as a person’s is', async () => {
+      const ticket = await tickets.issueForOperator(OPERATOR)
+      const later = new JoseRealtimeTickets(SECRET, 'local', { now: at('2026-09-19T12:01:01Z') })
+      expect(await later.verify(ticket)).toBeNull()
+    })
+
     test('a person’s ticket never reads as an operator’s', async () => {
       expect(await tickets.verify(await tickets.issue(HOLDER))).toEqual(HOLDER)
       expect(await tickets.verify(await signed('user-1', { sid: 'session-1' }))).toEqual(HOLDER)
