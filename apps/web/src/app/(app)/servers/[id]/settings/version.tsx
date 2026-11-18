@@ -116,7 +116,7 @@ function VersionForm({
     if (lines.length > 0 && allowed.ok) setConfirming(true)
   }
   return (
-    <form onSubmit={submit}>
+    <form id="version" onSubmit={submit}>
       <FormSection
         title="Version"
         description={versionNote(view)}
