@@ -12,7 +12,7 @@ import { randomUUID } from 'node:crypto'
 import { SECOND_MS } from '@blockly/contracts/durations'
 import { schema } from '@blockly/db'
 import { and, eq } from 'drizzle-orm'
-import { forcedChunks } from '../../infra/fake/fake-minecraft/chunks.ts'
+import { forcedChunks, stallChunks } from '../../infra/fake/fake-minecraft/chunks.ts'
 import { hasDatabase, startHarness } from '../../testing/harness.ts'
 import { RuntimeRouter } from '../runtimes/router.ts'
 import { serverBinding } from './handlers/binding.ts'
@@ -107,7 +107,7 @@ describe.skipIf(!hasDatabase)('a new world’s spawn', () => {
     const heard = h.minecraft.heard(server.id)
     expect(heard.indexOf(FORCELOAD_ADD)).toBeGreaterThan(-1)
     expect(heard.indexOf(FORCELOAD_REMOVE)).toBeGreaterThan(heard.indexOf(FORCELOAD_ADD))
-    expect(heard.filter((line) => line.startsWith('execute if loaded')).length).toBeGreaterThanOrEqual(49 * 2)
+    expect(heard.filter((line) => line.startsWith('execute if loaded')).length).toBeGreaterThanOrEqual(49)
     expect(forcedChunks(dir)).toEqual([])
     expect(await marksOf(h, warm?.id ?? '')).toEqual(['spawn:forced', 'spawn:ready'])
   })
@@ -145,11 +145,14 @@ describe.skipIf(!hasDatabase)('a new world’s spawn', () => {
   })
 
   test('not loaded in time, is still taken off', async () => {
-    const { h, server, handler, ctx, marks, target, dir } = await warmed({ waitMs: 0 })
-    await h.minecraft.run(target, FORCELOAD_ADD)
-    await h.minecraft.run(target, FORCELOAD_REMOVE)
+    const { h, server, handler, ctx, marks, dir } = await warmed({ waitMs: 0 })
     const before = h.minecraft.heard(server.id).length
-    await handler.run(ctx)
+    stallChunks(dir, true)
+    try {
+      await handler.run({ ...ctx, op: { ...ctx.op, id: randomUUID(), idempotencyKey: 'warm_spawn:unready' } })
+    } finally {
+      stallChunks(dir, false)
+    }
     expect(h.minecraft.heard(server.id).slice(before)).toContain(FORCELOAD_ADD)
     expect(forcedChunks(dir)).toEqual([])
     expect(marks).toEqual(['spawn:forced', 'spawn:unready'])

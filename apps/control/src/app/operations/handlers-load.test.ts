@@ -17,7 +17,10 @@ describe.skipIf(!hasDatabase)('loading operation handlers', () => {
         const server = await h.create(owner)
         await h.until(server.id, 'running')
         const operations = await h.settled(server.id)
-        expect(operations).toEqual([expect.objectContaining({ kind: 'provision', status: 'succeeded' })])
+        expect(operations).toEqual([
+          expect.objectContaining({ kind: 'provision', status: 'succeeded' }),
+          expect.objectContaining({ kind: 'warm_spawn', status: 'succeeded' }),
+        ])
         expect(h.runtime.machine(server.id)?.state).toBe('running')
         expect((await h.app.queries.get(owner, server.id)).status).toBe('running')
       } finally {

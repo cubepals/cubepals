@@ -74,7 +74,13 @@ describe.skipIf(!hasDatabase)('server lifecycle', () => {
     await h.settled(id)
     expect((await h.server(id)).lifecycle.status).toBe('running')
     const kinds = (await h.operations(id)).map((op) => `${op.kind}:${op.status}`)
-    expect(kinds).toEqual(['provision:succeeded', 'stop:succeeded', 'start:succeeded', 'restart:succeeded'])
+    expect(kinds).toEqual([
+      'provision:succeeded',
+      'warm_spawn:succeeded',
+      'stop:succeeded',
+      'start:succeeded',
+      'restart:succeeded',
+    ])
   })
 
   test('a restart is a stop, then a start the platform can still refuse (§10)', async () => {

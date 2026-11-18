@@ -7,8 +7,8 @@
  * `execute if loaded` answer in 26.3's words (`lang-26.3.json`). The console runs at the world
  * spawn, which the fake puts at block 0, 0, so `~-48` and `-48` are the same column. Force-loaded
  * chunks are kept with the world, by its directory, across restarts, as the game saves them; a
- * forced chunk is loaded from the second time it is asked about, the first having started its
- * generation. Players' own chunks are not modelled.
+ * forced chunk is loaded at once, unless a test stalls the world's generation (`stallChunks`).
+ * Players' own chunks are not modelled.
  */
 import lang from './lang-26.3.json' with { type: 'json' }
 
@@ -23,8 +23,8 @@ function said(key: keyof typeof lang.lines, ...values: string[]): string {
 
 interface Chunks {
   forced: Set<string>
-  /** Asked about once while forced: loaded at the next ask. */
-  started: Set<string>
+  /** Generation stalled: no forced chunk loads. */
+  stalled: boolean
 }
 
 const worlds = new Map<string, Chunks>()
@@ -32,7 +32,7 @@ const worlds = new Map<string, Chunks>()
 const chunksOf = (dir: string): Chunks => {
   let chunks = worlds.get(dir)
   if (chunks === undefined) {
-    chunks = { forced: new Set(), started: new Set() }
+    chunks = { forced: new Set(), stalled: false }
     worlds.set(dir, chunks)
   }
   return chunks
@@ -70,10 +70,7 @@ function marked(chunks: Chunks, adding: boolean, square: Array<[number, number]>
   const changed = square.filter(([x, z]) => adding !== chunks.forced.has(key(x, z)))
   for (const [x, z] of changed) {
     if (adding) chunks.forced.add(key(x, z))
-    else {
-      chunks.forced.delete(key(x, z))
-      chunks.started.delete(key(x, z))
-    }
+    else chunks.forced.delete(key(x, z))
   }
   if (changed.length === 0)
     return said(adding ? 'commands.forceload.added.failure' : 'commands.forceload.removed.failure')
@@ -100,17 +97,14 @@ function forceload(chunks: Chunks, args: string[]): string {
   return marked(chunks, verb === 'add', square ?? [])
 }
 
-/** `execute if loaded <x> <y> <z>`: passed once a forced chunk has been asked about before. */
+/** `execute if loaded <x> <y> <z>`: passed for a forced chunk, unless generation is stalled. */
 function ifLoaded(chunks: Chunks, args: string[]): string {
   const [x, , z] = args
   const cx = chunkOf(x ?? '')
   const cz = chunkOf(z ?? '')
   if (cx === null || cz === null) return said('command.unknown.argument')
-  const k = key(cx, cz)
-  if (!chunks.forced.has(k)) return said('commands.execute.conditional.fail')
-  if (chunks.started.has(k)) return said('commands.execute.conditional.pass')
-  chunks.started.add(k)
-  return said('commands.execute.conditional.fail')
+  const loaded = chunks.forced.has(key(cx, cz)) && !chunks.stalled
+  return said(loaded ? 'commands.execute.conditional.pass' : 'commands.execute.conditional.fail')
 }
 
 /** The answer to a command about chunks, or null for any other command. */
@@ -119,6 +113,11 @@ export function chunks(dir: string, verb: string, args: string[]): string | null
   if (verb === 'execute' && args[0] === 'if' && args[1] === 'loaded')
     return ifLoaded(chunksOf(dir), args.slice(2))
   return null
+}
+
+/** Stalls a world's generation, so its forced chunks never load, or lets it go on. */
+export function stallChunks(dir: string, stalled: boolean): void {
+  chunksOf(dir).stalled = stalled
 }
 
 /** The chunks force-loaded in a world, as `x,z` chunk coordinates, for tests to read. */
