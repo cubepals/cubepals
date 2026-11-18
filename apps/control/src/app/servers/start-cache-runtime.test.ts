@@ -136,66 +136,6 @@ describe('a server’s Java startup cache', () => {
     expect(javaCalls()).toEqual([])
   })
 
-  test('a recording started twice and never written isn’t tried again: its Java never got to write it', () => {
-    start()
-    start()
-    expect(
-      readFileSync(data(`${CACHE}.state`), 'utf8')
-        .trim()
-        .split('\n')[2],
-    ).toBe('2')
-    // The third start runs as it is, and says so, so no stop waits for a recording.
-    expect(start()).toEqual([ran('')])
-    expect(state()).toBe('failed')
-    expect(startThenExit()).toEqual([ran('')])
-    expect(start()).toEqual([ran('')])
-    expect(javaCalls()).toEqual([])
-    // What was given up on is what ran then: another heap starts over.
-    expect(start(COMMAND.replace('-Xmx1996M', '-Xmx2996M'))[0]).toBe(RECORDING)
-  })
-
-  test('a recording begun before the count was kept counts as one', () => {
-    start()
-    const file = data(`${CACHE}.state`)
-    writeFileSync(file, readFileSync(file, 'utf8').trim().split('\n').slice(0, 2).join('\n') + '\n')
-    expect(start()).toEqual([RECORDING, recorded()])
-    expect(start()).toEqual([ran('')])
-    expect(state()).toBe('failed')
-  })
-
-  test('a machine without the memory beside its heap to write a recording runs as it is, and leaves no recording behind', () => {
-    // A 3 GB machine with a 1,996 MB heap: the kernel counts about 2.97 GB.
-    memory(2_970_000)
-    expect(start()).toEqual([ran('')])
-    expect(existsSync(data(`${CACHE}.state`))).toBe(false)
-    // One recording from before the machine was measured is given up on, not waited for.
-    memory(16 * 1024 * 1024)
-    start()
-    expect(state()).toBe('recording')
-    memory(2_900_000)
-    expect(start()).toEqual([ran('')])
-    expect(existsSync(data(`${CACHE}.state`))).toBe(false)
-    // A heap given in gigabytes is read as one, and room beside it is enough.
-    memory(4_000_000)
-    expect(start(COMMAND.replace('-Xmx1996M', '-Xmx3G'))).toEqual([ran('').replace('-Xmx1996M', '-Xmx3G')])
-    // A 4 GB machine as the kernel counts it, with a modded server's 2,662 MB heap: it has room.
-    memory(4_013_292)
-    expect(start(COMMAND.replace('-Xmx1996M', '-Xmx2662M'))[0]).toBe(RECORDING)
-    // Where the kernel's memory can't be read, or no heap is said, it records as before.
-    rmSync(join(root, 'meminfo'))
-    expect(start(COMMAND.replace('-Xmx1996M', '-Xmx2996M'))[0]).toBe(RECORDING)
-    memory(2_900_000)
-    expect(start(COMMAND.replace(' -Xmx1996M', ''))[0]).toBe(RECORDING)
-  })
-
-  test('a volume short of room leaves no recording behind either', () => {
-    start()
-    expect(state()).toBe('recording')
-    room(600_000)
-    expect(start()).toEqual([ran('')])
-    expect(existsSync(data(`${CACHE}.state`))).toBe(false)
-  })
-
   test('a recording that makes no cache isn’t tried again', () => {
     startThenExit()
     writeFileSync(join(root, 'java-fails'), '')
@@ -281,6 +221,68 @@ describe('a server’s Java startup cache', () => {
     expect(start(COMMAND.replace('./server.jar', './gone.jar'))).toEqual([
       ran('').replace('./server.jar', './gone.jar'),
     ])
+    expect(existsSync(data(`${CACHE}.state`))).toBe(false)
+  })
+})
+
+describe('a recording a server’s Java can’t write', () => {
+  test('a recording started twice and never written isn’t tried again: its Java never got to write it', () => {
+    start()
+    start()
+    expect(
+      readFileSync(data(`${CACHE}.state`), 'utf8')
+        .trim()
+        .split('\n')[2],
+    ).toBe('2')
+    // The third start runs as it is, and says so, so no stop waits for a recording.
+    expect(start()).toEqual([ran('')])
+    expect(state()).toBe('failed')
+    expect(startThenExit()).toEqual([ran('')])
+    expect(start()).toEqual([ran('')])
+    expect(javaCalls()).toEqual([])
+    // What was given up on is what ran then: another heap starts over.
+    expect(start(COMMAND.replace('-Xmx1996M', '-Xmx2996M'))[0]).toBe(RECORDING)
+  })
+
+  test('a recording begun before the count was kept counts as one', () => {
+    start()
+    const file = data(`${CACHE}.state`)
+    writeFileSync(file, readFileSync(file, 'utf8').trim().split('\n').slice(0, 2).join('\n') + '\n')
+    expect(start()).toEqual([RECORDING, recorded()])
+    expect(start()).toEqual([ran('')])
+    expect(state()).toBe('failed')
+  })
+
+  test('a machine without the memory beside its heap to write a recording runs as it is, and leaves no recording behind', () => {
+    // A 3 GB machine with a 1,996 MB heap: the kernel counts about 2.97 GB.
+    memory(2_970_000)
+    expect(start()).toEqual([ran('')])
+    expect(existsSync(data(`${CACHE}.state`))).toBe(false)
+    // One recording from before the machine was measured is given up on, not waited for.
+    memory(16 * 1024 * 1024)
+    start()
+    expect(state()).toBe('recording')
+    memory(2_900_000)
+    expect(start()).toEqual([ran('')])
+    expect(existsSync(data(`${CACHE}.state`))).toBe(false)
+    // A heap given in gigabytes is read as one, and room beside it is enough.
+    memory(4_000_000)
+    expect(start(COMMAND.replace('-Xmx1996M', '-Xmx3G'))).toEqual([ran('').replace('-Xmx1996M', '-Xmx3G')])
+    // A 4 GB machine as the kernel counts it, with a modded server's 2,662 MB heap: it has room.
+    memory(4_013_292)
+    expect(start(COMMAND.replace('-Xmx1996M', '-Xmx2662M'))[0]).toBe(RECORDING)
+    // Where the kernel's memory can't be read, or no heap is said, it records as before.
+    rmSync(join(root, 'meminfo'))
+    expect(start(COMMAND.replace('-Xmx1996M', '-Xmx2996M'))[0]).toBe(RECORDING)
+    memory(2_900_000)
+    expect(start(COMMAND.replace(' -Xmx1996M', ''))[0]).toBe(RECORDING)
+  })
+
+  test('a volume short of room leaves no recording behind either', () => {
+    start()
+    expect(state()).toBe('recording')
+    room(600_000)
+    expect(start()).toEqual([ran('')])
     expect(existsSync(data(`${CACHE}.state`))).toBe(false)
   })
 })
