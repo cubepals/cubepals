@@ -4,10 +4,11 @@
 
 import { afterEach, describe, expect, test } from 'bun:test'
 import { connect, createServer, type Server, type Socket } from 'node:net'
+import { until } from '@blockly/contracts/waits'
 import type { Queryable } from '@blockly/db'
 import type { Locks } from '../../app/ports/locks.ts'
 import { ConsoleUnavailable } from '../../app/ports/minecraft.ts'
-import { RconConsole } from './rcon.ts'
+import { RconConsole, SETTLES } from './rcon.ts'
 
 /** Locks for one process, which is all these tests need to show sessions taking turns. */
 class LocalLocks implements Locks {
@@ -70,6 +71,25 @@ function vanillaRcon(
     })
   })
   return new Promise((resolve) => server.listen(0, '127.0.0.1', () => resolve(server)))
+}
+
+/**
+ * Vanilla's own way of answering, over `vanillaRcon`: as a command arrives its connection empties
+ * the one buffer every connection shares, the command waits its turn on the game's thread, which
+ * writes its answer into that buffer, and the connection sends back what the buffer then holds.
+ */
+function sharedBuffer(run: (command: string) => Promise<string>, arrived: string[]) {
+  let buffer = ''
+  let gameThread: Promise<unknown> = Promise.resolve()
+  return (command: string) => {
+    arrived.push(command)
+    buffer = ''
+    const turn = gameThread.then(async () => {
+      buffer += await run(command)
+    })
+    gameThread = turn
+    return turn.then(() => buffer)
+  }
 }
 
 /**
@@ -245,5 +265,32 @@ describe('RconConsole', () => {
       { ok: false, error: 'The console sent an answer over 1048576 characters' },
       { ok: false, error: 'The console sent an answer over 1048576 characters' },
     ])
+  })
+})
+
+// A command the game finishes after its session gave up writes its answer into the next
+// session's, through vanilla's shared buffer, unless the next one waits for it first.
+describe('RconConsole, after a session gave up on a command', () => {
+  test('its late answer reaches no other session', async () => {
+    const ADD = 'forceload add ~-48 ~-48 ~48 ~48'
+    const arrived: string[] = []
+    let finish = () => {}
+    const finished = new Promise<void>((resolve) => {
+      finish = resolve
+    })
+    const answer = async (command: string) => {
+      if (command !== ADD) return command === 'seed' ? 'Seed: [42]' : `ran ${command}`
+      await finished
+      return 'Marked 49 chunks in minecraft:overworld, from [-3, -3] to [3, 3], to be force loaded'
+    }
+    server = await vanillaRcon('secret', sharedBuffer(answer, arrived))
+    const console = rcon()
+    await expect(console.run(target(server), ADD)).rejects.toThrow('The console stopped answering')
+    const next = console.run(target(server), 'seed')
+    // The game finishes the first command only once the next session has sent something.
+    await until('the next session to send a command', () => arrived.length > arrived.indexOf(ADD) + 1)
+    finish()
+    expect(await next).toBe('Seed: [42]')
+    expect(arrived).toEqual([SETTLES, ADD, SETTLES, 'seed'])
   })
 })
