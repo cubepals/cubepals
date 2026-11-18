@@ -10,13 +10,17 @@
  * (production-website.ts) and from outside every few minutes (site-uptime.ts).
  *
  * Production has two more public addresses, each with the answer it gives when it is well: hq
- * redirects to its sign-in (a 3xx) and rt, realtime's own TLS endpoint, answers 404 to a plain
- * request (anything under 500 shows it is reachable).
+ * redirects to its sign-in (a 3xx), and realtime, at rt, is asked over WebTransport and over its
+ * WebSocket fallback as a browser asks it, and must refuse a session with no ticket itself
+ * (realtime-check.node.ts, run with Node, since its WebTransport client is a native binding).
  *
  * Not a test of what the pages say, or of the API behind them (health.yml and the sign-in guard do
  * that): only that the sites are up.
  */
+import { spawn } from 'node:child_process'
+import { join } from 'node:path'
 import { SECOND_MS } from '@blockly/contracts/durations'
+import { REALTIME_FALLBACK_PATH } from '@blockly/contracts/realtime'
 
 /** The website's pages asked: the home page, the pricing page, sign-in and the server browser. */
 export const SITE_PAGES = ['/', '/pricing', '/sign-in', '/browse'] as const
@@ -29,6 +33,8 @@ export interface Target {
   ok: (status: number) => boolean
   /** The answer wanted, in words: "2xx or 3xx". */
   want: string
+  /** How it is asked where a plain GET isn't the question; the status, or 0 with why. */
+  ask?: () => Promise<{ status: number; error?: string }>
 }
 
 export interface Answer {
@@ -74,6 +80,46 @@ export const apiTarget = (origin: string): Target => ({
   want: '200',
 })
 
+const CHECK = join(import.meta.dir, '..', 'realtime-check.node.ts')
+/** Past the check's own limits (a handshake and a refusal, six seconds each), it is stopped. */
+const CHECK_MS = 30 * SECOND_MS
+
+/**
+ * Realtime at `host` over one transport, through realtime-check.node.ts. Up, it is the status that
+ * opens such a session, a 200 for WebTransport's CONNECT and a 101 for the WebSocket's upgrade,
+ * followed by realtime's own refusal; anything else is 0 with what was heard.
+ */
+export function realtimeTarget(transport: 'webtransport' | 'websocket', host: string): Target {
+  const status = transport === 'webtransport' ? 200 : 101
+  return {
+    name: `${host} over ${transport === 'webtransport' ? 'WebTransport' : 'WebSocket'}`,
+    url: transport === 'webtransport' ? `https://${host}/` : `wss://${host}${REALTIME_FALLBACK_PATH}`,
+    ok: (answered) => answered === status,
+    want: `a session (${status}) that realtime itself turns away`,
+    ask: () =>
+      new Promise((resolve) => {
+        const child = spawn('node', [CHECK, host, '--transport', transport], {
+          stdio: ['ignore', 'pipe', 'ignore'],
+        })
+        setTimeout(() => child.kill(), CHECK_MS).unref()
+        let out = ''
+        child.stdout.on('data', (chunk) => {
+          out += chunk
+        })
+        child.on('error', (error) => resolve({ status: 0, error: error.message }))
+        child.on('close', (code) => {
+          const line =
+            out
+              .trim()
+              .split('\n')
+              .at(-1)
+              ?.replace(/^\w+: /, '') ?? ''
+          resolve(code === 0 ? { status } : { status: 0, error: line || `the check exited ${code}` })
+        })
+      }),
+  }
+}
+
 /**
  * Production's other public addresses. They are not the website Worker, so a failure here is
  * reported but never rolled back by rolling the Worker back (site-uptime.ts).
@@ -85,18 +131,15 @@ export const PRODUCTION_OTHERS: Target[] = [
     ok: (status) => status >= 300 && status < 400,
     want: 'a redirect to sign-in (3xx)',
   },
-  {
-    name: 'rt.cubepals.com',
-    url: 'https://rt.cubepals.com/',
-    ok: (status) => status > 0 && status < 500,
-    want: 'an answer under 500 (404 when well)',
-  },
+  realtimeTarget('webtransport', 'rt.cubepals.com'),
+  realtimeTarget('websocket', 'rt.cubepals.com'),
 ]
 
 /** Each target asked once, with a timeout so a hung Worker is an answer too. */
 export async function ask(targets: readonly Target[]): Promise<Answer[]> {
   return Promise.all(
     targets.map(async (target): Promise<Answer> => {
+      if (target.ask) return { target, ...(await target.ask()) }
       try {
         const response = await fetch(target.url, {
           redirect: 'manual',

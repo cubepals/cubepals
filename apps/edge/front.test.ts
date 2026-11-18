@@ -185,6 +185,21 @@ test('a Forge client’s marker is kept, and the packets after the handshake are
   expect(behind.received[0]?.endsWith(Buffer.from(forge).toString('latin1'))).toBe(true)
 })
 
+test('a 26.4 join that followed an SRV record reaches mc-router as a join before 26.4 did, at any hostname length', async () => {
+  const { port, behind } = await frontDoor(ROOMY, false)
+  const query = `_o=${encodeURIComponent('mc.example.com:25565')}&pad=${'p'.repeat(1024)}`
+  const host = `a.play.test?${query}`.slice(0, 1024)
+  expect(readHandshake(joinRequest(host))).toEqual({ hostname: 'a.play.test', protocol: 767, joining: true })
+  await dial(port, joinRequest(host))
+  await dial(port, joinRequest('a.play.test?_o=mc.example.com%3A25565'))
+  await until('mc-router to have seen both close', () => behind.received.length === 2)
+  const clean = Buffer.from(joinRequest('a.play.test')).toString('latin1')
+  for (const got of behind.received) {
+    expect(got.endsWith(clean)).toBe(true)
+    expect(got).not.toContain('_o=')
+  }
+})
+
 test('a join from a game the server can’t take is turned away at once, and mc-router never sees it', async () => {
   const { port, behind } = await frontDoor(ROOMY, false)
   expect(await dial(port, joinRequest('arcade.play.test', 774))).toEqual(turnAway('Wrong game'))

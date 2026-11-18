@@ -1470,6 +1470,15 @@ the control plane's **internal listener**: 6PN on Fly, loopback or the compose n
   join is told "This server is busy right now · join again in a moment". Refusals are logged every
   10 s by limit and by server. mc-router's own limit stays as the machine's last guard (1,000 a
   second). The defaults are the edge's own, each overridable by its environment.
+- **Query properties in the hostname** (`apps/edge/host-query.ts`). From Minecraft 26.4 a client
+  writes `host?key=value&…` as the handshake's hostname: `_o`, the address the player typed, when
+  an SRV record led it to `host` (a player's own domain pointing at `<slug>.play.cubepals.com`);
+  `_id`, from an address typed `id@host`. The hostname may be 1024 characters. The front door cuts
+  the query off before the gate, mc-router and the server, so every reader after it sees the
+  hostname as a client before 26.4 sent it: mc-router 1.49.0 routes no hostname with a query, and
+  a later one routes on `_o`, which names no route here. `_id` goes too: the game reads it only
+  against `allowed-connection-ids`, which Cubepals never sets. `cubepals_edge_host_query_keys`
+  counts the handshakes that carried each key (`_o`, `_id`, other).
 - **A game the server can't take** is turned away at the front door, before the gate counts it
   or anything is woken (`apps/edge/clients.ts`). Each route carries `joins`: the protocol numbers
   of the clients its server takes, which the control plane works out from the release and server
