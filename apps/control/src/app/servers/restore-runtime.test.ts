@@ -78,6 +78,8 @@ beforeAll(async () => {
     fetch(request) {
       fetched += 1
       const body = served.get(new URL(request.url).pathname)
+      // An expired presigned link: the store refuses it, as S3 does, with 403.
+      if (new URL(request.url).pathname === '/expired.tgz') return new Response(null, { status: 403 })
       if (body === undefined) return new Response(null, { status: 404 })
       const range = /^bytes=(\d+)-(\d+)$/.exec(request.headers.get('range') ?? '')
       if (range === null) return new Response(body)
@@ -107,11 +109,7 @@ async function volume(): Promise<string> {
 }
 
 /** Runs the step on `data` with the archive at `name`, checked against `hash`; its exit. */
-async function start(
-  data: string,
-  name: string,
-  hash: string | null = sha256(served.get(name) ?? Buffer.alloc(0)),
-) {
+async function start(data: string, name: string, hash: string = sha256(served.get(name) ?? Buffer.alloc(0))) {
   const env = name === '' ? {} : restoreEnv(`http://127.0.0.1:${store.port}${name}`, hash)
   const script = RESTORE_STEP.replaceAll('/tmp/blockly-restore', `${data}-work`).replaceAll('/data', data)
   return Bun.spawn(['/bin/sh', '-c', script], {
@@ -183,10 +181,12 @@ describe('a world brought back in its own machine', () => {
     expect(await readFile(join(data, 'world', 'level.dat'), 'utf8')).toBe('a world already here')
   })
 
-  test('an archive with no sha256 recorded is restored unchecked; a start with no restore does nothing', async () => {
-    const unchecked = await volume()
-    expect(await start(unchecked, '/world.tgz', null)).toBe(0)
-    expect(await listed(unchecked)).toEqual([RESTORED_MARK, 'lost+found', 'server.properties', 'world'])
+  test('a link that answers no more, as an expired one, fails it as a restore; a start with no restore does nothing', async () => {
+    const expired = await volume()
+    expect(await start(expired, '/expired.tgz', sha256(served.get('/world.tgz') ?? Buffer.alloc(0)))).toBe(
+      RESTORE_FAILED_EXIT,
+    )
+    expect(await listed(expired)).toEqual([RESTORING_MARK, 'lost+found'])
     const plain = await volume()
     expect(await start(plain, '')).toBe(0)
     expect(await listed(plain)).toEqual(['lost+found'])

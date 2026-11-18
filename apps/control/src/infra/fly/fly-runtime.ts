@@ -123,6 +123,7 @@ import {
   META,
   machineConfig,
   portsOf,
+  restoreCarried,
   restoreInMachine,
   startStep,
 } from './machine-config.ts'
@@ -478,7 +479,7 @@ export class FlyRuntime implements MinecraftRuntime {
         this.snapshotLifetimeDays,
       )
       const volumeId = idOf(volume, 'a volume')
-      if (options.bootsAtOnce && ref.machineId === null)
+      if (options.bootsAtOnce && ref.machineId === null && from.sha256)
         restoring = restoreInMachine(from.download.url, from.sha256)
       else {
         await volumeReady(this.#fly, ref.app, volumeId)
@@ -693,7 +694,8 @@ export class FlyRuntime implements MinecraftRuntime {
     from: Machine | null,
     env: Readonly<Record<string, string>> = {},
   ): MachineConfig {
-    return machineConfig({ ...spec, env: { ...spec.env, ...env } }, volumeId, {
+    const restoring = { ...restoreCarried(from, volumeId), ...env }
+    return machineConfig({ ...spec, env: { ...spec.env, ...restoring } }, volumeId, {
       deployment: this.#deployment,
       server: key,
       tags: heldTags(from?.config?.metadata),

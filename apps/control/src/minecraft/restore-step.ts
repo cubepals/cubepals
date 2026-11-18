@@ -23,7 +23,7 @@ import type { RuntimeObservation } from '../app/ports/runtime.ts'
 import { ARCHIVE_INFLATER } from './archive-unpack.ts'
 import { DATA_DIR } from './jars.ts'
 
-/** `<sha256> <link>`, or `- <link>` for an archive with none recorded. Held equal to Fly's copy. */
+/** `<sha256> <link>`: every copy a world rests in has its sha256. Held equal to Fly's copy. */
 export const RESTORE_VARIABLE = 'BLOCKLY_RESTORE'
 
 /**
@@ -57,7 +57,7 @@ export const RESTORE_STEP = [
   `{ $i || : > "$w/broken"; cat > /dev/null; } |`,
   `(tar -xf - -C ${DATA_DIR} --no-same-owner --no-same-permissions || : > "$w/broken"; cat > /dev/null); wait;`,
   `else : > "$w/broken"; fi;`,
-  `if [ ! -e "$w/broken" ] && { [ "$sha" = - ] || [ "$(cat "$w/sum")" = "$sha" ]; } &&`,
+  `if [ ! -e "$w/broken" ] && [ -n "$sha" ] && [ "$(cat "$w/sum")" = "$sha" ] &&`,
   `find ${DATA_DIR} -xdev ! -type f ! -type d -exec rm -f {} + && chmod -R ug-s ${DATA_DIR} && chown 0:0 ${DATA_DIR} && sync &&`,
   `: > ${DATA_DIR}/${RESTORED_MARK} && rm -f ${DATA_DIR}/${RESTORING_MARK} && sync; then rm -rf "$w";`,
   `else find ${DATA_DIR} -mindepth 1 -maxdepth 1 ! -name ${RESTORING_MARK} ! -name lost+found -exec rm -rf {} +;`,
@@ -74,7 +74,7 @@ export function stoppedByRestore(seen: Pick<RuntimeObservation, 'exit' | 'failed
 }
 
 /** The variable the step reads, for a machine that brings its world back from `url`. */
-export function restoreEnv(url: string, sha256: string | null): Record<string, string> {
-  if (sha256 !== null && !/^[0-9a-f]{64}$/i.test(sha256)) throw new Error(`${sha256} isn't a sha256`)
-  return { [RESTORE_VARIABLE]: `${sha256?.toLowerCase() ?? '-'} ${url}` }
+export function restoreEnv(url: string, sha256: string): Record<string, string> {
+  if (!/^[0-9a-f]{64}$/i.test(sha256)) throw new Error(`${sha256} isn't a sha256`)
+  return { [RESTORE_VARIABLE]: `${sha256.toLowerCase()} ${url}` }
 }

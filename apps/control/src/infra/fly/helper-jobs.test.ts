@@ -181,6 +181,14 @@ describe.skipIf(!existsSync(SOCKET))('a helper job that writes to the volume', (
     )
   }, 120_000)
 
+  test('archives a volume its machine was to fill only once the restore’s mark is there', async () => {
+    const target = { url: 'http://127.0.0.1:9/unused', headers: {} }
+    const empty = `find /data -mindepth 1 -delete\necho level > /data/level.dat\n`
+    expect(await run(`${empty}${exportJob(target, 0, '.blockly-restored')}`, flushed)).toBe('ok unrestored')
+    const marked = `${empty}: > /data/.blockly-restored\n${exportJob(target, 0, '.blockly-restored')}`
+    expect(await run(marked, flushed)).toMatch(/^ok parts [0-9a-f]{64} \d+$/)
+  }, 120_000)
+
   test('flushes the archive it leaves for the parts, which another helper reads', async () => {
     const said = await run(noted(exportJob({ url: 'http://127.0.0.1:9/unused', headers: {} }, 0)), flushed)
     expect(said).toMatch(/^synced ok parts [0-9a-f]{64} \d+$/)
