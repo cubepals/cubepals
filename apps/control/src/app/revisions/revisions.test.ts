@@ -457,7 +457,7 @@ describe.skipIf(!hasDatabase)('revisions', () => {
     await h.app.servers.changeAddress(owner, id, server.slug)
     expect((await h.server(id)).slug).toBe(server.slug)
     await h.settled(id)
-    expect((await h.operations(id)).map((op) => op.kind)).toEqual(['provision'])
+    expect((await h.operations(id)).map((op) => op.kind)).toEqual(['provision', 'warm_spawn'])
   })
 
   test('a running server whose spec drifted is updated, but not while someone is playing', async () => {

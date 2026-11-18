@@ -115,6 +115,14 @@ export function chunks(dir: string, verb: string, args: string[]): string | null
   return null
 }
 
+/**
+ * Whether the game tells only who asked, and writes nothing to its log: `forceload query` and
+ * `execute if loaded` answer their source alone, where `forceload add` and `remove` tell admins.
+ */
+export const toSourceOnly = (verb: string, args: string[]): boolean =>
+  (verb === 'forceload' && args[0] === 'query') ||
+  (verb === 'execute' && args[0] === 'if' && args[1] === 'loaded')
+
 /** Stalls a world's generation, so its forced chunks never load, or lets it go on. */
 export function stallChunks(dir: string, stalled: boolean): void {
   chunksOf(dir).stalled = stalled

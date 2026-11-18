@@ -65,7 +65,7 @@ import {
   pardonIp,
   whitelist,
 } from './fake-minecraft/access-commands.ts'
-import { chunks } from './fake-minecraft/chunks.ts'
+import { chunks, toSourceOnly } from './fake-minecraft/chunks.ts'
 import { FakeGameRules } from './fake-minecraft/game-rules.ts'
 import {
   installJars,
@@ -515,7 +515,7 @@ export class FakeMinecraft implements FakeWorkload, ServerConsole, ReadinessProb
     const verb =
       server.env.TYPE === 'PAPER' ? named.toLowerCase().replace(/^minecraft:/, '') : named.toLowerCase()
     const answer = chunks(server.dir, verb, rest) ?? (await this.#answer(server, verb, rest, source))
-    server.log.say(`[Server thread/INFO]: [${source}: ${answer}]`)
+    if (!toSourceOnly(verb, rest)) server.log.say(`[Server thread/INFO]: [${source}: ${answer}]`)
     if (this.#unanswered?.test(input.trim())) throw new Error(`No answer to ${input.trim()}`)
     return answer
   }
