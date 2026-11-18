@@ -35,9 +35,45 @@ export interface Join {
   bytes: Uint8Array
 }
 
-/** The hostname a join dialled, as mc-router reads it: before any Forge or proxy suffix, lowercased, no root dot. */
+/**
+ * Where a handshake's hostname begins its query properties, from Minecraft 26.4
+ * (`ServerConnectionDetails.QUERY_START`): `host?_o=…&_id=…`, before any NUL.
+ */
+export const QUERY_START = '?'
+
+/**
+ * The hostname a join dialled, as routing reads it: before any Forge or proxy suffix and any query
+ * properties, lowercased, no root dot.
+ */
 export const hostnameOf = (join: Pick<Join, 'address'>): string =>
-  (join.address.split('\0')[0] ?? '').split('\\')[0]?.toLowerCase().replace(/\.$/, '') ?? ''
+  (join.address.split('\0')[0] ?? '')
+    .split('\\')[0]
+    ?.split(QUERY_START)[0]
+    ?.toLowerCase()
+    .replace(/\.$/, '') ?? ''
+
+/**
+ * `bytes` with the handshake's hostname as `change` makes it, or as they were when `change`
+ * answers null or they aren't a whole handshake. Its port and intent, and everything after the
+ * handshake packet, go on as they came.
+ */
+export function withHostname(bytes: Uint8Array, change: (host: string) => string | null): Uint8Array {
+  const length = readVarInt(bytes, 0)
+  const id = length && readVarInt(bytes, length.next)
+  const protocol = id && readVarInt(bytes, id.next)
+  const address = protocol && readVarInt(bytes, protocol.next)
+  if (!length || id?.value !== 0 || !protocol || !address) return bytes
+  const end = length.next + length.value
+  const hostEnd = address.next + address.value
+  if (end > bytes.length || hostEnd > end) return bytes
+  const host = change(new TextDecoder().decode(bytes.subarray(address.next, hostEnd)))
+  if (host === null) return bytes
+  const rewritten = packet(0, [...varInt(protocol.value), ...string(host), ...bytes.subarray(hostEnd, end)])
+  const out = new Uint8Array(rewritten.length + bytes.length - end)
+  out.set(rewritten)
+  out.set(bytes.subarray(end), rewritten.length)
+  return out
+}
 
 /** A varint at `offset`, and where the next field begins; null when the bytes end first or run on. */
 export function readVarInt(bytes: Uint8Array, offset: number): { value: number; next: number } | null {

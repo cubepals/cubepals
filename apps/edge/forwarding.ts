@@ -16,7 +16,7 @@
  * Not for routing, which reads the hostname up to the NUL (`notice.ts`).
  */
 
-import { packet, readVarInt, string, varInt } from './notice.ts'
+import { withHostname } from './notice.ts'
 
 /** The only thing after a NUL that is not forwarding: the marker a Forge client adds. */
 const FORGE_MARKER = /^\0FML\d*\0$/
@@ -27,22 +27,8 @@ const FORGE_MARKER = /^\0FML\d*\0$/
  * handshake come back as they were.
  */
 export function withoutForwarding(bytes: Uint8Array): Uint8Array {
-  const length = readVarInt(bytes, 0)
-  const id = length && readVarInt(bytes, length.next)
-  const protocol = id && readVarInt(bytes, id.next)
-  const address = protocol && readVarInt(bytes, protocol.next)
-  if (!length || id?.value !== 0 || !protocol || !address) return bytes
-  const end = length.next + length.value
-  const hostEnd = address.next + address.value
-  if (end > bytes.length || hostEnd > end) return bytes
-  const host = new TextDecoder().decode(bytes.subarray(address.next, hostEnd))
-  const nul = host.indexOf('\0')
-  if (nul === -1 || FORGE_MARKER.test(host.slice(nul))) return bytes
-  // Its port and intent follow the hostname, unchanged.
-  const fields = [...varInt(protocol.value), ...string(host.slice(0, nul)), ...bytes.subarray(hostEnd, end)]
-  const rewritten = packet(0, fields)
-  const out = new Uint8Array(rewritten.length + bytes.length - end)
-  out.set(rewritten)
-  out.set(bytes.subarray(end), rewritten.length)
-  return out
+  return withHostname(bytes, (host) => {
+    const nul = host.indexOf('\0')
+    return nul === -1 || FORGE_MARKER.test(host.slice(nul)) ? null : host.slice(0, nul)
+  })
 }

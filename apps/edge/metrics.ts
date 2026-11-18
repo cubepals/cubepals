@@ -58,6 +58,10 @@ const pollDuration = meter.createHistogram('cubepals_edge_route_poll_duration_se
 const connections = meter.createCounter('cubepals_edge_connections', {
   description: 'Connections the front door took, by edition, how their greeting ended, and why',
 })
+const queried = meter.createCounter('cubepals_edge_host_query_keys', {
+  description:
+    'Query properties a handshake carried in its hostname, from Minecraft 26.4: _o (it followed an SRV record), _id, or other',
+})
 const proxied = meter.createCounter('cubepals_edge_proxied_bytes', {
   description: 'Bytes passed between players and servers, by edition and direction',
   unit: 'By',
@@ -132,6 +136,12 @@ export function connectionEnded(
   reason = 'none',
 ) {
   connections.add(1, { edition, outcome, reason, edge_region: EDGE_REGION })
+}
+
+/** The query properties a Java handshake's hostname carried, which the front door took out (`host-query.ts`). */
+export function hostQueried(intent: 'join' | 'ping', keys: readonly string[]): void {
+  for (const key of new Set(keys.map((k) => (k === '_o' || k === '_id' ? k : 'other'))))
+    queried.add(1, { intent, key, edge_region: EDGE_REGION })
 }
 
 /** The first byte came back for a connection accepted `ms` ago. */
