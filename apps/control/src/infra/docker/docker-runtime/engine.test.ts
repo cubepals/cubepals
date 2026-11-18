@@ -230,10 +230,7 @@ test('a first provision with an install seed makes the server, copies nothing ye
   const install = { key: 'release 1', env: { TYPE: 'X' }, paths: ['server.jar', '.manifest.json'] }
   const made = `bly-${DEPLOYMENT}-install-${createHash('sha256').update(install.key).digest('hex').slice(0, 16)}`
   helper = (cmd) => (cmd[3] === 'seed' ? { code: 0, stdout: 'missing\n' } : { code: 0 })
-  let release: () => void = () => {}
-  const held = new Promise<void>((resolve) => {
-    release = resolve
-  })
+  const { promise: held, resolve: release } = Promise.withResolvers<void>()
   holdWait = (cmd) => (cmd.length === 0 ? held : undefined)
   const said = progress()
   const other = runtimeKey('1b6c6a3e-3f43-4c39-9a52-2a8a1d1b7f10')
