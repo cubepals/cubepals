@@ -54,7 +54,9 @@ export type OperationStep =
  * restore's snapshot of the world it replaces was kept, as the backup came meanwhile (`saved`).
  * `own_mods_off`: the start failed with Cubepals' own mods (the performance mods, Offline world
  * progression's mod) and came up without those it placed, which are now off for the server
- * (`boot.ts`). `host_cpu:<model>@<MHz>` and `host:<region>/<name>`:
+ * (`boot.ts`). `out_of_memory`: its server's Java was killed for want of memory as it stopped or
+ * booted (`handlers/winding-down.ts`, `boot.ts`), which the `signals` job raises.
+ * `host_cpu:<model>@<MHz>` and `host:<region>/<name>`:
  * the CPU of the host a boot ran on and which host it is, where its runtime reads them (`host-cpu.ts`).
  */
 type OperationMark =
@@ -69,6 +71,7 @@ type OperationMark =
   | 'let_in'
   | 'saved'
   | 'own_mods_off'
+  | 'out_of_memory'
   | RuntimeMark
   | SleepMark
   | ChangedMark

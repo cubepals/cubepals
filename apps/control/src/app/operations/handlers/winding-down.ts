@@ -35,6 +35,7 @@ import {
 } from '../../servers/persistence.ts'
 import type { ServerTransitions } from '../../servers/transitions.ts'
 import { clearPresence, closeInterval, followsRecording, lastActivity } from '../../servers/usage.ts'
+import { markKilled } from '../out-of-memory.ts'
 import { latestBoot } from '../persistence.ts'
 import type { OperationContext, OperationHandler, OperationResult, SleepMark } from '../runner.ts'
 import type { ServerBinding } from './binding.ts'
@@ -61,17 +62,20 @@ function refusedAtOnce(reason: StopReason, sleeps: boolean, saved: boolean): Sle
  */
 async function sleepOrStop(
   ctx: OperationContext,
-  deps: { db: Db; runtime: Pick<Runtimes, 'sleep' | 'stop'> },
+  deps: { db: Db; runtime: Pick<Runtimes, 'sleep' | 'stop' | 'observe'> },
   handle: RuntimeHandle,
   refusal: SleepMark | null,
 ): Promise<void> {
+  const asked = new Date()
   if (refusal !== null) {
     await deps.runtime.stop(handle)
-    return ctx.mark(refusal)
+    await ctx.mark(refusal)
+    return markKilled(ctx, deps.runtime, handle, asked)
   }
   const kept = (await deps.runtime.sleep(handle)) === 'suspended'
   await saveMemoryKept(deps.db, ctx.server.id, kept)
   await ctx.mark(kept ? 'slept' : 'runtime_stopped')
+  if (!kept) await markKilled(ctx, deps.runtime, handle, asked)
 }
 
 /** The stop a handler runs, as far as what it was asked for goes: whose server, and why. */
@@ -149,7 +153,7 @@ export function windingDown(deps: {
   db: Db
   runtime: Pick<
     Runtimes,
-    'stop' | 'sleeps' | 'sleep' | 'forceStop' | 'decommission' | 'destroy' | 'exec' | 'endpoint'
+    'stop' | 'sleeps' | 'sleep' | 'observe' | 'forceStop' | 'decommission' | 'destroy' | 'exec' | 'endpoint'
   >
   probe: Pick<ReadinessProbe, 'ping'>
   transitions: Pick<ServerTransitions, 'outcome' | 'enqueue'>
