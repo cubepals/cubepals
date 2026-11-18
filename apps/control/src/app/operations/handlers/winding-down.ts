@@ -35,7 +35,7 @@ import {
 } from '../../servers/persistence.ts'
 import type { ServerTransitions } from '../../servers/transitions.ts'
 import { clearPresence, closeInterval, followsRecording, lastActivity } from '../../servers/usage.ts'
-import { latestOfKind } from '../persistence.ts'
+import { latestBoot } from '../persistence.ts'
 import type { OperationContext, OperationHandler, OperationResult, SleepMark } from '../runner.ts'
 import type { ServerBinding } from './binding.ts'
 import type { GameConsole } from './game-console.ts'
@@ -82,9 +82,11 @@ type StopAsked = Pick<OperationContext['op'], 'serverId' | 'input'>
  * for a startup cache, as the cache's own state on its volume says, and the recording is only
  * written as Java exits (`minecraft/start-cache.ts`). The idle check's next pass then starts it
  * in the background (`schedules/recorded-starts.ts`), which makes the cache, and it sleeps as
- * ever. Not in the run that start began: one stop a recording, so one that is never written costs
- * a boot once, not after every sleep. And only a sleep nobody asked for (`idle`): a server its
- * owner stopped stays as they left it, asleep, and isn't started again a minute later.
+ * ever. Not while the Java that start booted still runs, however often it slept and woke since
+ * (`latestBoot`): one stop a recording, so one that is never written costs a boot once, not after
+ * every sleep, nor after every hourly refresh that resumed it. And only a sleep nobody asked for
+ * (`idle`): a server its owner stopped stays as they left it, asleep, and isn't started again a
+ * minute later.
  */
 async function recordingRefusal(
   deps: { db: Db; runtime: Pick<Runtimes, 'exec'> },
@@ -92,8 +94,8 @@ async function recordingRefusal(
   handle: RuntimeHandle,
 ): Promise<SleepMark | null> {
   if (stop.input.reason !== ('idle' satisfies StopReason)) return null
-  const began = await latestOfKind(deps.db, stop.serverId, 'start')
-  if (began !== null && followsRecording(began)) return null
+  const booted = await latestBoot(deps.db, stop.serverId)
+  if (booted !== null && followsRecording(booted)) return null
   const state = await deps.runtime.exec(handle, ['sed', '-n', '2p', CACHE_STATE], 30).catch(() => null)
   return state?.exitCode === 0 && state.stdout.trim() === RECORDS ? 'recording' : null
 }

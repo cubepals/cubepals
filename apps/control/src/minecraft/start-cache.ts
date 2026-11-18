@@ -28,8 +28,9 @@
  *
  * - `start.aot`, the cache;
  * - `start.aot.conf`, a recording not yet made into one;
- * - `start.aot.state`, what they were made for and how far that got: `recording`, `made`, or
- *   `failed` where a recording made no cache, which isn't tried again.
+ * - `start.aot.state`, what they were made for and how far that got: `recording`, with how many
+ *   recordings it has started; `made`; or `failed` where a recording made no cache, or was started
+ *   twice and never written, which isn't tried again.
  *
  * What they were made for is the Java that runs, its options and the jar it starts: another of
  * any, a new loader or a heap of another size, starts over. Java checks a cache against what it
@@ -44,8 +45,9 @@
  * `app/operations/handlers/winding-down.ts`), and the server is then started in the background,
  * which makes the cache with nobody waiting, and sleeps as ever
  * (`app/operations/schedules/recorded-starts.ts`). Only a command of the shape `java … -jar …` is
- * given a cache, and only with room for it on the volume; one already made gives way when the
- * volume runs short. Everything here runs as the server's own user, on files that user can
+ * given a cache, and only with room for it on the volume and in the machine's memory beside the
+ * heap (`SPARE_KB`); one already made gives way when the volume runs short. A start that won't
+ * record leaves no `recording` behind it, so no stop waits for a recording that isn't being made. Everything here runs as the server's own user, on files that user can
  * write: nothing of it is read as root.
  *
  * Not for whether the image's scripts run (`direct-start.ts`).
@@ -86,6 +88,21 @@ const ROOM_KB = 1024 * 1024
 const TIGHT_KB = 256 * 1024
 
 /**
+ * The memory a machine has to have beside the heap (`-Xmx`) for its Java to record a start, in
+ * kilobytes. Java writes the recording as it exits, and that takes memory the running server
+ * doesn't: measured on Paper 26.3 with a 2,048 MB heap and Aikar's flags, about 450 MB above the
+ * heap while it runs and 440 MB more as it writes the recording. The kernel's own count of a
+ * machine's memory is about 180 MB under its size (4,013,292 kB on a 4 GB machine): on production's
+ * 3 GB machines with a 2,048 MB heap, which leaves about 880 MB, every such exit was killed for
+ * want of memory and nothing was written; a 4 GB machine with a 2,662 MB heap, about 1,257 MB
+ * beside it, wrote its recording and made its cache.
+ */
+const SPARE_KB = 1024 * 1024
+
+/** The recordings a start may begin for what it runs before one never written is given up on. */
+const TRIES = 2
+
+/**
  * The script, line by line. Its words are the runner's own, then `--`, `java`, Java's options,
  * `-jar`, the jar, and the server's own. `with` runs them with more options put after `java`;
  * `make` writes the cache from the recording, with Java's options as the server has them but the
@@ -115,8 +132,16 @@ export const CACHED_RUNNER_LINES = [
   'if make "$@" && [ -s $cache.new ] && mv -f $cache.new $cache && printf "%s\\n" "$fp" made > $state; then rm -f $conf; with "-XX:AOTCache=$cache" "$@"; fi',
   'rm -f $conf $cache $cache.new; printf "%s\\n" "$fp" failed > $state; plain "$@"',
   'fi',
-  `[ "$room" -ge ${ROOM_KB} ] || plain "$@"`,
-  `rm -f $conf $cache $cache.new; printf "%s\\n" "$fp" ${RECORDS} > $state || plain "$@"`,
+  // The recordings started for what runs now, this one counted: one still `recording` here was never written.
+  `tries=1; if [ "$phase" = ${RECORDS} ]; then tries=$(sed -n 3p $state); case "$tries" in ""|*[!0-9]*) tries=1;; esac; tries=$((tries + 1)); fi`,
+  `if [ "$tries" -gt ${TRIES} ]; then rm -f $conf $cache $cache.new; printf "%s\\n" "$fp" failed > $state; plain "$@"; fi`,
+  // The heap Java is given, in kilobytes, and the machine's memory: a heap not said is Java's own share, which leaves room.
+  'heap=; n=0; for w; do n=$((n + 1)); if [ $n -gt $at ] && [ $n -lt $jar ]; then case "$w" in -Xmx*) heap=${w#-Xmx};; esac; fi; done',
+  'case "$heap" in *[gG]) heap=$((${heap%?} * 1048576));; *[mM]) heap=$((${heap%?} * 1024));; *[kK]) heap=${heap%?};; *[!0-9]*) heap=;; ?*) heap=$((heap / 1024));; esac',
+  'memory=$(awk "/^MemTotal:/ { print \\$2 }" /proc/meminfo 2>/dev/null)',
+  `fits=1; case "$heap$memory" in *[!0-9]*) ;; *) if [ -n "$heap" ] && [ -n "$memory" ] && [ $((memory - heap)) -lt ${SPARE_KB} ]; then fits=; fi;; esac`,
+  `if [ "$room" -lt ${ROOM_KB} ] || [ -z "$fits" ]; then rm -f $conf $cache $cache.new $state; plain "$@"; fi`,
+  `rm -f $conf $cache $cache.new; printf "%s\\n" "$fp" ${RECORDS} "$tries" > $state || plain "$@"`,
   `echo "${RECORDING}"`,
   'with "-XX:AOTMode=record -XX:AOTConfiguration=$conf" "$@"',
 ]
