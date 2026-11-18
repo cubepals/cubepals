@@ -129,7 +129,13 @@ bun scripts/production.ts apply
    taken, have Geyser bound before the next one goes. `EDGE_CORDON=1` also cordons the region first while another is
    ready, so no new join arrives while it drains; it is off because on staging a cordoned region
    made the other region fail joins.
-5. It deploys the website's build, live when it returns, and once the site answers pushes the
+5. It builds the server image (`images/minecraft-server/Dockerfile`) for each Java a server runs
+   and pushes it to `bly-prod-control`'s repository in Fly's registry, tagged
+   `server-java<N>-<hash>` by the Dockerfile and its arguments. A tag already in the registry is
+   only asked for, about a second for all four; a new one is built by Fly's remote builder, about
+   half a minute to a minute each. No server runs these images until one is pinned to them, so a
+   build that fails is said and the deploy goes on (`production-server-images.ts`).
+6. It deploys the website's build, live when it returns, and once the site answers pushes the
    commit as the `production` branch.
 
 `apply` can be run again at any time: it changes only what differs. It's also how a value changes
