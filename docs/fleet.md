@@ -405,12 +405,13 @@ region data packing is the bottleneck (73 MB/s single-threaded on the test VM).
 
 **zstd, readers first.** The application's readers take an archive in zstd as well as gzip, told
 apart by its first bytes (`1f8b`, `28b52ffd`; `minecraft/archive-unpack.ts` for the shell's,
-`infra/formats/archive-codec.ts` for Node's): the Docker, Boat and fake runtimes' restores, the
-copy of worlds back into a running server, the reads of an archive's files and a player's
-download, which stays a `.tar.gz` made from either. zstd packs 5-8 times as fast and unpacks about
+`infra/formats/archive-codec.ts` for Node's): the Fly, Docker, Boat and fake runtimes' restores,
+the copy of worlds back into a running server, the reads of an archive's files and a player's
+download, which stays a `.tar.gz` made from either. Fly's restore helper reads the first bytes
+with a ranged request before it streams the rest. zstd packs 5-8 times as fast and unpacks about
 twelve times as fast, at the same size. No writer packs zstd yet, and none may until every reader
-takes it: Fly's restore helper next, then blocklyd's restore of an application archive, which reads
-gzip only. A server moved from Fly to the fleet would otherwise fail its restore.
+takes it: blocklyd's restore of an application archive still reads gzip only, and a server moved
+from Fly to the fleet would otherwise fail its restore.
 
 **ZFS** was evaluated as the snapshot layer (`zfs snapshot` + `zfs send` streams). It is not used:
 it needs an out-of-tree kernel module on every node, and the test environment's kernel has none
