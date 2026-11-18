@@ -109,6 +109,8 @@ export const SIGNAL_KINDS = [
   'wake_booted',
   'slow_operation',
   'retried_operation',
+  'out_of_memory',
+  'background_boots',
 ] as const
 export type SignalKind = (typeof SIGNAL_KINDS)[number]
 
@@ -177,6 +179,16 @@ export const SignalsConfig = z.object({
     .optional(),
   /** An operation that took more than one attempt, with its last error. */
   retriedOperation: On.optional(),
+  /**
+   * A server's Java killed for want of memory: while it ran, as it booted, or as it stopped, which
+   * is no crash and nothing else says.
+   */
+  outOfMemory: On.optional(),
+  /**
+   * A server booted in the background so many times in a day (keep-ready refreshes, starts after
+   * a startup recording) with nobody joining it in that day.
+   */
+  backgroundBoots: z.object({ perServerPerDay: Figure.optional() }).optional(),
   /**
    * Which kinds of signal are emailed to the admin inbox as they are raised, in one digest a pass,
    * each signal once (`app/platform/alerts.ts`). Absent or empty, none.

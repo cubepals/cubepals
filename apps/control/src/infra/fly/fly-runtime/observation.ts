@@ -90,13 +90,14 @@ export function observationOf(machine: Machine | null, now = new Date()): Runtim
   if (machine.host_status === 'unreachable') return { state: 'unknown', at: now, hostLost: true }
   const state = stateOf(machine.state)
   const exit = lastExit(machine)
+  const killed = exit?.oom && exit.at > 0 ? { killedForMemoryAt: new Date(exit.at) } : {}
   if (state === 'stopped' && exit && !exit.requested && (exit.code !== 0 || exit.oom)) {
     // When it exited, as Fly recorded it: a crashed run's play time ends then, not when looked at.
     const exited = exit.at > 0 && exit.at <= now.getTime() ? new Date(exit.at) : now
-    return { state: 'crashed', at: exited, exit: { code: exit.code, oom: exit.oom } }
+    return { state: 'crashed', at: exited, exit: { code: exit.code, oom: exit.oom }, ...killed }
   }
   // The restart policy (on-failure) starts it again after a failed exit, and the event stays.
   if (state !== 'stopped' && exit && !exit.requested && (exit.code !== 0 || exit.oom) && exit.at > 0)
-    return { state, at: now, failedAt: new Date(exit.at) }
-  return { state, at: now }
+    return { state, at: now, failedAt: new Date(exit.at), ...killed }
+  return { state, at: now, ...killed }
 }

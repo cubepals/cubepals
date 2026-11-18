@@ -128,6 +128,11 @@ export interface RuntimeObservation {
   at: Date
   exit?: { code: number; oom: boolean }
   /**
+   * When its last run was killed for want of memory, where the provider says: on its own, which
+   * `exit` says too, or in a stop that was asked for, which `exit` leaves out since nothing crashed.
+   */
+  killedForMemoryAt?: Date
+  /**
    * When it last stopped on its own, failing, where the provider started it again rather than
    * leave it stopped: the same configuration, which usually stops the same way.
    */

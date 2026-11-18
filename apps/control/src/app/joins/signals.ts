@@ -7,7 +7,8 @@
  * and each one found is raised once (`signals`, unique by key), with the server's and the player's
  * names, the address, the figure and its limit. Kinds judged from joins alone are
  * `signal-kinds.ts`'s; those judged from how operations went are `operation-signals.ts`'s; those
- * that read wakes, the platform's hour or a server's boot report are here. A signal left open a day is closed as expired.
+ * those about machines nobody saw (a kill for memory, boots in the background) are
+ * `machine-signals.ts`'s; those that read wakes, the platform's hour or a server's boot report are here. A signal left open a day is closed as expired.
  * A `dropped` signal also keeps what the provider's proxy said around it, where the deployment can
  * read that (`provider-said.ts`).
  *
@@ -21,6 +22,7 @@ import { and, count, eq, gt, inArray, isNotNull, isNull, lt, lte, sql } from 'dr
 import type { LogSource } from '../ports/platform.ts'
 import type { RuntimeHandle } from '../ports/runtime.ts'
 import { tuning } from '../tuning.ts'
+import { machineSignals } from './machine-signals.ts'
 import { operationSignals } from './operation-signals.ts'
 import { providerSaid } from './provider-said.ts'
 import { dropped, fromJoins, type JoinRow, type Raised, watched } from './signal-kinds.ts'
@@ -82,6 +84,7 @@ export async function raiseSignals(
     ...(await platformCrowd(db, config, now)),
     ...(await legacyLoginListeners(db, config, now)),
     ...(await operationSignals(db, config, now)),
+    ...(await machineSignals(db, config, now)),
   ]
   if (raised.length === 0) return 0
   const written = await db

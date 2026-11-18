@@ -44,6 +44,7 @@ import type { LogLine, LogSource } from '../ports/platform.ts'
 import type { RuntimeHandle } from '../ports/runtime.ts'
 import type { Runtimes } from '../runtimes/router.ts'
 import { type HostNotes, noteHostCpu } from './host-cpu.ts'
+import { markKilled } from './out-of-memory.ts'
 import { Resume } from './resume.ts'
 import { NoLongerApplies, type OperationContext } from './runner.ts'
 
@@ -567,6 +568,8 @@ export class BootSequence {
         () => crashReports,
         ready,
       )
+    } catch (error) {
+      throw await markKilled(ctx, this.#runtime, handle, started).then(() => error)
     } finally {
       reading.abort()
       await following

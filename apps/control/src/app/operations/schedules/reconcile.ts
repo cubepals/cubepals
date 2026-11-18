@@ -23,6 +23,7 @@ import {
 } from '../../servers/persistence.ts'
 import type { ServerTransitions } from '../../servers/transitions.ts'
 import { clearPresence, closeInterval, openIntervalStart } from '../../servers/usage.ts'
+import { keepKilledWhileRunning } from '../out-of-memory.ts'
 import { activeOperation } from '../persistence.ts'
 import { observedJson, recordHostLost } from './observations.ts'
 
@@ -145,6 +146,7 @@ export function reconciling(deps: {
       await closeInterval(tx, serverId, new Date(Math.max(now.at.getTime(), began)))
       await clearPresence(tx, serverId)
       await transitions.outcome(tx, locked, { type: 'crashed' })
+      if (now.exit?.oom) await keepKilledWhileRunning(tx, serverId, now.at)
     })
     return true
   }

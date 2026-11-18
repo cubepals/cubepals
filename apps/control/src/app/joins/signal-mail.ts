@@ -25,9 +25,20 @@ const providerSaid = (lines: readonly unknown[]): string =>
     ? 'the provider’s proxy said nothing'
     : `the provider’s proxy said: ${String((lines.at(-1) as { said?: unknown }).said).slice(0, 200)}`
 
+/** When a Java was killed for want of memory (`out_of_memory`), in words. */
+const KILLED: Readonly<Record<string, string>> = {
+  play: 'killed while it ran',
+  boot: 'killed as it booted',
+  stop: 'killed as it stopped',
+}
+
+/** When a Java was killed for want of memory, where the signal says. */
+const killedWhen = (during: unknown): string[] =>
+  typeof during === 'string' ? [KILLED[during] ?? `killed during ${during}`] : []
+
 /** What a signal found, in a line: its figures, and why where it says. */
 function said(detail: Record<string, unknown>): string {
-  const parts: string[] = []
+  const parts = killedWhen(detail.during)
   const { figure, limit, reasons, changed, operationKind, attempts, error, player, seconds, provider } =
     detail
   if (operationKind !== undefined) parts.push(String(operationKind))

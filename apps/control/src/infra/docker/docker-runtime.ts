@@ -578,8 +578,14 @@ function observation(info: Docker.ContainerInspectInfo | null): RuntimeObservati
   if (state.Restarting) return { state: 'starting', at }
   if (state.Status === 'created') return { state: 'stopped', at }
   const exit = { code: state.ExitCode, oom: state.OOMKilled }
+  const killed = state.OOMKilled ? { killedForMemoryAt: at } : {}
   // Exit code 0 after a stop request is a clean stop; anything else crashed.
-  return { state: state.ExitCode === 0 || state.ExitCode === 143 ? 'stopped' : 'crashed', at, exit }
+  return {
+    state: state.ExitCode === 0 || state.ExitCode === 143 ? 'stopped' : 'crashed',
+    at,
+    exit,
+    ...killed,
+  }
 }
 
 /** When the container last started or stopped, as the daemon recorded it; never is year 1. */

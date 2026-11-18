@@ -25,6 +25,8 @@ const KINDS: Record<string, string> = {
   slow_tick: 'Slow tick',
   legacy_login_listener: 'Plugin listening at login',
   dropped: 'Dropped between the player and the edge',
+  out_of_memory: 'Killed for want of memory',
+  background_boots: 'Booted in the background, nobody joined',
 }
 
 const kindOf = (kind: string) => KINDS[kind] ?? kind
