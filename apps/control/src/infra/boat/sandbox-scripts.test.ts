@@ -296,4 +296,9 @@ describe('the workload’s container', () => {
       { Type: 'volume', Source: 'blockly-data', Target: '/data', VolumeOptions: { NoCopy: true } },
     ])
   })
+
+  // The image's mc-health runs as root and sources /data/.mc-health.env, which a mod can write.
+  test('never runs the image’s own health check', () => {
+    expect(workloadConfig(spec, 'server').Healthcheck).toEqual({ Test: ['NONE'] })
+  })
 })

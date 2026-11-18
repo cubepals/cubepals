@@ -321,6 +321,12 @@ export const specDigest = ({ resumesOn: _resumesOn, ...spec }: RuntimeSpec) =>
   createHash('sha256').update(JSON.stringify(spec)).digest('hex').slice(0, 32)
 
 /**
+ * The healthcheck test that turns off the one an image declares (Docker Engine API,
+ * `HealthConfig.Test`: `["NONE"]` disables the image's healthcheck).
+ */
+const NO_HEALTH_CHECK = ['NONE']
+
+/**
  * A RuntimeSpec as the Docker Engine API's create body, as DockerRuntime makes its containers:
  * only ports the edge reaches are published, so a console port never leaves the container. It
  * restarts unless Blockly stopped it, so a sandbox that went down and came back runs its server
@@ -342,6 +348,10 @@ export function workloadConfig(spec: RuntimeSpec, serverId: string): Record<stri
     ExposedPorts: exposed,
     StopSignal: spec.stop.signal,
     StopTimeout: spec.stop.timeoutSeconds,
+    // The image's own check stays off: Blockly's status ping says whether a server answers, and
+    // nothing reads Docker's verdict. itzg's `mc-health` runs as root here every 30 s and sources
+    // `/data/.mc-health.env`, a file the server's mods can write.
+    Healthcheck: { Test: NO_HEALTH_CHECK },
     HostConfig: {
       // A new volume stays root's, as a new Fly volume is, rather than taking the image's /data
       // with its uid: the image hands /data to its user only when its owner isn't that user, and
