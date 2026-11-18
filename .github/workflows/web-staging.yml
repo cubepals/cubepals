@@ -62,8 +62,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          current=$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)
-          status=$(gh api "repos/$GITHUB_REPOSITORY/compare/$GITHUB_SHA...$current" --jq .status || true)
+          # GitHub's API can time out from a runner: each call is tried three times.
+          gh_api() { for wait in 5 15 0; do gh api "$@" && return; [ "$wait" = 0 ] && return 1; sleep "$wait"; done; }
+          current=$(gh_api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)
+          status=$(gh_api "repos/$GITHUB_REPOSITORY/compare/$GITHUB_SHA...$current" --jq .status || true)
           if [ "$status" = ahead ]; then
             echo "::notice::A newer push to main deploys the website."
             echo "stale=true" >> "$GITHUB_OUTPUT"
@@ -124,8 +126,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           CAN_UPLOAD: ${{ secrets.CLOUDFLARE_WORKERS_API_TOKEN != '' && secrets.CLOUDFLARE_ACCOUNT_ID != '' }}
         run: |
-          read -r current state < <(gh api "repos/$REPO/pulls/$PULL" --jq '"\(.head.sha) \(.state)"')
-          status=$(gh api "repos/$REPO/compare/$SHA...$current" --jq .status || true)
+          # GitHub's API can time out from a runner: each call is tried three times.
+          gh_api() { for wait in 5 15 0; do gh api "$@" && return; [ "$wait" = 0 ] && return 1; sleep "$wait"; done; }
+          # Read first, so a call that still fails ends the step rather than reading as a closed pull request.
+          pull=$(gh_api "repos/$REPO/pulls/$PULL" --jq '"\(.head.sha) \(.state)"')
+          read -r current state <<< "$pull"
+          status=$(gh_api "repos/$REPO/compare/$SHA...$current" --jq .status || true)
           if [ "$state" != open ]; then
             # The closed pull request's preview is forgotten by the origins job; adding it again would undo that.
             echo "run=false" >> "$GITHUB_OUTPUT"
@@ -199,8 +205,12 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          read -r current state < <(gh api "repos/$REPO/pulls/$PULL" --jq '"\(.head.sha) \(.state)"')
-          status=$(gh api "repos/$REPO/compare/$SHA...$current" --jq .status || true)
+          # GitHub's API can time out from a runner: each call is tried three times.
+          gh_api() { for wait in 5 15 0; do gh api "$@" && return; [ "$wait" = 0 ] && return 1; sleep "$wait"; done; }
+          # Read first, so a call that still fails ends the step rather than reading as a closed pull request.
+          pull=$(gh_api "repos/$REPO/pulls/$PULL" --jq '"\(.head.sha) \(.state)"')
+          read -r current state <<< "$pull"
+          status=$(gh_api "repos/$REPO/compare/$SHA...$current" --jq .status || true)
           if [ "$state" = open ] && [ "$status" != ahead ]; then echo "current=true" >> "$GITHUB_OUTPUT"; fi
       - name: Say how it went
         if: ${{ steps.fresh.outputs.current == 'true' }}
@@ -227,8 +237,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           URL: ${{ steps.upload.outputs.commit_url }}
         run: |
+          # GitHub's API can time out from a runner: each call is tried three times.
+          gh_api() { for wait in 5 15 0; do gh api "$@" && return; [ "$wait" = 0 ] && return 1; sleep "$wait"; done; }
           if bun .preview-tools/scripts/site-check.ts "$URL" 180 --proof; then
-            gh api --silent "repos/$REPO/statuses/$SHA" -f state=success -f "context=Website preview answers" \
+            gh_api --silent "repos/$REPO/statuses/$SHA" -f state=success -f "context=Website preview answers" \
               -f "description=/, /pricing, /sign-in, /browse and /_next/image answer 200" -f "target_url=$URL"
           else
             echo "::warning::The preview didn't answer 200 everywhere, so Deploy production's website route won't take this commit."
