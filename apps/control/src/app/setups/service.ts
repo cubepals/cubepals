@@ -22,6 +22,7 @@ import {
   offeredVersions,
   oldestReleaseOn,
   packRuns,
+  plainOnPaper,
   supports,
 } from '../../minecraft/versions.ts'
 import type { Actor } from '../actor.ts'
@@ -410,7 +411,7 @@ export class SetupService {
     }
     // Plain Minecraft lands on the newest release Cubepals runs it on Paper on, where Bedrock
     // friends join it (`runsOnPaper`); a newer one, on Mojang's own server, only when asked for.
-    const onPaper = (id: string) => setup.loader === 'vanilla' && supports(id, 'paper')
+    const onPaper = (id: string) => setup.loader === 'vanilla' && plainOnPaper(id)
     const versions =
       setup.gameVersion === ''
         ? offeredVersions()

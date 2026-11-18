@@ -57,9 +57,17 @@ describe.skipIf(!hasDatabase)('plain Minecraft on Paper', () => {
     await h.until(survival.id, 'running')
     await h.settled(survival.id)
     expect(env(survival.id)).toMatchObject({ TYPE: 'PAPER', PAPER_BUILD: '60' })
-    // Cubepals offers no Paper on 26.3: Mojang's own server, as before.
+    // Plain 26.3 stays on Mojang's own server, though Cubepals offers Paper on it.
     const newest = await h.create(await h.user('Robin', 'plus'), { name: 'Newest', gameVersion: '26.3' })
     expect((await desired(newest.id)).loaderVersion).toBeNull()
+  }, 60_000)
+
+  test('a Paper server is made on 26.3, with Paper’s build', async () => {
+    const made = await h.create(await h.user('Sky', 'plus'), { loader: 'paper', gameVersion: '26.3' })
+    expect(await desired(made.id)).toMatchObject({ loader: 'paper', gameVersion: '26.3', loaderVersion: '60' })
+    await h.until(made.id, 'running')
+    await h.settled(made.id)
+    expect(env(made.id)).toMatchObject({ TYPE: 'PAPER', VERSION: '26.3', PAPER_BUILD: '60' })
   }, 60_000)
 
   test('a Paper build list that is down makes the server on Mojang’s own, never refuses it', async () => {
@@ -111,7 +119,7 @@ describe.skipIf(!hasDatabase)('plain Minecraft on Paper', () => {
     expect(env(id).TYPE).toBe('VANILLA')
   }, 60_000)
 
-  test('a world on Paper moving to a release Paper has no build for runs on Mojang’s own', async () => {
+  test('a world on Paper moving to a release whose plain servers run on Mojang’s own runs on it', async () => {
     const owner = await h.user('Jo', 'plus')
     const { id } = await h.create(owner, { name: 'Ahead', gameVersion: '26.2' })
     await h.until(id, 'running')

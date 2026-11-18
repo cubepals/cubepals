@@ -34,6 +34,7 @@ import {
   isRelease,
   notOffered,
   packRuns,
+  plainOnPaper,
   supports,
 } from '../../minecraft/versions.ts'
 import { loadStanding } from '../accounts/persistence.ts'
@@ -272,7 +273,8 @@ export function newJoins(
 
 /**
  * Whether a new server runs plain Minecraft on Paper, as `firstPin` decides it, before any build list
- * is read: one made from nothing or a template where Cubepals offers Paper for its release, and a
+ * is read: one made from nothing or a template where plain Minecraft runs on Paper on its release
+ * (`plainOnPaper`), and a
  * copy where the server it copies ran on Paper.
  */
 function startsOnPaper(
@@ -285,7 +287,7 @@ function startsOnPaper(
   if (chosen.setup.loaderVersion !== null) return true
   return (
     (from === undefined || from.kind === 'template' || from.kind === 'world') &&
-    supports(chosen.gameVersion, 'paper')
+    plainOnPaper(chosen.gameVersion)
   )
 }
 

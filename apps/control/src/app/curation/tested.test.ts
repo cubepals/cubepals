@@ -123,7 +123,7 @@ describe('tested versions', () => {
         key: 'bentobox',
         title: 'bentobox',
         loaderLabel: 'Paper',
-        newest: '26.2',
+        newest: '26.3',
         status: 'current',
         behind: [],
         tested: [],
@@ -132,7 +132,7 @@ describe('tested versions', () => {
         key: 'oneblock',
         title: 'oneblock',
         loaderLabel: 'Paper',
-        newest: '26.2',
+        newest: '26.3',
         status: 'lagging',
         behind: [
           { name: 'AOneBlock', newestListed: '26.1.2' },
@@ -141,15 +141,24 @@ describe('tested versions', () => {
         tested: [],
       },
     ])
-    const covered = await compatibilityView(catalog, templates, TESTED)
+    // The boot test's records are for 26.2: on the newest Paper, 26.3, they cover nothing yet.
+    expect((await compatibilityView(catalog, templates, TESTED)).templates[1]).toMatchObject({
+      status: 'lagging',
+      tested: [],
+    })
+    const on26_3 = TESTED.filter((record) => record.gameVersion === '26.2').map((record) => ({
+      ...record,
+      gameVersion: '26.3',
+    }))
+    const covered = await compatibilityView(catalog, templates, on26_3)
     expect(covered.templates[1]).toMatchObject({ status: 'covered', behind: [] })
     expect(covered.templates[1]?.tested.map((r) => [r.name, r.gameVersion, r.testedOn])).toEqual([
-      ['AOneBlock', '26.2', '2026-10-09'],
-      ['Level', '26.2', '2026-10-09'],
+      ['AOneBlock', '26.3', '2026-10-09'],
+      ['Level', '26.3', '2026-10-09'],
     ])
-    expect(covered.tested).toHaveLength(TESTED.length)
+    expect(covered.tested).toHaveLength(on26_3.length)
     // A record for one addon leaves the other holding the template back.
-    const one = TESTED.filter((r) => r.name === 'Level')
+    const one = on26_3.filter((r) => r.name === 'Level')
     expect((await compatibilityView(catalog, templates, one)).templates[1]).toMatchObject({
       status: 'lagging',
       behind: [{ name: 'AOneBlock', newestListed: '26.1.2' }],
