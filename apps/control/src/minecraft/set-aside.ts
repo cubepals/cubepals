@@ -96,8 +96,10 @@ export function stillKept(files: readonly Aside[], level: string): string[] {
 }
 
 /**
- * The step: each `aside` file still where it was is moved into the kept folder, replacing an
- * earlier copy of the same path; each `back` file is moved back where nothing has taken its place.
+ * The step: each `aside` file still where it was is moved into the kept folder, unless a copy of
+ * that path is kept there already: one a put back couldn't return, because something new took its
+ * place, is the owner's to get back, and is never overwritten. Each `back` file is moved back where
+ * nothing has taken its place.
  * A line that isn't one `setAsideEnv` writes is passed over. It runs as root, after Blockly's own
  * steps have placed what they place, and before the image starts.
  */
@@ -106,8 +108,8 @@ export const SET_ASIDE_STEP = [
   `case "$p" in ''|/*|*..*|.*|*/.*|*[!A-Za-z0-9._+/-]*) continue;; esac;`,
   'case "$where" in world) rel="$LEVEL/$p";; server) rel="$p";; *) continue;; esac;',
   `kept="${ASIDE_DIR}/$rel"; unlinked "$rel"; unlinked "$kept";`,
-  `if [ "$how" = aside ] && [ -e "${DATA_DIR}/$rel" ]; then mkdir -p "$(dirname "${DATA_DIR}/$kept")";`,
-  `rm -rf -- "${DATA_DIR}/$kept"; mv -T "${DATA_DIR}/$rel" "${DATA_DIR}/$kept" && echo "[cubepals] Set aside $rel" >&2;`,
+  `if [ "$how" = aside ] && [ -e "${DATA_DIR}/$rel" ] && [ ! -e "${DATA_DIR}/$kept" ]; then`,
+  `mkdir -p "$(dirname "${DATA_DIR}/$kept")"; mv -T "${DATA_DIR}/$rel" "${DATA_DIR}/$kept" && echo "[cubepals] Set aside $rel" >&2;`,
   `elif [ "$how" = back ] && [ -e "${DATA_DIR}/$kept" ] && [ ! -e "${DATA_DIR}/$rel" ]; then`,
   `mkdir -p "$(dirname "${DATA_DIR}/$rel")"; mv -T "${DATA_DIR}/$kept" "${DATA_DIR}/$rel" && echo "[cubepals] Put back $rel" >&2; fi;`,
   'done;',

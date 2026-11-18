@@ -59,6 +59,10 @@ describe('setting a file aside, a copy kept', () => {
     await run('back server mods/jei.jar')
     expect(await read('mods/jei.jar')).toBe('new copy')
     expect(await read('.blockly-set-aside/mods/jei.jar')).toBe('old copy')
+    // The next start still sets it aside, but never over the copy its owner wants back.
+    await run('aside server mods/jei.jar')
+    expect(await read('.blockly-set-aside/mods/jei.jar')).toBe('old copy')
+    expect(await read('mods/jei.jar')).toBe('new copy')
   })
 
   test('what is still kept after a put back is read from the volume', async () => {
