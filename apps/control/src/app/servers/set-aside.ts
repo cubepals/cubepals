@@ -9,22 +9,20 @@
  * (`minecraft/set-aside.ts`), and the server's page says what was moved and why, with "Put it
  * back", which waits for the next start as every change to what a server boots does.
  *
- * Only a file Blockly didn't place itself is ever moved: its own datapacks and its revision's jars
- * would be placed again at the next start, so a failure that names one keeps the remedy it has.
+ * Only a file Blockly didn't place itself is ever moved: its own datapacks and jars would be placed
+ * again at the next start, so a failure that names one keeps the remedy it has.
  * Not which failures name a file, nor how the step moves it.
  */
 import { type Db, type Queryable, type SetAsideJson, schema } from '@blockly/db'
 import { eq } from 'drizzle-orm'
-import type { ServerRevision } from '../../domain/revision/revision.ts'
 import type { MinecraftServer } from '../../domain/server/server.ts'
-import { datapacksOf } from '../../minecraft/datapacks.ts'
 import { type Aside, asideOf, askedBack, stillKept } from '../../minecraft/set-aside.ts'
 import { type Actor, authorize, requestedBy } from '../actor.ts'
 import { DiagnosedFailure, NotFound, PlainFailure } from '../errors.ts'
 import type { EventBus } from '../ports/events.ts'
 import type { RuntimeHandle, RuntimeSpec } from '../ports/runtime.ts'
 import type { Runtimes } from '../runtimes/router.ts'
-import { loadRevision, lockServer } from './persistence.ts'
+import { lockServer } from './persistence.ts'
 
 /** What a server has set aside now, as its row keeps it, every path checked again. */
 export async function loadSetAside(q: Queryable, serverId: string): Promise<SetAsideJson[]> {
@@ -35,26 +33,23 @@ export async function loadSetAside(q: Queryable, serverId: string): Promise<SetA
   return (row?.setAside ?? []).filter((file) => asideOf(file.path, file.inWorld) !== null)
 }
 
-/** A datapack's name as Blockly writes one of its own: twelve hex characters of its SHA-512 first. */
-const BLOCKLY_DATAPACK = /^datapacks\/[0-9a-f]{12}-/
+/**
+ * A file Blockly placed itself: every jar and datapack it puts on a server is named after its bytes,
+ * twelve hex characters of its SHA-512 first (`minecraft/jars.ts`, `diskName`; `datapackName`), the
+ * revision's and Cubepals' own alike. It would be placed again at the next start, so it never moves.
+ */
+const placedByBlockly = (file: Aside): boolean => /^[0-9a-f]{12}-/.test(file.path.replace(/^.*\//, ''))
 
 /**
  * Of the files a failure named, the one a fix may set aside, or null: a datapack Blockly didn't
- * put there, or, of the copies of a mod found twice, the one copy the revision doesn't place when
- * another copy is the revision's. Where it can't be told which copy is the owner's, nothing moves.
+ * put there, or, of the copies of a mod found twice, the one copy Blockly didn't place when another
+ * copy is Blockly's. Where it can't be told which copy is the owner's, nothing moves.
  */
-export function chooseAside(
-  files: readonly Aside[],
-  revision: Pick<ServerRevision, 'loader' | 'mods'>,
-): Aside | null {
-  const datapacks = files.filter((file) => file.inWorld && !BLOCKLY_DATAPACK.test(file.path))
+export function chooseAside(files: readonly Aside[]): Aside | null {
+  const datapacks = files.filter((file) => file.inWorld && !placedByBlockly(file))
   if (datapacks.length === 1) return datapacks[0] ?? null
-  const packs = datapacksOf(revision)
-  const placed = new Set(
-    revision.mods.filter((mod) => !packs.includes(mod)).map((mod) => mod.artifact.fileName),
-  )
   const jars = files.filter((file) => !file.inWorld)
-  const theirs = jars.filter((file) => !placed.has(file.path.replace(/^.*\//, '')))
+  const theirs = jars.filter((file) => !placedByBlockly(file))
   return theirs.length === 1 && jars.length > theirs.length ? (theirs[0] ?? null) : null
 }
 
@@ -65,19 +60,22 @@ export function chooseAside(
  */
 export async function setAsideFor(
   db: Db,
-  server: Pick<MinecraftServer, 'id' | 'desiredRevisionId' | 'activeWorldId'>,
+  server: Pick<MinecraftServer, 'id' | 'activeWorldId'>,
   error: unknown,
 ): Promise<unknown> {
   if (!(error instanceof DiagnosedFailure) || error.files.length === 0) return error
   const serverId = server.id
-  const file = chooseAside(error.files, await loadRevision(db, server.desiredRevisionId))
+  const file = chooseAside(error.files)
   if (file === null) return error
   const kept = await db.transaction(async (tx) => {
     const server = await lockServer(tx, serverId)
     if (server === null) return false
     const now = await loadSetAside(tx, serverId)
-    if (now.some((aside) => aside.path === file.path && aside.inWorld === file.inWorld)) return false
     const world = file.inWorld && server.activeWorldId !== null ? { worldId: server.activeWorldId } : {}
+    // Aside already, from this world where it is in one: named again, it isn't moved twice.
+    const same = (aside: SetAsideJson) =>
+      aside.path === file.path && aside.inWorld === file.inWorld && aside.worldId === world.worldId
+    if (now.some(same)) return false
     const entry: SetAsideJson = {
       ...file,
       ...world,
