@@ -28,7 +28,9 @@
  *
  * The `raw` client is the game's own protocol (`lib/into-world.ts`) at the version the server lists,
  * for a release mineflayer doesn't speak (26.3): in the world at the first packet of play, and it
- * leaves at once.
+ * leaves at once. So it joins only in the new states: one that left before the presence reading
+ * would count its wake toward the server's hourly cap, and a run of wakes of one server would soon
+ * be refused.
  *
  * Each player stays in the world past the control plane's presence reading, so its wake counts as
  * joined. Each join prints one JSON line; the run ends with a table of the time from the connection to
@@ -294,6 +296,13 @@ const percentile = (sorted: readonly number[], p: number) =>
   sorted[Math.min(sorted.length - 1, Math.ceil((p / 100) * sorted.length) - 1)] ?? 0
 const secondsOf = (ms: number) => (ms / 1000).toFixed(1)
 
+/** Whether a client stays past the presence reading, as joins that wake the same server must; said where not. */
+function staysLongEnough(client: Client): boolean {
+  if (client !== 'raw') return true
+  say('raw: left out of the awake, sleep, cold and rest states; it leaves before the presence reading')
+  return false
+}
+
 /** A line of the table: n, p50 and p90 of the times in the world. */
 function row(template: string, state: State, client: Client, times: number[], failed: number): string {
   const sorted = [...times].sort((a, b) => a - b)
@@ -382,7 +391,7 @@ try {
   for (const template of kept.length > 0 ? templates : []) made.push(await make(template))
   for (const server of made)
     for (const wanted of kept)
-      for (const client of clients) {
+      for (const client of clients.filter(staysLongEnough)) {
         const times: number[] = []
         let failed = 0
         for (let i = 0; i < runs; i++) {
