@@ -38,6 +38,7 @@ import { RouterRoutes } from './router.ts'
 import { droppedFor, ROUTER_STATUS, type RouterSession } from './router-session.ts'
 import { VisitReporter } from './visit-reporter.ts'
 import { sourceKey, VISIT_TIMES, Visits } from './visits.ts'
+import { wakeWhile } from './wake-while.ts'
 import { wakingLine } from './waking-line.ts'
 
 const env = (name: string, fallback?: string): string => {
@@ -571,8 +572,14 @@ async function hold(client: Socket, join: Join, header: Uint8Array | null): Prom
   trace.named(said.name)
   trace.mark('wakeAsked')
   visit.seen({ wakeAskedAt: new Date().toISOString() })
-  const result = await wakeWhile(client, hostnameOf(join), said, Date.now() + (speaks ? HOLD_MS : 0)).finally(
-    () => clearInterval(keepAlive),
+  const asking = {
+    ask: () => wakeOnce(hostnameOf(join), said),
+    gone: () => client.destroyed,
+    now: Date.now,
+    sleep: Bun.sleep,
+  }
+  const result = await wakeWhile(asking, Date.now() + (speaks ? HOLD_MS : 0)).finally(() =>
+    clearInterval(keepAlive),
   )
   const ready = result?.outcome === 'ready'
   visit.seen({
@@ -646,24 +653,6 @@ async function nameOf(client: Socket, held: Held): Promise<string | undefined> {
   while (held.name === undefined && !client.destroyed && Date.now() < deadline) await Bun.sleep(50)
   const { name } = held
   return typeof name === 'string' && name.length <= 16 ? name : undefined
-}
-
-/**
- * Asks for the wake until the server is up, is refused or left asleep, the client leaves, or
- * `deadline` passes.
- */
-async function wakeWhile(
-  client: Socket,
-  hostname: string,
-  said: WakeClaim,
-  deadline: number,
-): Promise<WakeResult | null> {
-  for (;;) {
-    const result = await wakeOnce(hostname, said).catch(() => null)
-    const over = result?.outcome === 'ready' || result?.outcome === 'denied' || result?.outcome === 'asleep'
-    if (over || client.destroyed || Date.now() >= deadline) return result
-    await Bun.sleep(2_000)
-  }
 }
 
 /** Waits for the client to answer the hold's last queries, which the server must never get. */
