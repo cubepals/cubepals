@@ -557,7 +557,7 @@ test('a restore from an archive whose helper fails is removed, says why, and goe
   const [fetch] = helperCreates()
   expect(fetch?.Image).toBe('curlimages/curl:8.22.0')
   // Downloaded, checked whole (gzip or zstd, by its first bytes), and only then the volume emptied.
-  const [shell, flag, script = ''] = fetch?.Cmd ?? []
+  const [shell, flag, script = ''] = (fetch?.Cmd ?? []) as string[]
   expect([shell, flag]).toEqual(['sh', '-c'])
   const steps = [
     'curl -sS --fail --connect-timeout 20 --speed-limit 1024 --speed-time 60 --retry 5 --retry-delay 2 -o /tmp/world.archive "$SOURCE" &&',
