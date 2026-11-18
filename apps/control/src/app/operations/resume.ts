@@ -10,6 +10,7 @@
  */
 
 import { setTimeout as delay } from 'node:timers/promises'
+import { TAKE_BACK } from '../../minecraft/direct-start.ts'
 import { inFull, PlainFailure } from '../errors.ts'
 import type { GameEndpoint, ReadinessProbe } from '../ports/minecraft.ts'
 import type { LogSource } from '../ports/platform.ts'
@@ -52,14 +53,15 @@ const RESUME_PAUSE_MS = 200
 const LINES_READ = 50
 
 export class Resume {
-  readonly #runtime: Pick<Runtimes, 'waitRunning' | 'forceStop' | 'start'>
+  readonly #runtime: Pick<Runtimes, 'waitRunning' | 'forceStop' | 'start'> & Partial<Pick<Runtimes, 'exec'>>
   readonly #probe: ReadinessProbe
   readonly #logs: LogSource
   readonly #hungMs: number
   readonly #bootMs: number
 
   constructor(deps: {
-    runtime: Pick<Runtimes, 'waitRunning' | 'forceStop' | 'start'>
+    /** `exec` makes the record a sleep kept for a direct start pending again; without it, nothing is. */
+    runtime: Pick<Runtimes, 'waitRunning' | 'forceStop' | 'start'> & Partial<Pick<Runtimes, 'exec'>>
     probe: ReadinessProbe
     logs: LogSource
     /** `RESUME_HUNG_MS` by default; tests shorten it. */
@@ -97,6 +99,7 @@ export class Resume {
       const first = await this.#runningOrAnswered(handle, endpoint(), running)
       if (first === 'answered') {
         await ctx.mark('resume_answered')
+        this.#runsOn(handle)
         return true
       }
       await ctx.mark('resume_running')
@@ -111,12 +114,24 @@ export class Resume {
     }
     if (came === 'hung')
       await this.#startFresh(ctx, handle, new Error('It ran, but answered and printed nothing'))
-    if (came === 'answered') await ctx.mark('resume_answered')
+    if (came === 'answered') {
+      await ctx.mark('resume_answered')
+      this.#runsOn(handle)
+    }
     // The provider dropped the memory it kept (a deploy, a host move, maintenance): it boots from
     // its disk, which its record keeps, so a slow wake says why it was one. A log that couldn't be
     // read goes on as a boot too, but saw no boot, so it marks nothing.
     if (came === 'booting') await ctx.mark('resume_booted')
     return came === 'answered'
+  }
+
+  /**
+   * A server back as it was runs on: the record its sleep kept for a direct start is pending again
+   * (`minecraft/direct-start.ts`). Not waited for, as a player may be; one that fails is caught by
+   * the server's runner, which takes it away should it end with an error.
+   */
+  #runsOn(handle: RuntimeHandle): void {
+    this.#runtime.exec?.(handle, TAKE_BACK, 30).catch(() => undefined)
   }
 
   /** An answering game is ready even while its provider's state or long poll still lags. */

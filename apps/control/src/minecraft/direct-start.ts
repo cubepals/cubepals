@@ -47,8 +47,16 @@
  * the scripts'. A copy of the volume taken while the server ran, a snapshot a lost host is rebuilt
  * from among them, holds none either; one taken while it was stopped is that stopped volume itself.
  *
+ * A sleep that saved the world keeps the record too (`KEEP_ASLEEP`), just before the machine is
+ * suspended: the volume is then as a clean stop leaves it, saved and synced, by a server that came
+ * up. Where the provider drops the memory it kept, the boot after starts at once. A resume that
+ * kept the memory makes it pending again (`TAKE_BACK`), as the server runs on, and a server whose
+ * runner then ends with an error takes away any record there is, so a crash after a wake still
+ * leaves none. A world replaced while it slept comes on an emptied volume (`restore-step.ts`), and
+ * a setting changed while it slept is another key.
+ *
  * A record is used once: the boot that starts from it takes it away first, and it is kept again
- * only at that server's clean stop. A record that won't read is left to the scripts, as if there
+ * only at that server's clean stop, or its sleep. A record that won't read is left to the scripts, as if there
  * had been none. And a boot that goes through the scripts takes away whatever record it found
  * before they run, so the only record there can be is the one the last scripts wrote: an older one
  * would start the server with what those scripts have since changed, the password it is stopped
@@ -103,15 +111,16 @@ const RUNNER_LINES = [
 /**
  * What runs the server for both kinds of boot, line by line: the cache's script as its child, a
  * stop passed on to it, and the pending record kept only where it ended without an error, as a
- * server stopped by its runner does. Its input is passed on as the image gives it (a child in the
- * background would read none).
+ * server stopped by its runner does; where it ended with one, a record kept for a sleep before is
+ * taken away. Its input is passed on as the image gives it (a child in the background would read
+ * none).
  */
 const KEEPER_LINES = [
   '#!/bin/sh',
   'child=; code=; pass() { [ -n "$child" ] && kill -$1 $child 2>/dev/null; }; trap "pass TERM" TERM; trap "pass INT" INT',
   `exec 3<&0; ${CACHED_RUNNER} "$@" <&3 & child=$!`,
   'while [ -z "$code" ]; do wait $child; ended=$?; kill -0 $child 2>/dev/null || code=$ended; done',
-  `if [ "$code" = 0 ] && [ -f ${PENDING} ]; then mv -f ${PENDING} ${RECORD}; fi`,
+  `if [ "$code" = 0 ]; then [ ! -f ${PENDING} ] || mv -f ${PENDING} ${RECORD}; else rm -f ${RECORD}; fi`,
   'exit $code',
 ]
 
@@ -137,6 +146,20 @@ const STARTER_LINES = [
   '[ "$mode" = run ] || exit 0',
   `exec ${KEEPER} "$@"`,
 ]
+
+/**
+ * What the control plane runs on the machine as a server that saved its world goes to sleep, just
+ * before its memory is kept: the pending record is kept, as at a clean stop, and written to the
+ * volume. A rename, so it stays the volume user's. Nothing pending, nothing kept.
+ */
+export const KEEP_ASLEEP = [
+  'sh',
+  '-c',
+  `[ ! -f ${PENDING} ] || { mv -f ${PENDING} ${RECORD} && sync; }`,
+] as const
+
+/** What it runs once a resume kept the memory: the record kept for the sleep is pending again. */
+export const TAKE_BACK = ['sh', '-c', `[ ! -f ${RECORD} ] || mv -f ${RECORD} ${PENDING}`] as const
 
 const written = (path: string, lines: readonly string[]): string =>
   `printf '%s\\n' ${lines.map((line) => `'${line}'`).join(' ')} > ${path} && chmod 755 ${path}`

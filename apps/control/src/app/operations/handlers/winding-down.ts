@@ -15,6 +15,7 @@ import { and, eq } from 'drizzle-orm'
 import { entitlementsOf, grownDisk } from '../../../domain/account/entitlements.ts'
 import type { StopReason } from '../../../domain/server/lifecycle.ts'
 import type { MinecraftServer } from '../../../domain/server/server.ts'
+import { KEEP_ASLEEP } from '../../../minecraft/direct-start.ts'
 import { DATA_DIR } from '../../../minecraft/jars.ts'
 import { PORT_NAMES } from '../../../minecraft/runtime-spec.ts'
 import { CACHE_STATE, RECORDS } from '../../../minecraft/start-cache.ts'
@@ -63,7 +64,7 @@ function refusedAtOnce(reason: StopReason, sleeps: boolean, saved: boolean): Sle
  */
 async function sleepOrStop(
   ctx: OperationContext,
-  deps: { db: Db; runtime: Pick<Runtimes, 'sleep' | 'stop' | 'observe'> },
+  deps: { db: Db; runtime: Pick<Runtimes, 'sleep' | 'stop' | 'observe' | 'exec'> },
   handle: RuntimeHandle,
   refusal: SleepMark | null,
 ): Promise<void> {
@@ -73,6 +74,8 @@ async function sleepOrStop(
     await ctx.mark(refusal)
     return markKilled(ctx, deps.runtime, handle, asked)
   }
+  // Saved and about to keep its memory: a boot after the provider drops it starts at once.
+  await deps.runtime.exec(handle, KEEP_ASLEEP, 30).catch(() => null)
   const kept = (await deps.runtime.sleep(handle)) === 'suspended'
   await saveMemoryKept(deps.db, ctx.server.id, kept)
   await ctx.mark(kept ? 'slept' : 'runtime_stopped')
