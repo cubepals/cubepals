@@ -1,0 +1,1 @@
+ALTER TYPE "public"."operation_kind" ADD VALUE 'warm_spawn';

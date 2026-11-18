@@ -98,3 +98,13 @@ describe('Fabric’s installer', () => {
     expect(installer('PAPER')).toBe('')
   })
 })
+
+describe('spark’s background profiler', () => {
+  const profiler = (type: string) => run('echo "$SPARK_BACKGROUNDPROFILER"', { TYPE: type })
+
+  // It samples for as long as the server runs, whether or not anyone looks; `/spark` stays.
+  test('is off on Paper, where spark comes bundled, and left alone elsewhere', () => {
+    expect(profiler('PAPER')).toBe('false')
+    expect(profiler('FABRIC')).toBe('')
+  })
+})

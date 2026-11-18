@@ -21,10 +21,10 @@ on:
         description: Templates to make servers from, comma separated
         default: arcade,duels
       states:
-        description: States to join from, comma separated (awake, sleep, cold, rest)
+        description: States to join from, comma separated (awake, sleep, cold, rest, new, unwarmed)
         default: awake,sleep,cold,rest
       clients:
-        description: Clients, comma separated (java, bedrock)
+        description: Clients, comma separated (java, bedrock, raw)
         default: java,bedrock
 
 permissions:

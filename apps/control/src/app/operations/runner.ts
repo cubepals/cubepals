@@ -77,6 +77,7 @@ type OperationMark =
   | ChangedMark
   | MachineMark
   | HostMark
+  | SpawnMark
 
 /**
  * Why a wake booted where it could have resumed, after `other_spec`: one for each part of the
@@ -84,6 +85,12 @@ type OperationMark =
  * `changed:drift:image`, `changed:identity`, or `changed:unknown` where the boot before kept none.
  */
 type ChangedMark = `changed:${string}`
+
+/**
+ * What a new world's spawn warm-up found (`spawn-warm-up.ts`): `spawn:ready` or `spawn:unready`
+ * once it took its force-load off, or why it left the world alone.
+ */
+type SpawnMark = `spawn:${string}`
 
 /** The provider's machine an operation acted on (`handlers/binding.ts`), kept after the provider forgets it. */
 type MachineMark = `machine:${string}`

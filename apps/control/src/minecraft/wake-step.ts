@@ -30,6 +30,8 @@
  * needs none of the scripts, because nothing changed since the last one (`direct-start.ts`).
  */
 
+import { SPARK_STEP } from './spark.ts'
+
 /** Where the stand-ins live: the machine's own disk, made again at every start. */
 export const SHIM_DIR = '/tmp/blockly-bin'
 
@@ -72,4 +74,6 @@ export const WAKE_STEP = [
   `if [ "$TYPE" = PAPER ]; then export SKIP_DOWNLOAD_DEFAULTS=true; fi;`,
   `if [ "$TYPE" = FABRIC ]; then export FABRIC_LAUNCHER_VERSION=${FABRIC_INSTALLER}; fi;`,
   'export MC_IMAGE_HELPER_OPTS="-XX:TieredStopAtLevel=1 -XX:+UseSerialGC";',
+  // Not the image's work, but an export every start makes before Java, so it rides here.
+  SPARK_STEP,
 ].join(' ')

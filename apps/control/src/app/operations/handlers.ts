@@ -63,6 +63,7 @@ import { updating } from './handlers/updating.ts'
 import { windingDown } from './handlers/winding-down.ts'
 import { worldCopies } from './handlers/world-copies.ts'
 import type { OperationHandler } from './runner.ts'
+import { warmingAfterBoot, warmingSpawn } from './spawn-warm-up.ts'
 
 export interface HandlerDeps {
   db: Db
@@ -100,6 +101,7 @@ export function createHandlers(deps: HandlerDeps): OperationHandler[] {
     db,
     runtime,
     jobs: deps.jobs,
+    warmUp: warmingAfterBoot(transitions),
   })
 
   const { stillAllowed, mayBoot, preflight } = rechecks({ db, policy: deps.policy, artifacts })
@@ -248,10 +250,6 @@ export function createHandlers(deps: HandlerDeps): OperationHandler[] {
 
   const { stop, decommission, purge } = windingDown({ ...deps, bindingOf, windDown })
 
-  const pruneWorlds = pruningWorlds({ db, runtime, bindingOf })
-
-  const accessSync = syncingAccess({ db, access: deps.access, bindingOf })
-
   return [
     provision,
     start,
@@ -262,8 +260,9 @@ export function createHandlers(deps: HandlerDeps): OperationHandler[] {
     archive,
     restore,
     relocate,
-    pruneWorlds,
-    accessSync,
+    pruningWorlds({ db, runtime, bindingOf }),
+    warmingSpawn({ db, console: deps.console, consoleTarget, bindingOf }),
+    syncingAccess({ db, access: deps.access, bindingOf }),
     decommission,
     purge,
     store,
