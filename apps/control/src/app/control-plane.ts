@@ -79,6 +79,7 @@ import { OwnerNotices } from './servers/owner-notices.ts'
 import { markNotLoaded } from './servers/persistence.ts'
 import { ServerQueries } from './servers/queries.ts'
 import { MinecraftServerService } from './servers/service.ts'
+import { SetAsideChoice } from './servers/set-aside.ts'
 import { RuntimeSpecs } from './servers/specs.ts'
 import { TellPlayers } from './servers/tell-players.ts'
 import { ServerTransitions } from './servers/transitions.ts'
@@ -462,7 +463,7 @@ export type ControlPlane = ReturnType<typeof composeControlPlane>
 
 /**
  * A server's own choices that restart nothing, beside its service: its idle kick, telling players,
- * and the performance mods Cubepals adds.
+ * the performance mods Cubepals adds, and putting back a file set aside for a start.
  */
 function serverChoices(db: Db, events: EventBus) {
   return {
@@ -470,5 +471,6 @@ function serverChoices(db: Db, events: EventBus) {
     tellPlayers: new TellPlayers(db, events),
     performanceMods: new PerformanceSwitch(db, events),
     progression: new ProgressionSwitch(db, events),
+    setAside: new SetAsideChoice(db, events),
   }
 }

@@ -22,6 +22,7 @@ import { WAITING_DATAPACK } from './duels-waiting.ts'
 import { DATA_DIR, JAR_LISTS, jarsOf } from './jars.ts'
 import { PAPER_DEFAULTS_STEP } from './paper-defaults.ts'
 import { GAME_PORT, RCON_PORT } from './ports.ts'
+import { type Aside, SET_ASIDE_STEP, setAsideEnv } from './set-aside.ts'
 import { STARTER_STEP, starterEnv, startsOnOf } from './starter.ts'
 import { STOP_CHEATERS_STEP } from './stop-cheaters.ts'
 import { VANILLA_PAPER_STEP } from './vanilla-paper.ts'
@@ -69,6 +70,8 @@ export interface RuntimeSpecInput {
    * let in.
    */
   floodgateKey?: string | null
+  /** The files set aside for this server, and those its owner asked back (`set-aside.ts`). */
+  setAside?: readonly (Aside & { back: boolean })[]
 }
 
 interface PlanLimits {
@@ -572,6 +575,7 @@ function entrypointFor(steps: {
     ...(steps.stopCheaters ? [STOP_CHEATERS_STEP] : []),
     ...(steps.bedrock ? [BEDROCK_STEP] : []),
     ...(steps.jars === null ? [] : [jarListStep(steps.jars)]),
+    SET_ASIDE_STEP,
     WAKE_STEP,
     DIRECT_START_STEP,
     EXEC_IMAGE,
@@ -665,6 +669,7 @@ export function toRuntimeSpec(input: RuntimeSpecInput): RuntimeSpec {
       ...settingsEnv(revision.settings),
       ...modsEnv(input),
       ...datapacksEnv(revision, input.artifactUrl),
+      ...setAsideEnv(input.setAside ?? []),
       ...carriedEnv(revision, world.levelName, input.artifactUrl, placedHere),
       ...limitsEnv(input.limits),
       ...brandPackEnv(input),

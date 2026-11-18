@@ -367,6 +367,12 @@ export const SetAfkKickInput = z.object({
 
 /** Whether this server tells a player in chat when its owner acts on them from their page. */
 export const SetTellPlayersInput = z.object({ serverId: ServerId, tell: z.boolean() })
+/** A file set aside for a start: back at the next start, or kept aside after all. */
+export const PutAsideBackInput = z.object({
+  serverId: ServerId,
+  path: z.string().min(1).max(300),
+  back: z.boolean(),
+})
 
 /**
  * The game settings, and `partySize` when the settings page moved the server to another size for
@@ -631,6 +637,11 @@ export interface ServerView {
    * an add-on its plugin wouldn't take. Empty when everything loaded.
    */
   notLoaded: string[]
+  /**
+   * The files Cubepals set aside, a copy kept, because a start stopped on them: where each was,
+   * the failure that named it, and whether its owner asked it back for the next start.
+   */
+  setAside?: Array<{ path: string; inWorld: boolean; why: string; at: string; back: boolean }>
   gameVersion: string
   /** Which players' games join it; null for a release Cubepals can't tell of. */
   joins: JoinsView | null

@@ -71,7 +71,7 @@ class Diagnosed extends DiagnosedFailure {
   readonly hung: boolean
 
   constructor(found: Diagnosis, hung: boolean) {
-    super(found.summary, found.remedy)
+    super(found.summary, found.remedy, found.files)
     this.found = found
     this.hung = hung
   }

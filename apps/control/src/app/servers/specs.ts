@@ -28,6 +28,7 @@ import {
   VITALS_ENV,
   withoutOwnSteps,
 } from '../../minecraft/runtime-spec.ts'
+import { SET_ASIDE_VARIABLE } from '../../minecraft/set-aside.ts'
 import { stopCheatersEnv } from '../../minecraft/stop-cheaters.ts'
 import { loadStanding } from '../accounts/persistence.ts'
 import type { BuiltPack } from '../artifacts/brand-pack.ts'
@@ -49,6 +50,7 @@ import { tooLongForAStart, withCompressedFiles } from './carried-files.ts'
 import { noOfficialFiles, type OfficialFiles, withCurrentOwnFiles } from './own-files.ts'
 import { grownStorage, loadRevision, loadWorld } from './persistence.ts'
 import { resumeParts } from './resume-parts.ts'
+import { loadSetAside } from './set-aside.ts'
 
 export interface DesiredRuntime {
   revision: ServerRevision
@@ -93,14 +95,23 @@ export function specDigest(spec: RuntimeSpec): string {
 }
 
 /**
- * The spec as drift sees it: without what the owner's plan sets, the picture they chose, Paper's
+ * The spec as drift sees it: without what the owner's plan sets, the files set aside for its next
+ * start (`set-aside.ts`), the picture they chose, Paper's
  * reading a PROXY protocol header, which a server running from before it was asked takes at its
  * next start, where its join reporter reports joins and ticks, whether RCON's commands show in
  * operators' chat, or Blockly's own steps before the image starts (`withoutOwnSteps`), whose text can
  * change without changing what a server runs.
  */
 export function withoutPlanLimits(spec: RuntimeSpec): RuntimeSpec {
-  const ignored = [...PLAN_ENV, ...IDENTITY_ENV, PROXY_ENV, REPORT_ENV, VITALS_ENV, RCON_ECHO_ENV]
+  const ignored = [
+    ...PLAN_ENV,
+    ...IDENTITY_ENV,
+    PROXY_ENV,
+    REPORT_ENV,
+    VITALS_ENV,
+    RCON_ECHO_ENV,
+    SET_ASIDE_VARIABLE,
+  ]
   const { entrypoint: _entrypoint, ...rest } = spec
   const entrypoint = withoutOwnSteps(spec.entrypoint)
   return {
@@ -194,6 +205,7 @@ export class RuntimeSpecs {
         worldRadius: plan.worldRadius,
         storageGb: Math.max(plan.storage.startGb, await grownStorage(q, server.id)),
       },
+      setAside: await loadSetAside(q, server.id),
       iconUrl:
         server.ownIcon === null
           ? this.#links.icon(server.icon ?? BLOCKLY_ICON)
