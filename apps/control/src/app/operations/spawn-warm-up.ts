@@ -168,25 +168,45 @@ export function warmingSpawn(deps: {
   }
 
   /**
-   * Whether the force-load found is an earlier attempt's square: this operation said it was adding
-   * one (`spawn:forced`), and the square is there. Any other is the owner's, whatever its shape.
+   * Whether a warm-up of this world said it was adding its square (`spawn:forced`) and never said
+   * it took it off (`spawn:ready`, `spawn:unready`): an earlier attempt of this operation, or an
+   * operation of the same world that failed before it could.
    */
-  const ours = async (ctx: OperationContext, target: ConsoleTarget, forced: number): Promise<boolean> => {
+  const leftBehind = async (ctx: OperationContext): Promise<boolean> => {
+    const ops = schema.serverOperations
+    const world = ctx.op.idempotencyKey.split(':')[1] ?? ctx.op.id
+    const rows = await deps.db
+      .select({ steps: ops.steps })
+      .from(ops)
+      .where(
+        and(
+          eq(ops.serverId, ctx.server.id),
+          eq(ops.kind, 'warm_spawn'),
+          like(ops.idempotencyKey, `warm_spawn:${world}%`),
+        ),
+      )
+    return rows.some(({ steps }) => {
+      const said = ((steps ?? []) as Array<{ step: string }>).map((s) => s.step)
+      return said.includes(ADDING) && !said.includes('spawn:ready') && !said.includes('spawn:unready')
+    })
+  }
+
+  /** Whether the force-load found is exactly the square: both corners of 49 chunks. */
+  const square = async (target: ConsoleTarget, forced: number): Promise<boolean> => {
     if (forced !== SQUARE_CHUNKS) return false
-    const [op] = await deps.db
-      .select({ steps: schema.serverOperations.steps })
-      .from(schema.serverOperations)
-      .where(eq(schema.serverOperations.id, ctx.op.id))
-    if (!((op?.steps ?? []) as Array<{ step: string }>).some((s) => s.step === ADDING)) return false
     const corners = await Promise.all(CORNERS.map((query) => deps.console.run(target, query)))
     return corners.every(marked)
   }
 
-  /** Before the force-load goes on: what keeps it off, or null to go ahead. */
-  const keptOff = async (ctx: OperationContext, target: ConsoleTarget): Promise<Found | 'resume' | null> => {
+  /**
+   * Before the force-load goes on: what keeps it off, or null to go ahead. A square found is taken
+   * off (`resume`) only where a warm-up of this world left one; any other force-load is the owner's,
+   * whatever its shape.
+   */
+  const keptOff = async (target: ConsoleTarget, left: boolean): Promise<Found | 'resume' | null> => {
     const forced = forcedCount(await deps.console.run(target, FORCELOAD_QUERY))
     if (forced === null) return 'unreadable'
-    if (forced > 0) return (await ours(ctx, target, forced)) ? 'resume' : 'owner_forced'
+    if (forced > 0) return left && (await square(target, forced)) ? 'resume' : 'owner_forced'
     const online = parseOnlinePlayers(await deps.console.run(target, LIST_UUIDS))
     if (online === null) return 'unreadable'
     return online.online > 0 ? 'players_on' : null
@@ -207,24 +227,29 @@ export function warmingSpawn(deps: {
       const { handle } = await bindingOf(ctx.server.id)
       if (handle === null) return { status: 'succeeded' }
       const target = deps.consoleTarget(ctx.server, handle)
+      const left = await leftBehind(ctx)
       // Before anything is added, a console that doesn't answer leaves the world as it was: the
-      // join makes the spawn, as it always has.
-      const before = await keptOff(ctx, target).catch((): Found => 'unreadable')
+      // join makes the spawn, as it always has. After a square may have gone on, it fails, and is
+      // tried again until the square is off.
+      const before = await keptOff(target, left).catch((error: unknown): Found => {
+        if (left) throw error
+        return 'unreadable'
+      })
       if (before !== null && before !== 'resume') {
         await ctx.mark(`spawn:${before}`)
         return { status: 'succeeded' }
       }
       const until = Date.now() + waitMs
-      if (before === null) {
-        // Said first: an attempt that finds a square later takes it off only where this was said.
-        await ctx.mark(ADDING)
-        await deps.console.run(target, FORCELOAD_ADD)
-      }
-      // From here a failure is retried: the next attempt finds the square and takes it off.
       let found: Found = 'unready'
       try {
+        if (before === null) {
+          // Said first: a later attempt takes a square off only where this was said.
+          await ctx.mark(ADDING)
+          await deps.console.run(target, FORCELOAD_ADD)
+        }
         found = (await loaded(target, ctx, until)) ? 'ready' : 'unready'
       } finally {
+        // Also where the add went unanswered: it may have gone on all the same.
         await takeOff(target)
       }
       await ctx.mark(`spawn:${found}`)

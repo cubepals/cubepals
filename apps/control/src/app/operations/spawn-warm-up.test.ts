@@ -17,7 +17,7 @@ import { hasDatabase, startHarness } from '../../testing/harness.ts'
 import { RuntimeRouter } from '../runtimes/router.ts'
 import { serverBinding } from './handlers/binding.ts'
 import { gameConsole } from './handlers/game-console.ts'
-import { recordMark } from './persistence.ts'
+import { insertOperation, recordMark } from './persistence.ts'
 import type { OperationContext } from './runner.ts'
 import {
   FORCELOAD_ADD,
@@ -36,14 +36,28 @@ afterAll(async () => {
 }, 30 * SECOND_MS)
 
 /** The marks an operation's attempts left, in order. */
-async function marksOf(h: Awaited<ReturnType<typeof startHarness>>, serverId: string, kind: 'warm_spawn') {
+async function marksOf(h: Awaited<ReturnType<typeof startHarness>>, operationId: string) {
   const [row] = await h.db
     .select({ steps: schema.serverOperations.steps })
     .from(schema.serverOperations)
-    .where(and(eq(schema.serverOperations.serverId, serverId), eq(schema.serverOperations.kind, kind)))
+    .where(eq(schema.serverOperations.id, operationId))
   return ((row?.steps ?? []) as Array<{ step: string }>)
     .map((s) => s.step)
     .filter((s) => s.startsWith('spawn:'))
+}
+
+/** Another warm-up of the same world, a real operation whose marks are kept on it. */
+async function anotherOf(h: Awaited<ReturnType<typeof startHarness>>, ctx: OperationContext) {
+  const { record } = await h.db.transaction((tx) =>
+    insertOperation(tx, {
+      serverId: ctx.server.id,
+      kind: 'warm_spawn',
+      input: {},
+      requestedBy: 'system:warm',
+      idempotencyKey: `${ctx.op.idempotencyKey}:2`,
+    }),
+  )
+  return { ...ctx, op: record, mark: (mark: string) => recordMark(h.db, record.id, mark) }
 }
 
 /** A server whose first boot and its warm-up are done, and the warm-up handler to run again. */
@@ -95,7 +109,7 @@ describe.skipIf(!hasDatabase)('a new world’s spawn', () => {
     expect(heard.indexOf(FORCELOAD_REMOVE)).toBeGreaterThan(heard.indexOf(FORCELOAD_ADD))
     expect(heard.filter((line) => line.startsWith('execute if loaded')).length).toBeGreaterThanOrEqual(49 * 2)
     expect(forcedChunks(dir)).toEqual([])
-    expect(await marksOf(h, server.id, 'warm_spawn')).toEqual(['spawn:forced', 'spawn:ready'])
+    expect(await marksOf(h, warm?.id ?? '')).toEqual(['spawn:forced', 'spawn:ready'])
   })
 
   test('is left alone while someone is on', async () => {
@@ -120,13 +134,14 @@ describe.skipIf(!hasDatabase)('a new world’s spawn', () => {
   })
 
   test('cut short, is finished and taken off by the next attempt', async () => {
-    const { h, handler, ctx, marks, target, dir } = await warmed()
-    await recordMark(h.db, ctx.op.id, 'spawn:forced')
+    const { h, handler, ctx, target, dir } = await warmed()
+    const attempt = await anotherOf(h, ctx)
+    await recordMark(h.db, attempt.op.id, 'spawn:forced')
     await h.minecraft.run(target, FORCELOAD_ADD)
     expect(forcedChunks(dir)).toHaveLength(49)
-    await handler.run(ctx)
+    await handler.run(attempt)
     expect(forcedChunks(dir)).toEqual([])
-    expect(marks).toEqual(['spawn:ready'])
+    expect(await marksOf(h, attempt.op.id)).toEqual(['spawn:forced', 'spawn:ready'])
   })
 
   test('not loaded in time, is still taken off', async () => {
@@ -138,6 +153,22 @@ describe.skipIf(!hasDatabase)('a new world’s spawn', () => {
     expect(h.minecraft.heard(server.id).slice(before)).toContain(FORCELOAD_ADD)
     expect(forcedChunks(dir)).toEqual([])
     expect(marks).toEqual(['spawn:forced', 'spawn:unready'])
+  })
+
+  test('left on with the console unreadable, fails until an attempt takes it off', async () => {
+    const { h, server, handler, ctx, target, dir } = await warmed()
+    const attempt = await anotherOf(h, ctx)
+    await recordMark(h.db, attempt.op.id, 'spawn:forced')
+    await h.minecraft.run(target, FORCELOAD_ADD)
+    h.minecraft.refuseCommands(/^forceload query$/)
+    try {
+      await expect(handler.run(attempt)).rejects.toThrow()
+      expect(forcedChunks(dir)).toHaveLength(49)
+    } finally {
+      h.minecraft.refuseCommands(null)
+    }
+    expect(await handler.run(attempt)).toEqual({ status: 'succeeded' })
+    expect(forcedChunks(dir)).toEqual([])
   })
 
   test('keeps an owner’s own square around spawn, which no attempt said it added', async () => {
