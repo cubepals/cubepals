@@ -311,6 +311,27 @@ describe.skipIf(!hasDatabase)('a server whose Java records its start', () => {
     expect(resumed(await wake(owner, id))).toBe(true)
   }, 120_000)
 
+  test('a resume of the Java its recording’s start booted sleeps as ever, however often it woke since', async () => {
+    const { owner, id } = await running()
+    await stoppedRecording(owner, id)
+    expect(await followed(id)).toBe(true)
+    await h.until(id, 'running')
+    await h.settled(id)
+    await sleepsUnjoined(id)
+    // Its volume still says it records: as on a machine whose Java was killed writing it.
+    cacheIs(id, 'recording')
+    for (let wakes = 0; wakes < 2; wakes++) {
+      expect(resumed(await wake(owner, id))).toBe(true)
+      await asleep(owner, id)
+      expect((await last(id, 'stop')).steps).toContain('slept')
+      expect(await followed(id)).toBe(false)
+    }
+    // A start that boots another Java may stop for that one's recording.
+    await harder(owner, id)
+    expect(await wake(owner, id)).toContain('booting')
+    await stoppedRecording(owner, id)
+  }, 150_000)
+
   test('its start waits for the restore point its sleep is writing: the copy is of the server as it stopped', async () => {
     const { owner, id } = await running()
     await stoppedRecording(owner, id)

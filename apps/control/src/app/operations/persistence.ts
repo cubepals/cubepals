@@ -254,6 +254,21 @@ export async function latestOfKind(
 const marked = (mark: string) => sql`${operations.steps} @> ${JSON.stringify([{ step: mark }])}::jsonb`
 
 /**
+ * The newest operation that booted the server, of any kind (a start, a restart, a provision, a
+ * resume that found its memory gone): the one whose Java runs now, however often it slept and woke
+ * since.
+ */
+export async function latestBoot(q: Queryable, serverId: string): Promise<OperationRecord | null> {
+  const [row] = await q
+    .select()
+    .from(operations)
+    .where(and(eq(operations.serverId, serverId), marked('booting')))
+    .orderBy(desc(operations.createdAt))
+    .limit(1)
+  return row ? toRecord(row) : null
+}
+
+/**
  * The stops made since `since` that carry one of `marks` (`SleepMark`), where the stop is the
  * newest thing asked of its server but background work: nothing started it, stopped it, restored
  * it or moved it since. Oldest first, each with when it ended.
