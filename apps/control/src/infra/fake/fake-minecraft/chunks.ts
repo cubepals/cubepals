@@ -97,21 +97,28 @@ function forceload(chunks: Chunks, args: string[]): string {
   return marked(chunks, verb === 'add', square ?? [])
 }
 
-/** `execute if loaded <x> <y> <z>`: passed for a forced chunk, unless generation is stalled. */
+/**
+ * `execute if loaded <x> <y> <z>`, one or more chained: passed when every chunk is forced and
+ * generation isn't stalled. As in the game, a condition before the last that fails drops the
+ * command's source, so nothing is said at all; only the last one says it failed.
+ */
 function ifLoaded(chunks: Chunks, args: string[]): string {
-  const [x, , z] = args
-  const cx = chunkOf(x ?? '')
-  const cz = chunkOf(z ?? '')
-  if (cx === null || cz === null) return said('command.unknown.argument')
-  const loaded = chunks.forced.has(key(cx, cz)) && !chunks.stalled
-  return said(loaded ? 'commands.execute.conditional.pass' : 'commands.execute.conditional.fail')
+  for (let at = 0; at < args.length; at += 5) {
+    const [verb, kind, x, , z] = args.slice(at, at + 5)
+    if (verb !== 'if' || kind !== 'loaded') return said('command.unknown.argument')
+    const cx = chunkOf(x ?? '')
+    const cz = chunkOf(z ?? '')
+    if (cx === null || cz === null) return said('command.unknown.argument')
+    if (chunks.forced.has(key(cx, cz)) && !chunks.stalled) continue
+    return at + 5 >= args.length ? said('commands.execute.conditional.fail') : ''
+  }
+  return said('commands.execute.conditional.pass')
 }
 
 /** The answer to a command about chunks, or null for any other command. */
 export function chunks(dir: string, verb: string, args: string[]): string | null {
   if (verb === 'forceload') return forceload(chunksOf(dir), args)
-  if (verb === 'execute' && args[0] === 'if' && args[1] === 'loaded')
-    return ifLoaded(chunksOf(dir), args.slice(2))
+  if (verb === 'execute' && args[0] === 'if' && args[1] === 'loaded') return ifLoaded(chunksOf(dir), args)
   return null
 }
 
