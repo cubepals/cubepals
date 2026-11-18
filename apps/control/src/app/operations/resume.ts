@@ -89,6 +89,12 @@ export class Resume {
     endpoint: () => GameEndpoint,
     since = new Date(),
   ): Promise<boolean> {
+    // Its runtime saw the provider launch it anew (`relaunched`): it boots from its disk, and no
+    // answer from memory is waited for.
+    if (ctx.marked?.('relaunched') === true) {
+      await ctx.mark('resume_booted')
+      return false
+    }
     const hungAt = Date.now() + this.#hungMs
     const running = AbortSignal.timeout(this.#hungMs)
     let came: 'answered' | 'booting' | 'unread' | 'hung'
