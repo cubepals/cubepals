@@ -23,7 +23,7 @@ import type { RuntimeHandle } from '../../ports/runtime.ts'
 import type { Runtimes } from '../../runtimes/router.ts'
 import { keptStorage } from '../../servers/kept-storage.ts'
 import { loadRuntime, lockServer, markStored, saveHandle } from '../../servers/persistence.ts'
-import type { RuntimeSpecs } from '../../servers/specs.ts'
+import type { DesiredRuntime, RuntimeSpecs } from '../../servers/specs.ts'
 import type { ServerTransitions } from '../../servers/transitions.ts'
 import { openInterval } from '../../servers/usage.ts'
 import { enqueuePrune } from '../../worlds/service.ts'
@@ -63,7 +63,6 @@ export function storedWorlds(deps: {
     bindingOf,
     progressSink,
     startCompute,
-    booted,
     stillAllowed,
     preflight,
     archiveCopy,
@@ -237,6 +236,7 @@ export function storedWorlds(deps: {
       await preflight(desired, null)
       // The copy's access files are as old as the copy: who can join is put back on them at boot.
       await markReseed(db, server.id)
+      const woke = () => wokeRunning(deps, ctx, copy.id, desired)
       try {
         const download = await archives.presignGet(copy.archiveKey, IMPORT_LINK_SECONDS, 'runtime')
         // Booted at once, and let go if that fails, where the copy is small (`restoresAtBoot`).
@@ -249,7 +249,7 @@ export function storedWorlds(deps: {
         )
         await saveHandle(db, server.id, restored, server.regionKey)
         const started = await startCompute(server.id, restored)
-        await boot.run(ctx, server, started, desired.revision)
+        await boot.run(ctx, server, started, desired.revision, undefined, { ready: woke })
       } catch (error) {
         // Sent to the trash while it woke: the decommission behind this takes what it made.
         if (error instanceof NoLongerApplies) throw error
@@ -261,21 +261,7 @@ export function storedWorlds(deps: {
           detail: inFull(error),
         }
       }
-      await db.transaction(async (tx) => {
-        const locked = await lockServer(tx, server.id)
-        if (locked === null || locked.lifecycle.status !== 'restoring') return
-        await booted(tx, server.id, appliedConfig(locked, desired))
-        await openInterval(tx, server.id, locked.memoryTier, new Date(), ctx.op)
-        await markStored(tx, server.id, null)
-        await setExpiry(tx, copy.id, new Date(Date.now() + KEPT_AFTER_WAKING_MS))
-        const woke = await transitions.outcome(tx, locked, { type: 'restored', running: true })
-        await enqueuePrune(tx, transitions, woke)
-        await deps.events.publish(tx, {
-          type: 'backup_changed',
-          serverId: server.id,
-          ownerId: server.ownerId,
-        })
-      })
+      await woke()
       return { status: 'succeeded' }
     },
     /** Before the runner records a failure: it finds the server resting, and records none. */
@@ -285,6 +271,37 @@ export function storedWorlds(deps: {
   }
 
   return { store, unstore }
+}
+
+/**
+ * A rest wake's server running, said as its boot lets its players in (`Boot.run`'s `ready`), so
+ * whoever is held while it woke is handed over then; and again after the wake, which does nothing
+ * where it was said already.
+ */
+async function wokeRunning(
+  deps: {
+    db: Db
+    transitions: ServerTransitions
+    events: Pick<EventBus, 'publish'>
+    booted: ServerBinding['booted']
+  },
+  ctx: OperationContext,
+  copyId: string,
+  desired: DesiredRuntime,
+): Promise<void> {
+  const { db, transitions, events, booted } = deps
+  const server = ctx.server
+  await db.transaction(async (tx) => {
+    const locked = await lockServer(tx, server.id)
+    if (locked === null || locked.lifecycle.status !== 'restoring') return
+    await booted(tx, server.id, appliedConfig(locked, desired))
+    await openInterval(tx, server.id, locked.memoryTier, new Date(), ctx.op)
+    await markStored(tx, server.id, null)
+    await setExpiry(tx, copyId, new Date(Date.now() + KEPT_AFTER_WAKING_MS))
+    const running = await transitions.outcome(tx, locked, { type: 'restored', running: true })
+    await enqueuePrune(tx, transitions, running)
+    await events.publish(tx, { type: 'backup_changed', serverId: server.id, ownerId: server.ownerId })
+  })
 }
 
 /**

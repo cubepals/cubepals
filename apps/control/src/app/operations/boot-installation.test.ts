@@ -116,9 +116,20 @@ function fixture(
   return {
     seen,
     details,
-    run: (next: Parameters<BootSequence['run']>[3] = revision) => boot.run(ctx, server, handle, next),
+    run: (next: Parameters<BootSequence['run']>[3] = revision, ready?: () => Promise<void>) =>
+      boot.run(ctx, server, handle, next, undefined, ready === undefined ? {} : { ready }),
   }
 }
+
+test('a boot says its server runs as it lets players in, before it reads what the run left out', async () => {
+  const { run, seen, details } = fixture([mod.artifact.sha512])
+  const atReady: unknown[] = []
+  await run(revision, async () => {
+    atReady.push([...seen.marks], details.notLoaded.length)
+  })
+  expect(atReady).toEqual([['let_in'], 0])
+  expect(details.notLoaded).toHaveLength(1)
+})
 
 test('matching jar hashes are verified once before access is restored', async () => {
   const { run, seen } = fixture([mod.artifact.sha512])

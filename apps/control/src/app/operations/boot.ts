@@ -20,9 +20,7 @@ import {
   bootedWith,
   bootMilestone,
   bootMismatch,
-  lastRun,
   namesWhatStarted,
-  notLoaded,
   reportsCrash,
   saysNotLoaded,
   saysReady,
@@ -43,6 +41,7 @@ import {
 import type { LogLine, LogSource } from '../ports/platform.ts'
 import type { RuntimeHandle } from '../ports/runtime.ts'
 import type { Runtimes } from '../runtimes/router.ts'
+import { afterLetIn } from './came-up.ts'
 import { type HostNotes, noteHostCpu } from './host-cpu.ts'
 import { markKilled } from './out-of-memory.ts'
 import { Resume } from './resume.ts'
@@ -233,9 +232,11 @@ export class BootSequence {
      * each boot would get its own second wait, and together they outlast the half hour the queue
      * gives an operation, which then runs a second attempt on the same machine at once.
      * `askedAt`: when the start that may have resumed it was asked for, from which what it printed
-     * says it boots rather than hangs; now, by default.
+     * says it boots rather than hangs; now, by default. `ready`: the operation's word that the
+     * server runs, said as a boot lets its players in, before what it reads of itself after
+     * (`came-up.ts`), so a player held while it woke isn't kept waiting on that.
      */
-    options: { startAgainOnHang?: boolean; askedAt?: Date } = {},
+    options: { startAgainOnHang?: boolean; askedAt?: Date; ready?: () => Promise<void> } = {},
   ): Promise<void> {
     // Whether the server this boot runs reads a PROXY protocol header, which its pings then send.
     const proxyProtocol = usesProxyProtocol(revision)
@@ -333,13 +334,8 @@ export class BootSequence {
     await this.#letIn(ctx, server, handle, revision, proxyProtocol, leftOut)
     // Kept on the record: what follows is the platform's own reading, and its time is the boot's.
     await ctx.mark('let_in')
-
-    // Up, yet without all it was told to load: Paper goes on past a plugin it can't load, and the
-    // server says so rather than passing for one that runs everything. A log followed from now
-    // may have begun after a line printed early, so this run's own log is read too.
-    const recent = await this.#logs.recent(handle, RUN_LINES_READ).catch(() => [])
-    const said = [...leftOut, ...lastRun(recent.map((line) => line.text)).filter(saysNotLoaded)]
-    await this.#cameUp(server.id, notLoaded(said, revision.mods), handle)
+    const read = { logs: this.#logs, cameUp: this.#cameUp }
+    await afterLetIn(read, server.id, handle, revision.mods, leftOut, options.ready)
   }
 
   /**
@@ -769,9 +765,6 @@ const BANNER_LINES_KEPT = 50
 
 /** Enough of the tail to hold a crash report's cause, which sits well above the last line. */
 const LOG_LINES_READ = 300
-
-/** Enough of the tail to hold a Paper server's whole start, plugins' stack traces and all. */
-const RUN_LINES_READ = 2_000
 
 /** A pause that a nudge ends early; a nudge before the pause ends the next one at once. */
 class Nudge {
