@@ -6,8 +6,10 @@
  * A player joining all the way into the world through the edge, timed: the login, the
  * configuration the server sends before the world (its registries, its tags, any resource pack),
  * and the first packet of play, which is the moment the server writes "joined the game". It
- * speaks 1.21.11, which every Paper server takes through its Via plugins, and needs a server with
- * account checks off, since it has no account.
+ * speaks 1.21.11 by default, which every Paper server takes through its Via plugins, or the protocol
+ * number it is given, read from the server's status ping, for a release with no Via (vanilla 26.3):
+ * the login and configuration packets it uses kept their ids from 1.21.11 to 26.3 (minecraft-data's
+ * `pc/26.1`). It needs a server with account checks off, since it has no account.
  *
  * It answers what the game answers without asking the player: the edge's login queries, keep-alives
  * and pings. A resource pack offered while joining it never answers, as a player still reading the
@@ -59,7 +61,7 @@ class Joining {
     this.#settles = settles
   }
 
-  start(edge: Edge, address: string, name: string, timeoutMs: number): void {
+  start(edge: Edge, address: string, name: string, timeoutMs: number, protocol: number): void {
     const socket = this.#socket
     // A deadline of its own: the server's keep-alives would reset a socket's idle timeout for good.
     const deadline = setTimeout(() => this.#fail(this.#lateness(timeoutMs)), timeoutMs)
@@ -72,7 +74,7 @@ class Joining {
     socket.connect(edge.port, edge.host, () => {
       const port = Buffer.alloc(2)
       port.writeUInt16BE(edge.port)
-      socket.write(packet(0x00, Buffer.concat([varInt(PROTOCOL), mcString(address), port, varInt(2)])))
+      socket.write(packet(0x00, Buffer.concat([varInt(protocol), mcString(address), port, varInt(2)])))
       socket.write(packet(LOGIN_TO_SERVER.start, Buffer.concat([mcString(name), Buffer.alloc(16)])))
     })
   }
@@ -161,8 +163,14 @@ class Joining {
 }
 
 /** Joins `address` through `edge` as `name`, until the server puts the player in the world. */
-export function intoWorld(edge: Edge, address: string, name: string, timeoutMs = 60_000): Promise<InWorld> {
+export function intoWorld(
+  edge: Edge,
+  address: string,
+  name: string,
+  timeoutMs = 60_000,
+  protocol = PROTOCOL,
+): Promise<InWorld> {
   return new Promise((resolve, reject) =>
-    new Joining({ resolve, reject }).start(edge, address, name, timeoutMs),
+    new Joining({ resolve, reject }).start(edge, address, name, timeoutMs, protocol),
   )
 }

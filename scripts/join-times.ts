@@ -26,8 +26,9 @@
  * staging alike. An unwarmed server has its warm-up's operation recorded as done before its first
  * boot ends, so none is queued (`warm_spawn`, once per world).
  *
- * The `raw` client is the game's own protocol (`lib/raw-join.ts`), for a release mineflayer doesn't
- * speak (26.3): in the world at the first packet of play, and it leaves at once.
+ * The `raw` client is the game's own protocol (`lib/into-world.ts`) at the version the server lists,
+ * for a release mineflayer doesn't speak (26.3): in the world at the first packet of play, and it
+ * leaves at once.
  *
  * Each player stays in the world past the control plane's presence reading, so its wake counts as
  * joined. Each join prints one JSON line; the run ends with a table of the time from the connection to
@@ -45,7 +46,10 @@ import { parseArgs } from 'node:util'
 import { SECOND_MS } from '@blockly/contracts/durations'
 import { SQL } from 'bun'
 import { runScheduledNow } from '../apps/control/src/infra/pg/jobs.ts'
+import { GAME_PORT } from '../apps/control/src/minecraft/ports.ts'
 import { fly } from './lib/fly-async.ts'
+import { intoWorld } from './lib/into-world.ts'
+import { status } from './lib/minecraft.ts'
 import { type Api, people } from './lib/people.ts'
 import { restNow } from './lib/rest-now.ts'
 import { reachDatabase } from './lib/staging-database.ts'
@@ -228,34 +232,45 @@ async function into(made: Made, wanted: State): Promise<string> {
   return [...new Set((await machines(made.id)).map((m) => m.state))].join(',')
 }
 
+/** The game's own protocol, at the version the server lists (`lib/into-world.ts`), as one line's fields. */
+async function rawJoin(address: string, name: string): Promise<Record<string, unknown>> {
+  const edge = { host: address, port: GAME_PORT }
+  try {
+    const { protocol } = (await status(edge, address)).version
+    const at = await intoWorld(edge, address, name, JOIN_SECONDS * SECOND_MS, protocol)
+    return { protocol, steps: { loggedIn: at.loggedInMs, spawned: at.inWorldMs } }
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : String(error) }
+  }
+}
+
 /** One client's join, as the last JSON line it printed. */
 async function joinOnce(client: Client, address: string, name: string): Promise<Record<string, unknown>> {
+  if (client === 'raw') return rawJoin(address, name)
   const args =
-    client === 'raw'
-      ? ['bun', 'scripts/lib/raw-join.ts', address, name, String(JOIN_SECONDS)]
-      : client === 'java'
-        ? [
-            'bun',
-            'scripts/lib/players-probe.ts',
-            'join',
-            address,
-            name,
-            JAVA_VERSION,
-            String(JOIN_SECONDS),
-            String(STAY_SECONDS),
-          ]
-        : [
-            'bun',
-            'tools/bedrock-join/join.ts',
-            '--address',
-            address,
-            '--username',
-            name,
-            '--hold',
-            String(STAY_SECONDS),
-            '--timeout',
-            String(JOIN_SECONDS),
-          ]
+    client === 'java'
+      ? [
+          'bun',
+          'scripts/lib/players-probe.ts',
+          'join',
+          address,
+          name,
+          JAVA_VERSION,
+          String(JOIN_SECONDS),
+          String(STAY_SECONDS),
+        ]
+      : [
+          'bun',
+          'tools/bedrock-join/join.ts',
+          '--address',
+          address,
+          '--username',
+          name,
+          '--hold',
+          String(STAY_SECONDS),
+          '--timeout',
+          String(JOIN_SECONDS),
+        ]
   const run = Bun.spawn(args, { stdout: 'pipe', stderr: 'pipe' })
   const out = await new Response(run.stdout).text()
   await run.exited
