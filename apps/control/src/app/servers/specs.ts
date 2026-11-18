@@ -14,6 +14,7 @@ import type { MemoryTier } from '../../domain/server/size.ts'
 import type { World } from '../../domain/world/world.ts'
 import { FLOODGATE } from '../../minecraft/bedrock.ts'
 import { COMPAT_PREFIX } from '../../minecraft/carried.ts'
+import type { ImagePin } from '../../minecraft/image-pin.ts'
 import { runsPlugin } from '../../minecraft/mods.ts'
 import { leaveOutNow } from '../../minecraft/pack-build.ts'
 import {
@@ -145,6 +146,7 @@ export class RuntimeSpecs {
 
   readonly #official: OfficialFiles
   readonly #floodgateKey: string | null
+  readonly #imagePin: ImagePin | null
 
   constructor(
     secrets: SecretKeyring,
@@ -154,6 +156,7 @@ export class RuntimeSpecs {
     capabilities: DeploymentCapabilities = { archives: null, billing: null },
   ) {
     this.#floodgateKey = capabilities.bedrock?.floodgateKey ?? null
+    this.#imagePin = capabilities.imagePin ?? null
     this.#secrets = secrets
     this.#links = links
     this.#official = official
@@ -194,6 +197,7 @@ export class RuntimeSpecs {
     const { current } = this.#secrets
     const input = {
       serverId: server.id,
+      imagePin: this.#imagePin,
       revision,
       world,
       memoryTier: config.memoryTier,

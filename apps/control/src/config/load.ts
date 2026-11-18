@@ -11,6 +11,7 @@ import {
   DEFAULT_FREE_LINK_TUNING,
 } from '../domain/account/tuning.ts'
 import { DEFAULT_ROOM } from '../domain/policy/room.ts'
+import { imagePinOf } from '../minecraft/image-pin.ts'
 import { GAME_PORT } from '../minecraft/ports.ts'
 import { isLocalDeployment, localBilling, localNotes, localOnly } from './local.ts'
 import { DeploymentConfig, inconsistencies } from './schema.ts'
@@ -387,6 +388,7 @@ export function configFromEnv(env: NodeJS.ProcessEnv): unknown {
     operatorToken: env.OPERATOR_TOKEN || env.FLEET_OPERATOR_TOKEN || null,
     earlyRoom: earlyRoomOf(env),
     floodgateKey: floodgateKeyOf(env),
+    serverImagePin: imagePinOf(env.SERVER_IMAGE_PIN, (line) => console.warn(line)),
     artifacts: {
       runtimeFacingUrl: env.ARTIFACTS_RUNTIME_FACING_URL,
       mirrorCatalogArtifacts: env.ARTIFACTS_MIRROR === 'true',

@@ -20,6 +20,7 @@ import { DATAPACKS_STEP, datapacksEnv, datapacksOf } from './datapacks.ts'
 import { DIRECT_START_STEP } from './direct-start.ts'
 import { WAITING_DATAPACK } from './duels-waiting.ts'
 import { heapEnv } from './heap-flags.ts'
+import { type ImagePin, pinnedImage } from './image-pin.ts'
 import { DATA_DIR, JAR_LISTS, jarsOf } from './jars.ts'
 import { PAPER_DEFAULTS_STEP } from './paper-defaults.ts'
 import { GAME_PORT, RCON_PORT } from './ports.ts'
@@ -75,6 +76,8 @@ export interface RuntimeSpecInput {
   floodgateKey?: string | null
   /** The files set aside for this server, and those its owner asked back (`set-aside.ts`). */
   setAside?: readonly SetAsideFile[]
+  /** Servers pinned to Cubepals' own image (`image-pin.ts`); none runs the image `imageFor` names. */
+  imagePin?: ImagePin | null
 }
 
 interface PlanLimits {
@@ -648,6 +651,8 @@ export function toRuntimeSpec(input: RuntimeSpecInput): RuntimeSpec {
   const bedrock = bedrockSpec(placedHere, input.floodgateKey)
   const totalMb = memoryMb(memoryTier)
   const onPaper = runsOnPaper(revision)
+  const java = javaFor(revision.gameVersion)
+  const image = pinnedImage(input.imagePin, input.serverId, java) ?? imageFor(revision)
   const loaderVersionVar = onPaper ? LOADER_VERSION_VARS.paper : LOADER_VERSION_VARS[revision.loader]
 
   const pack = revision.modpack
@@ -667,7 +672,7 @@ export function toRuntimeSpec(input: RuntimeSpecInput): RuntimeSpec {
   const packEnv = modpackEnv(input)
 
   return {
-    image: imageFor(revision),
+    image,
     entrypoint,
     env: {
       EULA: 'TRUE',
@@ -700,7 +705,7 @@ export function toRuntimeSpec(input: RuntimeSpecInput): RuntimeSpec {
       // The control plane is the only writer of power state (§0, decision 3).
       ENABLE_AUTOPAUSE: 'FALSE',
       ENABLE_AUTOSTOP: 'FALSE',
-      ...heapEnv(heapMb(input), javaFor(revision.gameVersion), !imageFor(revision).endsWith(ALPINE)),
+      ...heapEnv(heapMb(input), java, !image.endsWith(ALPINE)),
       STOP_DURATION: String(STOP_DURATION_SECONDS),
       // The game's watchdogs off: a freeze reads as one endless tick (`watchdog.ts`).
       ...watchdogEnv(type === TYPES.paper, packEnv.JVM_DD_OPTS),

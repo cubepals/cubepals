@@ -584,6 +584,7 @@ function capabilitiesFor(config: DeploymentConfig, db: Db): DeploymentCapabiliti
     insight: insightFor(config),
     malware: new PublishedMalwareLists(),
     bedrock: bedrockCapability(config.floodgateKey),
+    imagePin: config.serverImagePin,
     playRecords: playRecordsFor(config.play, config.deploymentId),
     archives: config.archive === null ? null : new S3ArchiveStore(config.archive),
     billing:

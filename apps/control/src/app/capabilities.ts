@@ -6,6 +6,7 @@ import type { Queryable } from '@blockly/db'
 import { schema } from '@blockly/db'
 import { and, count, eq, inArray } from 'drizzle-orm'
 import { PAID_PLANS } from '../domain/account/entitlements.ts'
+import type { ImagePin } from '../minecraft/image-pin.ts'
 import type { GeyserMc } from './ports/geysermc.ts'
 import type { Insight } from './ports/insight.ts'
 import type { MalwareLists } from './ports/malware.ts'
@@ -31,6 +32,8 @@ export interface DeploymentCapabilities {
    * Floodgate comes from and gamertags are found. Absent, no server is given Floodgate.
    */
   readonly bedrock?: { readonly floodgateKey: string; readonly geyser: GeyserMc } | null
+  /** Servers pinned to Cubepals' own server image (`minecraft/image-pin.ts`). Absent pins none. */
+  readonly imagePin?: ImagePin | null
   /**
    * The play names' own A records, for servers in a region the edge has an address of its own in
    * (PLAY_IPV4_BY_REGION): where they are kept, and each such region's address. Absent keeps none,

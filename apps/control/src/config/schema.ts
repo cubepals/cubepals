@@ -5,6 +5,7 @@
 import { z } from 'zod'
 import { PAID_PLANS } from '../domain/account/entitlements.ts'
 import { DEFAULT_ABUSE_LIMITS, DEFAULT_FREE_LINK_TUNING } from '../domain/account/tuning.ts'
+import { ImagePin } from '../minecraft/image-pin.ts'
 
 /**
  * Everything a deployment can differ in. Parsed once at boot and consumed by the composition
@@ -462,6 +463,11 @@ export const DeploymentConfig = z.object({
     .string()
     .regex(/^[A-Za-z0-9+/]{22}==$/, 'FLOODGATE_KEY is 16 bytes as base64')
     .nullable(),
+  /**
+   * Servers pinned to Cubepals' own server image (SERVER_IMAGE_PIN, `minecraft/image-pin.ts`);
+   * none, and every server runs the image `imageFor` names.
+   */
+  serverImagePin: ImagePin.nullable(),
   artifacts: z.object({
     /** The control plane as game runtimes reach it (§15.2). */
     runtimeFacingUrl: z.url(),
