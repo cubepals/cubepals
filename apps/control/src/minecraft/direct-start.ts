@@ -32,6 +32,12 @@
  * and root never runs a word or takes a variable from it. A volume that belongs to root is left
  * to the scripts.
  *
+ * Fly mounts a volume as root's at every boot (its init says "Mounting /dev/vdc at /data w/ uid:
+ * 0, gid: 0"), and the image's own start then gives it to the server's user, `UID` and `GID`
+ * (`chown -R`, "Changing ownership of /data"). Looking before the image did, this step found root's
+ * and left every production boot to the scripts. So it does what the image does, first, with the
+ * user the image takes from its own variables, never from the volume.
+ *
  * A record is used once: the boot that starts from it takes it away first, and puts it back only
  * when the server has stayed up. One that fell over, or a record that won't read, is then started
  * by the scripts the next time, as if there had been no record. And a boot that goes through the
@@ -119,6 +125,9 @@ export const DIRECT_START_STEP = [
   `${written(RUNNER, RUNNER_LINES)} && ${written(STARTER, STARTER_LINES)} && ${written(CACHED_RUNNER, CACHED_RUNNER_LINES)} && ${written(LAUNCH_MAKER, LAUNCH_MAKER_LINES)} && export SERVER_RUNNER=${RUNNER};`,
   `awk "BEGIN { for (name in ENVIRON) print name }" > ${GIVEN};`,
   `export BLOCKLY_START_KEY=$({ awk "BEGIN { for (name in ENVIRON) if (name !~ /^(${PASSING})$/) print name \\"=\\" ENVIRON[name] }" | sort; cat /image/scripts/start*; } 2>/dev/null | sha256sum | cut -c1-64);`,
+  // The provider mounts the volume as root's at every boot, and the image's own start gives it back
+  // to the server's user before anything else: done here first, the same way, or no start is direct.
+  `if [ "$(id -u)" = 0 ]; then u=\${UID:-1000}; g=\${GID:-1000}; case "$u:$g" in *[!0-9:]*|0:*|*:0) ;; *) case "\${SKIP_CHOWN_DATA:-false}" in [Tt][Rr][Uu][Ee]) ;; *) if [ "$(stat -c %u ${DATA_DIR})" != "$u" ]; then echo "[init] Changing ownership of ${DATA_DIR} to $u ..."; chown -R "$u:$g" ${DATA_DIR}; fi;; esac;; esac; fi;`,
   // Whose the volume is, which the image's own start makes the server's user; never root's.
   `owner=$(ls -ldn ${DATA_DIR} | awk "{ print \\$3 \\":\\" \\$4 }"); me="$(id -u):$(id -g)"; direct=;`,
   `case "$owner" in 0:*|*:0|*[!0-9:]*|"") ;; "$me") direct=${STARTER};; *) if [ "$me" = 0:0 ]; then direct="gosu $owner ${STARTER}"; fi;; esac;`,
