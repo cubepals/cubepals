@@ -284,6 +284,7 @@ test('a first provision with an install seed makes the server, copies nothing ye
     ExposedPorts: {},
     StopSignal: 'SIGTERM',
     StopTimeout: 7,
+    Healthcheck: { Test: ['NONE'] },
     HostConfig: {
       Mounts: [{ Type: 'volume', Source: `${base}-data`, Target: '/data' }],
       Memory: 64 * 1024 * 1024,
