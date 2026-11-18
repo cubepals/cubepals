@@ -9,16 +9,16 @@
  * (`main.node.ts`).
  */
 import type { Db } from '@blockly/db'
-import type { DeploymentCapabilities } from './app/capabilities.ts'
-import type { DeploymentConfig } from './config/schema.ts'
-import { entitlementsFor, PAID_PLANS } from './domain/account/entitlements.ts'
-import { playRecordsFor } from './infra/cloudflare/dns-records.ts'
-import { bedrockCapability } from './infra/geysermc/geysermc.ts'
-import { LocalBilling } from './infra/local-billing/local-billing.ts'
-import { PublishedMalwareLists } from './infra/malware/mcantimalware.ts'
-import { PolarBilling } from './infra/polar/polar-billing.ts'
-import { PostHogInsight } from './infra/posthog/posthog-insight.ts'
-import { S3ArchiveStore } from './infra/s3/s3-archive-store.ts'
+import type { DeploymentCapabilities } from '../app/capabilities.ts'
+import type { DeploymentConfig } from '../config/schema.ts'
+import { entitlementsFor, PAID_PLANS } from '../domain/account/entitlements.ts'
+import { playRecordsFor } from '../infra/cloudflare/dns-records.ts'
+import { bedrockCapability } from '../infra/geysermc/geysermc.ts'
+import { LocalBilling } from '../infra/local-billing/local-billing.ts'
+import { PublishedMalwareLists } from '../infra/malware/mcantimalware.ts'
+import { PolarBilling } from '../infra/polar/polar-billing.ts'
+import { PostHogInsight } from '../infra/posthog/posthog-insight.ts'
+import { S3ArchiveStore } from '../infra/s3/s3-archive-store.ts'
 
 export function capabilitiesFor(config: DeploymentConfig, db: Db): DeploymentCapabilities {
   const billing = config.billing
