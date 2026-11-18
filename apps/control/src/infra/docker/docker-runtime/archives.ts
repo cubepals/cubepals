@@ -10,7 +10,15 @@
  */
 
 import type Docker from 'dockerode'
-import { type ArchiveTarget, type DownloadTarget, GZIP_MAGIC, NOT_ARCHIVED, type PartsUpload, type PutPart, ZSTD_MAGIC } from '../../../app/ports/runtime.ts'
+import {
+  type ArchiveTarget,
+  type DownloadTarget,
+  GZIP_MAGIC,
+  NOT_ARCHIVED,
+  type PartsUpload,
+  type PutPart,
+  ZSTD_MAGIC,
+} from '../../../app/ports/runtime.ts'
 import type { RunHelper } from './helper.ts'
 
 /** Archives go out and come back over HTTP: the helper needs curl, and this image is pinned in compose too. */

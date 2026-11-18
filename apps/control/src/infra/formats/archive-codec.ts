@@ -15,7 +15,6 @@ import { PassThrough, type Readable } from 'node:stream'
 import { createGunzip, createZstdDecompress } from 'node:zlib'
 import { GZIP_MAGIC, ZSTD_MAGIC } from '../../app/ports/runtime.ts'
 
-
 export type ArchiveCodec = 'gzip' | 'zstd'
 
 /** The codec an archive starting with `head` is compressed with; null for neither. */
