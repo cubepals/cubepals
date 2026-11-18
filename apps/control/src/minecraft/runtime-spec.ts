@@ -417,12 +417,17 @@ const PACK_STEP = [
 /**
  * The image fetches the icon at every start with its Java helper, whose own start took 4 to 7 s
  * of each boot on staging (2026-09-28), where curl takes a tenth of a second. So curl fetches it
- * first: the icon already on disk leaves the image nothing to do, and another is handed to it as
- * a file, which it copies. Where curl can't fetch it, the image fetches it itself, as it did.
+ * first and puts it in place itself, and the image is given no icon to handle. Every icon Cubepals
+ * hands a server is already a 64x64 PNG (its own, and an owner's, checked as it is uploaded), so
+ * nothing needs the image's ImageMagick, which Cubepals' own image (`images/minecraft-server/`)
+ * leaves out. Where curl can't fetch it, an image that has ImageMagick fetches it itself, as it
+ * did; one without keeps the icon the server had.
  */
-const ICON_STEP = [
+export const ICON_STEP: readonly string[] = [
   'if [ -n "$ICON" ] && curl -fsSL --max-time 10 -o /tmp/blockly-icon "$ICON"; then',
-  `if cmp -s /tmp/blockly-icon ${DATA_DIR}/server-icon.png; then unset OVERRIDE_ICON; else export ICON=/tmp/blockly-icon; fi;`,
+  `cmp -s /tmp/blockly-icon ${DATA_DIR}/server-icon.png || install -m 644 -o 1000 -g 1000 /tmp/blockly-icon ${DATA_DIR}/server-icon.png || exit 1;`,
+  'unset ICON OVERRIDE_ICON;',
+  'elif ! command -v identify >/dev/null 2>&1; then unset ICON OVERRIDE_ICON;',
   'fi;',
 ]
 
