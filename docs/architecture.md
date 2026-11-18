@@ -935,7 +935,11 @@ through the wake flow, which starts it first (§12).
   `snapshot_retention` is set to the longest entitlement.
 - Restore: new volume from `snapshot_id` (or filled from an archive by a helper), then, once
   the old world is kept, a new machine on it, then destroy the old machine; the old volume goes
-  after the new one is `created`. Returns the new handle.
+  after the new one is `created`. Returns the new handle. A helper filling from an archive with a
+  recorded sha256 hashes every byte it downloads as it unpacks them; a different hash empties the
+  new volume and fails the restore before anything is replaced, as blocklyd refuses one
+  (`fly-runtime/helper-jobs.ts`). An archive with none recorded (an uploaded world) is unpacked
+  unchecked.
 - Relocate: stop, fork the volume with `source_volume_id` + region, create a machine, wait
   until the fork is `created`, destroy the old one.
 - Export: restore the snapshot into a temporary volume, run a one-shot archiver machine
