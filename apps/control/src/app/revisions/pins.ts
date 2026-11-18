@@ -54,7 +54,9 @@ export async function pinUnpinned(builds: LoaderBuilds, draft: RevisionDraft): P
 
 /**
  * The Paper build plain Minecraft runs on (`runsOnPaper`): Paper's current stable build where
- * Cubepals offers Paper for the release, and null, Mojang's own server, where it doesn't. A list
+ * Cubepals offers Paper for the release, and null, Mojang's own server, where it doesn't. Whether a
+ * new plain server starts on Paper at all is `plainOnPaper`'s (`firstPin`); an owner's own choice,
+ * Bedrock, or a world already on Paper takes Paper wherever it is offered. A list
  * that can't be read leaves a new server on Mojang's own (`plain`), as every server was before
  * Paper became the default, and a change waits until it can be read (`refuse`), as any change of
  * server type does.

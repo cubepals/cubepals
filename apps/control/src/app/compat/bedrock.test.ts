@@ -80,9 +80,9 @@ afterAll(async () => {
   cdn.close()
 })
 
-const smooth = async (name: string) => {
+const smooth = async (name: string, gameVersion?: string) => {
   const owner = await h.user(name)
-  const server = await h.create(owner, { from: { kind: 'template', key: 'smooth' } })
+  const server = await h.create(owner, { from: { kind: 'template', key: 'smooth', gameVersion } })
   await h.until(server.id, 'running')
   await h.settled(server.id)
   return { owner, id: server.id }
@@ -140,7 +140,8 @@ describe.skipIf(!hasDatabase)('Bedrock players on a Paper server', () => {
   }, 90_000)
 
   test('a server that lets in only its own version gets no Via plugin for Bedrock, and says why', async () => {
-    const { owner, id } = await smooth('Dune')
+    // On a release that isn't Geyser's own, where Bedrock players come in through Via.
+    const { owner, id } = await smooth('Dune', '26.2')
     await h.app.revisions.changeOtherVersions(owner, id, 'off', randomUUID())
     await h.until(id, 'running')
     await h.settled(id)

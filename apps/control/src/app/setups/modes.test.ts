@@ -98,13 +98,13 @@ describe.skipIf(!hasDatabase)('game modes', () => {
     plugin('l8Uv7FzS', 'LifeStealZ', ['26.1.2', '26.2'])
     plugin('V67rIXws', 'Manhunt', ['26.1.2', '26.2', '26.3'])
     const owner = await h.user('Kai', 'plus')
-    for (const [key, mod] of [
-      ['lifesteal', 'LifeStealZ'],
-      ['manhunt', 'Manhunt'],
+    // The newest release Cubepals offers Paper on that the plugin lists.
+    for (const [key, mod, gameVersion] of [
+      ['lifesteal', 'LifeStealZ', '26.2'],
+      ['manhunt', 'Manhunt', '26.3'],
     ] as const) {
       const preview = await h.app.queries.setupPreview(owner, { kind: 'template', key })
-      // Paper's newest build is 26.2, so Manhunt+ running on 26.3 doesn't lift it there.
-      expect(preview).toMatchObject({ loader: 'paper', gameVersion: '26.2', mods: [mod], modpack: null })
+      expect(preview).toMatchObject({ loader: 'paper', gameVersion, mods: [mod], modpack: null })
     }
     const { templates } = await h.app.queries.createOptions(owner)
     expect(templates.filter((template) => template.forADay).map((template) => template.key)).toEqual([
@@ -171,7 +171,7 @@ describe.skipIf(!hasDatabase)('game modes', () => {
     expect(preview).toMatchObject({
       from: 'RPG survival',
       loader: 'paper',
-      gameVersion: '26.2',
+      gameVersion: '26.3',
       mods: ['AuraSkills'],
       modpack: null,
     })

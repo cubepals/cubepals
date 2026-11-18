@@ -94,9 +94,10 @@ describe.skipIf(!hasDatabase)('the releases a template runs on', () => {
       reason:
         "Cubepals can't run BentoBox on Minecraft 1.21.11: its builds for it need Minecraft 26.1.2 or newer.",
     })
+    // Paper is offered on 26.3, but these three list no build for it.
     expect(releases.get('26.3')).toMatchObject({
       runs: false,
-      reason: 'Cubepals doesn’t offer Paper on Minecraft 26.3 yet.',
+      reason: "Cubepals can't run BSkyBlock, Level, Warps on Minecraft 26.3.",
     })
     // Adding it to a Paper server on that release later is held to the same answer.
     const paper = await h.create(owner, { from: { kind: 'template', key: 'smooth', gameVersion: '1.21.11' } })

@@ -10,9 +10,10 @@ import type { Loader } from '../domain/revision/revision.ts'
  * that build for it, and a place in the upgrade path. Add a release here after trying it.
  *
  * Every pair below booted on the pinned image with its pinned build: the 26.x and 1.21.8-1.21.11
- * releases on 2026-09-19, and 1.21.1 and 1.20.1 on 2026-09-23. 26.3 has Fabric alone: Paper's
- * builds for it are alpha, NeoForge's beta, Forge has none recommended, and Quilt has no mappings
- * for it yet. 1.20.1 has no NeoForge, whose 1.20.1 line is a fork of Forge with its own scheme.
+ * releases on 2026-09-19, 1.21.1 and 1.20.1 on 2026-09-23, and Paper on 26.3 (build 254, its first
+ * stable ones) on 2026-11-18. 26.3 has no NeoForge, Forge or Quilt yet: NeoForge's builds for it are
+ * beta, Forge has none recommended, and Quilt has no mappings for it. 1.20.1 has no NeoForge, whose
+ * 1.20.1 line is a fork of Forge with its own scheme.
  *
  * 1.21.1 and 1.20.1 are here because that is where modded Minecraft lives: the mods and modpacks
  * people ask for by name build for them long after newer releases arrive.
@@ -20,12 +21,18 @@ import type { Loader } from '../domain/revision/revision.ts'
 interface OfferedVersion {
   id: string
   loaders: readonly Loader[]
+  /**
+   * Where plain Minecraft runs on Mojang's own server though Paper is offered (`plainOnPaper`).
+   * On one CPU Paper boots slower than Mojang's server, so a release's plain servers stay on
+   * Mojang's until Paper's boot is measured within a few seconds of it.
+   */
+  plainOnMojang?: true
 }
 
 const EVERY_LOADER: readonly Loader[] = ['vanilla', 'fabric', 'paper', 'quilt', 'neoforge', 'forge']
 
 const OFFERED: readonly OfferedVersion[] = [
-  { id: '26.3', loaders: ['vanilla', 'fabric'] },
+  { id: '26.3', loaders: ['vanilla', 'fabric', 'paper'], plainOnMojang: true },
   { id: '26.2', loaders: EVERY_LOADER },
   { id: '26.1.2', loaders: EVERY_LOADER },
   { id: '1.21.11', loaders: EVERY_LOADER },
@@ -74,6 +81,14 @@ export function loaderForMods(gameVersion: string): Loader | null {
 
 export function supports(gameVersion: string, loader: Loader): boolean {
   return OFFERED.some((v) => v.id === gameVersion && v.loaders.includes(loader))
+}
+
+/**
+ * Whether plain Minecraft on this release runs on Paper (`runsOnPaper`): where Cubepals offers
+ * Paper for it, unless its plain servers stay on Mojang's own server (`plainOnMojang`).
+ */
+export function plainOnPaper(gameVersion: string): boolean {
+  return OFFERED.some((v) => v.id === gameVersion && v.loaders.includes('paper') && v.plainOnMojang !== true)
 }
 
 /** The loaders a pack can bring; a pack never runs on Paper or plain Minecraft. */

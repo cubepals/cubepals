@@ -28,6 +28,11 @@
           "value": "fabric",
           "label": "Fabric",
           "allowed": true
+        },
+        {
+          "value": "paper",
+          "label": "Paper",
+          "allowed": true
         }
       ]
     }
