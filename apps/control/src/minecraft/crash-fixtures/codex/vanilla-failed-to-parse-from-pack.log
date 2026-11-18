@@ -1,0 +1,120 @@
+[14:14:08] [ServerMain/INFO]: Environment: Environment[sessionHost=https://sessionserver.mojang.com, servicesHost=https://api.minecraftservices.com, profilesHost=https://api.mojang.com, name=PROD]
+[14:14:08] [ServerMain/INFO]: Found new data pack file/far-end-ender-expansion-2-0-3-v1-17-1.zip, loading it automatically
+[14:14:08] [Worker-Main-3/ERROR]: Carver: Failed to parse either. First: Not a string: {"air":[]}; Second: Failed to parse either. First: Not a json array: {"air":[]}; Second: No key type in MapLike[{"air":[]}]
+[14:14:08] [Worker-Main-4/ERROR]: Carver: Failed to parse either. First: Not a string: {"air":[]}; Second: Failed to parse either. First: Not a json array: {"air":[]}; Second: No key type in MapLike[{"air":[]}]
+[14:14:08] [Worker-Main-3/ERROR]: Carver: Failed to parse either. First: Not a string: {}; Second: Failed to parse either. First: Not a json array: {}; Second: No key type in MapLike[{}]
+[14:14:08] [Worker-Main-1/ERROR]: Carver: Failed to parse either. First: Not a string: {"air":["far_end:surface_scar"]}; Second: Failed to parse either. First: Not a json array: {"air":["far_end:surface_scar"]}; Second: No key type in MapLike[{"air":["far_end:surface_scar"]}]
+[14:14:08] [Worker-Main-3/ERROR]: Carver: Failed to parse either. First: Not a string: {"air":["far_end:surface_scar"]}; Second: Failed to parse either. First: Not a json array: {"air":["far_end:surface_scar"]}; Second: No key type in MapLike[{"air":["far_end:surface_scar"]}]
+[14:14:08] [Worker-Main-1/ERROR]: Carver: Failed to parse either. First: Not a string: {"air":["far_end:surface_scar"]}; Second: Failed to parse either. First: Not a json array: {"air":["far_end:surface_scar"]}; Second: No key type in MapLike[{"air":["far_end:surface_scar"]}]
+[14:14:08] [Worker-Main-1/ERROR]: Carver: Failed to parse either. First: Not a string: {"air":["far_end:surface_scar"]}; Second: Failed to parse either. First: Not a json array: {"air":["far_end:surface_scar"]}; Second: No key type in MapLike[{"air":["far_end:surface_scar"]}]
+[14:14:08] [Worker-Main-1/ERROR]: Carver: Failed to parse either. First: Not a string: {"air":["far_end:surface_scar"]}; Second: Failed to parse either. First: Not a json array: {"air":["far_end:surface_scar"]}; Second: No key type in MapLike[{"air":["far_end:surface_scar"]}]
+[14:14:08] [Worker-Main-7/ERROR]: Registry loading errors:
+> Errors in registry minecraft:dimension_type:
+>> Errors in element minecraft:the_end:
+java.lang.IllegalStateException: Failed to parse minecraft:the_end from pack file/far-end-ender-expansion-2-0-3-v1-17-1.zip
+	at net.minecraft.resources.RegistryLoadTask$PendingRegistration.loadFromResource(RegistryLoadTask.java:115)
+	at net.minecraft.resources.ResourceManagerRegistryLoadTask.lambda$load$2(ResourceManagerRegistryLoadTask.java:46)
+	at net.minecraft.util.thread.ParallelMapTransform$Container.applyOperation(ParallelMapTransform.java:89)
+	at net.minecraft.util.thread.ParallelMapTransform$SingleTaskSplitter.lambda$scheduleBatch$0(ParallelMapTransform.java:160)
+	at java.base/java.util.concurrent.CompletableFuture$AsyncRun.run(CompletableFuture.java:1825)
+	at java.base/java.util.concurrent.CompletableFuture$AsyncRun.exec(CompletableFuture.java:1817)
+	at java.base/java.util.concurrent.ForkJoinTask.doExec(ForkJoinTask.java:511)
+	at java.base/java.util.concurrent.ForkJoinPool$WorkQueue.topLevelExec(ForkJoinPool.java:1450)
+	at java.base/java.util.concurrent.ForkJoinPool.runWorker(ForkJoinPool.java:2019)
+	at java.base/java.util.concurrent.ForkJoinWorkerThread.run(ForkJoinWorkerThread.java:187)
+Caused by: java.lang.IllegalStateException: No key monster_spawn_block_light_limit in MapLike[{"ultrawarm":false,"natural":false,"piglin_safe":false,"respawn_anchor_works":true,"bed_works":false,"has_raids":true,"has_skylight":false,"has_ceiling":false,"coordinate_scale":1,"ambient_light":0,"logical_height":320,"effects":"minecraft:the_end","infiniburn":"minecraft:infiniburn_end","min_y":-128,"height":320}]; No key monster_spawn_light_level in MapLike[{"ultrawarm":false,"natural":false,"piglin_safe":false,"respawn_anchor_works":true,"bed_works":false,"has_raids":true,"has_skylight":false,"has_ceiling":false,"coordinate_scale":1,"ambient_light":0,"logical_height":320,"effects":"minecraft:the_end","infiniburn":"minecraft:infiniburn_end","min_y":-128,"height":320}]; Not a tag id; No key has_ender_dragon_fight in MapLike[{"ultrawarm":false,"natural":false,"piglin_safe":false,"respawn_anchor_works":true,"bed_works":false,"has_raids":true,"has_skylight":false,"has_ceiling":false,"coordinate_scale":1,"ambient_light":0,"logical_height":320,"effects":"minecraft:the_end","infiniburn":"minecraft:infiniburn_end","min_y":-128,"height":320}]
+	at com.mojang.serialization.DataResult$Error.getOrThrow(DataResult.java:287)
+	at com.mojang.serialization.DataResult.getOrThrow(DataResult.java:81)
+	at net.minecraft.resources.RegistryLoadTask$PendingRegistration.loadFromResource(RegistryLoadTask.java:113)
+	... 9 more
+> Errors in registry minecraft:root:
+>> Errors in element minecraft:dimension_type:
+java.lang.IllegalStateException: Unbound values in registry ResourceKey[minecraft:root / minecraft:dimension_type]: [minecraft:the_end]
+	at net.minecraft.core.MappedRegistry.freeze(MappedRegistry.java:300)
+	at net.minecraft.resources.RegistryLoadTask.freezeRegistry(RegistryLoadTask.java:87)
+	at net.minecraft.resources.RegistryDataLoader.lambda$load$3(RegistryDataLoader.java:225)
+	at java.base/java.util.stream.ReferencePipeline$2$1.accept(ReferencePipeline.java:196)
+	at java.base/java.util.AbstractList$RandomAccessSpliterator.forEachRemaining(AbstractList.java:722)
+	at java.base/java.util.stream.AbstractPipeline.copyInto(AbstractPipeline.java:570)
+	at java.base/java.util.stream.AbstractPipeline.wrapAndCopyInto(AbstractPipeline.java:560)
+	at java.base/java.util.stream.AbstractPipeline.evaluate(AbstractPipeline.java:635)
+	at java.base/java.util.stream.AbstractPipeline.evaluateToArrayNode(AbstractPipeline.java:291)
+	at java.base/java.util.stream.ReferencePipeline.toArray(ReferencePipeline.java:652)
+	at java.base/java.util.stream.ReferencePipeline.toArray(ReferencePipeline.java:658)
+	at java.base/java.util.stream.ReferencePipeline.toList(ReferencePipeline.java:663)
+	at net.minecraft.resources.RegistryDataLoader.lambda$load$2(RegistryDataLoader.java:225)
+	at java.base/java.util.concurrent.CompletableFuture$UniApply.tryFire(CompletableFuture.java:667)
+	at java.base/java.util.concurrent.CompletableFuture$Completion.exec(CompletableFuture.java:504)
+	at java.base/java.util.concurrent.ForkJoinTask.doExec(ForkJoinTask.java:511)
+	at java.base/java.util.concurrent.ForkJoinPool$WorkQueue.topLevelExec(ForkJoinPool.java:1450)
+	at java.base/java.util.concurrent.ForkJoinPool.runWorker(ForkJoinPool.java:2019)
+	at java.base/java.util.concurrent.ForkJoinWorkerThread.run(ForkJoinWorkerThread.java:187)
+>> Errors in element minecraft:worldgen/placed_feature:
+java.lang.IllegalStateException: Unbound values in registry ResourceKey[minecraft:root / minecraft:worldgen/placed_feature]: [far_end:amethyst/geode/amethyst, far_end:amethyst/island/calcite_bottom, far_end:amethyst/tree/purple, far_end:amethyst/vegetation/amethyst, far_end:amethyst/vegetation/flower, far_end:amethyst/vegetation/hanging_amethyst, far_end:amethyst/vegetation/patch_crying_obsidian, far_end:amethyst/vegetation/patch_grass, far_end:amethyst/vegetation/trees, far_end:ash/aquatic/delta, far_end:ash/aquatic/lake, far_end:ash/island/basalt_bottom, far_end:ash/ore/ancient_debris, far_end:ash/surface/grass_delta, far_end:ash/vegetation/land/trees, far_end:ash/vegetation/land/wither_rose, far_end:ash/vegetation/water/sea_pickle, far_end:ash/vegetation/water/seagrass, minecraft:dripleaf, minecraft:end_gateway, minecraft:fossil, far_end:general/dragon_egg, far_end:general/end_spike/center/2, far_end:general/end_spike/ring/1, far_end:general/end_spike/ring/10, far_end:general/end_spike/ring/2, far_end:general/end_spike/ring/3, far_end:general/end_spike/ring/4, far_end:general/end_spike/ring/5, far_end:general/end_spike/ring/6, far_end:general/end_spike/ring/7, far_end:general/end_spike/ring/8, far_end:general/end_spike/ring/9, far_end:nest/hills/deepslate, far_end:nest/island/end_stone_bottom, far_end:nest/surface/tuff, far_end:nest/vegetation/dead_corals, far_end:nothing, minecraft:patch_waterlilly, far_end:tundra/aquatic/delta, far_end:tundra/aquatic/lake, far_end:tundra/surface/water, far_end:tundra/surface/water_2, far_end:tundra/tree/crimson, far_end:tundra/tree/crimson_2, far_end:tundra/vegetation/bone_trees, far_end:tundra/vegetation/chorus_plant, far_end:tundra/vegetation/surface_plants, far_end:warped/aquatic/delta, far_end:warped/aquatic/lake, far_end:warped/tree/warped, far_end:warped/vegetation/grass/patch_blue_orchid, far_end:warped/vegetation/grass/patch_grass, far_end:warped/vegetation/grass/patch_melon, far_end:warped/vegetation/grass/patch_nether_sprouts, far_end:warped/vegetation/grass/patch_warped_roots, far_end:warped/vegetation/water/patch_waterlilly, far_end:warped/vegetation/water/pool, far_end:warped/vegetation/water/sea_pickle, far_end:warped/vegetation/water/under_island_extra, far_end:waste/chorus_plant, far_end:wilds/geode/seed_of_life, far_end:wilds/surface/grassy_plain, far_end:wilds/surface/grassy_plain_outer, far_end:wilds/vegetation/chorus_plant, far_end:wilds/vegetation/patch_chorus_flower, far_end:wilds/vegetation/patch_leaves, far_end:wilds/vegetation/trees]
+	at net.minecraft.core.MappedRegistry.freeze(MappedRegistry.java:300)
+	at net.minecraft.resources.RegistryLoadTask.freezeRegistry(RegistryLoadTask.java:87)
+	at net.minecraft.resources.RegistryDataLoader.lambda$load$3(RegistryDataLoader.java:225)
+	at java.base/java.util.stream.ReferencePipeline$2$1.accept(ReferencePipeline.java:196)
+	at java.base/java.util.AbstractList$RandomAccessSpliterator.forEachRemaining(AbstractList.java:722)
+	at java.base/java.util.stream.AbstractPipeline.copyInto(AbstractPipeline.java:570)
+	at java.base/java.util.stream.AbstractPipeline.wrapAndCopyInto(AbstractPipeline.java:560)
+	at java.base/java.util.stream.AbstractPipeline.evaluate(AbstractPipeline.java:635)
+	at java.base/java.util.stream.AbstractPipeline.evaluateToArrayNode(AbstractPipeline.java:291)
+	at java.base/java.util.stream.ReferencePipeline.toArray(ReferencePipeline.java:652)
+	at java.base/java.util.stream.ReferencePipeline.toArray(ReferencePipeline.java:658)
+	at java.base/java.util.stream.ReferencePipeline.toList(ReferencePipeline.java:663)
+	at net.minecraft.resources.RegistryDataLoader.lambda$load$2(RegistryDataLoader.java:225)
+	at java.base/java.util.concurrent.CompletableFuture$UniApply.tryFire(CompletableFuture.java:667)
+	at java.base/java.util.concurrent.CompletableFuture$Completion.exec(CompletableFuture.java:504)
+	at java.base/java.util.concurrent.ForkJoinTask.doExec(ForkJoinTask.java:511)
+	at java.base/java.util.concurrent.ForkJoinPool$WorkQueue.topLevelExec(ForkJoinPool.java:1450)
+	at java.base/java.util.concurrent.ForkJoinPool.runWorker(ForkJoinPool.java:2019)
+	at java.base/java.util.concurrent.ForkJoinWorkerThread.run(ForkJoinWorkerThread.java:187)
+> Errors in registry minecraft:worldgen/biome:
+>> Errors in element far_end:amethyst_forest:
+java.lang.IllegalStateException: Failed to parse far_end:amethyst_forest from pack file/far-end-ender-expansion-2-0-3-v1-17-1.zip
+	at net.minecraft.resources.RegistryLoadTask$PendingRegistration.loadFromResource(RegistryLoadTask.java:115)
+	at net.minecraft.resources.ResourceManagerRegistryLoadTask.lambda$load$2(ResourceManagerRegistryLoadTask.java:46)
+	at net.minecraft.util.thread.ParallelMapTransform$Container.applyOperation(ParallelMapTransform.java:89)
+	at net.minecraft.util.thread.ParallelMapTransform$SingleTaskSplitter.lambda$scheduleBatch$0(ParallelMapTransform.java:160)
+	at java.base/java.util.concurrent.CompletableFuture$AsyncRun.run(CompletableFuture.java:1825)
+	at java.base/java.util.concurrent.CompletableFuture$AsyncRun.exec(CompletableFuture.java:1817)
+	at java.base/java.util.concurrent.ForkJoinTask.doExec(ForkJoinTask.java:511)
+	at java.base/java.util.concurrent.ForkJoinPool$WorkQueue.topLevelExec(ForkJoinPool.java:1450)
+	at java.base/java.util.concurrent.ForkJoinPool.runWorker(ForkJoinPool.java:2019)
+	at java.base/java.util.concurrent.ForkJoinWorkerThread.run(ForkJoinWorkerThread.java:187)
+Caused by: java.lang.IllegalStateException: Failed to parse either. First: Not a string: {"air":[]}; Second: Failed to parse either. First: Not a json array: {"air":[]}; Second: No key type in MapLike[{"air":[]}]; No key has_precipitation in MapLike[{"surface_builder":"far_end:amethyst_forest","depth":-0.5,"scale":0.3,"temperature":0.8,"downfall":0.4,"precipitation":"none","category":"the_end","player_spawn_friendly":false,"creature_spawn_probability":0,"effects":{"sky_color":7907327,"fog_color":16636149,"water_color":15979007,"water_fog_color":329011,"grass_color":7289714,"foliage_color":14593535,"grass_color_modifier":"none","mood_sound":{"sound":"ambient.underwater.loop.additions.rare","tick_delay":100,"block_search_extent":10,"offset":100},"additions_sound":{"sound":"ambient.underwater.loop.additions.ultra_rare","tick_chance":0.01},"music":{"sound":"music.nether.nether_waste","min_delay":100,"max_delay":200,"replace_current_music":false},"particle":{"options":{"type":"dripping_obsidian_tear"},"probability":0.005}},"starts":["minecraft:stronghold","minecraft:end_city"],"spawners":{"monster":[{"type":"minecraft:enderman","weight":10,"minCount":4,"maxCount":4},{"type":"minecraft:vex","weight":100,"minCount":4,"maxCount":4},{"type":"minecraft:evoker","weight":1,"minCount":1,"maxCount":1},{"type":"minecraft:witch","weight":10,"minCount":4,"maxCount":4}]},"spawn_costs":{},"carvers":{"air":[]},"features":[["far_end:amethyst/island/calcite_bottom"],[],["far_end:amethyst/geode/amethyst"],[],[],[],[],[],["far_end:amethyst/vegetation/trees","far_end:amethyst/vegetation/amethyst","far_end:amethyst/vegetation/hanging_amethyst","far_end:amethyst/vegetation/flower","far_end:amethyst/vegetation/patch_grass","far_end:amethyst/vegetation/patch_crying_obsidian"],["far_end:amethyst/tree/purple","far_end:general/end_spike/center/2","far_end:general/end_spike/ring/1","far_end:general/end_spike/ring/2","far_end:general/end_spike/ring/3","far_end:general/end_spike/ring/4","far_end:general/end_spike/ring/5","far_end:general/end_spike/ring/6","far_end:general/end_spike/ring/7","far_end:general/end_spike/ring/8","far_end:general/end_spike/ring/9","far_end:general/end_spike/ring/10"]]}]
+	at com.mojang.serialization.DataResult$Error.getOrThrow(DataResult.java:287)
+	at com.mojang.serialization.DataResult.getOrThrow(DataResult.java:81)
+	at net.minecraft.resources.RegistryLoadTask$PendingRegistration.loadFromResource(RegistryLoadTask.java:113)
+	... 9 more
+>> Errors in element far_end:ashfall_delta:
+java.lang.IllegalStateException: Failed to parse far_end:ashfall_delta from pack file/far-end-ender-expansion-2-0-3-v1-17-1.zip
+	at net.minecraft.resources.RegistryLoadTask$PendingRegistration.loadFromResource(RegistryLoadTask.java:115)
+	at net.minecraft.resources.ResourceManagerRegistryLoadTask.lambda$load$2(ResourceManagerRegistryLoadTask.java:46)
+	at net.minecraft.util.thread.ParallelMapTransform$Container.applyOperation(ParallelMapTransform.java:89)
+	at net.minecraft.util.thread.ParallelMapTransform$SingleTaskSplitter.lambda$scheduleBatch$0(ParallelMapTransform.java:160)
+	at java.base/java.util.concurrent.CompletableFuture$AsyncRun.run(CompletableFuture.java:1825)
+	at java.base/java.util.concurrent.CompletableFuture$AsyncRun.exec(CompletableFuture.java:1817)
+	at java.base/java.util.concurrent.ForkJoinTask.doExec(ForkJoinTask.java:511)
+	at java.base/java.util.concurrent.ForkJoinPool$WorkQueue.topLevelExec(ForkJoinPool.java:1450)
+	at java.base/java.util.concurrent.ForkJoinPool.runWorker(ForkJoinPool.java:2019)
+	at java.base/java.util.concurrent.ForkJoinWorkerThread.run(ForkJoinWorkerThread.java:187)
+Caused by: java.lang.IllegalStateException: Failed to parse either. First: Not a string: {"air":[]}; Second: Failed to parse either. First: Not a json array: {"air":[]}; Second: No key type in MapLike[{"air":[]}]; No key has_precipitation in MapLike[{"surface_builder":"far_end:ashfall_delta","depth":-0.7,"scale":0.3,"temperature":0.8,"downfall":0.9,"precipitation":"none","temperature_modifier":"none","category":"the_end","player_spawn_friendly":false,"creature_spawn_probability":0,"effects":{"sky_color":7907327,"fog_color":12638463,"water_color":15068927,"water_fog_color":12895439,"grass_color":14606046,"foliage_color":12763842,"ambient_sound":"minecraft:ambient.basalt_deltas.loop","mood_sound":{"sound":"minecraft:ambient.basalt_deltas.mood","tick_delay":100,"block_search_extent":10,"offset":100},"additions_sound":{"sound":"minecraft:ambient.basalt_deltas.additions","tick_chance":0.05},"music":{"sound":"music.nether.basalt_deltas","min_delay":100,"max_delay":100,"replace_current_music":false},"particle":{"options":{"type":"white_ash"},"probability":0.05}},"starts":["minecraft:stronghold"],"spawners":{"monster":[{"type":"minecraft:guardian","weight":40,"minCount":4,"maxCount":4},{"type":"minecraft:wither_skeleton","weight":40,"minCount":4,"maxCount":4}]},"spawn_costs":{},"carvers":{"air":[]},"features":[["far_end:ash/island/basalt_bottom"],["far_end:ash/aquatic/lake"],[],["far_end:ash/aquatic/delta","far_end:ash/surface/grass_delta","minecraft:small_basalt_columns","minecraft:basalt_pillar"],[],["minecraft:basalt_blobs","far_end:ash/ore/ancient_debris"],[],["minecraft:patch_grass_forest","minecraft:patch_waterlilly","minecraft:seagrass_swamp","far_end:ash/vegetation/water/seagrass","far_end:ash/vegetation/water/sea_pickle","far_end:ash/vegetation/land/trees","far_end:ash/vegetation/land/wither_rose"],["far_end:general/end_spike/center/2","far_end:general/end_spike/ring/1","far_end:general/end_spike/ring/2","far_end:general/end_spike/ring/3","far_end:general/end_spike/ring/4","far_end:general/end_spike/ring/5","far_end:general/end_spike/ring/6","far_end:general/end_spike/ring/7","far_end:general/end_spike/ring/8","far_end:general/end_spike/ring/9","far_end:general/end_spike/ring/10","minecraft:chorus_plant"]]}]
+	at com.mojang.serialization.DataResult$Error.getOrThrow(DataResult.java:287)
+	at com.mojang.serialization.DataResult.getOrThrow(DataResult.java:81)
+	at net.minecraft.resources.RegistryLoadTask$PendingRegistration.loadFromResource(RegistryLoadTask.java:113)
+	... 9 more
+>> Errors in element far_end:end_wilds:
+java.lang.IllegalStateException: Failed to parse far_end:end_wilds from pack file/far-end-ender-expansion-2-0-3-v1-17-1.zip
+	at net.minecraft.resources.RegistryLoadTask$PendingRegistration.loadFromResource(RegistryLoadTask.java:115)
+	at net.minecraft.resources.ResourceManagerRegistryLoadTask.lambda$load$2(ResourceManagerRegistryLoadTask.java:46)
+	at net.minecraft.util.thread.ParallelMapTransform$Container.applyOperation(ParallelMapTransform.java:89)
+	at net.minecraft.util.thread.ParallelMapTransform$SingleTaskSplitter.lambda$scheduleBatch$0(ParallelMapTransform.java:160)
+	at java.base/java.util.concurrent.CompletableFuture$AsyncRun.run(CompletableFuture.java:1825)
+	at java.base/java.util.concurrent.CompletableFuture$AsyncRun.exec(CompletableFuture.java:1817)
+	at java.base/java.util.concurrent.ForkJoinTask.doExec(ForkJoinTask.java:511)
+	at java.base/java.util.concurrent.ForkJoinPool$WorkQueue.topLevelExec(ForkJoinPool.java:1450)
+	at java.base/java.util.concurrent.ForkJoinPool.runWorker(ForkJoinPool.java:2019)
+	at java.base/java.util.concurrent.ForkJoinWorkerThread.run(ForkJoinWorkerThread.java:187)
+Caused by: java.lang.IllegalStateException: Failed to parse either. First: Not a string: {"air":["far_end:surface_scar"]}; Second: Failed to parse either. First: Not a json array: {"air":["far_end:surface_scar"]}; Second: No key type in MapLike[{"air":["far_end:surface_scar"]}]; No key has_precipitation in MapLike[{"surface_builder":"far_end:end_wilds","depth":-0.5,"scale":0.3,"temperature":0.8,"downfall":0.4,"precipitation":"none","temperature_modifier":"none","category":"swamp","player_spawn_friendly":true,"creature_spawn_probability":0,"effects":{"sky_color":7907327,"fog_color":12638463,"water_color":10672615,"water_fog_color":6798273,"grass_color":16446345,"foliage_color":16772469,"ambient_sound":"ambient.warped_forest.loop","mood_sound":{"sound":"ambient.warped_forest.mood","tick_delay":100,"block_search_extent":10,"offset":100},"additions_sound":{"sound":"ambient.warped_forest.additions","tick_chance":0.1},"music":{"sound":"music.nether.crimson_forest","min_delay":100,"max_delay":200,"replace_current_music":false},"particle":{"options":{"type":"warped_spore"},"probability":0.05}},"starts":["minecraft:stronghold","minecraft:end_city"],"spawners":{"monster":[{"type":"minecraft:enderman","weight":10,"minCount":4,"maxCount":4}]},"spawn_costs":{},"carvers":{"air":["far_end:surface_scar"]},"features":[["far_end:wilds/surface/grassy_plain","far_end:wilds/surface/grassy_plain_outer"],[],["far_end:wilds/geode/seed_of_life"],[],["minecraft:end_gateway"],[],[],["far_end:wilds/vegetation/patch_chorus_flower","far_end:wilds/vegetation/patch_leaves","far_end:wilds/vegetation/trees","minecraft:patch_dead_bush"],["far_end:wilds/vegetation/chorus_plant","far_end:general/end_spike/center/2","far_end:general/end_spike/ring/1","far_end:general/end_spike/ring/2","far_end:general/end_spike/ring/3","far_end:general/end_spike/ring/4","far_end:general/end_spike/ring/5","far_end:general/end_spike/ring/6","far_end:general/end_spike/ring/7","far_end:general/end_spike/ring/8","far_end:general/end_spike/ring/9","far_end:general/end_spike/ring/10"]]}]

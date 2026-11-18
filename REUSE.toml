@@ -185,3 +185,10 @@ path = [
 precedence = "override"
 SPDX-FileCopyrightText = "2015 the original authors"
 SPDX-License-Identifier = "Apache-2.0"
+
+# Real server logs from Aternos' codex-minecraft tests, the read failures diagnosis.ts was checked on.
+[[annotations]]
+path = "apps/control/src/minecraft/crash-fixtures/codex/**"
+precedence = "closest"
+SPDX-FileCopyrightText = "2019-2025 Aternos GmbH"
+SPDX-License-Identifier = "MIT"

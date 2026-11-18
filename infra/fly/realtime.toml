@@ -62,10 +62,15 @@ primary_region = "fra"
     handlers = ["http"]
     force_https = true
 
-  [[services.tcp_checks]]
+  # The listener's own answer (a 204 at transport-io's probe path), not only an open port: what
+  # browsers ask over TCP when WebTransport's handshake fails.
+  [[services.http_checks]]
     interval = "15s"
     timeout = "2s"
     grace_period = "20s"
+    method = "get"
+    path = "/.well-known/transport-io"
+    protocol = "http"
 
 [metrics]
   port = 9091

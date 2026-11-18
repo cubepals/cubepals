@@ -54,6 +54,7 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync }
 import { dirname, resolve } from 'node:path'
 import { authWorks } from './lib/auth-through-website.ts'
 import { pingIndexNow } from './lib/indexnow.ts'
+import { ask, isUp, realtimeTarget } from './lib/site-pages.ts'
 import { untilItRuns } from './lib/terraform-retries.ts'
 import { buildWorker } from './lib/web-worker.ts'
 import {
@@ -537,10 +538,15 @@ async function signInGuard(): Promise<void> {
 }
 
 /**
- * Whether production answers: the API through the website, realtime's own TLS, and every machine
- * of the apps just deployed started with its checks passing. Tried for two minutes.
+ * Whether production answers: the API through the website, realtime over both its transports as
+ * a browser asks it (lib/site-pages.ts), and every machine of the apps just deployed started with
+ * its checks passing. Tried for two minutes.
  */
 async function answers(apps: readonly FlyApp[], env: NodeJS.ProcessEnv): Promise<boolean> {
+  const realtime = [
+    realtimeTarget('webtransport', 'rt.cubepals.com'),
+    realtimeTarget('websocket', 'rt.cubepals.com'),
+  ]
   const reached = (url: string) =>
     fetch(url, { signal: AbortSignal.timeout(10_000) }).then(
       (response) => response.status < 500,
@@ -557,8 +563,7 @@ async function answers(apps: readonly FlyApp[], env: NodeJS.ProcessEnv): Promise
     )
   }
   for (let tries = 0; tries < 8; tries++) {
-    const up =
-      (await reached('https://cubepals.com/api/health')) && (await reached('https://rt.cubepals.com/'))
+    const up = (await reached('https://cubepals.com/api/health')) && (await ask(realtime)).every(isUp)
     if (up && apps.every(healthy)) return true
     await Bun.sleep(15_000)
   }

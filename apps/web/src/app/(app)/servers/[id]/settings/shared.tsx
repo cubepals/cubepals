@@ -34,10 +34,24 @@ export function changeable(view: ServerView): { ok: boolean } {
 }
 
 /**
+ * Whether a change to what the server boots (its settings, version or mods) can be saved now: as
+ * `changeable`, and on a server that failed as it started or updated, which the change starts
+ * again with it (`startsWithChange` in the control plane). That is how a failure's fix is tried.
+ */
+export function takesChange(view: ServerView): { ok: boolean } {
+  if (view.activeOperation !== null) return { ok: false }
+  return { ok: changeable(view).ok || failedToStart(view) }
+}
+
+const failedToStart = (view: ServerView): boolean =>
+  view.status === 'failed' && (view.failure?.during === 'starting' || view.failure?.during === 'updating')
+
+/**
  * What saving a boot change does to this server right now, in one sentence. With players on, when
  * it restarts is the owner's choice (`RestartChoice`), which says what each does.
  */
 export function whatHappens(view: ServerView): string {
+  if (failedToStart(view)) return 'The server starts again with the change.'
   if (occupied(view)) return 'If the change doesn’t start, the server goes back to how it was.'
   return view.status === 'running'
     ? 'The server saves the world and restarts with the change. Anyone online is back in about half a minute. If the change doesn’t start, the server goes back to how it was.'

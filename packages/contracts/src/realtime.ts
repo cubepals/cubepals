@@ -52,6 +52,16 @@ export const realtimeContract = defineContract({
 
 export interface RealtimeMap extends MapOf<typeof realtimeContract> {}
 
+/** Where realtime's WebSocket fallback listens on its host; WebTransport's sessions open at `/`. */
+export const REALTIME_FALLBACK_PATH = '/transport-io'
+
+/**
+ * Why realtime turns a session away before it opens, said as the close's reason over either
+ * transport: it came from a page that isn't Cubepals', or its ticket doesn't verify. A check from
+ * outside takes either as realtime's own answer (scripts/lib/realtime-probe.node.ts).
+ */
+export const REALTIME_REFUSALS = { origin: 'origin', ticket: 'ticket' } as const
+
 /** What the web app needs to open a realtime session, fetched over tRPC before every connect. */
 export interface RealtimeConnectInfo {
   url: string

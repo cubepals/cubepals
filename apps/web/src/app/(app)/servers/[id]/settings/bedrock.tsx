@@ -19,7 +19,7 @@ import { useTRPC } from '../../../../../lib/api'
 import { busyFor } from '../../../../../lib/button-busy'
 import { useOutcome } from '../../../../../lib/outcome'
 import { Button, CopyField, FormRow, FormSection, Toggle } from '../../../../../ui'
-import { ConfirmChange, changeable, useChanged, whatHappens } from './shared'
+import { ConfirmChange, takesChange, useChanged, whatHappens } from './shared'
 
 export function BedrockSetting({ view }: { view: ServerView }) {
   const bedrock = view.bedrock
@@ -59,7 +59,7 @@ function BedrockForm({ view, on, blocked }: { view: ServerView; on: boolean; blo
       },
     }),
   )
-  const allowed = changeable(view)
+  const allowed = takesChange(view)
   // The server's words only for work this switch started; anything else it waits out disabled.
   const busy = busyFor(outcome, view)
   const line = lineOf(on, blocked)
@@ -146,7 +146,7 @@ function LetThemIn({ view }: { view: ServerView }) {
       },
     }),
   )
-  const allowed = changeable(view)
+  const allowed = takesChange(view)
   // The server's words only for work this switch started; anything else it waits out disabled.
   const busy = busyFor(outcome, view)
   const line = 'Friends on phones, tablets and Windows can’t join this server yet.'

@@ -3,7 +3,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { MINUTE_MS } from '@blockly/contracts/durations'
-import { type RealtimeMap, realtimeContract } from '@blockly/contracts/realtime'
+import {
+  REALTIME_FALLBACK_PATH,
+  REALTIME_REFUSALS,
+  type RealtimeMap,
+  realtimeContract,
+} from '@blockly/contracts/realtime'
 import {
   CloseCode,
   type ConnectRequest,
@@ -87,9 +92,12 @@ const authorizer =
       realtimeConnected(transport, outcome, performance.now() - began)
       return answer
     }
-    if (!originAllowed(headers.origin, options.allowedOrigins)) return answered('origin', refuse('origin'))
+    if (!originAllowed(headers.origin, options.allowedOrigins))
+      return answered('origin', refuse(REALTIME_REFUSALS.origin))
     const holder = await options.tickets.verify(query.get('ticket') ?? '')
-    return holder === null ? answered('ticket', refuse('ticket')) : answered('accepted', holder)
+    return holder === null
+      ? answered('ticket', refuse(REALTIME_REFUSALS.ticket))
+      : answered('accepted', holder)
   }
 
 /**
@@ -223,7 +231,7 @@ export async function startRealtime(options: RealtimeOptions): Promise<{ stop():
   })
   const fallback = await listenWebSocket<Peer>({
     ...options.fallbackListen,
-    path: '/transport-io',
+    path: REALTIME_FALLBACK_PATH,
     authorize: authorizer(options, 'websocket'),
   })
 
