@@ -18,6 +18,7 @@ import {
   mkdtempSync,
   readFileSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -25,13 +26,14 @@ import { join } from 'node:path'
 import { DIRECT_START_STEP } from '../../minecraft/direct-start.ts'
 import { bootMilestone } from '../../minecraft/logs.ts'
 import { RECORDING } from '../../minecraft/start-cache.ts'
+import { NOT_ARCHIVED } from '../ports/runtime.ts'
 
 const AS_ROOT = process.getuid?.() === 0
 /** The user a server's volume belongs to, where this runs as root. */
 const SERVER_USER = 1000
 
 let root = ''
-const record = () => join(root, 'data/.blockly-start')
+const record = () => join(root, 'data/.blockly-remade/start')
 const tool = (name: string, lines: string[]) => {
   writeFileSync(join(root, 'bin', name), `#!/bin/sh\n${lines.join('\n')}\n`)
   chmodSync(join(root, 'bin', name), 0o755)
@@ -47,11 +49,13 @@ beforeEach(() => {
   writeFileSync(join(root, 'data/server.jar'), 'jar')
   if (AS_ROOT) chownSync(join(root, 'data'), SERVER_USER, SERVER_USER)
   // The runner says where it ran, with which words, and the password it would stop the server
-  // with. How long the server stays up is read from a file: a variable would be a changed boot.
+  // with. How it ends is read from files, a variable being a changed boot: a copy of the volume
+  // taken while it runs, and its exit code, 0 for a clean stop.
   tool('mc-server-runner', [
     'password=$RCON_PASSWORD; [ -n "$password" ] || password=none',
     'echo "ran in $(pwd): $* (password $password)"',
-    'sleep "$(cat "$STAYS_UP_FILE" 2>/dev/null || echo 0)"',
+    `[ -f ${join(root, 'copy-while-running')} ] && cp -a ${join(root, 'data')} ${join(root, 'copy')}`,
+    `exit "$(cat ${join(root, 'ends-with')} 2>/dev/null || echo 0)"`,
   ])
   // No room on the volume for a Java startup cache, which has tests of its own
   // (`start-cache-runtime.test.ts`): the command is run as it was written down.
@@ -83,7 +87,6 @@ function boot(
     .replaceAll('/data', join(root, 'data'))
     .replaceAll('/image/scripts/start', join(root, 'image/start'))
     .replaceAll('/etc/nsswitch.conf', join(root, 'nsswitch'))
-    .replaceAll('sleep 90', 'sleep 0.3')
   const scripts = [
     'password=$RCON_PASSWORD; [ -n "$password" ] || password=none;',
     'echo "scripts with $# words (password $password)";',
@@ -94,7 +97,6 @@ function boot(
     env: {
       PATH: `${join(root, 'bin')}:${process.env.PATH ?? ''}`,
       DIFFICULTY: 'hard',
-      STAYS_UP_FILE: join(root, 'stays-up'),
       ...env,
     },
   })
@@ -118,9 +120,8 @@ describe('a boot that changed nothing', () => {
 
   test('then starts the server at once: the same words, directory and variables', () => {
     boot()
-    writeFileSync(join(root, 'stays-up'), '1')
     expect(boot()).toEqual([DIRECT, RAN])
-    // It stayed up, so the record is there for the boot after.
+    // It stopped cleanly, so the record is there for the boot after.
     expect(existsSync(record())).toBe(true)
     // Said as the image says its hand-over to Java, which a start's progress reads.
     expect(bootMilestone(DIRECT)).toBe('starting')
@@ -149,6 +150,7 @@ describe('a boot that changed nothing', () => {
 
   test('uses a record once: a server that fell over is started by the scripts the next time', () => {
     boot()
+    writeFileSync(join(root, 'ends-with'), '1')
     expect(boot()[0]).toBe(DIRECT)
     expect(existsSync(record())).toBe(false)
     expect(boot()).toEqual(SCRIPTED)
@@ -197,6 +199,78 @@ describe('a boot that changed something', () => {
   })
 })
 
+/**
+ * The volume filled again from an archive of it, as a restore, a rest's wake, an import of the
+ * server's own download and a move by archive fill a new one: written without what no archive
+ * holds (the export job's `NOT_ARCHIVED`), unpacked as the restore job does, and root's.
+ */
+function refilledFromArchive(): void {
+  const data = join(root, 'data')
+  const archive = join(root, 'archive.tgz')
+  const excluded = NOT_ARCHIVED.map((name) => `--exclude=./${name}`)
+  const packed = Bun.spawnSync(['tar', '-czf', archive, ...excluded, '-C', data, '.'])
+  expect(packed.exitCode).toBe(0)
+  rmSync(data, { recursive: true })
+  mkdirSync(data)
+  const unpacked = Bun.spawnSync([
+    'tar',
+    '-xzf',
+    archive,
+    '-C',
+    data,
+    '--no-same-owner',
+    '--no-same-permissions',
+  ])
+  expect(unpacked.exitCode).toBe(0)
+  if (AS_ROOT) chownSync(data, 0, 0)
+}
+
+describe('a boot after the world was replaced', () => {
+  test('restored from a backup, or woken from rest: the volume comes without a record, and the scripts run', () => {
+    boot()
+    expect(existsSync(record())).toBe(true)
+    refilledFromArchive()
+    expect(boot().slice(-2)).toEqual(SCRIPTED)
+    // Those scripts' record holds for the volume as it is now.
+    expect(boot()).toEqual([DIRECT, RAN])
+  })
+
+  test('brought in as an import of the server’s own download: the scripts run', () => {
+    boot()
+    // A download is the same archive of the volume; the world it holds is then restored.
+    refilledFromArchive()
+    writeFileSync(join(root, 'data/level.dat'), 'the world brought in')
+    expect(boot().slice(-2)).toEqual(SCRIPTED)
+  })
+
+  test('moved from a copy taken while it ran, as a lost host is rebuilt from its snapshot: the scripts run', () => {
+    writeFileSync(join(root, 'copy-while-running'), '')
+    boot()
+    rmSync(join(root, 'copy-while-running'))
+    // The record of a server still running is only pending, and a copy taken then keeps none.
+    expect(existsSync(join(root, 'copy/.blockly-remade/start'))).toBe(false)
+    rmSync(join(root, 'data'), { recursive: true })
+    Bun.spawnSync(['mv', join(root, 'copy'), join(root, 'data')])
+    expect(boot().slice(-2)).toEqual(SCRIPTED)
+  })
+
+  test('crashed or killed under it: it left no record, and the next boot is the scripts’', () => {
+    writeFileSync(join(root, 'ends-with'), '137')
+    expect(boot()).toEqual(SCRIPTED)
+    expect(existsSync(record())).toBe(false)
+    rmSync(join(root, 'ends-with'))
+    expect(boot()).toEqual(SCRIPTED)
+    // That one stopped cleanly: the boot after starts at once.
+    expect(boot()).toEqual([DIRECT, RAN])
+  })
+
+  test('leaves no record where the record used to be kept, which every archive holds', () => {
+    writeFileSync(join(root, 'data/.blockly-start'), 'a record from before it moved\n')
+    boot()
+    expect(existsSync(join(root, 'data/.blockly-start'))).toBe(false)
+  })
+})
+
 describe('a record on a volume the server can write', () => {
   test('is read and run as the volume’s user, never as root', () => {
     boot()
@@ -218,12 +292,31 @@ describe('a record on a volume the server can write', () => {
     expect(boot()).toEqual(SCRIPTED)
   })
 
-  test('is left alone where the volume is root’s: nothing starts at once as root', () => {
+  test('on a volume mounted as root’s, as Fly mounts it at every boot, is run once the volume is the server user’s, as the image makes it', () => {
     if (!AS_ROOT) return
     boot()
     rmSync(join(root, 'gosu.log'), { force: true })
     chownSync(join(root, 'data'), 0, 0)
-    expect(boot()).toEqual(SCRIPTED)
-    expect(handedOver()).toEqual([])
+    chownSync(record(), 0, 0)
+    expect(boot()).toEqual([`[init] Changing ownership of {data} to ${SERVER_USER} ...`, DIRECT, RAN])
+    // Everything on it is the server user's again, as after the image's own `chown -R`.
+    expect(statSync(join(root, 'data')).uid).toBe(SERVER_USER)
+    expect(statSync(record()).uid).toBe(SERVER_USER)
+    const as = `${SERVER_USER}:${SERVER_USER}`
+    expect(handedOver()).toEqual([`${as} direct-start check`, `${as} direct-start run`])
+  })
+
+  test('is left alone where the image runs the server as root, or keeps the volume’s owner: nothing starts at once as root', () => {
+    if (!AS_ROOT) return
+    const kept: Record<string, string>[] = [{ UID: '0', GID: '0' }, { SKIP_CHOWN_DATA: 'true' }]
+    for (const env of kept) {
+      chownSync(join(root, 'data'), 0, 0)
+      boot(env)
+      rmSync(join(root, 'gosu.log'), { force: true })
+      chownSync(join(root, 'data'), 0, 0)
+      expect(boot(env)).toEqual(SCRIPTED)
+      expect(handedOver()).toEqual([])
+      expect(statSync(join(root, 'data')).uid).toBe(0)
+    }
   })
 })
