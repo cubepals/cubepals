@@ -21,7 +21,6 @@ import { Cdn } from '../../testing/cdn.ts'
 import { catalogPins } from '../../testing/compat-pins.ts'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
 import type { UserActor } from '../actor.ts'
-import { AppError } from '../errors.ts'
 import { loadRevision } from '../servers/persistence.ts'
 
 let h: Harness
@@ -134,7 +133,7 @@ describe.skipIf(!hasDatabase)('a new plain server', () => {
     }, 60_000)
   }
 
-  test('a plain server asked for on a release without Paper runs Mojang’s own, and says Bedrock can’t join', async () => {
+  test('a new plain 26.3 server runs Mojang’s own, and turning Bedrock on moves it onto Paper', async () => {
     const owner = await h.user('Newest')
     const { id } = await h.create(owner, {
       name: 'Newest',
@@ -142,11 +141,15 @@ describe.skipIf(!hasDatabase)('a new plain server', () => {
     })
     await running(id)
     expect((await desired(id)).loaderVersion).toBeNull()
-    expect((await h.app.queries.get(owner, id)).bedrock).toBeNull()
     expect(await jarsOf(id)).toEqual([])
-    const refused = await h.app.revisions.changeBedrock(owner, id, true, randomUUID()).catch((e) => e)
-    expect(refused).toBeInstanceOf(AppError)
-    expect((refused as AppError).message).toContain('26.3')
+    // As a plain server made before Paper was its default: the page says Bedrock moves it.
+    expect((await h.app.queries.get(owner, id)).bedrock).toEqual({
+      on: false,
+      needsOtherVersions: false,
+      moves: true,
+    })
+    await h.app.revisions.changeBedrock(owner, id, true, randomUUID())
+    expect((await desired(id)).loaderVersion).not.toBeNull()
   }, 60_000)
 })
 

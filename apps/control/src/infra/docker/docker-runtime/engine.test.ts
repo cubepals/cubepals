@@ -556,11 +556,19 @@ test('a restore from an archive whose helper fails is removed, says why, and goe
   expect(said.said).toEqual(['storage'])
   const [fetch] = helperCreates()
   expect(fetch?.Image).toBe('curlimages/curl:8.22.0')
-  expect(fetch?.Cmd).toEqual([
-    'sh',
-    '-c',
-    'curl -sS --fail --connect-timeout 20 --speed-limit 1024 --speed-time 60 --retry 5 --retry-delay 2 -o /tmp/world.tar.gz "$SOURCE" && tar -tzf /tmp/world.tar.gz > /dev/null && find /to -mindepth 1 -delete && tar -xzf /tmp/world.tar.gz -C /to',
-  ])
+  // Downloaded, checked whole (gzip or zstd, by its first bytes), and only then the volume emptied.
+  const [shell, flag, script = ''] = (fetch?.Cmd ?? []) as string[]
+  expect([shell, flag]).toEqual(['sh', '-c'])
+  const steps = [
+    'curl -sS --fail --connect-timeout 20 --speed-limit 1024 --speed-time 60 --retry 5 --retry-delay 2 -o /tmp/world.archive "$SOURCE" &&',
+    'inflate=$(inflater "$(head -c 4 /tmp/world.archive',
+    '$inflate /tmp/world.archive | { tar -tf - > /dev/null; s=$?; cat > /dev/null; exit $s; } &&',
+    'find /to -mindepth 1 -delete &&',
+    '$inflate /tmp/world.archive | { tar -xf - -C /to; s=$?; cat > /dev/null; exit $s; }',
+  ]
+  const at = steps.map((step) => script.indexOf(step))
+  expect(at.every((index) => index >= 0)).toBe(true)
+  expect(at).toEqual([...at].sort((a, b) => a - b))
   expect(fetch?.Env).toEqual(['SOURCE=http://store/get'])
   expect(fetch?.HostConfig).toEqual({
     Mounts: [{ Type: 'volume', Source: `${base}-data`, Target: '/to' }],

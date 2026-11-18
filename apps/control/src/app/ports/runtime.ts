@@ -67,6 +67,16 @@ interface PortSpec {
  */
 export const NOT_ARCHIVED = ['.blockly-remade'] as const
 
+/**
+ * How an archive of a server's storage may be compressed, told by its first bytes: gzip, as every
+ * archive so far (RFC 1952), or zstd, a frame's magic number 0xFD2FB528 little-endian (RFC 8878,
+ * 3.1.1). A runtime that restores one reads both; none packs zstd until every reader does,
+ * blocklyd's included. The game's own shell copy is `minecraft/archive-unpack.ts`, held equal by
+ * its test.
+ */
+export const GZIP_MAGIC = [0x1f, 0x8b] as const
+export const ZSTD_MAGIC = [0x28, 0xb5, 0x2f, 0xfd] as const
+
 export interface RuntimeSpec {
   image: string
   /** Replaces the image's own entrypoint; absent, the image starts as it was built to. */

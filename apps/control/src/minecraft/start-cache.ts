@@ -117,6 +117,14 @@ const SPARE_KB = 768 * 1024
 const TRIES = 2
 
 /**
+ * How a recording is made, said beside a server's failure: a server whose recordings failed made
+ * another way is tried again this way, as if it had none. A failure that says no way was made
+ * before recordings left the heap untouched (`bare`) with room beside it (`SPARE_KB`), and is tried
+ * again. Changed whenever a change to how a recording is made could save one that failed.
+ */
+const WAY = 'bare'
+
+/**
  * The script, line by line. Its words are the runner's own, then `--`, `java`, Java's options,
  * `-jar`, the jar, and the server's own. `with` runs them with more options put after `java`, less
  * the one that touches the whole heap first where `bare` is set;
@@ -125,7 +133,7 @@ const TRIES = 2
  */
 export const CACHED_RUNNER_LINES = [
   '#!/bin/sh',
-  `cache=${CACHE}; conf=$cache.conf; state=${CACHE_STATE}`,
+  `cache=${CACHE}; conf=$cache.conf; state=${CACHE_STATE}; way=${WAY}`,
   'plain() { exec mc-server-runner "$@"; }',
   'n=0; at=0; jar=0; file=; bare=; launch=; lstate=',
   'for w; do n=$((n + 1)); if [ $at = 0 ]; then if [ "$w" = java ]; then at=$n; fi; elif [ $jar = 0 ]; then if [ "$w" = -jar ]; then jar=$n; fi; elif [ $n = $((jar + 1)) ]; then file=$w; fi; done',
@@ -143,16 +151,18 @@ export const CACHED_RUNNER_LINES = [
   'case "$room" in ""|*[!0-9]*) plain "$@";; esac',
   `if [ "$room" -lt ${TIGHT_KB} ]; then rm -f $cache $cache.new $conf $state; plain "$@"; fi`,
   'phase=; if [ "$(sed -n 1p $state 2>/dev/null)" = "$fp" ]; then phase=$(sed -n 2p $state); else rm -f $cache $cache.new $conf $state; fi',
+  // A failure made another way is forgotten: this way may write it.
+  'if [ "$phase" = failed ] && [ "$(sed -n 3p $state)" != "$way" ]; then phase=; rm -f $cache $cache.new $conf $state; fi',
   'if [ "$phase" = made ] && [ -s $cache ]; then with "-XX:AOTCache=$cache" "$@"; fi',
   'if [ "$phase" = failed ]; then plain "$@"; fi',
   `if [ "$phase" = ${RECORDS} ] && [ -s $conf ]; then`,
   'echo "[init] Making this server a quicker start from its last one"',
   'if make "$@" && [ -s $cache.new ] && mv -f $cache.new $cache && printf "%s\\n" "$fp" made > $state; then rm -f $conf; with "-XX:AOTCache=$cache" "$@"; fi',
-  'rm -f $conf $cache $cache.new; printf "%s\\n" "$fp" failed > $state; plain "$@"',
+  'rm -f $conf $cache $cache.new; printf "%s\\n" "$fp" failed "$way" > $state; plain "$@"',
   'fi',
   // The recordings started for what runs now, this one counted: one still `recording` here was never written.
   `tries=1; if [ "$phase" = ${RECORDS} ]; then tries=$(sed -n 3p $state); case "$tries" in ""|*[!0-9]*) tries=1;; esac; tries=$((tries + 1)); fi`,
-  `if [ "$tries" -gt ${TRIES} ]; then rm -f $conf $cache $cache.new; printf "%s\\n" "$fp" failed > $state; plain "$@"; fi`,
+  `if [ "$tries" -gt ${TRIES} ]; then rm -f $conf $cache $cache.new; printf "%s\\n" "$fp" failed "$way" > $state; plain "$@"; fi`,
   // The heap Java is given, in kilobytes, and the machine's memory: a heap not said is Java's own share, which leaves room.
   'heap=; n=0; for w; do n=$((n + 1)); if [ $n -gt $at ] && [ $n -lt $jar ]; then case "$w" in -Xmx*) heap=${w#-Xmx};; esac; fi; done',
   'case "$heap" in *[gG]) heap=$((${heap%?} * 1048576));; *[mM]) heap=$((${heap%?} * 1024));; *[kK]) heap=${heap%?};; *[!0-9]*) heap=;; ?*) heap=$((heap / 1024));; esac',

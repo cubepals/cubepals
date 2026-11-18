@@ -54,6 +54,6 @@ test('one with none recorded, as an upload has, is restored unchecked', async ()
   const download = { url: 'https://bucket.example/upload.tgz' }
   await runtime.restore(handle, { kind: 'archive', download, sha256: null }, spec, progress)
   const script = fake.jobScripts.find((s) => s.includes('upload.tgz')) ?? ''
-  expect(script).toContain('tar -xzf -')
+  expect(script).toContain('tar -xf - -C /data')
   expect(script).not.toContain('sha256sum')
 }, 20_000)

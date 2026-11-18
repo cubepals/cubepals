@@ -61,6 +61,7 @@ import { type Edge, join, login } from './lib/minecraft.ts'
 import { ownGameJoins } from './lib/own-game-joins.ts'
 import { type Api, people } from './lib/people.ts'
 import { restNow } from './lib/rest-now.ts'
+import { seedIn } from './lib/seed-reply.ts'
 import { reachDatabase } from './lib/staging-database.ts'
 
 const WEB = 'https://staging.cubepals.com'
@@ -324,7 +325,7 @@ class Journey {
   }
 
   async seedOf(): Promise<string> {
-    return (await this.consoleSays('seed')).match(/-?\d+/)?.[0] ?? ''
+    return seedIn(await this.consoleSays('seed'))
   }
 
   /** How long an operation of this kind last took, from its own record. */

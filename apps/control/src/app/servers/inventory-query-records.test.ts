@@ -352,6 +352,7 @@ test.skipIf(!hasDatabase)(
         loaders: [
           { value: 'vanilla', label: 'Vanilla', allowed: true },
           { value: 'fabric', label: 'Fabric', allowed: false, reason: 'Fabric servers come with Plus.' },
+          { value: 'paper', label: 'Paper', allowed: true },
         ],
       },
     ])

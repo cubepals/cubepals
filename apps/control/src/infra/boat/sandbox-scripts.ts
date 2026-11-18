@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { createHash } from 'node:crypto'
-import { NOT_ARCHIVED, type RuntimeSpec } from '../../app/ports/runtime.ts'
+import { GZIP_MAGIC, NOT_ARCHIVED, type RuntimeSpec, ZSTD_MAGIC } from '../../app/ports/runtime.ts'
 
 /**
  * What runs inside a server's sandbox, as shell: one program, told what to do by a verb, run
@@ -32,6 +32,8 @@ export const SETTLE_PART_SECONDS = 100
 const CONFIG_DIR = '/home/user/.blockly'
 /** Written here, then moved into place by `configure` once nothing still needs the one before. */
 export const NEXT_CONFIG = `${CONFIG_DIR}/workload.next.json`
+
+const hex = (bytes: readonly number[]) => bytes.map((byte) => byte.toString(16).padStart(2, '0')).join('')
 
 const PROGRAM = String.raw`
 set -u
@@ -201,10 +203,22 @@ forget() {
   settle
   sudo -n rm -f "$SNAPS/$1" && echo "ok forgotten"
 }
+# The command that inflates an archive whose first bytes are $1 in hex: gzip or zstd.
+inflater() {
+  case "$1" in
+    ${hex(ZSTD_MAGIC)}*) echo "zstd -dcq" ;;
+    ${hex(GZIP_MAGIC)}*) echo "gzip -dc" ;;
+    *) return 1 ;;
+  esac
+}
+# gzip or zstd, by the archive's first bytes; checked whole before the world is emptied. pipefail
+# keeps the inflater's own failure (a bad checksum under whole tar headers) from tar's success, and
+# tar's input is drained after it ends, so zeros padding the last record never cut the inflater off.
 fill() {
   running && fail "the workload is running"
-  sudo -n tar -tzf "$1" >/dev/null || fail "the archive is not whole"
-  sudo -n find "$DATA" -mindepth 1 -delete && sudo -n tar -xzf "$1" -C "$DATA" || fail "unpacking the world"
+  inflate=$(inflater "$(sudo -n head -c 4 "$1" | od -An -tx1 | tr -d ' \n')") || fail "the archive is neither gzip nor zstd"
+  ( set -o pipefail; sudo -n $inflate "$1" | { sudo -n tar -tf - >/dev/null; s=$?; cat >/dev/null; exit $s; } ) || fail "the archive is not whole"
+  sudo -n find "$DATA" -mindepth 1 -delete && ( set -o pipefail; sudo -n $inflate "$1" | { sudo -n tar -xf - -C "$DATA"; s=$?; cat >/dev/null; exit $s; } ) || fail "unpacking the world"
 }
 restore_snapshot() {
   settle

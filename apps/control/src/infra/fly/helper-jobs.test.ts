@@ -149,6 +149,30 @@ describe.skipIf(!existsSync(SOCKET))('a helper job that writes to the volume', (
     expect(said).toBe('failed 1 |')
   }, 120_000)
 
+  test('a zstd archive is restored as a gzip one is, told apart by its first bytes', async () => {
+    const zstd = packed.replace('gzip -c /tmp/a.tar > /tmp/a.tgz', 'zstd -q -c /tmp/a.tar > /tmp/a.tgz')
+    expect(zstd).not.toBe(packed)
+    const said = await run(holds(`find /data -mindepth 1 -delete\n${zstd}\n${checked()}`), flushed)
+    expect(said).toBe('ok restored | ./world/level.dat')
+    const unchecked = await run(
+      holds(`find /data -mindepth 1 -delete\n${zstd}\n${restoreJob('file:///tmp/a.tgz')}`),
+      flushed,
+    )
+    expect(unchecked).toBe('ok restored | ./world/level.dat')
+  }, 120_000)
+
+  test('a gzip archive whose own checksum is wrong fails the restore, though its sha256 is recorded', async () => {
+    // The CRC-32 in gzip's trailer, changed after the archive's sha256 is taken: tar's headers
+    // are whole, and only the inflater can tell.
+    const broken = packed.replace(
+      'sha=$(sha256sum',
+      'printf "\\377\\377\\377\\377" | dd of=/tmp/a.tgz bs=1 seek=$(( $(stat -c %s /tmp/a.tgz) - 8 )) conv=notrunc 2>/dev/null\nsha=$(sha256sum',
+    )
+    expect(broken).not.toBe(packed)
+    const said = await run(holds(`find /data -mindepth 1 -delete\n${broken}\n${checked()}`), flushed)
+    expect(said).toStartWith('failed')
+  }, 120_000)
+
   test('flushes the world it restored before it says so', async () => {
     const made =
       'mkdir -p /tmp/w/world && echo level > /tmp/w/world/level.dat && tar -czf /tmp/a.tgz -C /tmp/w .'

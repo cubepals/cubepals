@@ -13,9 +13,11 @@ import type Docker from 'dockerode'
 import {
   type ArchiveTarget,
   type DownloadTarget,
+  GZIP_MAGIC,
   NOT_ARCHIVED,
   type PartsUpload,
   type PutPart,
+  ZSTD_MAGIC,
 } from '../../../app/ports/runtime.ts'
 import type { RunHelper } from './helper.ts'
 
@@ -28,6 +30,20 @@ const ARCHIVER_IMAGE = 'curlimages/curl:8.22.0'
  */
 const CURL =
   'curl -sS --fail --connect-timeout 20 --speed-limit 1024 --speed-time 60 --retry 5 --retry-delay 2'
+const hex = (bytes: readonly number[]) => bytes.map((byte) => byte.toString(16).padStart(2, '0')).join('')
+/**
+ * Shell: `inflater <hex>` prints the command that inflates an archive starting with those bytes,
+ * gzip or zstd (`GZIP_MAGIC`, `ZSTD_MAGIC`), and fails for neither.
+ */
+const INFLATER = [
+  'inflater() {',
+  '  case "$1" in',
+  `    ${hex(ZSTD_MAGIC)}*) echo "zstd -dcq" ;;`,
+  `    ${hex(GZIP_MAGIC)}*) echo "gzip -dc" ;;`,
+  '    *) echo "the archive is neither gzip nor zstd" >&2; return 1 ;;',
+  '  esac',
+  '}',
+].join('\n')
 const headerArgs = (headers: Record<string, string>) =>
   Object.entries(headers).flatMap(([name, value]) => ['-H', `${name}: ${value}`])
 
@@ -75,8 +91,8 @@ export async function exportArchive(
 
 /**
  * The archive at `download` unpacked into `volume`, in place of what it held. The helper fetches
- * the archive the way a game runtime would reach the store, and checks it is a whole tarball before
- * the volume is emptied: a bad download leaves the world alone.
+ * the archive the way a game runtime would reach the store, and checks it is a whole tarball, gzip
+ * or zstd by its first bytes, before the volume is emptied: a bad download leaves the world alone.
  */
 export async function unpackArchive(
   helper: RunHelper,
@@ -88,7 +104,17 @@ export async function unpackArchive(
     [
       'sh',
       '-c',
-      `${CURL} -o /tmp/world.tar.gz "$SOURCE" && tar -tzf /tmp/world.tar.gz > /dev/null && find /to -mindepth 1 -delete && tar -xzf /tmp/world.tar.gz -C /to`,
+      [
+        'set -o pipefail',
+        INFLATER,
+        `${CURL} -o /tmp/world.archive "$SOURCE" &&`,
+        'inflate=$(inflater "$(head -c 4 /tmp/world.archive | od -An -tx1 | tr -d " \\n")") &&',
+        // tar's input is drained after it ends, so zeros padding the last record never cut the
+        // inflater off, which pipefail would count as a failure.
+        '$inflate /tmp/world.archive | { tar -tf - > /dev/null; s=$?; cat > /dev/null; exit $s; } &&',
+        'find /to -mindepth 1 -delete &&',
+        '$inflate /tmp/world.archive | { tar -xf - -C /to; s=$?; cat > /dev/null; exit $s; }',
+      ].join('\n'),
     ],
     {
       mounts: [{ Type: 'volume', Source: volume, Target: '/to' }],

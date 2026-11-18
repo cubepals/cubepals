@@ -620,9 +620,9 @@ describe('FlyRuntime resting worlds', () => {
     const ref = decodeHandle(back)
     expect(ref.machineId).not.toBeNull()
     expect(ref.volumeId).not.toBeNull()
-    expect(fake.jobScripts.at(-1)).toContain(
-      "curl -fsSL 'https://bucket.example/rest.tgz?sig=1' | tar -xzf - -C /data",
-    )
+    const script = fake.jobScripts.at(-1) ?? ''
+    expect(script).toContain("curl -fsSL 'https://bucket.example/rest.tgz?sig=1' | ")
+    expect(script).toContain('tar -xf - -C /data')
     expect(runtime.endpoint(back, 'game', 'edge')).toEqual({ host: `${APP}.flycast`, port: 25565 })
   })
 

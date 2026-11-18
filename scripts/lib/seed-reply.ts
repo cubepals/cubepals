@@ -1,0 +1,18 @@
+// SPDX-FileCopyrightText: 2026 The Cubepals Authors
+//
+// SPDX-License-Identifier: AGPL-3.0-only
+
+/**
+ * The seed in the console's answer to `seed`, which Minecraft gives as `Seed: [<number>]`. The
+ * staging check tells worlds apart by it, so it is read from that line alone. Vanilla's console
+ * keeps one answer for every connection, so another command's answer can arrive ahead of it (the
+ * spawn warm-up's "Marked 49 chunks"), and its numbers are not the seed. An answer without the
+ * seed's line is refused with what it said.
+ */
+const SEED_REPLY = /Seed: \[(-?\d+)\]/
+
+export function seedIn(reply: string): string {
+  const seed = SEED_REPLY.exec(reply)?.[1]
+  if (seed === undefined) throw new Error(`the console answered "${reply.trim()}" to seed`)
+  return seed
+}
