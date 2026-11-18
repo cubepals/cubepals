@@ -7,6 +7,7 @@ import { createHash, randomBytes } from 'node:crypto'
 import { chmod, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { gzipSync, constants as zlib, zstdCompressSync } from 'node:zlib'
 import type { RuntimeSpec } from '../../app/ports/runtime.ts'
 import { MemoryStore } from '../../testing/memory-store.ts'
 import { script, scriptOnNew, type Verb, workloadConfig } from './sandbox-scripts.ts'
@@ -300,5 +301,86 @@ describe('the workload’s container', () => {
   // The image's mc-health runs as root and sources /data/.mc-health.env, which a mod can write.
   test('never runs the image’s own health check', () => {
     expect(workloadConfig(spec, 'server').Healthcheck).toEqual({ Test: ['NONE'] })
+  })
+})
+
+// Restores: gzip, as every archive so far, or zstd, told apart by their first bytes. A machine
+// without zstd (this one may be) gets a stand-in that inflates as `zstd -dcq <file>` does.
+describe('the sandbox program’s restore', () => {
+  let root: string
+  let volumes: string
+  let shims: string
+
+  beforeAll(async () => {
+    root = await mkdtemp(join(tmpdir(), 'blockly-boat-restore-'))
+    volumes = join(root, 'volumes')
+    shims = join(root, 'bin')
+    const world = join(root, 'world')
+    await mkdir(join(world, 'world'), { recursive: true })
+    await writeFile(join(world, 'world', 'level.dat'), 'the archived world')
+    const tar = Bun.spawnSync(['tar', '-cf', join(root, 'w.tar'), '-C', world, '.'])
+    if (tar.exitCode !== 0) throw new Error('tar failed')
+    const packed = await readFile(join(root, 'w.tar'))
+    // Whole and valid, its last record zeros past tar's end: tar is done before gzip is.
+    const pad = Bun.spawnSync(['tar', '-b', '512', '-cf', join(root, 'pad.tar'), '-C', world, '.'])
+    if (pad.exitCode !== 0) throw new Error('tar failed')
+    const snaps = join(volumes, 'blockly-snapshots', '_data')
+    await mkdir(snaps, { recursive: true })
+    await mkdir(join(volumes, 'blockly-data', '_data'), { recursive: true })
+    await writeFile(join(snaps, 'g.tar.gz'), gzipSync(packed))
+    await writeFile(join(snaps, 'z.tar.gz'), zstdCompressSync(packed))
+    await writeFile(join(snaps, 'pad.tar.gz'), gzipSync(await readFile(join(root, 'pad.tar'))))
+    await writeFile(join(snaps, 'x.tar.gz'), 'neither gzip nor zstd, at any length')
+    // Whole tar inside, a wrong checksum around it: gzip's CRC-32, zstd's content checksum.
+    const crc = gzipSync(packed)
+    crc[crc.length - 8] = (crc.at(-8) ?? 0) ^ 0xff
+    await writeFile(join(snaps, 'crc.tar.gz'), crc)
+    const sum = zstdCompressSync(packed, { params: { [zlib.ZSTD_c_checksumFlag]: 1 } })
+    sum[sum.length - 1] = (sum.at(-1) ?? 0) ^ 0xff
+    await writeFile(join(snaps, 'sum.tar.gz'), sum)
+    await mkdir(shims)
+    await writeFile(join(shims, 'sudo'), '#!/bin/sh\n[ "$1" = -n ] && shift\nexec "$@"\n')
+    await writeFile(join(shims, 'docker'), '#!/bin/sh\nexit 0\n')
+    if (Bun.spawnSync(['sh', '-c', 'command -v zstd']).exitCode !== 0)
+      await writeFile(
+        join(shims, 'zstd'),
+        `#!/bin/sh\nfor last; do :; done\nexec ${process.execPath} -e 'process.stdout.write(require("node:zlib").zstdDecompressSync(require("node:fs").readFileSync(process.argv[1])))' "$last"\n`,
+      )
+    for (const shim of await readdir(shims)) await chmod(join(shims, shim), 0o755)
+  })
+
+  afterAll(async () => {
+    await rm(root, { recursive: true, force: true })
+  })
+
+  const data = join('blockly-data', '_data')
+  const run = (file: string) =>
+    Bun.spawnSync(['bash', '-c', script('restore-snapshot', file)], {
+      env: { ...process.env, PATH: `${shims}:${process.env.PATH}`, BLOCKLY_VOLUMES: volumes },
+    })
+      .stdout.toString()
+      .trim()
+
+  test('a gzip snapshot, a zstd one and one padded with zeros all come back whole', async () => {
+    for (const file of ['g.tar.gz', 'z.tar.gz', 'pad.tar.gz']) {
+      await writeFile(join(volumes, data, 'stale'), 'from before')
+      expect(run(file)).toBe('ok restored')
+      expect(await readdir(join(volumes, data))).toEqual(['world'])
+      expect(await readFile(join(volumes, data, 'world', 'level.dat'), 'utf8')).toBe('the archived world')
+    }
+  })
+
+  test('one that is neither is refused, and the world stays as it was', async () => {
+    await writeFile(join(volumes, data, 'kept'), 'still here')
+    expect(run('x.tar.gz')).toStartWith('failed')
+    expect((await readdir(join(volumes, data))).sort()).toEqual(['kept', 'world'])
+  })
+
+  test('one whose checksum is wrong is refused, and the world stays as it was', async () => {
+    await writeFile(join(volumes, data, 'kept'), 'still here')
+    for (const file of ['crc.tar.gz', 'sum.tar.gz']) {
+      expect(run(file)).toStartWith('failed')
+      expect((await readdir(join(volumes, data))).sort()).toEqual(['kept', 'world'])
+    }
   })
 })

@@ -5,7 +5,7 @@
 import { PassThrough, Readable, Transform } from 'node:stream'
 import type { ReadableStream as WebReadableStream } from 'node:stream/web'
 import { promisify } from 'node:util'
-import { createGunzip, gunzip, gzipSync } from 'node:zlib'
+import { gunzip, gzipSync } from 'node:zlib'
 import { SECOND_MS } from '@blockly/contracts/durations'
 import { configure } from '@zip.js/zip.js'
 import { parse as parseProperties } from 'dot-properties'
@@ -16,6 +16,7 @@ import { parse as parseToml } from 'smol-toml'
 import { Header, Pack, Parser, ReadEntry } from 'tar'
 import { parse as parseYaml } from 'yaml'
 import { type FileFormats, ReadCutShort, UnreadableFile } from '../../app/ports/formats.ts'
+import { inflating } from './archive-codec.ts'
 import { readRemoteZip } from './remote-zip.ts'
 
 /**
@@ -173,7 +174,7 @@ export class LibraryFileFormats implements FileFormats {
       // Inflated here rather than by the parser, so every byte the archive inflates to is counted,
       // the ones no entry is read for and any after its end included. Each chunk inflated costs a
       // round through the stream, so they are large ones: zlib's default is many times slower.
-      const gunzip = createGunzip({ chunkSize: INFLATED_CHUNK_BYTES })
+      const inflate = inflating(input, INFLATED_CHUNK_BYTES, () => new UnreadableFile(NOT_AN_ARCHIVE))
       let inflated = 0
       let kept = 0
       let keptBytes = 0
@@ -183,7 +184,7 @@ export class LibraryFileFormats implements FileFormats {
         settled = true
         clearTimeout(timer)
         input.destroy()
-        gunzip.destroy()
+        inflate.destroy()
         counted.destroy()
         if (error) reject(error)
         else resolve(found)
@@ -235,14 +236,20 @@ export class LibraryFileFormats implements FileFormats {
         },
       })
       parser.on('error', (error: unknown) =>
-        finish(new UnreadableFile(`Not a gzipped tarball: ${messageOf(error)}`)),
+        finish(new UnreadableFile(`${NOT_AN_ARCHIVE}: ${messageOf(error)}`)),
       )
       parser.on('end', () => finish())
       input.on('error', (error) => finish(error))
-      gunzip.on('error', (error) => finish(new UnreadableFile(`Not a gzipped tarball: ${messageOf(error)}`)))
+      inflate.on('error', (error) =>
+        finish(
+          error instanceof UnreadableFile
+            ? error
+            : new UnreadableFile(`${NOT_AN_ARCHIVE}: ${messageOf(error)}`),
+        ),
+      )
       if (stop.signal.aborted) return finish(late())
       stop.signal.addEventListener('abort', () => finish(late()))
-      input.pipe(gunzip).pipe(counted).pipe(parser)
+      inflate.pipe(counted).pipe(parser)
     })
   }
 
@@ -287,7 +294,7 @@ export class LibraryFileFormats implements FileFormats {
     })
     const output = pack.pipe(new PassThrough())
     const fail = (error: unknown) =>
-      output.destroy(new UnreadableFile(`Not a gzipped tarball: ${messageOf(error)}`))
+      output.destroy(new UnreadableFile(`${NOT_AN_ARCHIVE}: ${messageOf(error)}`))
     parser.on('error', fail)
     pack.on('error', fail)
     input.on('error', (error) => output.destroy(error))
@@ -330,6 +337,9 @@ const MAX_JAR_RECORDS = 20_000
 const MAX_SCANNED_RECORDS = 150_000
 const BATCH_BYTES = 64 * 1024 * 1024
 const INFLATED_CHUNK_BYTES = 1024 * 1024
+
+/** What an archive that can't be read is: a tarball, gzipped or zstd-compressed, is what is kept. */
+const NOT_AN_ARCHIVE = 'Not a gzip or zstd tarball'
 
 /** A level.dat or a player's file is kilobytes inflated, a heavily modded one a few megabytes. */
 const MAX_NBT_BYTES = 64 * 1024 * 1024
