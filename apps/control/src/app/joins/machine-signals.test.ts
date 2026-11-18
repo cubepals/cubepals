@@ -160,33 +160,40 @@ describe.skipIf(!hasDatabase)('a Java killed for want of memory', () => {
 })
 
 describe.skipIf(!hasDatabase)('a kill the provider started the server again from', () => {
-  /** The provider lists the server running anew, and says, asked, what its last exit was. */
-  async function relisted(id: string, said: Partial<RuntimeObservation>): Promise<() => void> {
+  /**
+   * The provider lists the server running anew, at one time however often it is listed, and says,
+   * asked, what its last exit was; the first `failing` times it is asked, it can't be reached.
+   */
+  async function relisted(id: string, said: Partial<RuntimeObservation>, failing = 0): Promise<() => void> {
     const handle = (await loadRuntime(h.db, id, ['fake'])).handle as RuntimeHandle
     const { observe, observeChanged } = h.runtime
+    const listedAt = new Date()
+    let failures = failing
     h.runtime.observeChanged = async function* (since) {
-      yield* observeChanged.call(h.runtime, since)
-      yield { key: id as RuntimeKey, handle, observation: { state: 'running' as const, at: new Date() } }
+      for await (const listed of observeChanged.call(h.runtime, since)) if (listed.key !== id) yield listed
+      yield { key: id as RuntimeKey, handle, observation: { state: 'running' as const, at: listedAt } }
     }
-    h.runtime.observe = async (asked: RuntimeHandle) => ({
-      ...(await observe.call(h.runtime, asked)),
-      ...(asked === handle ? said : {}),
-    })
+    h.runtime.observe = async (asked: RuntimeHandle) => {
+      if (asked === handle && failures-- > 0) throw new Error('The provider can’t be reached')
+      return { ...(await observe.call(h.runtime, asked)), ...(asked === handle ? said : {}) }
+    }
     return () => {
       h.runtime.observe = observe
       h.runtime.observeChanged = observeChanged
     }
   }
 
-  test('is kept once, however many passes see it; a stop’s kill a boot came after is not', async () => {
+  test('is kept once, however many passes see it, and after a pass that couldn’t ask; a stop’s kill a boot came after is not', async () => {
     const { id: restarted } = await running('Restarted by the provider')
     const { id: booted } = await running('Booted after its stop')
     const killedAt = new Date(Date.now() - 30_000)
     const restore = [
-      await relisted(restarted, { failedAt: killedAt, killedForMemoryAt: killedAt }),
+      // The first pass can't ask the provider: the next, listing the same, asks again.
+      await relisted(restarted, { failedAt: killedAt, killedForMemoryAt: killedAt }, 1),
       await relisted(booted, { killedForMemoryAt: killedAt }),
     ]
     try {
+      await h.app.schedules.reconcile()
       await h.app.schedules.reconcile()
       await h.app.schedules.reconcile()
     } finally {

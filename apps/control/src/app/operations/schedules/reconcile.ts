@@ -107,25 +107,29 @@ export function reconciling(deps: {
     const status = server.lifecycle.status
     if (status === 'running' && EXITED.has(seen.state)) return crashed(serverId, binding.handle)
     if (HOLDS_NONE.has(status) && seen.state === 'running') return stray(serverId, binding.handle)
-    await restartedUnder(serverId, binding.handle, status, seen)
-    await saveObserved(db, serverId, observedJson(seen))
-    return true
+    return settled(serverId, binding.handle, status, seen)
   }
 
   /**
-   * A running server whose compute changed while it stayed running: the provider may have started
-   * it again after its run failed (`on-failure`), which the listing doesn't say. The provider is
-   * asked, and a kill for want of memory it restarted from is kept (`out-of-memory.ts`).
+   * Keeps what was seen. A running server whose compute changed while it stayed running may have
+   * been started again by the provider after its run failed (`on-failure`), which the listing doesn't
+   * say: the provider is asked first, and a kill for want of memory it restarted from is kept
+   * (`out-of-memory.ts`). Where it can't be asked, nothing is kept, so the next pass asks again:
+   * once saved, the same listing is never news.
    */
-  const restartedUnder = async (
+  const settled = async (
     serverId: string,
     handle: RuntimeHandle,
     status: ServerStatus,
     seen: RuntimeObservation,
-  ): Promise<void> => {
-    if (status !== 'running' || seen.state !== 'running') return
-    const now = await runtime.observe(handle).catch(() => null)
-    if (now !== null) await keepRestartedKill(db, serverId, now)
+  ): Promise<boolean> => {
+    if (status === 'running' && seen.state === 'running') {
+      const now = await runtime.observe(handle).catch(() => null)
+      if (now === null) return false
+      await keepRestartedKill(db, serverId, now)
+    }
+    await saveObserved(db, serverId, observedJson(seen))
+    return true
   }
 
   /** Compute the provider brought back at another address: its new handle, unless one was saved since. */
