@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import type { AppErrorCode } from '@blockly/contracts'
+import type { Aside } from '../minecraft/set-aside.ts'
 import { ConsoleUnavailable } from './ports/minecraft.ts'
 import { RuntimeFull } from './ports/runtime.ts'
 
@@ -69,11 +70,14 @@ export class PlainFailure extends Error {
  */
 export class DiagnosedFailure extends PermanentFailure {
   readonly remedy: string
+  /** The files the output named as what stopped it, which a fix may set aside (`servers/set-aside.ts`). */
+  readonly files: readonly Aside[]
 
-  constructor(message: string, remedy: string, options?: ErrorOptions) {
+  constructor(message: string, remedy: string, files: readonly Aside[] = [], options?: ErrorOptions) {
     super(message, options)
     this.name = 'DiagnosedFailure'
     this.remedy = remedy
+    this.files = files
   }
 }
 

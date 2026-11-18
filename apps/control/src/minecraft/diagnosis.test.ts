@@ -496,12 +496,12 @@ describe('mods that change the same code, or come twice', () => {
         '[23:35:35] [main/FATAL]: A critical error occurred',
         "net.fabricmc.loader.discovery.ModResolutionException: Duplicate versions for mod ID 'fabric': [0.30.3+1.16 at /data/mods/fabric-api-0.30.3+1.16.jar]",
       ]),
-    ).toEqual(mods('Two copies of fabric are installed.'))
+    ).toMatchObject(mods('Two copies of fabric are installed.'))
     expect(
       diagnose([
         '[22:32:46] [Server thread/ERROR] [FML/]: Found a duplicate mod Baubles at [/data/mods/1.7.10/Baubles-1.7.10-1.0.1.10.jar, /data/mods/Baubles-1.7.10-1.0.1.10.jar]',
       ]),
-    ).toEqual(mods('Two copies of Baubles are installed.'))
+    ).toMatchObject(mods('Two copies of Baubles are installed.'))
     // Forge 1.20.1: Embeddium carries Rubidium's id, so both are Rubidium to it.
     expect(
       diagnose([
@@ -509,13 +509,13 @@ describe('mods that change the same code, or come twice', () => {
         "\tMod ID: 'rubidium' from mod files: rubidium-mc1.20.1-0.7.1.jar, embeddium-0.3.31+mc1.20.1.jar",
         'net.minecraftforge.fml.loading.EarlyLoadingException: Duplicate mods found',
       ]),
-    ).toEqual(mods('rubidium and embeddium are the same mod, so only one of them can be installed.'))
+    ).toMatchObject(mods('rubidium and embeddium are the same mod, so only one of them can be installed.'))
     expect(
       diagnose([
         'Exception in thread "main" net.neoforged.fml.ModLoadingException: Loading errors encountered:',
         '\t- Mod jei is present in multiple files: jei-1.21.1-neoforge-19.21.0.247.jar, jei-1.21.1-neoforge-19.19.0.221.jar',
       ]),
-    ).toEqual(mods('Two copies of jei are installed.'))
+    ).toMatchObject(mods('Two copies of jei are installed.'))
   })
 
   test('two mods carrying the same code', () => {

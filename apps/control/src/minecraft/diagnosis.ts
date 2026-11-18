@@ -14,6 +14,7 @@
  */
 
 import { modName, someNames } from './pack-build.ts'
+import { type Aside, asideOf } from './set-aside.ts'
 
 /** What Blockly can offer to do about it, which the app turns into a single action. */
 type Remedy =
@@ -50,6 +51,11 @@ export interface Diagnosis {
    * again with it, where Blockly was the one that left it out.
    */
   missing?: string
+  /**
+   * The files the output names as what stopped it, where one is a file a fix may set aside, a copy
+   * kept (`set-aside.ts`): a datapack in the world, the copies of a mod found twice.
+   */
+  files?: Aside[]
 }
 
 interface Signature {
@@ -250,6 +256,12 @@ const PAPER_FILE: Readonly<Record<string, string>> = {
 /** A path's last part: `/srv/server/mods/html.jar` is `html.jar`. */
 const fileName = (path: string): string => path.replace(/^.*\//, '')
 
+/** The files a fix may set aside, where any of those named is one. */
+function filesOf(named: readonly (Aside | null)[]): { files?: Aside[] } {
+  const files = named.filter((file) => file !== null)
+  return files.length === 0 ? {} : { files }
+}
+
 /** A datapack by the name its owner knows: its file without `.zip`. */
 const packName = (file: string): string => fileName(file).replace(/\.zip$/i, '')
 
@@ -375,12 +387,19 @@ const SIGNATURES: readonly Signature[] = [
       const id = match[1] ?? match[2] ?? match[4] ?? match[6] ?? match[8] ?? ''
       const files = (match[3] ?? match[5] ?? match[7] ?? '').split(/,\s*/).filter((file) => file !== '')
       const names = [...new Set(files.map((file) => modName(file.trim())))]
+      // Fabric lists each copy as `<version> at <path>` after the id.
+      const paths =
+        match[1] === undefined
+          ? files
+          : [...match.input.matchAll(/ at (\/[^,\]\s]+)/g)].map((m) => m[1] ?? '')
+      const found = filesOf(paths.map((path) => asideOf(path.trim(), false)))
       if (names.length >= 2)
         return {
           summary: `${names[0]} and ${names[1]} are the same mod, so only one of them can be installed.`,
           remedy: 'mods',
+          ...found,
         }
-      return { summary: `Two copies of ${names[0] ?? id} are installed.`, remedy: 'mods' }
+      return { summary: `Two copies of ${names[0] ?? id} are installed.`, remedy: 'mods', ...found }
     },
   },
   {
@@ -609,6 +628,7 @@ const SIGNATURES: readonly Signature[] = [
     diagnose: (match) => ({
       summary: `The datapack ${packName(match[1] ?? '')} has files this Minecraft can’t read, so its world couldn’t load. It may be made for another version.`,
       remedy: 'mods',
+      ...filesOf([asideOf(`datapacks/${match[1] ?? ''}`, true)]),
     }),
   },
   {

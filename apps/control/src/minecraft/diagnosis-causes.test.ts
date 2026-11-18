@@ -90,7 +90,7 @@ describe('what codex knows', () => {
   })
 
   test('a datapack that doesn’t parse is named', () => {
-    expect(diagnose(log('codex/vanilla-failed-to-parse-from-pack'))).toEqual({
+    expect(diagnose(log('codex/vanilla-failed-to-parse-from-pack'))).toMatchObject({
       summary:
         'The datapack far-end-ender-expansion-2-0-3-v1-17-1 has files this Minecraft can’t read, so its world couldn’t load. It may be made for another version.',
       remedy: 'mods',

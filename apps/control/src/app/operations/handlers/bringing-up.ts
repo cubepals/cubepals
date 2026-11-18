@@ -28,6 +28,7 @@ import { heldStorage } from '../../servers/kept-storage.ts'
 import { loadRevision, lockServer, type RuntimeBinding, saveHandle } from '../../servers/persistence.ts'
 import { changedParts } from '../../servers/resume-parts.ts'
 import { desiredRuns } from '../../servers/revision-reads.ts'
+import { setAsideFor } from '../../servers/set-aside.ts'
 import type { DesiredRuntime, RuntimeSpecs } from '../../servers/specs.ts'
 import type { ServerTransitions } from '../../servers/transitions.ts'
 import { clearPresence, closeInterval, openInterval } from '../../servers/usage.ts'
@@ -152,7 +153,10 @@ async function moveOn(
 
 export function bringingUp(deps: {
   db: Db
-  runtime: Pick<Runtimes, 'providers' | 'ensureProvisioned' | 'apply' | 'stop' | 'destroy' | 'hasRoom'>
+  runtime: Pick<
+    Runtimes,
+    'providers' | 'ensureProvisioned' | 'apply' | 'stop' | 'destroy' | 'hasRoom' | 'exec'
+  >
   placement: Pick<RuntimePlacement, 'fallbackFor' | 'fellBack' | 'nextFor'>
   policy: Pick<AccessPolicy, 'check'>
   specs: Pick<RuntimeSpecs, 'desired'>
@@ -346,7 +350,7 @@ export function bringingUp(deps: {
           desired = installed
         }
       } catch (error) {
-        return await hostRefused(deps).refusedHere(ctx, error)
+        return await hostRefused(deps).refusedHere(ctx, await setAsideFor(db, ctx.server, error))
       }
       await db.transaction(async (tx) => {
         const server = await lockServer(tx, ctx.server.id)
