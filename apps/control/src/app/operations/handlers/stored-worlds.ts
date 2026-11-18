@@ -12,6 +12,7 @@ import { DAY_MS } from '@blockly/contracts/durations'
 import { type AppliedConfigJson, type Db, schema, type Tx } from '@blockly/db'
 import { entitlementsOf } from '../../../domain/account/entitlements.ts'
 import type { MinecraftServer } from '../../../domain/server/server.ts'
+import { stoppedByRestore } from '../../../minecraft/restore-step.ts'
 import { markReseed } from '../../access/persistence.ts'
 import { loadControls, loadStanding } from '../../accounts/persistence.ts'
 import { type BackupRecord, expireSnapshotsOf, setExpiry, storedCopy } from '../../backups/persistence.ts'
@@ -39,7 +40,7 @@ const KEEPING_REBUILDS_STORAGE =
 
 export function storedWorlds(deps: {
   db: Db
-  runtime: Pick<Runtimes, 'providers' | 'stop' | 'release' | 'restore'>
+  runtime: Pick<Runtimes, 'providers' | 'stop' | 'release' | 'restore' | 'observe'>
   specs: Pick<RuntimeSpecs, 'desired'>
   boot: Pick<BootSequence, 'run'>
   transitions: ServerTransitions
@@ -238,11 +239,13 @@ export function storedWorlds(deps: {
       await markReseed(db, server.id)
       try {
         const download = await archives.presignGet(copy.archiveKey, IMPORT_LINK_SECONDS, 'runtime')
+        // Booted at once, and let go if that fails, where the copy is small (`restoresAtBoot`).
         const restored = await runtime.restore(
           binding.handle,
           { kind: 'archive', download, sha256: copy.sha256 },
           desired.spec,
           progressSink(ctx, server),
+          { bootsAtOnce: restoresAtBoot(copy) },
         )
         await saveHandle(db, server.id, restored, server.regionKey)
         const started = await startCompute(server.id, restored)
@@ -251,8 +254,7 @@ export function storedWorlds(deps: {
         // Sent to the trash while it woke: the decommission behind this takes what it made.
         if (error instanceof NoLongerApplies) throw error
         // What went wrong is the platform's to read; the owner reads that the world is safe.
-        await backToStored(server.id, ctx.op.id, inFull(error))
-        const words = ownersWords(error)
+        const words = await wakeFailed(db, runtime, backToStored, server.id, ctx.op.id, error)
         return {
           status: 'failed',
           reason: `We couldn’t wake it just now${words === null ? '' : ` (${words})`}. Its world is safe; try again in a minute.`,
@@ -283,6 +285,40 @@ export function storedWorlds(deps: {
   }
 
   return { store, unstore }
+}
+
+/**
+ * The largest copy a wake lets the runtime bring back as the server boots (`bootsAtOnce`): there,
+ * the restore counts against the boot's own wait for the server to answer (ten minutes), where a
+ * restore before the boot has hours. Every copy a world rested in on 2026-11-18 was under 800 MB,
+ * half of them under 220 MB; a larger one is brought back before the boot, as it was.
+ */
+const RESTORED_AT_BOOT_MOST_BYTES = 2 * 1024 ** 3
+
+/** Whether a wake from `copy` may bring its world back as the server boots. */
+const restoresAtBoot = (copy: Pick<BackupRecord, 'sizeBytes'>): boolean =>
+  copy.sizeBytes !== null && copy.sizeBytes <= RESTORED_AT_BOOT_MOST_BYTES
+
+/** What an owner reads, in the wake's failure, when its world couldn't be brought back. */
+const NOT_BACK = 'its world couldn’t be brought back from its copy'
+
+/**
+ * A wake that failed, its world put back to rest, and what its owner reads of why, or null. The
+ * server's machine is read before it is let go: a start its own restore stopped
+ * (`stoppedByRestore`) is said as a world that couldn't be brought back, not as a failed boot.
+ */
+async function wakeFailed(
+  db: Db,
+  runtime: Pick<Runtimes, 'providers' | 'observe'>,
+  backToStored: (serverId: string, wakeId: string, reason: string) => Promise<void>,
+  serverId: string,
+  wakeId: string,
+  error: unknown,
+): Promise<string | null> {
+  const { handle } = await loadRuntime(db, serverId, runtime.providers)
+  const notBack = handle !== null && stoppedByRestore(await runtime.observe(handle).catch(() => null))
+  await backToStored(serverId, wakeId, notBack ? `${NOT_BACK}. ${inFull(error)}` : inFull(error))
+  return notBack ? NOT_BACK : ownersWords(error)
 }
 
 /**

@@ -23,6 +23,7 @@ import { heapEnv } from './heap-flags.ts'
 import { DATA_DIR, JAR_LISTS, jarsOf } from './jars.ts'
 import { PAPER_DEFAULTS_STEP } from './paper-defaults.ts'
 import { GAME_PORT, RCON_PORT } from './ports.ts'
+import { RESTORE_STEP } from './restore-step.ts'
 import { SET_ASIDE_STEP, type SetAsideFile, setAsideEnv } from './set-aside.ts'
 import { STARTER_STEP, starterEnv, startsOnOf } from './starter.ts'
 import { STOP_CHEATERS_STEP } from './stop-cheaters.ts'
@@ -545,9 +546,10 @@ const EXEC_IMAGE = `exec ${IMAGE_ENTRYPOINT} "$@"`
 
 /**
  * The image's own entrypoint, after Blockly's steps, which run as root on the volume: before them,
- * what they call to replace a link where they write (`volume-links.ts`). The world a server starts
- * on (`STARTER_STEP`) comes first where it has one, so the steps after it find the world it
- * unpacked as they find any. The first of those puts the volume's files as the server type reads
+ * what they call to replace a link where they write (`volume-links.ts`). A world brought back from
+ * its archive in the machine itself (`RESTORE_STEP`) comes first, then the world a server starts
+ * on (`STARTER_STEP`) where it has one, so the steps after them find the world they unpacked as
+ * they find any. The first of those puts the volume's files as the server type reads
  * them (`PAPER_STEP` on Paper, after `VANILLA_PAPER_STEP` on plain Minecraft run on Paper and before
  * the settings Cubepals gives Paper for how it runs, `paper-defaults.ts`; `DIMENSIONS_STEP` on any
  * other), and the second the world's datapacks (`DATAPACKS_STEP`); the
@@ -569,6 +571,7 @@ function entrypointFor(steps: {
 }): readonly string[] {
   const script = [
     UNLINKED,
+    RESTORE_STEP,
     ...(steps.starter ? [STARTER_STEP] : []),
     ...(steps.vanilla ? [VANILLA_PAPER_STEP] : []),
     steps.paper ? PAPER_STEP : DIMENSIONS_STEP,

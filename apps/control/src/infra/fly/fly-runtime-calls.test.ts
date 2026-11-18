@@ -81,6 +81,17 @@ async function provisioned(rewrite?: (call: string, response: Response) => Promi
   return { ...s, handle, mark: s.fake.calls.length }
 }
 
+/**
+ * How an export begins: a volume from the snapshot, then the machine on it, read for whether it
+ * was to bring its world back itself.
+ */
+const EXPORT_BEGINS = [
+  `POST ${at('/volumes')}`,
+  `GET ${at('/volumes/vol_4')}`,
+  `GET ${at('/volumes/vol_4')}`,
+  `GET ${at('/machines')}`,
+]
+
 describe('FlyRuntime calls, in order', () => {
   test('a first provision and start', async () => {
     const { fake } = await provisioned()
@@ -169,9 +180,7 @@ describe('FlyRuntime calls, in order', () => {
     const mark = callsSince(0).length
     await runtime.exportSnapshot(snapshot, recordingTarget())
     expect(callsSince(mark)).toEqual([
-      `POST ${at('/volumes')}`,
-      `GET ${at('/volumes/vol_4')}`,
-      `GET ${at('/volumes/vol_4')}`,
+      ...EXPORT_BEGINS,
       `POST ${at('/machines')}`,
       `GET ${at('/machines/m_5')}`,
       `POST ${at('/machines/m_5/exec')}`,
@@ -189,9 +198,7 @@ describe('FlyRuntime calls, in order', () => {
     const mark = callsSince(0).length
     await runtime.exportSnapshot(snapshot, recordingTarget({ maxPutBytes: 64 * MIB, partSize: 8 * MIB }))
     expect(callsSince(mark)).toEqual([
-      `POST ${at('/volumes')}`,
-      `GET ${at('/volumes/vol_4')}`,
-      `GET ${at('/volumes/vol_4')}`,
+      ...EXPORT_BEGINS,
       `POST ${at('/machines')}`,
       `GET ${at('/machines/m_5')}`,
       `POST ${at('/machines/m_5/exec')}`,
