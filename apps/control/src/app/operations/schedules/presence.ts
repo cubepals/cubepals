@@ -11,7 +11,8 @@
  * doesn't sample it, which `vitals/console-samples.ts` keeps, and says an operator's notice on its
  * owner to the players on it (`notice-said.ts`), and tells an operator who has just joined of the
  * updates found for its mods (`mods/updates-told.ts`). Stopping a server nobody is on is `idle.ts`'s;
- * rebuilding one off a lost host is `relocations.ts`'s.
+ * rebuilding one off a lost host is `relocations.ts`'s; restarting one whose console stays silent is
+ * `silent.ts`'s, from what this pass hears.
  */
 import { MINUTE_MS } from '@blockly/contracts/durations'
 import type { Db } from '@blockly/db'
@@ -42,6 +43,7 @@ import { recordConsoleTick, reportingServers } from '../../vitals/console-sample
 import { sayNotice } from './notice-said.ts'
 import { observedJson, recordHostLost } from './observations.ts'
 import { placementsOf } from './placements.ts'
+import type { SilentRestarts } from './silent.ts'
 
 /**
  * `list uuids`, and `tick query` after it on the same connection when the server's ticks are read
@@ -87,6 +89,8 @@ export function readingPresence(deps: {
   players: Pick<PlayerService, 'deliverWaiting'>
   /** Tells operators who just joined of their server's mod updates, apart from the pass. */
   updatesTold?: Pick<UpdatesTold, 'heard'>
+  /** Hears whether each console answered, and restarts one silent for minutes (`silent.ts`). */
+  silent?: Pick<SilentRestarts, 'note' | 'settle'>
 }) {
   const { db, runtime, specs, events, transitions } = deps
 
@@ -125,6 +129,7 @@ export function readingPresence(deps: {
       }
       const { output, tick } = await readConsole(deps.console, target, !sampled.has(server.id))
       const readAt = new Date()
+      deps.silent?.note(server.id, handle, output !== null, readAt)
       if (output === null && observed?.detail !== HOST_LOST) {
         // A console that stopped answering may be a lost host, which the provider's list doesn't
         // say: this one machine is asked.
@@ -178,6 +183,7 @@ export function readingPresence(deps: {
       const notice = notices.get(server.ownerId)
       await sayNotice({ db, console: deps.console }, { id: server.id, target }, notice, reading.players)
     }
+    await deps.silent?.settle(new Date())
   }
 
   return presenceSync
