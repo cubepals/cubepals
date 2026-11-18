@@ -11,6 +11,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { PACK_FILES_SCRIPT } from '../../minecraft/pack-files.ts'
 import { WAKE_STEP } from '../../minecraft/wake-step.ts'
 
 let root = ''
@@ -53,6 +54,24 @@ describe('the helper’s stand-in', () => {
       )
     expect(sync(join(root, 'nowhere'))).toBe('')
     expect(sync(join(root, 'data'))).toStartWith('helper sync-and-interpolate')
+  })
+
+  // Only where the image installs a pack: a server without one, a direct start and a resume
+  // never ask for it, and pay nothing for it (`pack-files.ts`).
+  test('hands a pack’s install to the script that keeps the owner’s files, and nothing else', () => {
+    const script = join(root, 'shim', 'pack-files')
+    // The step writes the script as it is; then the stand-in tells each call apart.
+    expect(run(`cat ${script}`)).toBe(PACK_FILES_SCRIPT.trim())
+    const routed = (call: string) =>
+      run(`printf '#!/bin/sh\\necho "pack-files $*"\\n' > ${script} && mc-image-helper ${call}`)
+        .split('\n')
+        .at(-1)
+    expect(routed('install-modrinth-modpack --project=x')).toBe(
+      'pack-files install-modrinth-modpack --project=x',
+    )
+    expect(routed('set-properties --x=1 server.properties')).toBe(
+      'helper set-properties --x=1 server.properties',
+    )
   })
 
   test('hands everything else to the helper, with a JVM for a short life', () => {

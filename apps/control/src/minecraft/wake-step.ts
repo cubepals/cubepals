@@ -30,7 +30,7 @@
  * needs none of the scripts, because nothing changed since the last one (`direct-start.ts`).
  */
 
-import { PACK_FILES_STEP } from './pack-files.ts'
+import { HELPER, PACK_FILES_SCRIPT } from './pack-files.ts'
 import { SPARK_STEP } from './spark.ts'
 
 /** Where the stand-ins live: the machine's own disk, made again at every start. */
@@ -51,8 +51,10 @@ const SHIM = [
   `java-release) v=$(sed -n "s/^JAVA_VERSION=\\"\\([0-9]*\\).*/\\1/p" "$JAVA_HOME/release" 2>/dev/null); if [ "\${v:-0}" -gt 8 ]; then echo "$v"; exit 0; fi;;`,
   'sync|sync-and-interpolate) for a; do src=$dst; dst=$a; done; [ -e "$src" ] || exit 0;;',
   `curseforge-files) for a; do last=$a; done; [ -z "$last" ] && [ ! -e ${CURSEFORGE_MANIFEST} ] && exit 0;;`,
+  // A pack's install keeps the owner's files among the pack's (`pack-files.ts`).
+  `install-modrinth-modpack) exec ${SHIM_DIR}/pack-files "$@";;`,
   'esac',
-  'exec /usr/bin/mc-image-helper "$@"',
+  `exec ${HELPER} "$@"`,
 ]
 
 /**
@@ -72,11 +74,10 @@ const FABRIC_INSTALLER = '1.1.2'
 export const WAKE_STEP = [
   `mkdir -p ${SHIM_DIR} && printf '%s\\n' ${SHIM.map((line) => `'${line}'`).join(' ')} > ${SHIM_DIR}/mc-image-helper`,
   `&& chmod 755 ${SHIM_DIR}/mc-image-helper && export PATH="${SHIM_DIR}:$PATH";`,
+  `printf %s ${btoa(PACK_FILES_SCRIPT)} | base64 -d > ${SHIM_DIR}/pack-files && chmod 755 ${SHIM_DIR}/pack-files;`,
   `if [ "$TYPE" = PAPER ]; then export SKIP_DOWNLOAD_DEFAULTS=true; fi;`,
   `if [ "$TYPE" = FABRIC ]; then export FABRIC_LAUNCHER_VERSION=${FABRIC_INSTALLER}; fi;`,
   'export MC_IMAGE_HELPER_OPTS="-XX:TieredStopAtLevel=1 -XX:+UseSerialGC";',
   // Not the image's work, but an export every start makes before Java, so it rides here.
   SPARK_STEP,
-  // The same: which of a pack's files are its own, before the image extracts them (`pack-files.ts`).
-  PACK_FILES_STEP,
 ].join(' ')

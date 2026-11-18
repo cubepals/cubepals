@@ -3,29 +3,25 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Which of a pack's files are the pack's and which the owner's (`minecraft/pack-files.ts`), run in
- * a real shell against a folder standing in for the volume, starts after starts, with the image's
- * extraction of the pack's overrides played after each: every file, `server-overrides/` over
- * `overrides/`, but the ones the step left to the owner.
+ * A pack's install keeping the owner's files (`minecraft/pack-files.ts`), run in a real shell
+ * against a folder standing in for the volume, installs after installs, with a stand-in for the
+ * image's helper that does what its install does to the pack's overrides: extracts every one,
+ * `server-overrides/` over `overrides/`, over whatever is there.
  */
 import { afterAll, afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
-  readdirSync,
   readFileSync,
   rmSync,
-  statSync,
   unlinkSync,
   writeFileSync,
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
-import { FROM_PACK, PACK_FILES_STEP } from '../../minecraft/pack-files.ts'
-
-/** Where the step's own output ends and the list it left the image begins. */
-const LIST = 'LEFT TO THE OWNER:'
+import { FROM_PACK, HELPER, PACK_FILES_SCRIPT } from '../../minecraft/pack-files.ts'
 
 /** Where the packs are made, once, for every test. */
 const packs = mkdtempSync(join(tmpdir(), 'blockly-packs-'))
@@ -33,10 +29,32 @@ afterAll(() => rmSync(packs, { recursive: true, force: true }))
 
 let root = ''
 let data = ''
+let script = ''
 beforeEach(() => {
-  root = mkdtempSync(join(tmpdir(), 'blockly-pack-files-'))
+  root = mkdtempSync(join(tmpdir(), 'blockly-pf-'))
   data = join(root, 'data')
   mkdirSync(data, { recursive: true })
+  // The helper's install, as far as the overrides go; it fails, after extracting, when told to.
+  const helper = join(root, 'helper')
+  writeFileSync(
+    helper,
+    [
+      '#!/bin/sh',
+      `cd ${data} && rm -rf ${root}/x && unzip -qq -o modpack.mrpack -d ${root}/x`,
+      `for s in overrides server-overrides; do if [ -d ${root}/x/$s ]; then cp -R ${root}/x/$s/. ${data}/; fi; done`,
+      'echo "helper $1"',
+      'exit "${FAIL:-0}"',
+    ].join('\n'),
+  )
+  chmodSync(helper, 0o755)
+  script = join(root, 'pack-files')
+  writeFileSync(
+    script,
+    PACK_FILES_SCRIPT.replaceAll(HELPER, helper)
+      .replaceAll('/tmp/blockly-pack-files', join(root, 'work'))
+      .replaceAll('/data', data),
+  )
+  chmodSync(script, 0o755)
 })
 afterEach(() => rmSync(root, { recursive: true, force: true }))
 
@@ -58,175 +76,148 @@ function pack(files: Record<string, string>, server: Record<string, string> = {}
 }
 
 /**
- * One start of a server on `archive`, pinned as `id`: the step, then the image's extraction of
- * what the step didn't leave to the owner. What the step printed, and the list it left the image.
+ * One install of `archive`, pinned as `id`: what the console says, and how the install ended.
+ * As `PACK_STEP` does before the image, the pack kept from before goes when another is pinned.
  */
-function start(archive: Uint8Array, id: string, env: Record<string, string> = {}, placed = true) {
-  // The pack is where the image fetches it from; the image keeps what it fetched (`PACK_STEP`).
+function install(archive: Uint8Array, id: string, env: Record<string, string> = {}) {
   const link = join(root, `${id}.mrpack`)
   writeFileSync(link, archive)
-  // As `PACK_STEP` does before it: the pack kept from before goes when another is pinned.
   const mark = join(data, '.blockly-pack')
   if (!existsSync(mark) || readFileSync(mark, 'utf8') !== id)
     rmSync(join(data, 'modpack.mrpack'), { force: true })
   writeFileSync(mark, id)
-  const step = PACK_FILES_STEP.replaceAll('/tmp/blockly-pack-files', join(root, 'work')).replaceAll(
-    '/data',
-    data,
-  )
-  const result = Bun.spawnSync(
-    ['/bin/sh', '-c', `${step} printf '${LIST}%s' "$MODRINTH_OVERRIDES_EXCLUSIONS"`],
-    {
-      env: { PATH: process.env.PATH ?? '', MODRINTH_MODPACK: `file://${link}`, BLOCKLY_PACK: id, ...env },
-    },
-  )
-  const [said = '', left = ''] = result.stdout.toString().split(LIST)
-  const excluded = left === '' ? [] : left.split('\n')
-  if (placed) extract(readFileSync(join(data, 'modpack.mrpack')), new Set(excluded))
-  return { said: said.trim(), excluded }
-}
-
-/** The image's extraction: every override, the server's over the rest, but those it is told to leave. */
-function extract(archive: Uint8Array, leave: ReadonlySet<string>) {
-  const dir = mkdtempSync(join(root, 'extract-'))
-  writeFileSync(join(dir, 'pack.mrpack'), archive)
-  Bun.spawnSync(['unzip', '-qq', 'pack.mrpack', '-d', 'out'], { cwd: dir })
-  for (const prefix of ['overrides', 'server-overrides']) {
-    const base = join(dir, 'out', prefix)
-    if (!existsSync(base)) continue
-    for (const path of readdirSync(base, { recursive: true, encoding: 'utf8' })) {
-      if (leave.has(path) || !statSync(join(base, path)).isFile()) continue
-      mkdirSync(dirname(join(data, path)), { recursive: true })
-      writeFileSync(join(data, path), readFileSync(join(base, path)))
-    }
+  const result = Bun.spawnSync([script, 'install-modrinth-modpack', '--output-directory=/data'], {
+    env: { PATH: process.env.PATH ?? '', MODRINTH_MODPACK: `file://${link}`, ...env },
+  })
+  return {
+    said: result.stdout
+      .toString()
+      .replace(/^helper .*\n?/m, '')
+      .trim(),
+    code: result.exitCode,
   }
 }
 
 const read = (path: string) => readFileSync(join(data, path), 'utf8')
+const there = (path: string) => existsSync(join(data, path))
+const record = () => readFileSync(join(data, '.blockly-pack-files'), 'utf8')
 
 const v1 = pack({ 'config/a.toml': 'a = 1', 'config/b.toml': 'b = 1', 'options.txt': 'o = 1' })
 const v2 = pack({ 'config/a.toml': 'a = 2', 'config/b.toml': 'b = 2', 'options.txt': 'o = 2' })
 
 describe('a pack’s files', () => {
-  test('are all the pack’s at the first start, and follow it while nobody changes them', () => {
-    expect(start(v1, 'one').excluded).toEqual([])
+  test('are all the pack’s on a new server, and follow it while nobody changes them', () => {
+    expect(install(v1, 'one')).toEqual({ said: '', code: 0 })
     expect(read('config/a.toml')).toBe('a = 1')
-    expect(start(v1, 'one').excluded).toEqual([])
-    expect(start(v2, 'two').excluded).toEqual([])
+    expect(record().trimEnd().endsWith('# end')).toBe(true)
+    expect(install(v2, 'two')).toEqual({ said: '', code: 0 })
     expect(read('config/a.toml')).toBe('a = 2')
-    expect(existsSync(join(data, `config/a.toml${FROM_PACK}`))).toBe(false)
+    expect(there(`config/a.toml${FROM_PACK}`)).toBe(false)
   })
 
-  test('stay as the owner changed them, start after start, while the pack doesn’t change them', () => {
-    start(v1, 'one')
+  test('stay as the owner changed them, install after install, while the pack doesn’t change them', () => {
+    install(v1, 'one')
     writeFileSync(join(data, 'config/a.toml'), 'a = mine')
-    for (let i = 0; i < 3; i++) {
-      const { said, excluded } = start(v1, 'one')
-      expect(excluded).toEqual(['config/a.toml'])
-      expect(said).toBe('')
-    }
+    for (let i = 0; i < 3; i++) expect(install(v1, 'one')).toEqual({ said: '', code: 0 })
     expect(read('config/a.toml')).toBe('a = mine')
     expect(read('config/b.toml')).toBe('b = 1')
   })
 
   test('stay the owner’s when a pack update changes them, with the pack’s new copy beside them, said once', () => {
-    start(v1, 'one')
+    install(v1, 'one')
     writeFileSync(join(data, 'config/a.toml'), 'a = mine')
-    const update = start(v2, 'two')
-    expect(update.excluded).toEqual(['config/a.toml'])
-    expect(update.said).toContain(
-      `Kept your own config/a.toml; the pack's new copy is beside it, as config/a.toml${FROM_PACK}`,
+    expect(install(v2, 'two').said).toBe(
+      `[init] Kept your own config/a.toml; the pack's new copy is beside it, as config/a.toml${FROM_PACK}`,
     )
     expect(read('config/a.toml')).toBe('a = mine')
     expect(read(`config/a.toml${FROM_PACK}`)).toBe('a = 2')
-    // The rest of the pack moved on.
     expect(read('config/b.toml')).toBe('b = 2')
-    // The next start says nothing more, and leaves the owner's file and the copy as they are.
-    const after = start(v2, 'two')
-    expect(after.said).toBe('')
-    expect(after.excluded).toEqual(['config/a.toml'])
+    expect(install(v2, 'two').said).toBe('')
     expect(read('config/a.toml')).toBe('a = mine')
   })
 
   test('stay gone when the owner deleted one, with the pack’s new copy beside where it was', () => {
-    start(v1, 'one')
+    install(v1, 'one')
     unlinkSync(join(data, 'options.txt'))
-    expect(start(v1, 'one').excluded).toEqual(['options.txt'])
-    expect(existsSync(join(data, 'options.txt'))).toBe(false)
-    const update = start(v2, 'two')
-    expect(update.excluded).toEqual(['options.txt'])
-    expect(existsSync(join(data, 'options.txt'))).toBe(false)
+    install(v1, 'one')
+    expect(there('options.txt')).toBe(false)
+    install(v2, 'two')
+    expect(there('options.txt')).toBe(false)
     expect(read(`options.txt${FROM_PACK}`)).toBe('o = 2')
   })
 
   test('follow the pack again once the owner’s copy is the pack’s', () => {
-    start(v1, 'one')
+    install(v1, 'one')
     writeFileSync(join(data, 'config/a.toml'), 'a = mine')
-    start(v2, 'two')
-    writeFileSync(join(data, 'config/a.toml'), 'a = 2')
-    expect(start(v2, 'two').excluded).toEqual([])
+    install(v1, 'one')
+    writeFileSync(join(data, 'config/a.toml'), 'a = 1')
+    install(v2, 'two')
+    expect(read('config/a.toml')).toBe('a = 2')
   })
 
-  test('take the server’s override over the pack’s other one', () => {
-    const both = pack({ 'server.properties': 'client' }, { 'server.properties': 'server' })
-    start(both, 'one')
-    expect(read('server.properties')).toBe('server')
-    expect(start(both, 'one').excluded).toEqual([])
-  })
-
-  test('add to what the pack’s own settings already leave out', () => {
-    start(v1, 'one')
+  test('are all the owner’s where the record of what the pack placed is missing', () => {
+    install(v1, 'one')
     writeFileSync(join(data, 'config/a.toml'), 'a = mine')
-    expect(start(v1, 'one', { MODRINTH_OVERRIDES_EXCLUSIONS: 'kubejs/**' }).excluded).toEqual([
-      'kubejs/**',
-      'config/a.toml',
-    ])
-  })
-
-  test('stay as the owner changed them right after the first start', () => {
-    start(v1, 'one')
-    writeFileSync(join(data, 'config/a.toml'), 'a = mine')
-    expect(start(v1, 'one').excluded).toEqual(['config/a.toml'])
+    rmSync(join(data, '.blockly-pack-files'))
+    install(v2, 'two')
+    // Every file there stays as it was, the pack's new copy beside it; none is overwritten.
     expect(read('config/a.toml')).toBe('a = mine')
+    expect(read('config/b.toml')).toBe('b = 1')
+    expect(read(`config/b.toml${FROM_PACK}`)).toBe('b = 2')
   })
 
-  test('are placed again, not taken for deleted, when a start ended before the image placed them', () => {
-    start(v1, 'one', {}, false)
-    expect(existsSync(join(data, 'config/a.toml'))).toBe(false)
-    expect(start(v1, 'one').excluded).toEqual([])
-    expect(read('config/a.toml')).toBe('a = 1')
+  test('are all the owner’s where that record was cut short', () => {
+    install(v1, 'one')
+    writeFileSync(join(data, 'config/a.toml'), 'a = mine')
+    const whole = record()
+    writeFileSync(join(data, '.blockly-pack-files'), whole.slice(0, whole.indexOf('\n') + 1))
+    install(v2, 'two')
+    expect(read('config/a.toml')).toBe('a = mine')
+    expect(read('config/b.toml')).toBe('b = 1')
+    expect(read('options.txt')).toBe('o = 1')
   })
 
-  test('are all the pack’s again, said so, where the owner changed more than the image’s list can hold', () => {
+  test('stay the owner’s, every one, however many the owner changed', () => {
     const many = Object.fromEntries(
       Array.from({ length: 1500 }, (_, i) => [
         `config/a-mod-with-a-long-name/settings-${String(i).padStart(4, '0')}.toml`,
-        'x',
+        'pack',
       ]),
     )
     const big = pack(many)
-    start(big, 'big')
-    start(big, 'big')
+    install(big, 'big')
     for (const path of Object.keys(many)) writeFileSync(join(data, path), 'mine')
-    const after = start(big, 'big')
-    expect(after.excluded).toEqual([])
-    expect(after.said).toContain("Too many of the pack's files were changed to keep them all")
+    expect(install(big, 'big').code).toBe(0)
+    expect(Object.keys(many).every((path) => read(path) === 'mine')).toBe(true)
   })
 
-  test('are left to the image, as before, where the pack can’t be fetched', () => {
-    const step = PACK_FILES_STEP.replaceAll('/tmp/blockly-pack-files', join(root, 'work')).replaceAll(
-      '/data',
-      data,
-    )
-    const result = Bun.spawnSync(['/bin/sh', '-c', `${step} printf '%s' "$MODRINTH_OVERRIDES_EXCLUSIONS"`], {
+  test('are put back as the owner had them when the install fails, and the record waits', () => {
+    install(v1, 'one')
+    writeFileSync(join(data, 'config/a.toml'), 'a = mine')
+    const before = record()
+    expect(install(v2, 'two', { FAIL: '1' }).code).toBe(1)
+    expect(read('config/a.toml')).toBe('a = mine')
+    expect(record()).toBe(before)
+  })
+
+  test('take the server’s override over the pack’s other one', () => {
+    install(pack({ 'server.properties': 'client' }, { 'server.properties': 'server' }), 'one')
+    expect(read('server.properties')).toBe('server')
+  })
+
+  test('go to the helper as they always did where the pack can’t be fetched, or isn’t a link', () => {
+    const missing = Bun.spawnSync([script, 'install-modrinth-modpack'], {
       env: {
         PATH: process.env.PATH ?? '',
         MODRINTH_MODPACK: `file://${join(root, 'missing.mrpack')}`,
-        BLOCKLY_PACK: 'x',
+        FAIL: '3',
       },
     })
-    expect(result.exitCode).toBe(0)
-    expect(result.stdout.toString()).toBe('')
-    expect(existsSync(join(data, '.blockly-pack-index'))).toBe(false)
+    expect(missing.exitCode).toBe(3)
+    const slug = Bun.spawnSync([script, 'install-modrinth-modpack'], {
+      env: { PATH: process.env.PATH ?? '', MODRINTH_MODPACK: 'some-project', FAIL: '4' },
+    })
+    expect(slug.exitCode).toBe(4)
+    expect(there('.blockly-pack-files')).toBe(false)
   })
 })
