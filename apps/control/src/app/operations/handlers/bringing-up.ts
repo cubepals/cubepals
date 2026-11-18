@@ -118,6 +118,31 @@ async function fallBack(
   return to
 }
 
+/** How a server is brought up: `ready` is said as the boot lets its players in (`Boot.run`). */
+interface BringUpOptions {
+  startAgainOnHang?: boolean
+  elsewhere?: boolean
+  ready?: (desired: DesiredRuntime) => Promise<void>
+}
+
+/**
+ * A start's server running, said as its boot lets its players in (`Boot.run`'s `ready`), so
+ * whoever is held while it woke is handed over then; and again after the start, which does nothing
+ * where it was said already and says it where the boot gave no such moment (a resume, an install).
+ */
+const startedRunning =
+  (db: Db, transitions: ServerTransitions, booted: ServerBinding['booted'], ctx: OperationContext) =>
+  (desired: DesiredRuntime) =>
+    db.transaction(async (tx) => {
+      const server = await lockServer(tx, ctx.server.id)
+      if (server === null || server.lifecycle.status !== 'starting') return
+      await booted(tx, server.id, appliedConfig(server, desired))
+      // A run nobody asked for in the app is one a connection woke; it runs on probation.
+      await openInterval(tx, server.id, server.memoryTier, new Date(), ctx.op)
+      const started = await transitions.outcome(tx, server, { type: 'started' })
+      await enqueuePrune(tx, transitions, started)
+    })
+
 /**
  * A new server whose first start couldn't come up on `from` (it hung, stopped saying nothing
  * recognised, or answered in a way that can't be read) goes to the next runtime with room, once,
@@ -195,10 +220,7 @@ export function bringingUp(deps: {
    * Brings compute up matching the desired spec, then boots. Shared by provision and start;
    * `elsewhere`, a new server that can't come up on its runtime moves to the next (`moveOn`).
    */
-  const bringUp = async (
-    ctx: OperationContext,
-    options: { startAgainOnHang?: boolean; elsewhere?: boolean } = {},
-  ): Promise<DesiredRuntime> => {
+  const bringUp = async (ctx: OperationContext, options: BringUpOptions = {}): Promise<DesiredRuntime> => {
     const server = ctx.server
     // Provisioning a server whose world rests in the store would give it new, empty storage. Only
     // `unstore` brings such a world back; nothing that reaches here may start it any other way.
@@ -229,6 +251,8 @@ export function bringingUp(deps: {
     // A server that may yet move on is waited on once on each runtime, not twice: two waits in
     // all, inside the half hour the queue gives an operation.
     const elsewhere = options.elsewhere === true && binding.applied === null && runtime.providers.length > 1
+    const { ready } = options
+    const once = { startAgainOnHang: elsewhere ? false : options.startAgainOnHang, askedAt }
     const booting = (started: RuntimeHandle) =>
       // A pack server whose start taught its pack something starts again on what it learned.
       boot.run(
@@ -240,7 +264,7 @@ export function bringingUp(deps: {
           desired = await specs.desired(db, server)
           return provisioned(desired.spec)
         },
-        { ...(elsewhere ? { startAgainOnHang: false } : options), askedAt },
+        ready === undefined ? once : { ...once, ready: () => ready(desired) },
       )
     await booting(handle).catch(async (error: unknown) => {
       const next = elsewhere && notUpHere(error) ? await moveOn(deps, ctx, provider, desired, error) : null
@@ -341,9 +365,10 @@ export function bringingUp(deps: {
         return { status: 'cancelled', reason: decision.message }
       }
       const installing = await pendingInstall(ctx.server)
+      const running = startedRunning(db, transitions, booted, ctx)
       let desired: DesiredRuntime
       try {
-        if (installing === null) desired = await bringUp(ctx)
+        if (installing === null) desired = await bringUp(ctx, { ready: running })
         else {
           const installed = await installOnStart(ctx, installing)
           if ('status' in installed) return installed
@@ -352,15 +377,7 @@ export function bringingUp(deps: {
       } catch (error) {
         return await hostRefused(deps).refusedHere(ctx, await setAsideFor(db, ctx.server, error))
       }
-      await db.transaction(async (tx) => {
-        const server = await lockServer(tx, ctx.server.id)
-        if (server === null || server.lifecycle.status !== 'starting') return
-        await booted(tx, server.id, appliedConfig(server, desired))
-        // A run nobody asked for in the app is one a connection woke; it runs on probation.
-        await openInterval(tx, server.id, server.memoryTier, new Date(), ctx.op)
-        const started = await transitions.outcome(tx, server, { type: 'started' })
-        await enqueuePrune(tx, transitions, started)
-      })
+      await running(desired)
       return { status: 'succeeded' }
     },
   }
