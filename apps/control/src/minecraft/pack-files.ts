@@ -15,8 +15,8 @@
  * server without one, a direct start and a resume never reach it, and pay nothing.
  *
  * - A file the pack placed that nobody changed since follows the pack, a new version included.
- * - A file the owner changed or deleted is set aside before the install and put back after it
- *   (deleted again, for one deleted). Where the pack's copy of it changed, the new copy is put
+ * - A file the owner changed or deleted is set aside on the volume before the install and put back
+ *   after it (deleted again, for one deleted); after an install cut short, at the start of the next. Where the pack's copy of it changed, the new copy is put
  *   beside it as `<file>.from-pack`, and the console says so, once.
  * - A file already there that the pack never placed, as far as the record knows, is the owner's
  *   as well: with no record, or one cut short, every file already on the volume is.
@@ -53,6 +53,12 @@ const END = '# end'
 /** What a kept file's newer pack copy is called, beside it. */
 export const FROM_PACK = '.from-pack'
 
+/**
+ * Where the owner's files wait on the volume while the pack is installed, until they are back: an
+ * install cut short leaves them there, and the next one puts them back before anything else.
+ */
+const KEPT = `${DATA_DIR}/.blockly-pack-kept`
+
 /** Scratch space on the machine's own disk. */
 const WORK = '/tmp/blockly-pack-files'
 
@@ -84,14 +90,21 @@ const BESIDE = [
 /** The script, as `install-modrinth-modpack` with the helper's own arguments. */
 export const PACK_FILES_SCRIPT = `#!/bin/sh
 # install-modrinth-modpack, keeping the owner's files among the pack's (pack-files.ts).
-d=${DATA_DIR}; a=${ARCHIVE}; r=${RECORD}; t=${WORK}
+d=${DATA_DIR}; a=${ARCHIVE}; r=${RECORD}; k=${KEPT}; t=${WORK}
 case "$MODRINTH_MODPACK" in http://*|https://*|file://*) ;; *) exec ${HELPER} "$@";; esac
 ${UNLINKED}
-for f in ${ARCHIVE.slice(DATA_DIR.length + 1)} ${ARCHIVE.slice(DATA_DIR.length + 1)}.part ${RECORD.slice(DATA_DIR.length + 1)} ${RECORD.slice(DATA_DIR.length + 1)}.new; do unlinked "$f"; done
+for f in ${ARCHIVE.slice(DATA_DIR.length + 1)} ${ARCHIVE.slice(DATA_DIR.length + 1)}.part ${RECORD.slice(DATA_DIR.length + 1)} ${RECORD.slice(DATA_DIR.length + 1)}.new ${KEPT.slice(DATA_DIR.length + 1)}; do unlinked "$f"; done
+# The owner's files from an install that didn't finish, back first.
+if [ -d "$k" ]; then
+  (cd "$k/files" 2>/dev/null && find . -type f -o -type l) | while IFS= read -r p; do unlinked "\${p#./}"; done
+  (cd "$k/files" 2>/dev/null && tar -cf - .) | (cd "$d" && tar -xpf -)
+  if [ -f "$k/gone" ]; then while IFS= read -r p; do unlinked "$p"; rm -f "$d/$p"; done < "$k/gone"; fi
+  rm -rf "$k"; echo "[init] Put back your own files from a pack install that didn't finish"
+fi
 if [ ! -s "$a" ]; then
   curl -fsSL --retry 3 -o "$a.part" "$MODRINTH_MODPACK" && mv -f "$a.part" "$a" || { rm -f "$a.part"; exec ${HELPER} "$@"; }
 fi
-rm -rf "$t"; mkdir -p "$t/keep"
+rm -rf "$t"; mkdir -p "$t"
 # The pack's paths, server overrides and the rest alike.
 unzip -Z1 "$a" > "$t/entries" 2>/dev/null || exec ${HELPER} "$@"
 sed -n -e 's#^server-overrides/##p' -e 's#^overrides/##p' "$t/entries" | grep -v '/$' | sort -u > "$t/paths"
@@ -102,7 +115,8 @@ if [ "$(tail -n 1 "$r" 2>/dev/null)" = "${END}" ]; then sed '$d' "$r" > "$t/S"; 
 (cd "$d" && xargs -r -d '\\n' sha1sum < "$t/paths" 2>/dev/null) > "$t/C"
 awk '${OWNERS}' "$t/S" "$t/C" "$t/paths" > "$t/owners"
 sed -n 's/^keep //p' "$t/owners" > "$t/keep.list"; sed -n 's/^gone //p' "$t/owners" > "$t/gone.list"
-(cd "$d" && tar -cf - --verbatim-files-from -T "$t/keep.list") | (cd "$t/keep" && tar -xpf -)
+rm -rf "$k"; mkdir -p "$k/files" && cp "$t/gone.list" "$k/gone"
+(cd "$d" && tar -cf - --verbatim-files-from -T "$t/keep.list") | (cd "$k/files" && tar -xpf -)
 ${HELPER} "$@"; s=$?
 # The pack's copy of each of the owner's files, as the install left it.
 cut -c6- "$t/owners" | (cd "$d" && xargs -r -d '\\n' sha1sum 2>/dev/null) > "$t/N"
@@ -112,13 +126,13 @@ if [ $s -eq 0 ]; then
   done
 fi
 # Each owner's file back as it was.
-(cd "$t/keep" && tar -cf - .) | (cd "$d" && tar -xpf -)
+(cd "$k/files" && tar -cf - .) | (cd "$d" && tar -xpf -)
 (cd "$d" && xargs -r -d '\\n' rm -f < "$t/gone.list")
 # What the pack placed, for the next install, once this one succeeded.
 if [ $s -eq 0 ]; then
   cut -c6- "$t/owners" > "$t/kept"
   { cat "$t/N"; (cd "$d" && grep -vxF -f "$t/kept" "$t/paths" | xargs -r -d '\\n' sha1sum 2>/dev/null); echo "${END}"; } > "$r.new" && mv -f "$r.new" "$r"
 fi
-rm -rf "$t"
+rm -rf "$k" "$t"
 exit $s
 `

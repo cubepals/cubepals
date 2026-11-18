@@ -45,6 +45,8 @@ beforeEach(() => {
       `cd ${data} && rm -rf ${root}/x && unzip -qq -o modpack.mrpack -d ${root}/x`,
       `for s in overrides server-overrides; do if [ -d ${root}/x/$s ]; then cp -R ${root}/x/$s/. ${data}/; fi; done`,
       'echo "helper $1"',
+      // An install cut short, as by a machine stopped mid-start: the script dies with the helper.
+      'if [ -n "$KILL" ]; then kill -9 $PPID; fi',
       'exit "${FAIL:-0}"',
     ].join('\n'),
   )
@@ -193,15 +195,6 @@ describe('a pack’s files', () => {
     expect(Object.keys(many).every((path) => read(path) === 'mine')).toBe(true)
   })
 
-  test('are put back as the owner had them when the install fails, and the record waits', () => {
-    install(v1, 'one')
-    writeFileSync(join(data, 'config/a.toml'), 'a = mine')
-    const before = record()
-    expect(install(v2, 'two', { FAIL: '1' }).code).toBe(1)
-    expect(read('config/a.toml')).toBe('a = mine')
-    expect(record()).toBe(before)
-  })
-
   test('take the server’s override over the pack’s other one', () => {
     install(pack({ 'server.properties': 'client' }, { 'server.properties': 'server' }), 'one')
     expect(read('server.properties')).toBe('server')
@@ -241,5 +234,30 @@ describe('a pack’s install, as root', () => {
     install(pack({ 'extra/kept.txt': 'pack' }), 'three')
     expect(readFileSync(join(outside, 'kept.txt'), 'utf8')).toBe('outside')
     expect(read('extra/kept.txt')).toBe('pack')
+  })
+})
+
+describe('a pack’s install that doesn’t finish', () => {
+  test('puts the owner’s files back at the next install, when one is cut short', () => {
+    install(v1, 'one')
+    writeFileSync(join(data, 'config/a.toml'), 'a = mine')
+    unlinkSync(join(data, 'options.txt'))
+    install(v1, 'one')
+    expect(install(v2, 'two', { KILL: '1' }).code).not.toBe(0)
+    expect(read('config/a.toml')).toBe('a = 2')
+    const next = install(v2, 'two')
+    expect(next.said).toContain("[init] Put back your own files from a pack install that didn't finish")
+    expect(read('config/a.toml')).toBe('a = mine')
+    expect(there('options.txt')).toBe(false)
+    expect(there('.blockly-pack-kept')).toBe(false)
+  })
+
+  test('puts the owner’s files back when it fails, and the record waits', () => {
+    install(v1, 'one')
+    writeFileSync(join(data, 'config/a.toml'), 'a = mine')
+    const before = record()
+    expect(install(v2, 'two', { FAIL: '1' }).code).toBe(1)
+    expect(read('config/a.toml')).toBe('a = mine')
+    expect(record()).toBe(before)
   })
 })
