@@ -11,6 +11,14 @@ describe('the seed in the console answer', () => {
     expect(seedIn('Seed: [49]')).toBe('49')
   })
 
+  test("is read past another command's answer that reached it first", () => {
+    // Vanilla's console keeps one answer for every connection: a command left running by a
+    // connection that gave up writes into the next one's.
+    const mixed =
+      'Marked 49 chunks in minecraft:overworld from [-3, -3] to [3, 3] to be force loaded\nSeed: [1506612756767360150]'
+    expect(seedIn(mixed)).toBe('1506612756767360150')
+  })
+
   test("another command's answer is refused, not read as a seed", () => {
     expect(() =>
       seedIn('There are 49 force loaded chunks in minecraft:overworld at: [-3, -3], [-3, -2]'),

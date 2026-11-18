@@ -4,9 +4,10 @@
 
 /**
  * The seed in the console's answer to `seed`, which Minecraft gives as `Seed: [<number>]`. The
- * staging check tells worlds apart by it, so an answer that isn't that one is refused with what it
- * said: another command's answer reaching this one (the spawn warm-up's "49 force loaded chunks")
- * must not read as a seed.
+ * staging check tells worlds apart by it, so it is read from that line alone. Vanilla's console
+ * keeps one answer for every connection, so another command's answer can arrive ahead of it (the
+ * spawn warm-up's "Marked 49 chunks"), and its numbers are not the seed. An answer without the
+ * seed's line is refused with what it said.
  */
 const SEED_REPLY = /Seed: \[(-?\d+)\]/
 
