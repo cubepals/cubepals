@@ -5,7 +5,15 @@
 /** What counts as a page being up, against a real local server that answers as a broken Worker would. */
 import { afterAll, expect, describe as group, test } from 'bun:test'
 import { tailExceptions } from '../site-uptime.ts'
-import { ask, isUp, PRODUCTION_OTHERS, SITE_PAGES, waitFor, websiteTargets } from './site-pages.ts'
+import {
+  ask,
+  isUp,
+  PRODUCTION_OTHERS,
+  realtimeTarget,
+  SITE_PAGES,
+  waitFor,
+  websiteTargets,
+} from './site-pages.ts'
 
 const server = Bun.serve({
   port: 0,
@@ -50,11 +58,26 @@ group('the website’s pages', () => {
 })
 
 group('the other public addresses', () => {
-  const [hq, rt] = PRODUCTION_OTHERS
-  test('hq is well when it redirects, rt when it answers under 500', () => {
+  const [hq, webtransport, websocket] = PRODUCTION_OTHERS
+  test('hq is well when it redirects', () => {
     expect([hq?.ok(302), hq?.ok(200), hq?.ok(500)]).toEqual([true, false, false])
-    expect([rt?.ok(404), rt?.ok(200), rt?.ok(502), rt?.ok(0)]).toEqual([true, true, false, false])
   })
+
+  test('realtime is asked over each transport, and a plain answer from its host is not enough', () => {
+    expect([webtransport?.name, websocket?.name]).toEqual([
+      'rt.cubepals.com over WebTransport',
+      'rt.cubepals.com over WebSocket',
+    ])
+    expect([webtransport?.ok(200), webtransport?.ok(404), webtransport?.ok(0)]).toEqual([true, false, false])
+    expect([websocket?.ok(101), websocket?.ok(404), websocket?.ok(0)]).toEqual([true, false, false])
+  })
+
+  test('realtime that doesn’t answer is down, with what the check heard', async () => {
+    const [answer] = await ask([realtimeTarget('websocket', '127.0.0.1:1')])
+    expect(answer?.status).toBe(0)
+    expect(isUp(answer as never)).toBe(false)
+    expect(answer?.error).toStartWith('no handshake')
+  }, 20_000)
 })
 
 group('a Worker tail', () => {
