@@ -196,7 +196,7 @@ describe('toRuntimeSpec', () => {
     // for a modded server, which loads twice the classes. A live modpack run on the smallest
     // size sat at 93% of the container before anyone joined.
     const vanilla = toRuntimeSpec({ ...input, revision, memoryTier: '3g' })
-    expect(vanilla.env.MEMORY).toBe('2048M')
+    expect(vanilla.env.MAX_MEMORY).toBe('2048M')
     const withPack = toRuntimeSpec({
       ...input,
       memoryTier: '3g',
@@ -220,11 +220,11 @@ describe('toRuntimeSpec', () => {
         },
       },
     })
-    expect(withPack.env.MEMORY).toBe('1996M')
+    expect(withPack.env.MAX_MEMORY).toBe('1996M')
     // Which still leaves three times the live heap every pack in the research measured.
-    expect(Number.parseInt(withPack.env.MEMORY ?? '0', 10)).toBeGreaterThan(3 * 639)
+    expect(Number.parseInt(withPack.env.MAX_MEMORY ?? '0', 10)).toBeGreaterThan(3 * 639)
     // And a full gigabyte outside it for the JVM's own memory and the system.
-    expect(3072 - Number.parseInt(withPack.env.MEMORY ?? '0', 10)).toBeGreaterThan(650)
+    expect(3072 - Number.parseInt(withPack.env.MAX_MEMORY ?? '0', 10)).toBeGreaterThan(650)
   })
 
   test('a pack server clears the pack file the image kept when the pack pinned changes', () => {
@@ -312,7 +312,7 @@ describe('toRuntimeSpec', () => {
   test('sizes the heap below the memory the server is promised', () => {
     const spec = toRuntimeSpec({ ...input, revision })
     expect(spec.resources.memoryMb).toBe(4096)
-    expect(spec.env.MEMORY).toBe('3072M')
+    expect(spec.env.MAX_MEMORY).toBe('3072M')
     expect(spec.stop.timeoutSeconds).toBeGreaterThan(Number(spec.env.STOP_DURATION))
   })
 
@@ -338,7 +338,7 @@ describe('toRuntimeSpec', () => {
     // live part never passed 1.1 GB; a gigabyte stays outside it for the JVM and the system.
     const spec = toRuntimeSpec({ ...input, revision, memoryTier: '3g' })
     expect(spec.resources.memoryMb).toBe(3072)
-    expect(spec.env.MEMORY).toBe('2048M')
+    expect(spec.env.MAX_MEMORY).toBe('2048M')
     expect(spec.storage.sizeGb).toBe(5)
   })
 

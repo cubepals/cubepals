@@ -38,10 +38,17 @@ const headerArgs = (headers: Record<string, string>) =>
  * Archives the volume beside itself and measures it. One PUT carries it: uploaded to the
  * presigned URL (`put <sha> <size>`). Larger: left on the volume for `partsJob` (`parts <sha>
  * <size>`), which reads it on another helper once this one is gone, so it is flushed first.
+ *
+ * `restoredMark`: the volume was to be filled by its machine's own restore, and holds nothing
+ * worth keeping unless that mark says it was (`unrestored`, and nothing archived, otherwise). A
+ * world its server made on an empty volume never goes over the copy it should have come from.
  */
-export function exportJob(target: UploadTarget, maxPutBytes: number): string {
+export function exportJob(target: UploadTarget, maxPutBytes: number, restoredMark?: string): string {
+  const unrestored =
+    restoredMark === undefined ? [] : [`  if [ ! -e /data/${restoredMark} ]; then echo unrestored; else`]
   return job(
     [
+      ...unrestored,
       '  cd /data &&',
       '  rm -f .blockly-export.tgz &&',
       `  tar -czf .blockly-export.tgz --exclude=./.blockly-export.tgz ${NOT_ARCHIVED.map((name) => `--exclude=./${name}`).join(' ')} . &&`,
@@ -51,6 +58,7 @@ export function exportJob(target: UploadTarget, maxPutBytes: number): string {
       `  if [ "$size" -gt ${maxPutBytes} ]; then echo "parts $sha $size"; else`,
       `  curl -fsS -X PUT --upload-file .blockly-export.tgz ${headerArgs(target.headers)} ${quote(target.url)} > /dev/null &&`,
       '  echo "put $sha $size"; fi',
+      ...(restoredMark === undefined ? [] : ['  fi']),
     ].join('\n'),
   )
 }

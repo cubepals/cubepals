@@ -3,7 +3,13 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { createHash } from 'node:crypto'
-import type { ProgressSink, RuntimeSpec, RuntimeTags } from '../../app/ports/runtime.ts'
+import {
+  type ProgressSink,
+  RESTORE_MARKS,
+  RESTORE_VARIABLES,
+  type RuntimeSpec,
+  type RuntimeTags,
+} from '../../app/ports/runtime.ts'
 import type { FlySchemas } from './client.ts'
 
 type Machine = FlySchemas['Machine']
@@ -130,6 +136,35 @@ export async function startStep(progress: ProgressSink, existing: Machine | null
   if (asleep === null)
     await progress.mark?.(existing === null ? 'no_compute' : isAsleep(existing) ? 'other_spec' : 'not_asleep')
   await progress.step(asleep === null ? 'booting' : 'resuming')
+}
+
+/** The variable the game's own restore step reads, `<sha256> <link>` (`RESTORE_VARIABLES`). */
+export const [RESTORE_VARIABLE] = RESTORE_VARIABLES
+
+/** The mark the step writes once the world is whole (`RESTORE_MARKS`). */
+export const [, RESTORED_MARK] = RESTORE_MARKS
+
+/**
+ * What a machine is given to bring its world back from an archive itself, before its server
+ * starts. Set on that machine's config, never in the spec, and carried into every later config on
+ * the same volume (`restoreCarried`): the step's own mark keeps any start after the first from
+ * doing it again, and a config that lost it could boot the empty volume as a new world.
+ */
+export function restoreInMachine(url: string, sha256: string): Record<string, string> {
+  if (!/^[0-9a-f]{64}$/i.test(sha256)) throw new Error(`${sha256} isn't a sha256`)
+  return { [RESTORE_VARIABLE]: `${sha256.toLowerCase()} ${url}` }
+}
+
+/**
+ * The restore a machine was given, kept for a new config of it on the same volume: an apply, or
+ * an update of its spec, while it may not have brought its world back yet. A machine on another
+ * volume (a restore, a move) is given none: that volume is filled another way.
+ */
+export function restoreCarried(from: Machine | null, volumeId: string): Record<string, string> {
+  const restoring = from?.config?.env?.[RESTORE_VARIABLE]
+  return restoring !== undefined && from?.config?.mounts?.[0]?.volume === volumeId
+    ? { [RESTORE_VARIABLE]: restoring }
+    : {}
 }
 
 /**

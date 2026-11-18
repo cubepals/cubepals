@@ -133,7 +133,8 @@ folder of the volume that no archive holds and no measure of the server's size c
 A copy of the whole disk has it. It gives way when the volume runs short. An earlier class data
 archive saved under 2 s of the same wake and went into every backup and rest, so it wasn't used.
 
-A rest adds a helper machine's whole life and an image pull onto the volume's host.
+A rest added a helper machine's whole life and an image pull onto the volume's host; it now adds
+neither (below).
 
 ## What Blockly does about it
 
@@ -201,6 +202,17 @@ A rest adds a helper machine's whole life and an image pull onto the volume's ho
 - **The copy is read sooner.** A helper job's result is read every second for its first 20 s,
   then every 5 s. A small world's copy was done well inside the 5 s the helper used to wait
   between reads.
+- **A world at rest comes back in its own machine.** On Fly, a wake from rest makes the volume and
+  the server's machine at once, and the machine's first step brings the world back before its
+  server starts (`minecraft/restore-step.ts`): the copy streamed through `curl`, hashed against the
+  sha256 it was written with, read as gzip or zstd by its first bytes, and unpacked onto the
+  volume. No helper machine is made, started and destroyed first, and the image is pulled once,
+  which was most of the helper's 17 s in the table above. It fills only an empty volume, or one it
+  began on and was cut short in; a mark written last stops a later start doing it again. One that
+  fails empties the volume and stops the start with its own exit (75), and the wake says its world
+  couldn't be brought back, not that it failed to boot; the world stays at rest, safe in its copy.
+  A restore of a server that still has its world, a move, or a backup's restore keeps the helper:
+  each counts on the new volume being whole before the old one goes.
 
 ## Measuring it
 
@@ -244,9 +256,5 @@ Servers on Cubepals' own machines sleep and wake through blocklyd (`infra/fleet/
 
 ## Not done here
 
-- **The restore inside the server's own machine.** No helper, so no second machine made, started
-  and destroyed, and the image pulled once, while the copy downloads. On the rest above, that is
-  most of the helper's 17 s. It costs nothing more, but changes how a restore fails and is checked
-  on Fly, so it is a change of its own.
 - **Keeping memory or volumes longer**, or more CPU while a server boots: each changes what a
   sleeping or waking server costs, so it is a pricing decision, not one made here.

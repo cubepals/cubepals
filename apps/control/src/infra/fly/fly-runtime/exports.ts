@@ -11,8 +11,10 @@
 import type { ArchiveTarget, PutPart, SnapshotHandle } from '../../../app/ports/runtime.ts'
 import type { FlyClient } from '../client.ts'
 import { decodeSnapshot } from '../handle.ts'
+import { META, RESTORE_VARIABLE, RESTORED_MARK, restoreCarried } from '../machine-config.ts'
 import { exportJob, PARTS_PER_JOB, partBatches, partsJob, partsPut } from './helper-jobs.ts'
 import { helperJob } from './helper-machine.ts'
+import { machineOnVolume } from './machines.ts'
 import { idOf } from './responses.ts'
 import { type RoomWait, whenRoom } from './room.ts'
 import { createVolume, deleteVolume, EXPORT_VOLUME_NAME, volumeReady } from './volumes.ts'
@@ -50,9 +52,16 @@ export async function exportSnapshot(
     )
   try {
     await volumeReady(fly, ref.app, volumeId)
-    const [how = '', sha256 = '', size = '0'] = (await job(exportJob(target.put, target.maxPutBytes))).split(
-      ' ',
-    )
+    // A volume its machine was to fill from a copy archives only once that restore said it was done.
+    const machine = await machineOnVolume(fly, ref.app, ref.volumeId)
+    const mark = RESTORE_VARIABLE in restoreCarried(machine, ref.volumeId) ? RESTORED_MARK : undefined
+    const [how = '', sha256 = '', size = '0'] = (
+      await job(exportJob(target.put, target.maxPutBytes, mark))
+    ).split(' ')
+    if (how === 'unrestored')
+      throw new Error(
+        `Nothing archived from server ${machine?.config?.metadata?.[META.server] ?? ref.app}: its machine was to bring its world back from a copy, and its volume says it never did`,
+      )
     const sizeBytes = Number(size)
     if (how === 'parts') {
       const parts = await target.inParts(sizeBytes, PARTS_PER_JOB)

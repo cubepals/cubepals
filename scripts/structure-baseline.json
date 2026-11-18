@@ -589,7 +589,7 @@
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/control/src/app/operations/handlers/stored-worlds.ts \u203a function storedWorlds": {
-      "n": 160,
+      "n": 159,
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/control/src/app/operations/lifecycle.test.ts \u203a describe.skipIf server lifecycle": {
@@ -769,7 +769,7 @@
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/control/src/infra/fly/fly-runtime-calls.test.ts \u203a describe FlyRuntime calls, in order": {
-      "n": 120,
+      "n": 116,
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/control/src/infra/fly/fly-runtime.test.ts \u203a describe FlyRuntime power": {

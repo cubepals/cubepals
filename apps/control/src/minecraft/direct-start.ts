@@ -32,12 +32,27 @@
  * and root never runs a word or takes a variable from it. A volume that belongs to root is left
  * to the scripts.
  *
- * A record is used once: the boot that starts from it takes it away first, and puts it back only
- * when the server has stayed up. One that fell over, or a record that won't read, is then started
- * by the scripts the next time, as if there had been no record. And a boot that goes through the
- * scripts takes away whatever record it found before they run, so the only record there can be is
- * the one the last scripts wrote: an older one would start the server with what those scripts
- * have since changed, the password it is stopped with among it.
+ * Fly mounts a volume as root's at every boot (its init says "Mounting /dev/vdc at /data w/ uid:
+ * 0, gid: 0"), and the image's own start then gives it to the server's user, `UID` and `GID`
+ * (`chown -R`, "Changing ownership of /data"). Looking before the image did, this step found root's
+ * and left every production boot to the scripts. So it does what the image does, first, with the
+ * user the image takes from its own variables, never from the volume.
+ *
+ * A record holds only for the volume as the server last left it, stopped. So it is kept in the
+ * folder no archive holds (`.blockly-remade`, `NOT_ARCHIVED`): a world restored, brought in, woken
+ * from rest or moved by an archive comes on a volume without one, and boots through the scripts, as
+ * Java's startup cache is made again there (`start-cache.ts`). And it is kept only once the server
+ * stops of itself, its runner ending without an error: until then it is pending. A server that
+ * crashed, was killed under it, or fell over as it started leaves no record, and its next boot is
+ * the scripts'. A copy of the volume taken while the server ran, a snapshot a lost host is rebuilt
+ * from among them, holds none either; one taken while it was stopped is that stopped volume itself.
+ *
+ * A record is used once: the boot that starts from it takes it away first, and it is kept again
+ * only at that server's clean stop. A record that won't read is left to the scripts, as if there
+ * had been none. And a boot that goes through the scripts takes away whatever record it found
+ * before they run, so the only record there can be is the one the last scripts wrote: an older one
+ * would start the server with what those scripts have since changed, the password it is stopped
+ * with among it.
  *
  * Either way the server's command is run through `start-cache.ts`, which gives Java its startup
  * cache and changes nothing else of it; what is written down is the command without it.
@@ -48,20 +63,23 @@
 
 import { DATA_DIR } from './jars.ts'
 import { LAUNCH_MAKER, LAUNCH_MAKER_LINES } from './paper-launch.ts'
-import { CACHED_RUNNER, CACHED_RUNNER_LINES } from './start-cache.ts'
+import { CACHED_RUNNER, CACHED_RUNNER_LINES, REMADE_DIR } from './start-cache.ts'
 import { SHIM_DIR } from './wake-step.ts'
 
 /**
  * What the last boot's scripts ran: the key, the directory, how many variables they added and
  * those, one a line, then the command, a word a line.
  */
-const RECORD = `${DATA_DIR}/.blockly-start`
+const RECORD = `${REMADE_DIR}/start`
+/** The record of a server still running, kept as `RECORD` once it stops cleanly. */
+const PENDING = `${RECORD}.pending`
+/** Where the record was kept before it moved to `REMADE_DIR`: taken away, as any older record is. */
+const FORMER = `${DATA_DIR}/.blockly-start`
 const RUNNER = `${SHIM_DIR}/server-runner`
 const STARTER = `${SHIM_DIR}/direct-start`
+const KEEPER = `${SHIM_DIR}/start-kept`
 /** The names in the entrypoint's environment, for the stand-in to tell what the scripts added. */
 const GIVEN = `${SHIM_DIR}/given-names`
-/** How long a server started at once has to stay up for its record to be used again. */
-const KEPT_AFTER_S = 90
 /**
  * The variables that differ from one boot of a machine to the next and say nothing of what the
  * scripts would do: the provider's own, and the shell's.
@@ -70,31 +88,46 @@ const PASSING = 'FLY_.*|HOSTNAME|PWD|OLDPWD|SHLVL|_|TERM|BLOCKLY_START_KEY'
 const VARIABLE = '^[A-Za-z_][A-Za-z0-9_]*='
 
 /**
- * The stand-in, line by line: it writes down what it is asked to run, then runs it (through the
- * cache's own script, `start-cache.ts`). Variables are
+ * The stand-in, line by line: it writes down what it is asked to run, as pending, then runs it
+ * (through `KEEPER` and the cache's own script, `start-cache.ts`). Variables are
  * read from awk's own table of them, which keeps a value whole whatever is in it; one that runs
  * over several lines is said as `!`, and nothing is written down.
  */
 const RUNNER_LINES = [
   '#!/bin/sh',
   `added=$(awk "BEGIN { while ((getline name < \\"${GIVEN}\\") > 0) given[name]; for (name in ENVIRON) if (!(name in given) && name !~ /^(${PASSING})$/) { if (ENVIRON[name] ~ /\\n/) print \\"!\\"; else print name \\"=\\" ENVIRON[name] } }" | sort)`,
-  `if [ -n "$BLOCKLY_START_KEY" ] && ! printf "%s\\n" "$added" | grep -q -x "!"; then { echo "$BLOCKLY_START_KEY"; pwd; printf "%s\\n" "$added" | grep -c .; printf "%s\\n" "$added" | grep .; for word; do printf "%s\\n" "$word"; done; } > ${RECORD}.new && mv -f ${RECORD}.new ${RECORD}; fi`,
-  `exec ${CACHED_RUNNER} "$@"`,
+  `if [ -n "$BLOCKLY_START_KEY" ] && ! printf "%s\\n" "$added" | grep -q -x "!" && mkdir -p ${REMADE_DIR}; then { echo "$BLOCKLY_START_KEY"; pwd; printf "%s\\n" "$added" | grep -c .; printf "%s\\n" "$added" | grep .; for word; do printf "%s\\n" "$word"; done; } > ${PENDING}.new && mv -f ${PENDING}.new ${PENDING}; fi`,
+  `exec ${KEEPER} "$@"`,
+]
+
+/**
+ * What runs the server for both kinds of boot, line by line: the cache's script as its child, a
+ * stop passed on to it, and the pending record kept only where it ended without an error, as a
+ * server stopped by its runner does. Its input is passed on as the image gives it (a child in the
+ * background would read none).
+ */
+const KEEPER_LINES = [
+  '#!/bin/sh',
+  'child=; code=; pass() { [ -n "$child" ] && kill -$1 $child 2>/dev/null; }; trap "pass TERM" TERM; trap "pass INT" INT',
+  `exec 3<&0; ${CACHED_RUNNER} "$@" <&3 & child=$!`,
+  'while [ -z "$code" ]; do wait $child; ended=$?; kill -0 $child 2>/dev/null || code=$ended; done',
+  `if [ "$code" = 0 ] && [ -f ${PENDING} ]; then mv -f ${PENDING} ${RECORD}; fi`,
+  'exit $code',
 ]
 
 /**
  * What reads the record, as the volume's own user, line by line. `check` says whether a start
  * from it would hold: its key is this boot's, its lines read as they were written, every jar its
- * command names is there. `run` takes the record away, then starts the server from it; whatever
- * fails after that leaves no record, so the next boot is the scripts'. `forget` takes it away for
- * a boot the scripts are about to run.
+ * command names is there. `run` makes the record pending again, then starts the server from it
+ * through `KEEPER`; anything but a clean stop leaves no record, so the next boot is the scripts'.
+ * `forget` takes it away, and any older one, for a boot the scripts are about to run.
  */
 const STARTER_LINES = [
   '#!/bin/sh',
   `record=${RECORD}; mode=$1`,
-  'if [ "$mode" = forget ]; then rm -f $record $record.last; exit 0; fi',
+  `if [ "$mode" = forget ]; then rm -f $record ${PENDING} ${FORMER} ${FORMER}.last; exit 0; fi`,
   '[ "$(sed -n 1p $record 2>/dev/null)" = "$BLOCKLY_START_KEY" ] || exit 1',
-  'if [ "$mode" = run ]; then mv -f $record $record.last || exit 1; record=$record.last; fi',
+  `if [ "$mode" = run ]; then mv -f $record ${PENDING} || exit 1; record=${PENDING}; fi`,
   '{ read -r key; read -r dir; read -r added; case "$added" in ""|*[!0-9]*) exit 1;; esac',
   `while [ "$added" -gt 0 ]; do IFS= read -r variable; printf "%s\\n" "$variable" | grep -q -E "${VARIABLE}" || exit 1; if [ "$mode" = run ]; then export "$variable"; fi; added=$((added - 1)); done`,
   'set --; while IFS= read -r word; do set -- "$@" "$word"; done; } < $record',
@@ -102,8 +135,7 @@ const STARTER_LINES = [
   'for word; do case "$word" in *.jar) [ -f "$dir/$word" ] || [ -f "$word" ] || exit 1;; esac; done',
   'cd "$dir" || exit 1',
   '[ "$mode" = run ] || exit 0',
-  `(sleep ${KEPT_AFTER_S}; kill -0 $$ 2>/dev/null && mv -f ${RECORD}.last ${RECORD}) >/dev/null 2>&1 &`,
-  `exec ${CACHED_RUNNER} "$@"`,
+  `exec ${KEEPER} "$@"`,
 ]
 
 const written = (path: string, lines: readonly string[]): string =>
@@ -112,13 +144,16 @@ const written = (path: string, lines: readonly string[]): string =>
 /**
  * The step, after every other of Blockly's and before the image's own entrypoint, which it leaves
  * to run wherever it doesn't hand the start over. Its lines hold no single quote but the files'
- * it writes (its own two, the cache's and Paper's manifest maker), so each of those is written as
+ * it writes (its own three, the cache's and Paper's manifest maker), so each of those is written as
  * one argument per line.
  */
 export const DIRECT_START_STEP = [
-  `${written(RUNNER, RUNNER_LINES)} && ${written(STARTER, STARTER_LINES)} && ${written(CACHED_RUNNER, CACHED_RUNNER_LINES)} && ${written(LAUNCH_MAKER, LAUNCH_MAKER_LINES)} && export SERVER_RUNNER=${RUNNER};`,
+  `${written(RUNNER, RUNNER_LINES)} && ${written(STARTER, STARTER_LINES)} && ${written(KEEPER, KEEPER_LINES)} && ${written(CACHED_RUNNER, CACHED_RUNNER_LINES)} && ${written(LAUNCH_MAKER, LAUNCH_MAKER_LINES)} && export SERVER_RUNNER=${RUNNER};`,
   `awk "BEGIN { for (name in ENVIRON) print name }" > ${GIVEN};`,
   `export BLOCKLY_START_KEY=$({ awk "BEGIN { for (name in ENVIRON) if (name !~ /^(${PASSING})$/) print name \\"=\\" ENVIRON[name] }" | sort; cat /image/scripts/start*; } 2>/dev/null | sha256sum | cut -c1-64);`,
+  // The provider mounts the volume as root's at every boot, and the image's own start gives it back
+  // to the server's user before anything else: done here first, the same way, or no start is direct.
+  `if [ "$(id -u)" = 0 ]; then u=\${UID:-1000}; g=\${GID:-1000}; case "$u:$g" in *[!0-9:]*|0:*|*:0) ;; *) case "\${SKIP_CHOWN_DATA:-false}" in [Tt][Rr][Uu][Ee]) ;; *) if [ "$(stat -c %u ${DATA_DIR})" != "$u" ]; then echo "[init] Changing ownership of ${DATA_DIR} to $u ..."; chown -R "$u:$g" ${DATA_DIR}; fi;; esac;; esac; fi;`,
   // Whose the volume is, which the image's own start makes the server's user; never root's.
   `owner=$(ls -ldn ${DATA_DIR} | awk "{ print \\$3 \\":\\" \\$4 }"); me="$(id -u):$(id -g)"; direct=;`,
   `case "$owner" in 0:*|*:0|*[!0-9:]*|"") ;; "$me") direct=${STARTER};; *) if [ "$me" = 0:0 ]; then direct="gosu $owner ${STARTER}"; fi;; esac;`,

@@ -109,6 +109,14 @@ export const LAUNCH_MAKER_LINES = [
 ]
 
 /**
+ * Whether the jar is Paperclip, by its own class, read with Python's zipfile. Not `unzip -l`: on
+ * the image's Alpine build, which every plain server runs, unzip is BusyBox's, which exits 0 for an
+ * entry the jar doesn't hold, so Mojang's jar was taken for Paperclip and its patch run started a
+ * whole server. A jar that won't read is not Paperclip. It holds no single quote, as the lines don't.
+ */
+const IS_PAPERCLIP = `import sys, zipfile; sys.exit(0 if \\"${PAPERCLIP}\\" in zipfile.ZipFile(sys.argv[1]).namelist() else 1)`
+
+/**
  * The cache script's lines that put the manifest jar in place of Paperclip, after the jar the
  * start runs is known (`file`, the word after `-jar` at `jar`) and before what the cache was made
  * for is worked out. `lfp` is what the manifest jar was made for: Paperclip and every jar on its
@@ -119,7 +127,7 @@ export const LAUNCH_LINES = [
   `launch=${LAUNCH}; lstate=$launch.state; paperclip=$file`,
   'lfp() { { stat -c "%s %Y" "$paperclip"; while IFS= read -r f; do stat -c "%n %s %Y" "$f"; done < $launch.list; } 2>/dev/null | sha256sum | cut -c1-64; }',
   `lmake() { python3 ${LAUNCH_MAKER} "$paperclip" $launch > $launch.list.new 2>/dev/null; }`,
-  `if [ "$file" != $launch ] && command -v python3 >/dev/null 2>&1 && unzip -l "$file" ${PAPERCLIP} >/dev/null 2>&1 && mkdir -p "$(dirname "$launch")"; then`,
+  `if [ "$file" != $launch ] && command -v python3 >/dev/null 2>&1 && python3 -c "${IS_PAPERCLIP}" "$file" 2>/dev/null && mkdir -p "$(dirname "$launch")"; then`,
   'lphase=; if [ -s $launch ] && [ -s $launch.list ] && [ "$(sed -n 1p $lstate 2>/dev/null)" = "$(lfp)" ]; then lphase=$(sed -n 2p $lstate); fi',
   'if [ -z "$lphase" ]; then',
   'rm -f $launch $launch.list $lstate; lmake; made=$?',

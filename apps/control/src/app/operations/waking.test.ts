@@ -14,7 +14,7 @@ import { randomUUID } from 'node:crypto'
 import { readFile, writeFile } from 'node:fs/promises'
 import { DAY_MS } from '@blockly/contracts/durations'
 import { schema } from '@blockly/db'
-import { eq } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
 import { MemoryStore } from '../../testing/memory-store.ts'
 import { loadRuntime } from '../servers/persistence.ts'
@@ -33,12 +33,13 @@ describe.skipIf(!hasDatabase)('waking a resting world', () => {
     store.close()
   })
 
-  test('a join as a failed wake is being recorded wakes it again at once, not cancelled', async () => {
-    const owner = await h.user('Quinn')
+  /** A new server of `name`'s, played on (`played`), then put to rest by the sweep. */
+  async function resting(name: string, played: (id: string) => Promise<void> = async () => {}) {
+    const owner = await h.user(name)
     const { id } = await h.create(owner)
     await h.until(id, 'running')
     await h.settled(id)
-    await writeFile(h.minecraft.path(id, 'world/built.txt'), "Quinn's castle")
+    await played(id)
     await h.app.servers.stop(owner, id, randomUUID())
     await h.until(id, 'stopped')
     await h.settled(id)
@@ -49,6 +50,13 @@ describe.skipIf(!hasDatabase)('waking a resting world', () => {
     await h.app.schedules.storeSweep()
     await h.until(id, 'stored', 20_000)
     await h.settled(id, 20_000)
+    return { owner, id }
+  }
+
+  test('a join as a failed wake is being recorded wakes it again at once, not cancelled', async () => {
+    const { owner, id } = await resting('Quinn', (id) =>
+      writeFile(h.minecraft.path(id, 'world/built.txt'), "Quinn's castle"),
+    )
 
     h.runtime.failRestores('volume already claimed', 'compute')
     const publish = h.events.publish.bind(h.events)
@@ -77,20 +85,7 @@ describe.skipIf(!hasDatabase)('waking a resting world', () => {
   }, 60_000)
 
   test('the orphan sweep clears what a resting world’s runtime holds, and keeps an awake one’s world', async () => {
-    const owner = await h.user('Rowan')
-    const { id } = await h.create(owner)
-    await h.until(id, 'running')
-    await h.settled(id)
-    await h.app.servers.stop(owner, id, randomUUID())
-    await h.until(id, 'stopped')
-    await h.settled(id)
-    await h.db
-      .update(schema.minecraftServers)
-      .set({ lastActiveAt: new Date(Date.now() - 15 * DAY_MS) })
-      .where(eq(schema.minecraftServers.id, id))
-    await h.app.schedules.storeSweep()
-    await h.until(id, 'stored', 20_000)
-    await h.settled(id, 20_000)
+    const { owner, id } = await resting('Rowan')
 
     // The fake runtime leaves nothing behind; this one says what each ask deleted.
     const asked: { handle: unknown; worldElsewhere: boolean }[] = []
@@ -126,6 +121,30 @@ describe.skipIf(!hasDatabase)('waking a resting world', () => {
     } finally {
       warn.mockRestore()
       delete runtime.clearLeftovers
+    }
+  }, 60_000)
+
+  test('a wake lets the runtime bring a small copy back as it boots, and a large one before, within the boot’s wait', async () => {
+    const small = await resting('Sage')
+    const large = await resting('Tamsin')
+    await h.db
+      .update(schema.backups)
+      .set({ sizeBytes: 3 * 1024 ** 3 })
+      .where(and(eq(schema.backups.serverId, large.id), eq(schema.backups.trigger, 'stored')))
+    const restore = spyOn(h.runtime, 'restore')
+    try {
+      for (const { owner, id } of [small, large]) {
+        await h.app.servers.start(owner, id, randomUUID())
+        await h.until(id, 'running', 20_000)
+        await h.settled(id, 20_000)
+      }
+      const asked = restore.mock.calls.map(([, from, , , options]) => [from.kind, options?.bootsAtOnce])
+      expect(asked).toEqual([
+        ['archive', true],
+        ['archive', false],
+      ])
+    } finally {
+      restore.mockRestore()
     }
   }, 60_000)
 })

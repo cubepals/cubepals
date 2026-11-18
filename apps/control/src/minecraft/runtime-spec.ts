@@ -19,9 +19,11 @@ import { CARRIED_STEP, carriedEnv, placesFiles } from './carried.ts'
 import { DATAPACKS_STEP, datapacksEnv, datapacksOf } from './datapacks.ts'
 import { DIRECT_START_STEP } from './direct-start.ts'
 import { WAITING_DATAPACK } from './duels-waiting.ts'
+import { heapEnv } from './heap-flags.ts'
 import { DATA_DIR, JAR_LISTS, jarsOf } from './jars.ts'
 import { PAPER_DEFAULTS_STEP } from './paper-defaults.ts'
 import { GAME_PORT, RCON_PORT } from './ports.ts'
+import { RESTORE_STEP } from './restore-step.ts'
 import { SET_ASIDE_STEP, type SetAsideFile, setAsideEnv } from './set-aside.ts'
 import { STARTER_STEP, starterEnv, startsOnOf } from './starter.ts'
 import { STOP_CHEATERS_STEP } from './stop-cheaters.ts'
@@ -169,7 +171,7 @@ const LOADER_VERSION_VARS: Partial<Record<Loader, string>> = {
  * 39,000 to 54,000 classes against vanilla's 25,000, and the metaspace, code cache and mixin
  * machinery live outside the heap. A live run proved the point — a modpack on the smallest size
  * with three quarters as heap sat at 93% of the container's memory before anybody joined, since
- * Aikar's flags pre-touch the whole heap at startup. Two thirds leaves a modded server about a
+ * Aikar's flags then pre-touched the whole heap at startup (`heap-flags.ts`). Two thirds leaves a modded server about a
  * gigabyte outside the heap, and still gives it three times the live heap the research measured.
  *
  * A vanilla 3 GB server needs that gigabyte too. Five bots exploring apart on one (2026-09-28)
@@ -192,6 +194,9 @@ function heapMb(input: Pick<RuntimeSpecInput, 'revision' | 'memoryTier'>): numbe
  */
 const ALPINE_JAVA: ReadonlySet<number> = new Set([21, 25])
 
+/** The tag suffix of the image's Alpine build, which runs musl in place of glibc. */
+const ALPINE = '-alpine'
+
 /**
  * The image a server runs. Plain Minecraft gets the image's Alpine build where there is one: 205 MB
  * compressed against 350, and its wake on Boat came back faster. Everything that loads mods or
@@ -210,7 +215,7 @@ export function imageFor(
     revision.modpack === null &&
     jarModsOf({ loader: revision.loader, mods: revision.mods ?? [] }).length === 0 &&
     !runsOnPaper(revision)
-  return `${IMAGE}:${IMAGE_RELEASE}-java${java}${plain && ALPINE_JAVA.has(java) ? '-alpine' : ''}`
+  return `${IMAGE}:${IMAGE_RELEASE}-java${java}${plain && ALPINE_JAVA.has(java) ? ALPINE : ''}`
 }
 
 /**
@@ -546,9 +551,10 @@ const EXEC_IMAGE = `exec ${IMAGE_ENTRYPOINT} "$@"`
 
 /**
  * The image's own entrypoint, after Blockly's steps, which run as root on the volume: before them,
- * what they call to replace a link where they write (`volume-links.ts`). The world a server starts
- * on (`STARTER_STEP`) comes first where it has one, so the steps after it find the world it
- * unpacked as they find any. The first of those puts the volume's files as the server type reads
+ * what they call to replace a link where they write (`volume-links.ts`). A world brought back from
+ * its archive in the machine itself (`RESTORE_STEP`) comes first, then the world a server starts
+ * on (`STARTER_STEP`) where it has one, so the steps after them find the world they unpacked as
+ * they find any. The first of those puts the volume's files as the server type reads
  * them (`PAPER_STEP` on Paper, after `VANILLA_PAPER_STEP` on plain Minecraft run on Paper and before
  * the settings Cubepals gives Paper for how it runs, `paper-defaults.ts`; `DIMENSIONS_STEP` on any
  * other), and the second the world's datapacks (`DATAPACKS_STEP`); the
@@ -570,6 +576,7 @@ function entrypointFor(steps: {
 }): readonly string[] {
   const script = [
     UNLINKED,
+    RESTORE_STEP,
     ...(steps.starter ? [STARTER_STEP] : []),
     ...(steps.vanilla ? [VANILLA_PAPER_STEP] : []),
     steps.paper ? PAPER_STEP : DIMENSIONS_STEP,
@@ -693,8 +700,7 @@ export function toRuntimeSpec(input: RuntimeSpecInput): RuntimeSpec {
       // The control plane is the only writer of power state (§0, decision 3).
       ENABLE_AUTOPAUSE: 'FALSE',
       ENABLE_AUTOSTOP: 'FALSE',
-      MEMORY: `${heapMb(input)}M`,
-      USE_AIKAR_FLAGS: 'TRUE',
+      ...heapEnv(heapMb(input), javaFor(revision.gameVersion), !imageFor(revision).endsWith(ALPINE)),
       STOP_DURATION: String(STOP_DURATION_SECONDS),
       // The game's watchdogs off: a freeze reads as one endless tick (`watchdog.ts`).
       ...watchdogEnv(type === TYPES.paper, packEnv.JVM_DD_OPTS),

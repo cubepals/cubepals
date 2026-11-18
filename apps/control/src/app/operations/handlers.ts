@@ -27,6 +27,7 @@
  * - `restart-warning.ts`: the countdown players read in chat before a restart drops them.
  * - `restart-notice.ts`: turns the players out with why, before an update or a restart reboots their server.
  * - `restoring.ts`: puts a backup's world in place of the server's, with a way back.
+ * - `started-again.ts`: starts a recording run again in place as it sleeps, so its startup cache is made without a second boot.
  * - `stored-worlds.ts`: rests a world nobody plays in the archive store, and wakes it from there.
  * - `updating.ts`: puts a running server onto a new configuration, with a way back.
  * - `winding-down.ts`: takes a server down: stopped, decommissioned into the trash, or purged.
@@ -58,6 +59,7 @@ import { moving } from './handlers/moving.ts'
 import { pruningWorlds } from './handlers/prune-worlds.ts'
 import { rechecks } from './handlers/rechecks.ts'
 import { restoring } from './handlers/restoring.ts'
+import type { StartAgain } from './handlers/started-again.ts'
 import { storedWorlds } from './handlers/stored-worlds.ts'
 import { updating } from './handlers/updating.ts'
 import { windingDown } from './handlers/winding-down.ts'
@@ -80,6 +82,8 @@ export interface HandlerDeps {
   console: ServerConsole
   /** Whether a server is up, and who is on it: a server with someone on never sleeps. */
   probe: ReadinessProbe
+  /** How a recording run starts again in place as it sleeps; the machine's own where not given. */
+  startAgain?: StartAgain | undefined
   /** Each player's facts, kept as a server stops for its page while it sleeps. */
   players: Pick<PlayerService, 'snapshot'>
   artifacts: ArtifactService

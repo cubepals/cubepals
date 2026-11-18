@@ -40,6 +40,7 @@ import { latestBoot } from '../persistence.ts'
 import type { OperationContext, OperationHandler, OperationResult, SleepMark } from '../runner.ts'
 import type { ServerBinding } from './binding.ts'
 import type { GameConsole } from './game-console.ts'
+import { type StartAgain, startedAgain } from './started-again.ts'
 
 /**
  * The stops that put a server to sleep: nobody played for a while, or a woken one nobody joined
@@ -82,12 +83,12 @@ async function sleepOrStop(
 type StopAsked = Pick<OperationContext['op'], 'serverId' | 'input'>
 
 /**
- * Whether a server about to sleep is stopped for once instead: its Java is recording its start
- * for a startup cache, as the cache's own state on its volume says, and the recording is only
- * written as Java exits (`minecraft/start-cache.ts`). The idle check's next pass then starts it
- * in the background (`schedules/recorded-starts.ts`), which makes the cache, and it sleeps as
- * ever. Not while the Java that start booted still runs, however often it slept and woke since
- * (`latestBoot`): one stop a recording, so one that is never written costs a boot once, not after
+ * Whether a server about to sleep is started again in place first (`again`): its Java is recording
+ * its start for a startup cache, as the cache's own state on its volume says, and the recording is
+ * only written as Java exits (`minecraft/start-cache.ts`). Where that doesn't come back, the sleep is
+ * a stop for once, and the idle check's next pass starts it in the background
+ * (`schedules/recorded-starts.ts`), which makes the cache, and it sleeps as ever. Not while the
+ * Java that start booted still runs, however often it slept and woke since (`latestBoot`): one stop a recording, so one that is never written costs a boot once, not after
  * every sleep, nor after every hourly refresh that resumed it. And only a sleep nobody asked for
  * (`idle`): a server its owner stopped stays as they left it, asleep, and isn't started again a
  * minute later.
@@ -149,6 +150,87 @@ async function playedSinceRestorePoint(q: Queryable, serverId: string): Promise<
   return played !== null && (last === null || played > last.createdAt)
 }
 
+/**
+ * Why a server just saved may not sleep with its memory kept, or null where it may: nobody on
+ * it, as the game says now (one who joined since the stop was asked would be frozen with it,
+ * where a stop at least says goodbye), its files written through to its storage, since the
+ * provider may drop the memory it kept and boot from there, and its Java not recording its
+ * start (`recordingRefusal`).
+ */
+async function dozeRefusal(
+  deps: { db: Db; runtime: Pick<Runtimes, 'exec' | 'endpoint'>; probe: Pick<ReadinessProbe, 'ping'> },
+  stop: StopAsked,
+  handle: RuntimeHandle,
+  booted: AppliedConfigJson | null,
+): Promise<SleepMark | null> {
+  if ((await playersOn(deps.probe, gameOf(deps.runtime, handle, booted))) !== 0) return 'players_on'
+  const synced = await deps.runtime.exec(handle, ['sync'], 60).catch(() => null)
+  return synced?.exitCode === 0 ? recordingRefusal(deps, stop, handle) : 'unsynced'
+}
+
+/**
+ * A server whose Java records its start, started again in place (`started-again.ts`): its time
+ * stops counting where its sleep was asked, as a refresh's does, and it is saved again once back.
+ * What then refuses its sleep, or `recording` where it didn't come back, which is the stop it used
+ * to be and the start that follows it (`schedules/recorded-starts.ts`).
+ */
+async function again(
+  deps: {
+    db: Db
+    runtime: Pick<Runtimes, 'exec' | 'endpoint'>
+    probe: Pick<ReadinessProbe, 'ping'>
+    windDown: GameConsole['windDown']
+    startAgain: StartAgain
+    refusal: (
+      stop: StopAsked,
+      handle: RuntimeHandle,
+      booted: AppliedConfigJson | null,
+    ) => Promise<SleepMark | null>
+  },
+  ctx: Parameters<OperationHandler['run']>[0],
+  handle: RuntimeHandle,
+  booted: AppliedConfigJson | null,
+): Promise<SleepMark | null> {
+  await closeInterval(deps.db, ctx.server.id, new Date())
+  const up = await deps.startAgain({
+    exec: (command, seconds) => deps.runtime.exec(handle, command, seconds).catch(() => null),
+    answers: async () => (await playersOn(deps.probe, gameOf(deps.runtime, handle, booted))) !== null,
+    wait: (ms) => new Promise((done) => setTimeout(done, ms)),
+    now: () => Date.now(),
+  })
+  if (!up) return 'recording'
+  await ctx.mark('started_again')
+  if (!(await deps.windDown(ctx.server, handle))) return 'unsaved'
+  return deps.refusal(ctx.op, handle, booted)
+}
+
+/**
+ * What the world takes on disk, read while the server still runs, just saved: what
+ * a resting copy costs, and whether the next start needs a bigger disk. Best effort: a server
+ * that won't answer stops all the same.
+ */
+async function measureDisk(
+  deps: { db: Db; runtime: Pick<Runtimes, 'exec'> },
+  server: MinecraftServer,
+  handle: RuntimeHandle,
+): Promise<void> {
+  const read = await deps.runtime.exec(handle, MEASURE, 60).catch(() => null)
+  if (read === null || read.exitCode !== 0) return
+  const kilobytes = Number.parseInt(read.stdout.trim().split(/\s+/)[0] ?? '', 10)
+  if (!Number.isFinite(kilobytes)) return
+  const usedBytes = kilobytes * 1024
+  const standing = await loadStanding(deps.db, server.ownerId)
+  const plan = entitlementsOf(standing)
+  const current = Math.max(plan.storage.startGb, await grownStorage(deps.db, server.id))
+  await recordDisk(
+    deps.db,
+    server.id,
+    usedBytes,
+    new Date(),
+    grownDisk(plan, current, usedBytes) ?? undefined,
+  )
+}
+
 export function windingDown(deps: {
   db: Db
   runtime: Pick<
@@ -160,38 +242,9 @@ export function windingDown(deps: {
   bindingOf: ServerBinding['bindingOf']
   windDown: GameConsole['windDown']
   players: Pick<PlayerService, 'snapshot'>
+  startAgain?: StartAgain
 }) {
   const { db, runtime, transitions, bindingOf, windDown } = deps
-
-  /**
-   * What the world takes on disk, read while the server still runs, just saved: what
-   * a resting copy costs, and whether the next start needs a bigger disk. Best effort: a server
-   * that won't answer stops all the same.
-   */
-  const measureDisk = async (server: MinecraftServer, handle: RuntimeHandle) => {
-    const read = await runtime.exec(handle, MEASURE, 60).catch(() => null)
-    if (read === null || read.exitCode !== 0) return
-    const kilobytes = Number.parseInt(read.stdout.trim().split(/\s+/)[0] ?? '', 10)
-    if (!Number.isFinite(kilobytes)) return
-    const usedBytes = kilobytes * 1024
-    const standing = await loadStanding(db, server.ownerId)
-    const plan = entitlementsOf(standing)
-    const current = Math.max(plan.storage.startGb, await grownStorage(db, server.id))
-    await recordDisk(db, server.id, usedBytes, new Date(), grownDisk(plan, current, usedBytes) ?? undefined)
-  }
-
-  /**
-   * Why a server just saved may not sleep with its memory kept, or null where it may: nobody on
-   * it, as the game says now (one who joined since the stop was asked would be frozen with it,
-   * where a stop at least says goodbye), its files written through to its storage, since the
-   * provider may drop the memory it kept and boot from there, and its Java not recording its
-   * start (`recordingRefusal`).
-   */
-  const dozeRefusal = async (stop: StopAsked, handle: RuntimeHandle, booted: AppliedConfigJson | null) => {
-    if ((await playersOn(deps.probe, gameOf(runtime, handle, booted))) !== 0) return 'players_on' as const
-    const synced = await runtime.exec(handle, ['sync'], 60).catch(() => null)
-    return synced?.exitCode === 0 ? recordingRefusal(deps, stop, handle) : ('unsynced' as const)
-  }
 
   const stop: OperationHandler = {
     kind: 'stop',
@@ -207,13 +260,29 @@ export function windingDown(deps: {
           return keep(db, transitions, server.id)
         await ctx.step('saving')
         const saved = await windDown(server, handle)
-        await measureDisk(server, handle)
+        await measureDisk({ db, runtime }, server, handle)
         // One more exec, while the files are just saved and still cheap to read.
         await deps.players.snapshot(server, handle).catch(() => undefined)
         await ctx.step('stopping')
         // Asleep only once the world is saved: unsaved, a stop saves it on the way down.
         const refused = refusedAtOnce(reason, runtime.sleeps(handle), saved)
-        const refusal = refused ?? (await dozeRefusal(ctx.op, handle, applied))
+        const dozed = refused ?? (await dozeRefusal(deps, ctx.op, handle, applied))
+        const refusal =
+          dozed === 'recording'
+            ? await again(
+                {
+                  db,
+                  runtime,
+                  probe: deps.probe,
+                  windDown,
+                  startAgain: deps.startAgain ?? startedAgain,
+                  refusal: (op, at, booted) => dozeRefusal(deps, op, at, booted),
+                },
+                ctx,
+                handle,
+                applied,
+              )
+            : dozed
         await sleepOrStop(ctx, { db, runtime }, handle, refusal)
       }
       await db.transaction(async (tx) => {
