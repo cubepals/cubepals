@@ -62,10 +62,13 @@ import { DATA_DIR } from './jars.ts'
 import { LAUNCH_LINES } from './paper-launch.ts'
 import { SHIM_DIR } from './wake-step.ts'
 
-/** The folder on the volume that no archive holds (`NOT_ARCHIVED`): a cache is made again. */
+/**
+ * The folder on the volume that no archive holds (`NOT_ARCHIVED`): what is in it is made again on
+ * a volume filled from one. The cache, and the direct start's record (`direct-start.ts`).
+ */
 const REMADE: (typeof NOT_ARCHIVED)[number] = '.blockly-remade'
-const CACHE_DIR = `${DATA_DIR}/${REMADE}`
-const CACHE = `${CACHE_DIR}/start.aot`
+export const REMADE_DIR = `${DATA_DIR}/${REMADE}`
+const CACHE = `${REMADE_DIR}/start.aot`
 
 /** The script that the start's last word is called through, in place of the image's runner. */
 export const CACHED_RUNNER = `${SHIM_DIR}/start-cache`
@@ -143,7 +146,7 @@ export const CACHED_RUNNER_LINES = [
   'fp=$({ cat "$home/release"; stat -c "%s %Y" "$file"; if [ "$file" = "$launch" ]; then sed -n 1p "$lstate"; fi; n=0; for w; do n=$((n + 1)); if [ $n -gt $at ] && [ $n -le $((jar + 1)) ]; then printf "%s\\n" "$w"; fi; done; } 2>/dev/null | sha256sum | cut -c1-64)',
   'with() { more=$1; shift; n=0; for w; do n=$((n + 1)); if [ $n = 1 ]; then set --; fi; if [ -n "$bare" ] && [ "$w" = -XX:+AlwaysPreTouch ]; then continue; fi; set -- "$@" "$w"; if [ $n = $at ]; then set -- "$@" $more; fi; done; exec mc-server-runner "$@"; }',
   `make() ( n=0; for w; do n=$((n + 1)); if [ $n = 1 ]; then set --; fi; if [ $n -gt $at ] && [ $n -lt $jar ] && [ "$w" != -XX:+AlwaysPreTouch ]; then set -- "$@" "$w"; fi; done; exec java "$@" -XX:AOTMode=create -XX:AOTConfiguration=$conf -XX:AOTCache=$cache.new -cp "$file" >/dev/null 2>&1 )`,
-  `mkdir -p ${CACHE_DIR} 2>/dev/null || plain "$@"`,
+  `mkdir -p ${REMADE_DIR} 2>/dev/null || plain "$@"`,
   `room=$(df -Pk ${DATA_DIR} 2>/dev/null | awk "NR == 2 { print \\$4 }")`,
   'case "$room" in ""|*[!0-9]*) plain "$@";; esac',
   `if [ "$room" -lt ${TIGHT_KB} ]; then rm -f $cache $cache.new $conf $state; plain "$@"; fi`,
