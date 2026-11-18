@@ -37,6 +37,7 @@ import { ModQueries } from './mods/queries.ts'
 import { ModService } from './mods/service.ts'
 import { updatesOf } from './mods/updates.ts'
 import { BootSequence, type BootTimeouts } from './operations/boot.ts'
+import type { StartAgain } from './operations/handlers/started-again.ts'
 import { createHandlers } from './operations/handlers.ts'
 import { OperationRunner } from './operations/runner.ts'
 import { Schedules } from './operations/schedules.ts'
@@ -108,6 +109,11 @@ export interface ControlPlanePorts {
   runtime: Runtimes
   console: ServerConsole
   probe: ReadinessProbe
+  /**
+   * How a recording run is started again in place as it sleeps (`operations/handlers/started-again.ts`);
+   * the machine's own by default. A test holds it to see the sleep around it.
+   */
+  startAgain?: StartAgain | undefined
   profiles: PlayerProfiles
   logs: LogSource
   catalog: ModCatalog

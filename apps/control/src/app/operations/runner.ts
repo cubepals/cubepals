@@ -60,6 +60,7 @@ export type OperationStep =
  * the CPU of the host a boot ran on and which host it is, where its runtime reads them (`host-cpu.ts`).
  */
 type OperationMark =
+  | 'started_again'
   | 'resume_observing'
   | 'resume_running'
   | 'resume_answered'
