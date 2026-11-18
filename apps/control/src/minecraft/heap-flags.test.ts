@@ -56,20 +56,20 @@ const revision = {
 }
 
 describe('heap flags', () => {
-  test("a server's heap starts small, is never pre-touched, and gives back what it doesn't use", () => {
+  test("a server's heap starts small, is never pre-touched, and grows from a start that covers an idle server", () => {
     // Pre-touched with -Xms at -Xmx, a 3 GB server held 2.3 GiB awake, idle or asleep, for a
     // live heap under 300 MiB (heap-flags.ts).
     const spec = toRuntimeSpec({ ...input, revision, memoryTier: '3g' })
     expect(spec.env.USE_AIKAR_FLAGS).toBeUndefined()
     expect(spec.env.MEMORY).toBeUndefined()
-    expect(spec.env.INIT_MEMORY).toBe('256M')
+    expect(spec.env.INIT_MEMORY).toBe('1024M')
     expect(spec.env.MAX_MEMORY).toBe('2048M')
     const flags = (spec.env.JVM_XX_OPTS ?? '').split(' ')
     expect(flags).not.toContain('-XX:+AlwaysPreTouch')
     expect(flags).toContain('-XX:+UseG1GC')
     expect(flags).toContain('-XX:G1HeapRegionSize=8M')
-    expect(flags).toContain('-XX:MinHeapFreeRatio=10')
-    expect(flags).toContain('-XX:MaxHeapFreeRatio=30')
+    // A 256 MB start doubled G1's young collections and raised the worst ticks (heap-flags.ts).
+    expect(flags.some((flag) => flag.includes('HeapFreeRatio'))).toBe(false)
     expect(flags).toContain('-XX:+UseCompactObjectHeaders')
     expect(flags.some((flag) => flag.includes('PeriodicGC'))).toBe(false)
     // Plain Minecraft runs on Alpine's musl, where glibc's arenas mean nothing.

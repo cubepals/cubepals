@@ -774,10 +774,10 @@ infra/fly | infra/docker | infra/boat | infra/fleet | infra/fake   ← provider-
     so they are left out of the digest drift compares: a plan change never restarts a server.
   - Memory: the heap (`heapMb`): 75% of the size for a vanilla server and 65% for one
     with mods or a pack, which needs more room outside the heap; from 3 GB up, never more than
-    the size less 1024 MB. It is `MAX_MEMORY`; `INIT_MEMORY` is 256 MB, and Aikar's G1 tuning goes in
-    `JVM_XX_OPTS` without pre-touch, with `MaxHeapFreeRatio=30` and, on Java 25, compact object
-    headers, so the heap holds what the game uses (`heap-flags.ts`). `MALLOC_ARENA_MAX=2` on the
-    images built on glibc.
+    the size less 1024 MB. It is `MAX_MEMORY`; `INIT_MEMORY` is 1 GB (or the heap, where
+    smaller), and Aikar's G1 tuning goes in `JVM_XX_OPTS` without pre-touch, with compact object
+    headers on Java 25, so the heap holds what the game uses (`heap-flags.ts`).
+    `MALLOC_ARENA_MAX=2` on the images built on glibc.
   - Shutdown: `STOP_DURATION=60`.
 - **Secrets.** `RCON_PASSWORD`. Like the artifact token, it's derived as
   `deriveServerSecret(key, serverId, purpose)` with the current runtime key

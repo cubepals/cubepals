@@ -6,16 +6,20 @@
  * How a server's Java holds its memory: the image's variables for the heap and the garbage
  * collector, and the C library's.
  *
- * The heap grows as the game needs it and gives back what it no longer does. The image's
+ * The heap grows as the game needs it, from a start that covers an idle server. The image's
  * `USE_AIKAR_FLAGS` would set the same collector tuning, but with `-XX:+AlwaysPreTouch` and with
  * `-Xms` equal to `-Xmx` (its `MEMORY`), which together make the whole heap resident from the
  * first second and keep it so: a vanilla 3 GB server held about 2.3 GiB in every state, awake,
- * idle or frozen, for a live heap under 300 MiB, since G1 never shrinks below `-Xms`. So the
- * tuning is written here without those two, and:
+ * idle or frozen, for a live heap under 300 MiB. So the tuning is written here without
+ * pre-touch, and:
  *
- * - `-Xms` is small (`INIT_MEMORY`) and `-Xmx` is the server's heap (`MAX_MEMORY`);
- * - `MinHeapFreeRatio=10` and `MaxHeapFreeRatio=30` let G1 keep at most 30% of the heap free
- *   after a collection, where its default of 70% kept nearly three times the live heap;
+ * - `-Xms` is 1 GB (`INIT_MEMORY`), or the whole heap where that is smaller, and `-Xmx` is the
+ *   server's heap (`MAX_MEMORY`). Measured with five players exploring on one CPU (2026-11-18),
+ *   a 256 MB start made G1 grow the heap through play and doubled its young collections, and the
+ *   worst ticks rose past 100 ms in every run; from 1 GB the ticks were at today's level, with
+ *   0.75 GiB resident idle and 1.3 GiB busy in place of 2.3 and 2.4;
+ * - G1's own free ratios (40/70) are kept: lowering them to 10/30 bought no memory back after
+ *   play, since an empty server pauses its ticks and no collection runs to shrink the heap;
  * - compact object headers (JEP 519, a product flag from Java 25) take about 6% off the live
  *   heap; older Java refuses the flag, so it is set only from 25;
  * - `MALLOC_ARENA_MAX=2` keeps glibc from giving each thread an arena of its own, up to eight per
@@ -28,8 +32,8 @@
  * Not for how big the heap is (`heapMb` in `runtime-spec.ts`).
  */
 
-/** The heap a server starts with. It grows to `-Xmx` as the game asks. */
-const INITIAL_HEAP_MB = 256
+/** The heap a server starts with, at most: room for an idle server, so play grows it little. */
+const INITIAL_HEAP_MB = 1024
 
 /** From this heap on, Aikar's tuning takes a larger young generation and larger regions. */
 const LARGE_HEAP_MB = 12 * 1024
@@ -68,8 +72,6 @@ function aikarG1(heapMb: number): string[] {
 export function heapEnv(heapMb: number, java: number, glibc: boolean): Record<string, string> {
   const flags = [
     ...aikarG1(heapMb),
-    '-XX:MinHeapFreeRatio=10',
-    '-XX:MaxHeapFreeRatio=30',
     ...(java >= COMPACT_HEADERS_JAVA ? ['-XX:+UseCompactObjectHeaders'] : []),
   ]
   return {
