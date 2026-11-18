@@ -23,6 +23,7 @@ import {
   FORCELOAD_ADD,
   FORCELOAD_REMOVE,
   forcedCount,
+  LOADED_CHECK,
   warmingAfterBoot,
   warmingSpawn,
 } from './spawn-warm-up.ts'
@@ -107,7 +108,7 @@ describe.skipIf(!hasDatabase)('a new world’s spawn', () => {
     const heard = h.minecraft.heard(server.id)
     expect(heard.indexOf(FORCELOAD_ADD)).toBeGreaterThan(-1)
     expect(heard.indexOf(FORCELOAD_REMOVE)).toBeGreaterThan(heard.indexOf(FORCELOAD_ADD))
-    expect(heard.filter((line) => line.startsWith('execute if loaded')).length).toBeGreaterThanOrEqual(49)
+    expect(heard).toContain(LOADED_CHECK)
     expect(forcedChunks(dir)).toEqual([])
     expect(await marksOf(h, warm?.id ?? '')).toEqual(['spawn:forced', 'spawn:ready'])
   })

@@ -53,12 +53,16 @@ const FORCELOAD_QUERY = 'forceload query'
 const CORNERS = [`forceload query ~-${REACH} ~-${REACH}`, `forceload query ~${REACH} ~${REACH}`]
 const SQUARE_CHUNKS = (2 * RADIUS_CHUNKS + 1) ** 2
 
-/** One `execute if loaded` per chunk of the square, at its spawn-relative block. */
-const LOADED_CHECKS: readonly string[] = Array.from({ length: SQUARE_CHUNKS }, (_, i) => {
+/**
+ * One command that passes only when every chunk of the square is loaded: an `if loaded` per chunk,
+ * at its spawn-relative block, chained in one `execute`. One command a poll keeps each of the
+ * warm-up's console sessions to one short answer, and leaves the console free between them.
+ */
+export const LOADED_CHECK = `execute ${Array.from({ length: SQUARE_CHUNKS }, (_, i) => {
   const dx = ((i % (2 * RADIUS_CHUNKS + 1)) - RADIUS_CHUNKS) * CHUNK_BLOCKS
   const dz = (Math.floor(i / (2 * RADIUS_CHUNKS + 1)) - RADIUS_CHUNKS) * CHUNK_BLOCKS
-  return `execute if loaded ~${dx} ~ ~${dz}`
-})
+  return `if loaded ~${dx} ~ ~${dz}`
+}).join(' ')}`
 
 /** How often the square is asked whether it is loaded. */
 const ASKED_EVERY_MS = SECOND_MS
@@ -151,17 +155,11 @@ export function warmingSpawn(deps: {
   const waitMs = deps.waitMs ?? WAITED_AT_MOST_MS
   const pollMs = deps.pollMs ?? ASKED_EVERY_MS
 
-  /** Whether all of the square is loaded by `until`, asking only for what wasn't yet. */
+  /** Whether all of the square is loaded by `until`. */
   const loaded = async (target: ConsoleTarget, ctx: OperationContext, until: number): Promise<boolean> => {
-    let left = [...LOADED_CHECKS]
     for (;;) {
-      // Over one connection: the square is 49 commands a time.
-      const answers = await deps.console.runAll(target, left)
-      left = left.filter((_, i) => {
-        const answer = answers[i]
-        return answer === undefined || !answer.ok || !passed(answer.output)
-      })
-      if (left.length === 0) return true
+      const [answer] = await deps.console.runAll(target, [LOADED_CHECK])
+      if (answer?.ok && passed(answer.output)) return true
       if (Date.now() >= until || ctx.signal.aborted) return false
       await sleep(pollMs, undefined, { signal: ctx.signal }).catch(() => undefined)
     }

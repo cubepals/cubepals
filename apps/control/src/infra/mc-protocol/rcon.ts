@@ -19,10 +19,23 @@ import { type ConsoleTarget, ConsoleUnavailable, type ServerConsole } from '../.
  * Vanilla also captures every RCON connection's answers in one shared buffer: commands arriving
  * on two connections at once swap or lose their answers. So each session holds its server's lock,
  * across every control-plane process.
+ *
+ * The lock can't cover a command the server is still running after its session gave up on it.
+ * Vanilla empties the shared buffer as a command arrives, queues it for the game's thread, and
+ * sends back whatever the buffer holds once it has run, so an earlier session's command finishing
+ * late writes its answer into the next session's. The game's thread runs commands in the order
+ * they arrive, though: each session first runs one command whose answer it throws away, which
+ * returns only once everything sent before it has run. No late answer reaches what a session
+ * asked for.
  */
 
 const AUTH = 3
 const EXEC = 2
+/**
+ * Run first in every session, its answer thrown away: it changes nothing, writes nothing to the
+ * server's log, and answers only once every command sent before it has run.
+ */
+export const SETTLES = 'list'
 /** Long enough for another session's batch to finish. */
 const LOCK_WAIT_MS = 15_000
 /** Between tries at a console that refused or dropped the connection. */
@@ -308,6 +321,7 @@ export class RconConsole implements ServerConsole {
       return await this.#locks.hold(key, LOCK_WAIT_MS, async () => {
         const connection = await this.#open(target)
         try {
+          await connection.exec(SETTLES)
           return await work(connection)
         } finally {
           connection.close()
