@@ -4,7 +4,10 @@
 
 /**
  * Starts the servers whose last sleep was a stop, made so that their Java could write the
- * recording of its start (`handlers/winding-down.ts`, `minecraft/start-cache.ts`). The start makes
+ * recording of its start (`handlers/winding-down.ts`, `minecraft/start-cache.ts`). Such a sleep
+ * first starts the server again in place, which makes the cache with no second boot
+ * (`handlers/started-again.ts`); it is a stop, and this start follows it, only where that start
+ * again didn't come back in time or found nothing recording. The start makes
  * the startup cache with nobody waiting, and the server sleeps with its memory after the
  * probation, as it would have (`servers/refresh.ts`, which also bounds how often and on whose
  * hours).
