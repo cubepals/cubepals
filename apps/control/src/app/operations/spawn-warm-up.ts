@@ -22,8 +22,8 @@
 import { setTimeout as sleep } from 'node:timers/promises'
 import { SECOND_MS } from '@blockly/contracts/durations'
 import { compareVersions } from '@blockly/contracts/release-order'
-import { type AppliedConfigJson, schema, type Tx } from '@blockly/db'
-import { eq } from 'drizzle-orm'
+import { type AppliedConfigJson, type Db, schema, type Tx } from '@blockly/db'
+import { and, eq, like } from 'drizzle-orm'
 import { LIST_UUIDS, parseOnlinePlayers } from '../../minecraft/console.ts'
 import type { ConsoleTarget, ServerConsole } from '../ports/minecraft.ts'
 import { findServer } from '../servers/persistence.ts'
@@ -87,34 +87,59 @@ const marked = (output: string) => /is marked for force loading/i.test(output) &
 /** Whether `execute if loaded` passed. */
 const passed = (output: string) => /^Test passed/i.test(output.trim())
 
+/** How many warm-ups a world gets, each cut short before it ran (by a change made at once, say). */
+const QUEUED_AT_MOST = 3
+
 /**
  * What `booted` asks before it saves what a server now runs over what it ran: the warm-up is queued
  * where the boot brought up a world the server didn't run before, a new server's or another switched
  * to (a fresh one, an import, or one played before, whose spawn is on disk and loads in a second),
- * and only where the game makes its spawn at the first join. Once for each world, by its key.
+ * and only where the game makes its spawn at the first join. A world has one that succeeds: one that
+ * never got to run, because the server moved on to a change first, is queued again at the next boot
+ * of the same world, a few times at most.
  */
 export function warmingAfterBoot(transitions: Pick<ServerTransitions, 'enqueue'>) {
   return async (tx: Tx, serverId: string, config: Pick<AppliedConfigJson, 'worldId' | 'revisionId'>) => {
+    const ops = schema.serverOperations
+    const tries = await tx
+      .select({ status: ops.status })
+      .from(ops)
+      .where(
+        and(
+          eq(ops.serverId, serverId),
+          eq(ops.kind, 'warm_spawn'),
+          like(ops.idempotencyKey, `warm_spawn:${config.worldId}%`),
+        ),
+      )
+    if (
+      tries.length >= QUEUED_AT_MOST ||
+      tries.some((t) => t.status !== 'cancelled' && t.status !== 'failed')
+    )
+      return
     const [ran] = await tx
       .select({ applied: schema.serverRuntimes.applied })
       .from(schema.serverRuntimes)
       .where(eq(schema.serverRuntimes.serverId, serverId))
-    if (ran?.applied?.worldId === config.worldId) return
+    if (tries.length === 0 && ran?.applied?.worldId === config.worldId) return
     const { gameVersion } = await loadRevisionFields(tx, config.revisionId, ['gameVersion'])
     if (compareVersions(gameVersion, SPAWN_AT_FIRST_JOIN) < 0) return
     const server = await findServer(tx, serverId)
     if (server === null) return
     await transitions.enqueue(tx, server, 'warm_spawn', {
       requestedBy: 'system:warm',
-      idempotencyKey: `warm_spawn:${config.worldId}`,
+      idempotencyKey: `warm_spawn:${config.worldId}:${tries.length + 1}`,
     })
   }
 }
+
+/** Kept on the operation before its force-load goes on. */
+const ADDING = 'spawn:forced'
 
 /** What one attempt found and did, kept on the operation. */
 type Found = 'players_on' | 'owner_forced' | 'unreadable' | 'ready' | 'unready'
 
 export function warmingSpawn(deps: {
+  db: Db
   console: Pick<ServerConsole, 'run' | 'runAll'>
   consoleTarget: GameConsole['consoleTarget']
   bindingOf: ServerBinding['bindingOf']
@@ -142,18 +167,26 @@ export function warmingSpawn(deps: {
     }
   }
 
-  /** Whether the force-load found is exactly an earlier attempt's square. */
-  const ours = async (target: ConsoleTarget, forced: number): Promise<boolean> => {
+  /**
+   * Whether the force-load found is an earlier attempt's square: this operation said it was adding
+   * one (`spawn:forced`), and the square is there. Any other is the owner's, whatever its shape.
+   */
+  const ours = async (ctx: OperationContext, target: ConsoleTarget, forced: number): Promise<boolean> => {
     if (forced !== SQUARE_CHUNKS) return false
+    const [op] = await deps.db
+      .select({ steps: schema.serverOperations.steps })
+      .from(schema.serverOperations)
+      .where(eq(schema.serverOperations.id, ctx.op.id))
+    if (!((op?.steps ?? []) as Array<{ step: string }>).some((s) => s.step === ADDING)) return false
     const corners = await Promise.all(CORNERS.map((query) => deps.console.run(target, query)))
     return corners.every(marked)
   }
 
   /** Before the force-load goes on: what keeps it off, or null to go ahead. */
-  const keptOff = async (target: ConsoleTarget): Promise<Found | 'resume' | null> => {
+  const keptOff = async (ctx: OperationContext, target: ConsoleTarget): Promise<Found | 'resume' | null> => {
     const forced = forcedCount(await deps.console.run(target, FORCELOAD_QUERY))
     if (forced === null) return 'unreadable'
-    if (forced > 0) return (await ours(target, forced)) ? 'resume' : 'owner_forced'
+    if (forced > 0) return (await ours(ctx, target, forced)) ? 'resume' : 'owner_forced'
     const online = parseOnlinePlayers(await deps.console.run(target, LIST_UUIDS))
     if (online === null) return 'unreadable'
     return online.online > 0 ? 'players_on' : null
@@ -176,13 +209,17 @@ export function warmingSpawn(deps: {
       const target = deps.consoleTarget(ctx.server, handle)
       // Before anything is added, a console that doesn't answer leaves the world as it was: the
       // join makes the spawn, as it always has.
-      const before = await keptOff(target).catch((): Found => 'unreadable')
+      const before = await keptOff(ctx, target).catch((): Found => 'unreadable')
       if (before !== null && before !== 'resume') {
         await ctx.mark(`spawn:${before}`)
         return { status: 'succeeded' }
       }
       const until = Date.now() + waitMs
-      if (before === null) await deps.console.run(target, FORCELOAD_ADD)
+      if (before === null) {
+        // Said first: an attempt that finds a square later takes it off only where this was said.
+        await ctx.mark(ADDING)
+        await deps.console.run(target, FORCELOAD_ADD)
+      }
       // From here a failure is retried: the next attempt finds the square and takes it off.
       let found: Found = 'unready'
       try {

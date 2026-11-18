@@ -133,7 +133,10 @@ async function waitFor(made: Made, want: (view: any) => boolean, what: string, l
 const settled = (made: Made) => waitFor(made, (v) => v.activeOperation === null, 'settled')
 
 /** An account of Cubepals' own, on a plan that runs the template, and its server made from it, up. */
-async function make(template: string, createdHook?: (id: string) => Promise<void>): Promise<Made> {
+async function make(
+  template: string,
+  hooks: { created?: (id: string) => Promise<void>; up?: (made: Made) => Promise<void> } = {},
+): Promise<Made> {
   for (let i = 0; i < 30; i++) {
     if (
       await fetch(`http://127.0.0.1:${MAIL_PORT_HERE}/api/v1/info`).then(
@@ -163,8 +166,10 @@ async function make(template: string, createdHook?: (id: string) => Promise<void
     from: { kind: 'template', key: template },
   })
   const made: Made = { template, id: created.id, slug: created.slug, api }
-  await createdHook?.(made.id)
+  await hooks.created?.(made.id)
   await waitFor(made, (v) => v.status === 'running' && v.activeOperation === null, 'came up')
+  // Before the change below, which would cut short background work still queued.
+  await hooks.up?.(made)
   // As Cubepals runs its own: official, and account checks off for a client with no account.
   await sql(
     `insert into public_listings (server_id, official) values ('${made.id}', true) on conflict (server_id) do update set official = true`,
@@ -281,29 +286,42 @@ function row(template: string, state: State, client: Client, times: number[], fa
   return `| ${template} | ${state} | ${client} | ${sorted.length}${failed ? ` (${failed} failed)` : ''} | ${at(50)} | ${at(90)} |`
 }
 
-/** A new server's warm-up recorded as done before its first boot ends, so none is queued. */
+/**
+ * A new server's warm-up recorded as done before its first boot ends, so none is queued: one
+ * recorded as cut short would be queued again at the next boot of the world.
+ */
 async function unwarmed(id: string): Promise<void> {
   await sql(
     `insert into server_operations (id, server_id, kind, status, input, requested_by, idempotency_key, finished_at)
-     select gen_random_uuid(), id, 'warm_spawn', 'cancelled', '{}', 'join-times', 'warm_spawn:' || active_world_id, now()
+     select gen_random_uuid(), id, 'warm_spawn', 'succeeded', '{}', 'join-times', 'warm_spawn:' || active_world_id, now()
      from minecraft_servers where id = '${id}'`,
   )
 }
 
-/** Seconds from the server's first boot ending to its warm-up done, once it is; null if it never ran. */
-async function warmedAfter(made: Made): Promise<number | null> {
+interface Warmed {
+  /** Seconds from the first boot ending to the warm-up done. */
+  after: number | null
+  /** Whether it ended with the whole square loaded (`spawn:ready`). */
+  ready: boolean
+}
+
+/** The new server's warm-up, once it has ended. */
+async function warmUpOf(made: Made): Promise<Warmed> {
   for (const deadline = Date.now() + 300 * SECOND_MS; Date.now() < deadline; ) {
     const [row] = await sql(
-      `select w.status, extract(epoch from w.finished_at - p.finished_at) as after
+      `select w.status, w.steps @> '[{"step":"spawn:ready"}]'::jsonb as ready,
+              extract(epoch from w.finished_at - p.finished_at) as after
        from server_operations w join server_operations p on p.server_id = w.server_id and p.kind = 'provision'
-       where w.server_id = '${made.id}' and w.kind = 'warm_spawn'`,
+       where w.server_id = '${made.id}' and w.kind = 'warm_spawn' and w.requested_by = 'system:warm'`,
     )
-    if (row === undefined) return null
-    if (row.status === 'succeeded') return Number(row.after)
-    if (row.status !== 'queued' && row.status !== 'running') return null
+    if (row !== undefined && row.status !== 'queued' && row.status !== 'running')
+      return {
+        after: row.after === null ? null : Number(row.after),
+        ready: row.status === 'succeeded' && row.ready === true,
+      }
     await Bun.sleep(1000)
   }
-  return null
+  return { after: null, ready: false }
 }
 
 /** One first join to a new server of `template` per state, in turn, `runs` times; each server goes after. */
@@ -311,12 +329,23 @@ async function freshJoins(template: string, fresh: State[], client: Client): Pro
   const times = new Map<State, number[]>(fresh.map((s) => [s, []]))
   for (let i = 0; i < runs; i++)
     for (const wanted of fresh) {
-      const server = await make(template, wanted === 'unwarmed' ? unwarmed : undefined)
-      const warmed = wanted === 'new' ? await warmedAfter(server) : null
+      let warmed: Warmed | null = null
+      const server = await make(
+        template,
+        wanted === 'unwarmed'
+          ? { created: unwarmed }
+          : {
+              up: async (made) => {
+                warmed = await warmUpOf(made)
+              },
+            },
+      )
       const result = await joinOnce(client, `${server.slug}.${PLAY_DOMAIN}`, `First${i}`)
-      say(JSON.stringify({ template, state: wanted, client, warmedAfterS: warmed, ...result }))
+      say(JSON.stringify({ template, state: wanted, client, warmed, ...result }))
       const ms = inWorldMs(client, result)
-      if (ms === null) failures++
+      // A server whose warm-up didn't end ready isn't one of the warmed: said, and left out.
+      if (wanted === 'new' && !(warmed as Warmed | null)?.ready) say(`left out: ${server.slug} wasn't warmed`)
+      else if (ms === null) failures++
       else times.get(wanted)?.push(ms)
       const view = await server.api('servers.get', { serverId: server.id }, 'GET')
       await server

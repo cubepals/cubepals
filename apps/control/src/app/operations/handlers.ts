@@ -261,7 +261,7 @@ export function createHandlers(deps: HandlerDeps): OperationHandler[] {
     restore,
     relocate,
     pruningWorlds({ db, runtime, bindingOf }),
-    warmingSpawn({ console: deps.console, consoleTarget, bindingOf }),
+    warmingSpawn({ db, console: deps.console, consoleTarget, bindingOf }),
     syncingAccess({ db, access: deps.access, bindingOf }),
     decommission,
     purge,

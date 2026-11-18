@@ -8,6 +8,7 @@
  * its owner set.
  */
 import { afterAll, describe, expect, test } from 'bun:test'
+import { randomUUID } from 'node:crypto'
 import { SECOND_MS } from '@blockly/contracts/durations'
 import { schema } from '@blockly/db'
 import { and, eq } from 'drizzle-orm'
@@ -16,6 +17,7 @@ import { hasDatabase, startHarness } from '../../testing/harness.ts'
 import { RuntimeRouter } from '../runtimes/router.ts'
 import { serverBinding } from './handlers/binding.ts'
 import { gameConsole } from './handlers/game-console.ts'
+import { recordMark } from './persistence.ts'
 import type { OperationContext } from './runner.ts'
 import {
   FORCELOAD_ADD,
@@ -55,17 +57,20 @@ async function warmed(options: { waitMs?: number } = {}) {
   const binding = serverBinding({ db: h.db, runtime, jobs: h.jobs })
   const game = gameConsole({ runtime, specs: h.app.specs, console: h.minecraft, access: h.app.reconciler })
   const handler = warmingSpawn({
+    db: h.db,
     console: h.minecraft,
     consoleTarget: game.consoleTarget,
     bindingOf: binding.bindingOf,
     pollMs: 0,
     ...options,
   })
+  const warmOp = ops.find((op) => op.kind === 'warm_spawn')
+  if (warmOp === undefined) throw new Error('A new server’s first boot queues its warm-up')
   const marks: string[] = []
   const ctx: OperationContext = {
     signal: new AbortController().signal,
     server,
-    op: { ...(ops[0] as NonNullable<(typeof ops)[0]>), kind: 'warm_spawn' },
+    op: warmOp,
     step: async () => {},
     mark: async (mark) => {
       marks.push(mark)
@@ -90,7 +95,7 @@ describe.skipIf(!hasDatabase)('a new world’s spawn', () => {
     expect(heard.indexOf(FORCELOAD_REMOVE)).toBeGreaterThan(heard.indexOf(FORCELOAD_ADD))
     expect(heard.filter((line) => line.startsWith('execute if loaded')).length).toBeGreaterThanOrEqual(49 * 2)
     expect(forcedChunks(dir)).toEqual([])
-    expect(await marksOf(h, server.id, 'warm_spawn')).toEqual(['spawn:ready'])
+    expect(await marksOf(h, server.id, 'warm_spawn')).toEqual(['spawn:forced', 'spawn:ready'])
   })
 
   test('is left alone while someone is on', async () => {
@@ -116,6 +121,7 @@ describe.skipIf(!hasDatabase)('a new world’s spawn', () => {
 
   test('cut short, is finished and taken off by the next attempt', async () => {
     const { h, handler, ctx, marks, target, dir } = await warmed()
+    await recordMark(h.db, ctx.op.id, 'spawn:forced')
     await h.minecraft.run(target, FORCELOAD_ADD)
     expect(forcedChunks(dir)).toHaveLength(49)
     await handler.run(ctx)
@@ -131,7 +137,18 @@ describe.skipIf(!hasDatabase)('a new world’s spawn', () => {
     await handler.run(ctx)
     expect(h.minecraft.heard(server.id).slice(before)).toContain(FORCELOAD_ADD)
     expect(forcedChunks(dir)).toEqual([])
-    expect(marks).toEqual(['spawn:unready'])
+    expect(marks).toEqual(['spawn:forced', 'spawn:unready'])
+  })
+
+  test('keeps an owner’s own square around spawn, which no attempt said it added', async () => {
+    const { h, server, handler, ctx, marks, target, dir } = await warmed()
+    await h.minecraft.run(target, FORCELOAD_ADD)
+    const before = h.minecraft.heard(server.id).length
+    // A warm-up of another world switched to, whose attempts never added one.
+    await handler.run({ ...ctx, op: { ...ctx.op, id: randomUUID() } })
+    expect(h.minecraft.heard(server.id).slice(before)).not.toContain(FORCELOAD_REMOVE)
+    expect(forcedChunks(dir)).toHaveLength(49)
+    expect(marks).toEqual(['spawn:owner_forced'])
   })
 })
 
@@ -150,6 +167,39 @@ describe.skipIf(!hasDatabase)('the warm-up is queued', () => {
     await h.db.transaction((tx) => queue(tx, server.id, applied))
     await h.db.transaction((tx) => queue(tx, server.id, { ...applied, worldId: server.activeWorldId }))
     expect(await warmUps(h, server.id)).toHaveLength(1)
+  })
+
+  test('again at the next boot of its world, where one never got to run', async () => {
+    const { h, server, ops } = await warmed()
+    const [{ applied } = { applied: null }] = await h.db
+      .select({ applied: schema.serverRuntimes.applied })
+      .from(schema.serverRuntimes)
+      .where(eq(schema.serverRuntimes.serverId, server.id))
+    if (applied === null) throw new Error('A booted server has what it runs')
+    const queue = warmingAfterBoot(h.app.transitions)
+    const first = ops.find((op) => op.kind === 'warm_spawn')?.idempotencyKey ?? 'none'
+    const cancel = () =>
+      h.db
+        .update(schema.serverOperations)
+        .set({ status: 'cancelled' })
+        .where(
+          and(
+            eq(schema.serverOperations.serverId, server.id),
+            eq(schema.serverOperations.kind, 'warm_spawn'),
+          ),
+        )
+    await cancel()
+    for (let i = 0; i < 4; i++) {
+      await h.db.transaction((tx) => queue(tx, server.id, applied))
+      await h.settled(server.id)
+      await cancel()
+    }
+    const all = await warmUps(h, server.id)
+    expect(all.map((op) => op.idempotencyKey)).toEqual([
+      first,
+      `warm_spawn:${applied.worldId}:2`,
+      `warm_spawn:${applied.worldId}:3`,
+    ])
   })
 
   test('not where the game prepares its spawn as it starts', async () => {
