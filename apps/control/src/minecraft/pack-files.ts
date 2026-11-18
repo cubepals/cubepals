@@ -28,10 +28,15 @@
  * it again (`skipExisting`; `runtime-spec.ts`'s `PACK_STEP`). Where it can't be fetched or listed,
  * the install runs as it always did.
  *
+ * It runs as root, so before anything writes or removes one of these paths, any link on the way to
+ * it is replaced (`volume-links.ts`): the pack's paths, their copies beside them, the record and the
+ * pack's archive.
+ *
  * Not for the files a pack's index lists (its mods), which the image's own manifest keeps; nor
  * for Cubepals' own files (`carried.ts`), which, placed at an override path, count as the owner's.
  */
 import { DATA_DIR } from './jars.ts'
+import { UNLINKED } from './volume-links.ts'
 
 /** The image's own Java helper, which the stand-in hands the install to. */
 export const HELPER = '/usr/bin/mc-image-helper'
@@ -81,6 +86,8 @@ export const PACK_FILES_SCRIPT = `#!/bin/sh
 # install-modrinth-modpack, keeping the owner's files among the pack's (pack-files.ts).
 d=${DATA_DIR}; a=${ARCHIVE}; r=${RECORD}; t=${WORK}
 case "$MODRINTH_MODPACK" in http://*|https://*|file://*) ;; *) exec ${HELPER} "$@";; esac
+${UNLINKED}
+for f in ${ARCHIVE.slice(DATA_DIR.length + 1)} ${ARCHIVE.slice(DATA_DIR.length + 1)}.part ${RECORD.slice(DATA_DIR.length + 1)} ${RECORD.slice(DATA_DIR.length + 1)}.new; do unlinked "$f"; done
 if [ ! -s "$a" ]; then
   curl -fsSL --retry 3 -o "$a.part" "$MODRINTH_MODPACK" && mv -f "$a.part" "$a" || { rm -f "$a.part"; exec ${HELPER} "$@"; }
 fi
@@ -88,6 +95,8 @@ rm -rf "$t"; mkdir -p "$t/keep"
 # The pack's paths, server overrides and the rest alike.
 unzip -Z1 "$a" > "$t/entries" 2>/dev/null || exec ${HELPER} "$@"
 sed -n -e 's#^server-overrides/##p' -e 's#^overrides/##p' "$t/entries" | grep -v '/$' | sort -u > "$t/paths"
+# No link on the way to any of them, where the install and this script write as root.
+while IFS= read -r p; do unlinked "$p"; unlinked "$p${FROM_PACK}"; done < "$t/paths"
 # The record, where it is whole; else none, and every file there is the owner's.
 if [ "$(tail -n 1 "$r" 2>/dev/null)" = "${END}" ]; then sed '$d' "$r" > "$t/S"; else : > "$t/S"; fi
 (cd "$d" && xargs -r -d '\\n' sha1sum < "$t/paths" 2>/dev/null) > "$t/C"

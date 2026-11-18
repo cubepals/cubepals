@@ -12,10 +12,12 @@ import { afterAll, afterEach, beforeEach, describe, expect, test } from 'bun:tes
 import {
   chmodSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
   rmSync,
+  symlinkSync,
   unlinkSync,
   writeFileSync,
 } from 'node:fs'
@@ -219,5 +221,25 @@ describe('a pack’s files', () => {
     })
     expect(slug.exitCode).toBe(4)
     expect(there('.blockly-pack-files')).toBe(false)
+  })
+})
+
+describe('a pack’s install, as root', () => {
+  test('writes inside the volume, never through a link left on it', () => {
+    const outside = join(root, 'outside')
+    mkdirSync(outside)
+    writeFileSync(join(outside, 'kept.txt'), 'outside')
+    install(v1, 'one')
+    writeFileSync(join(data, 'config/a.toml'), 'a = mine')
+    symlinkSync(join(outside, 'kept.txt'), join(data, `config/a.toml${FROM_PACK}`))
+    install(v2, 'two')
+    expect(readFileSync(join(outside, 'kept.txt'), 'utf8')).toBe('outside')
+    expect(lstatSync(join(data, `config/a.toml${FROM_PACK}`)).isSymbolicLink()).toBe(false)
+    expect(read(`config/a.toml${FROM_PACK}`)).toBe('a = 2')
+    // A folder on the way is a link: what the pack places there stays on the volume.
+    symlinkSync(outside, join(data, 'extra'))
+    install(pack({ 'extra/kept.txt': 'pack' }), 'three')
+    expect(readFileSync(join(outside, 'kept.txt'), 'utf8')).toBe('outside')
+    expect(read('extra/kept.txt')).toBe('pack')
   })
 })
