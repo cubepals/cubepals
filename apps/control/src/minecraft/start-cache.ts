@@ -62,10 +62,13 @@ import { DATA_DIR } from './jars.ts'
 import { LAUNCH_LINES } from './paper-launch.ts'
 import { SHIM_DIR } from './wake-step.ts'
 
-/** The folder on the volume that no archive holds (`NOT_ARCHIVED`): a cache is made again. */
+/**
+ * The folder on the volume that no archive holds (`NOT_ARCHIVED`): what is in it is made again on
+ * a volume filled from one. The cache, and the direct start's record (`direct-start.ts`).
+ */
 const REMADE: (typeof NOT_ARCHIVED)[number] = '.blockly-remade'
-const CACHE_DIR = `${DATA_DIR}/${REMADE}`
-const CACHE = `${CACHE_DIR}/start.aot`
+export const REMADE_DIR = `${DATA_DIR}/${REMADE}`
+const CACHE = `${REMADE_DIR}/start.aot`
 
 /** The script that the start's last word is called through, in place of the image's runner. */
 export const CACHED_RUNNER = `${SHIM_DIR}/start-cache`
@@ -110,6 +113,25 @@ const TIGHT_KB = 256 * 1024
  */
 const SPARE_KB = 768 * 1024
 
+/**
+ * Where the control plane asks a recording run to start again once its Java has stopped, in place of
+ * the machine stopping: written before it tells the game to stop, and taken away by the script before
+ * the start again (`handlers/winding-down.ts`). A stop the machine was asked for wins over it.
+ */
+export const AGAIN = `${CACHE}.again`
+/**
+ * What the control plane runs on the machine to have a recording run start again in place: the ask,
+ * then Java told to stop, which saves the world and writes the recording on its way out, as at any
+ * stop (its own shutdown hook). Fails, and asks nothing, where no Java records.
+ */
+export const START_AGAIN = [
+  'sh',
+  '-c',
+  `pgrep -f "^java .*-XX:AOTMode=record" >/dev/null && touch ${AGAIN} && pkill -TERM -o -f "^java .*-XX:AOTMode=record"`,
+] as const
+/** What the script says as it starts again in place. */
+export const AGAIN_SAID = '[init] Starting again with a quicker start made from this run'
+
 /** The recordings a start may begin for what it runs before one never written is given up on. */
 const TRIES = 2
 
@@ -141,9 +163,9 @@ export const CACHED_RUNNER_LINES = [
   ...LAUNCH_LINES,
   // What it is made for covers every jar a manifest jar names: its state's first line is their sizes and times.
   'fp=$({ cat "$home/release"; stat -c "%s %Y" "$file"; if [ "$file" = "$launch" ]; then sed -n 1p "$lstate"; fi; n=0; for w; do n=$((n + 1)); if [ $n -gt $at ] && [ $n -le $((jar + 1)) ]; then printf "%s\\n" "$w"; fi; done; } 2>/dev/null | sha256sum | cut -c1-64)',
-  'with() { more=$1; shift; n=0; for w; do n=$((n + 1)); if [ $n = 1 ]; then set --; fi; if [ -n "$bare" ] && [ "$w" = -XX:+AlwaysPreTouch ]; then continue; fi; set -- "$@" "$w"; if [ $n = $at ]; then set -- "$@" $more; fi; done; exec mc-server-runner "$@"; }',
+  'with() { more=$1; shift; n=0; for w; do n=$((n + 1)); if [ $n = 1 ]; then set --; fi; if [ -n "$bare" ] && [ "$w" = -XX:+AlwaysPreTouch ]; then continue; fi; set -- "$@" "$w"; if [ $n = $at ]; then set -- "$@" $more; fi; done; if [ -n "$spawn" ]; then mc-server-runner "$@" <&3 & child=$!; return; fi; exec mc-server-runner "$@"; }',
   `make() ( n=0; for w; do n=$((n + 1)); if [ $n = 1 ]; then set --; fi; if [ $n -gt $at ] && [ $n -lt $jar ] && [ "$w" != -XX:+AlwaysPreTouch ]; then set -- "$@" "$w"; fi; done; exec java "$@" -XX:AOTMode=create -XX:AOTConfiguration=$conf -XX:AOTCache=$cache.new -cp "$file" >/dev/null 2>&1 )`,
-  `mkdir -p ${CACHE_DIR} 2>/dev/null || plain "$@"`,
+  `mkdir -p ${REMADE_DIR} 2>/dev/null || plain "$@"`,
   `room=$(df -Pk ${DATA_DIR} 2>/dev/null | awk "NR == 2 { print \\$4 }")`,
   'case "$room" in ""|*[!0-9]*) plain "$@";; esac',
   `if [ "$room" -lt ${TIGHT_KB} ]; then rm -f $cache $cache.new $conf $state; plain "$@"; fi`,
@@ -169,5 +191,13 @@ export const CACHED_RUNNER_LINES = [
   `rm -f $conf $cache $cache.new; printf "%s\\n" "$fp" ${RECORDS} "$tries" > $state || plain "$@"`,
   `echo "${RECORDING}"`,
   // Recorded with the heap untouched until used: Java writes the recording beside it as it exits (`SPARE_KB`).
-  'bare=1; with "-XX:AOTMode=record -XX:AOTConfiguration=$conf" "$@"',
+  // A stop the machine was asked for reaches Java through this script, and is a stop: it never starts again.
+  'stopped=; child=; trap "stopped=1; [ -n \\"\\$child\\" ] && kill -TERM \\$child 2>/dev/null" TERM; trap "stopped=1; [ -n \\"\\$child\\" ] && kill -INT \\$child 2>/dev/null" INT',
+  // The console's input goes to the server as it would were the runner this script: the shell gives a job in the background none.
+  `exec 3<&0; rm -f ${AGAIN}; bare=1; spawn=1; with "-XX:AOTMode=record -XX:AOTConfiguration=$conf" "$@"`,
+  'while kill -0 $child 2>/dev/null; do wait $child; done; wait $child; code=$?',
+  // Java stopped by itself where the control plane asked for the start again (`AGAIN`): the recording is
+  // written, and this script's next run makes the cache from it and starts the server with it.
+  `if [ -z "$stopped" ] && [ -f ${AGAIN} ] && rm -f ${AGAIN}; then echo "${AGAIN_SAID}"; exec /bin/sh "$0" "$@"; fi`,
+  'exit $code',
 ]

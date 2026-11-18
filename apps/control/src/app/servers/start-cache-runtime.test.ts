@@ -12,8 +12,9 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { until } from '@blockly/contracts/waits'
 import { bootMilestone, classifyLine } from '../../minecraft/logs.ts'
-import { CACHED_RUNNER_LINES, RECORDING } from '../../minecraft/start-cache.ts'
+import { AGAIN, AGAIN_SAID, CACHED_RUNNER_LINES, RECORDING } from '../../minecraft/start-cache.ts'
 
 let root = ''
 const data = (name: string) => join(root, 'data', name)
@@ -54,6 +55,10 @@ beforeEach(() => {
   // asked for, as Java does on its way out.
   tool('mc-server-runner', [
     'echo "ran: $*"',
+    // Asked again in place while it records, as the control plane asks it before it stops the game.
+    `if [ -f ${join(root, 'asks-again')} ]; then case "$*" in *AOTMode=record*) touch ${join(root, 'data', '.blockly-remade/start.aot.again')};; esac; fi`,
+    // A server that runs until it is stopped, and says it is up.
+    `if [ -f ${join(root, 'runs')} ]; then trap "echo stopped; exit 0" TERM; touch ${join(root, 'up')}; while :; do sleep 0.05; done; fi`,
     `for word; do case "$word" in -XX:AOTConfiguration=*) if [ -f ${join(root, 'exits')} ]; then echo recorded > "\${word#-XX:AOTConfiguration=}"; fi;; esac; done`,
   ])
   // Java, asked to make a cache: it says with what, and writes one unless it is said to fail.
@@ -318,5 +323,46 @@ describe('a recording a server’s Java can’t write', () => {
     room(600_000)
     expect(start()).toEqual([ran('')])
     expect(existsSync(data(`${CACHE}.state`))).toBe(false)
+  })
+})
+
+describe('a recording run started again in place', () => {
+  test('whose Java stopped by itself where it was asked again starts again at once, with the cache made from it', () => {
+    writeFileSync(join(root, 'asks-again'), '')
+    const said = startThenExit()
+    rmSync(join(root, 'asks-again'))
+    expect(said).toEqual([
+      RECORDING,
+      recorded(),
+      AGAIN_SAID,
+      '[init] Making this server a quicker start from its last one',
+      cached(),
+    ])
+    expect(state()).toBe('made')
+    // Asked once: the start again took the ask away.
+    expect(existsSync(data(AGAIN.replace('/data/', '')))).toBe(false)
+  })
+
+  test('a recording whose Java stopped without being asked again stops, as a stop always has', () => {
+    expect(startThenExit()).toEqual([RECORDING, recorded()])
+    expect(state()).toBe('recording')
+  })
+
+  test('a stop the machine was asked for wins: no start again, ask or not', async () => {
+    writeFileSync(join(root, 'asks-again'), '')
+    writeFileSync(join(root, 'runs'), '')
+    const run = Bun.spawn(['/bin/sh', join(root, 'start-cache'), ...COMMAND.split(' ')], {
+      cwd: join(root, 'data'),
+      env: { PATH: `${join(root, 'bin')}:${process.env.PATH ?? ''}`, BLOCKLY_START_KEY: 'a'.repeat(64) },
+      stdout: 'pipe',
+    })
+    await until('the server to be up', () => existsSync(join(root, 'up')))
+    run.kill('SIGTERM')
+    await run.exited
+    const said = (await new Response(run.stdout).text()).trim().split('\n')
+    expect(said).toContain('stopped')
+    expect(said).not.toContain(AGAIN_SAID)
+    expect(javaCalls()).toEqual([])
+    expect(state()).toBe('recording')
   })
 })

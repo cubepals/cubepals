@@ -19,6 +19,7 @@ import type { DeploymentCapabilities } from '../app/capabilities.ts'
 import { type ControlPlane, type ControlPlaneSettings, composeControlPlane } from '../app/control-plane.ts'
 import type { OwnPack } from '../app/curation/own.ts'
 import type { CuratedPack } from '../app/curation/packs.ts'
+import type { StartAgain } from '../app/operations/handlers/started-again.ts'
 import { type OperationRecord, toRecord } from '../app/operations/persistence.ts'
 import type { EventBus } from '../app/ports/events.ts'
 import { UnreadableFile } from '../app/ports/formats.ts'
@@ -126,6 +127,8 @@ export interface HarnessOptions {
   runtimeSecrets?: SecretKeyring
   /** What the provider charges; nothing by default. */
   runtimePrices?: RuntimePrices
+  /** How a recording run starts again in place as it sleeps, held by the test in place of the machine's. */
+  startAgain?: StartAgain
   /** Compute comes back at another edge address each time it starts, as on Boat. */
   movingAddresses?: boolean
   /**
@@ -244,8 +247,7 @@ export async function startHarness(options: HarnessOptions = {}): Promise<Harnes
   await admin.connect()
   await admin.query(`CREATE DATABASE ${name}`)
   await admin.end()
-  const url = new URL(base)
-  url.pathname = `/${name}`
+  const url = Object.assign(new URL(base), { pathname: `/${name}` })
 
   const pool = createPool(url.toString(), options.poolMax)
   const db = createDb(pool)
@@ -317,6 +319,7 @@ export async function startHarness(options: HarnessOptions = {}): Promise<Harnes
       runtime: router,
       console: routed.console,
       probe: routed.probe,
+      startAgain: options.startAgain,
       profiles,
       logs: routed.logs,
       catalog,
