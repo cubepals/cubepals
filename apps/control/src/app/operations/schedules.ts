@@ -26,6 +26,7 @@
  * - `relocations.ts`: asks for the moves the platform makes on its own, a few a pass.
  * - `scheduled-backups.ts`: queues the daily backups and retires the ones gone or past their lifetime.
  * - `session-cap.ts`: warns, then stops, a run that reaches its account's session cap.
+ * - `silent.ts`: restarts a running server whose console has answered nothing for minutes, from what the presence pass hears.
  * - `spend.ts`: works out what today cost and, past the daily limit, pauses starts and creation.
  * - `stale-sleep.ts`: refreshes in the background a server asleep whose wake would boot, or stopped where a sleep was meant, so a player's resumes.
  * - `store-sweep.ts`: hands servers idle past their plan's days to the `store` operation.
@@ -40,7 +41,7 @@ import type { ModUpdates } from '../mods/updates.ts'
 import { UpdatesTold } from '../mods/updates-told.ts'
 import type { PlayerService } from '../players/service.ts'
 import type { EventBus } from '../ports/events.ts'
-import type { ServerConsole } from '../ports/minecraft.ts'
+import type { ReadinessProbe, ServerConsole } from '../ports/minecraft.ts'
 import type { Mailer } from '../ports/platform.ts'
 import type { Runtimes } from '../runtimes/router.ts'
 import type { RuntimePlacement } from '../runtimes/service.ts'
@@ -60,6 +61,7 @@ import { recordedStarts } from './schedules/recorded-starts.ts'
 import { relocating } from './schedules/relocations.ts'
 import { schedulingBackups } from './schedules/scheduled-backups.ts'
 import { sessionCaps } from './schedules/session-cap.ts'
+import { silentRestarts } from './schedules/silent.ts'
 import { type SpendCheck, SpendWatchdog } from './schedules/spend.ts'
 import { staleSleepers } from './schedules/stale-sleep.ts'
 import { storingIdle } from './schedules/store-sweep.ts'
@@ -116,6 +118,8 @@ export class Schedules {
     adminInbox?: readonly string[]
     /** When this process started: until presence is read again after it, activity is unknown. */
     startedAt?: Date
+    /** Whether a server whose console is silent is still reached: its status ping (`silent.ts`). */
+    probe?: Pick<ReadinessProbe, 'ping'>
   }) {
     this.#db = deps.db
     this.#catalog = deps.catalog
@@ -160,6 +164,10 @@ export class Schedules {
       events: deps.events,
       transitions: deps.transitions,
       players: deps.players,
+      silent:
+        deps.probe === undefined
+          ? undefined
+          : silentRestarts({ runtime: deps.runtime, probe: deps.probe, service: deps.service }),
       updatesTold: new UpdatesTold({
         db: deps.db,
         console: deps.console,
