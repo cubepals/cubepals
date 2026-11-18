@@ -125,7 +125,7 @@ describe('datapacks in a revision', () => {
       `${manhunt.artifact.sha512} ${datapackName(manhunt.artifact)} https://control.test/a/Manhunt%20v1.zip`,
     )
     // Data, not classes: the heap stays plain Minecraft's.
-    expect(spec.env.MEMORY).toBe(toRuntimeSpec({ ...input, revision }).env.MEMORY)
+    expect(spec.env.MAX_MEMORY).toBe(toRuntimeSpec({ ...input, revision }).env.MAX_MEMORY)
   })
 
   test('a mod server installs its jars as jars and its datapacks into the world', () => {
