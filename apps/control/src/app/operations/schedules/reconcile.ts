@@ -23,7 +23,7 @@ import {
 } from '../../servers/persistence.ts'
 import type { ServerTransitions } from '../../servers/transitions.ts'
 import { clearPresence, closeInterval, openIntervalStart } from '../../servers/usage.ts'
-import { keepKilledWhileRunning } from '../out-of-memory.ts'
+import { keepKilledWhileRunning, keepRestartedKill } from '../out-of-memory.ts'
 import { activeOperation } from '../persistence.ts'
 import { observedJson, recordHostLost } from './observations.ts'
 
@@ -107,8 +107,25 @@ export function reconciling(deps: {
     const status = server.lifecycle.status
     if (status === 'running' && EXITED.has(seen.state)) return crashed(serverId, binding.handle)
     if (HOLDS_NONE.has(status) && seen.state === 'running') return stray(serverId, binding.handle)
+    await restartedUnder(serverId, binding.handle, status, seen)
     await saveObserved(db, serverId, observedJson(seen))
     return true
+  }
+
+  /**
+   * A running server whose compute changed while it stayed running: the provider may have started
+   * it again after its run failed (`on-failure`), which the listing doesn't say. The provider is
+   * asked, and a kill for want of memory it restarted from is kept (`out-of-memory.ts`).
+   */
+  const restartedUnder = async (
+    serverId: string,
+    handle: RuntimeHandle,
+    status: ServerStatus,
+    seen: RuntimeObservation,
+  ): Promise<void> => {
+    if (status !== 'running' || seen.state !== 'running') return
+    const now = await runtime.observe(handle).catch(() => null)
+    if (now !== null) await keepRestartedKill(db, serverId, now)
   }
 
   /** Compute the provider brought back at another address: its new handle, unless one was saved since. */
@@ -136,6 +153,8 @@ export function reconciling(deps: {
    */
   const crashed = async (serverId: string, handle: RuntimeHandle): Promise<boolean> => {
     const now = await runtime.observe(handle)
+    // Started again by the provider since it was listed stopped: no crash, but maybe a kill.
+    await keepRestartedKill(db, serverId, now)
     await db.transaction(async (tx) => {
       await saveObserved(tx, serverId, observedJson(now))
       if (!EXITED.has(now.state)) return

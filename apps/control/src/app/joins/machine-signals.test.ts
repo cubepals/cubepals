@@ -17,7 +17,8 @@ import { eq } from 'drizzle-orm'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
 import { Outbox } from '../../testing/outbox.ts'
 import type { UserActor } from '../actor.ts'
-import type { RuntimeHandle } from '../ports/runtime.ts'
+import type { RuntimeHandle, RuntimeKey, RuntimeObservation } from '../ports/runtime.ts'
+import { loadRuntime } from '../servers/persistence.ts'
 import { READY_KEY } from '../servers/usage.ts'
 import { installTuning, tuning } from '../tuning.ts'
 import { tellSignals, type Written } from './signal-mail.ts'
@@ -155,6 +156,53 @@ describe.skipIf(!hasDatabase)('a Java killed for want of memory', () => {
       detail: { server: 'Killed running', during: 'play' },
     })
     expect(JSON.stringify(outbox.sent[0])).toContain('killed while it ran')
+  }, 60_000)
+})
+
+describe.skipIf(!hasDatabase)('a kill the provider started the server again from', () => {
+  /** The provider lists the server running anew, and says, asked, what its last exit was. */
+  async function relisted(id: string, said: Partial<RuntimeObservation>): Promise<() => void> {
+    const handle = (await loadRuntime(h.db, id, ['fake'])).handle as RuntimeHandle
+    const { observe, observeChanged } = h.runtime
+    h.runtime.observeChanged = async function* (since) {
+      yield* observeChanged.call(h.runtime, since)
+      yield { key: id as RuntimeKey, handle, observation: { state: 'running' as const, at: new Date() } }
+    }
+    h.runtime.observe = async (asked: RuntimeHandle) => ({
+      ...(await observe.call(h.runtime, asked)),
+      ...(asked === handle ? said : {}),
+    })
+    return () => {
+      h.runtime.observe = observe
+      h.runtime.observeChanged = observeChanged
+    }
+  }
+
+  test('is kept once, however many passes see it; a stop’s kill a boot came after is not', async () => {
+    const { id: restarted } = await running('Restarted by the provider')
+    const { id: booted } = await running('Booted after its stop')
+    const killedAt = new Date(Date.now() - 30_000)
+    const restore = [
+      await relisted(restarted, { failedAt: killedAt, killedForMemoryAt: killedAt }),
+      await relisted(booted, { killedForMemoryAt: killedAt }),
+    ]
+    try {
+      await h.app.schedules.reconcile()
+      await h.app.schedules.reconcile()
+    } finally {
+      for (const undo of restore.reverse()) undo()
+    }
+    expect((await h.server(restarted)).lifecycle.status).toBe('running')
+    signalsOn({ outOfMemory: {} })
+    await raiseSignals(h.db, new Date())
+    const theirs = (await raised('out_of_memory')).filter((s) =>
+      [restarted, booted].includes(s.serverId ?? ''),
+    )
+    expect(theirs).toHaveLength(1)
+    expect(theirs[0]).toMatchObject({
+      serverId: restarted,
+      detail: { server: 'Restarted by the provider', during: 'play', killedAt: killedAt.toISOString() },
+    })
   }, 60_000)
 })
 
