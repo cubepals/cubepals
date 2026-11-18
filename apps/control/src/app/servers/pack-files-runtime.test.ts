@@ -238,6 +238,28 @@ describe('a pack’s install, as root', () => {
 })
 
 describe('a pack’s install that doesn’t finish', () => {
+  test('never takes a path outside the volume from what it set aside', () => {
+    const outside = join(root, 'outside.txt')
+    writeFileSync(outside, 'outside')
+    install(v1, 'one')
+    // A plugin could leave this on the volume between starts.
+    mkdirSync(join(data, '.blockly-pack-kept', 'files'), { recursive: true })
+    writeFileSync(join(data, '.blockly-pack-kept', 'gone'), '../outside.txt\n/etc/hostname\n')
+    install(v1, 'one')
+    expect(readFileSync(outside, 'utf8')).toBe('outside')
+  })
+
+  test('leaves the owner’s files as they are when setting them aside was cut short', () => {
+    install(v1, 'one')
+    writeFileSync(join(data, 'config/a.toml'), 'a = mine')
+    // What a copy stopped halfway leaves: a part of the owner's file, never moved into place.
+    mkdirSync(join(data, '.blockly-pack-kept.new', 'files', 'config'), { recursive: true })
+    writeFileSync(join(data, '.blockly-pack-kept.new', 'files', 'config/a.toml'), 'a = mi')
+    install(v1, 'one')
+    expect(read('config/a.toml')).toBe('a = mine')
+    expect(there('.blockly-pack-kept.new')).toBe(false)
+  })
+
   test('puts the owner’s files back at the next install, when one is cut short', () => {
     install(v1, 'one')
     writeFileSync(join(data, 'config/a.toml'), 'a = mine')

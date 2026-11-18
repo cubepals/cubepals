@@ -59,6 +59,9 @@ export const FROM_PACK = '.from-pack'
  */
 const KEPT = `${DATA_DIR}/.blockly-pack-kept`
 
+/** The same, from the volume's root, as `unlinked` takes it. */
+const KEPT_REL = KEPT.slice(DATA_DIR.length + 1)
+
 /** Scratch space on the machine's own disk. */
 const WORK = '/tmp/blockly-pack-files'
 
@@ -93,12 +96,18 @@ export const PACK_FILES_SCRIPT = `#!/bin/sh
 d=${DATA_DIR}; a=${ARCHIVE}; r=${RECORD}; k=${KEPT}; t=${WORK}
 case "$MODRINTH_MODPACK" in http://*|https://*|file://*) ;; *) exec ${HELPER} "$@";; esac
 ${UNLINKED}
-for f in ${ARCHIVE.slice(DATA_DIR.length + 1)} ${ARCHIVE.slice(DATA_DIR.length + 1)}.part ${RECORD.slice(DATA_DIR.length + 1)} ${RECORD.slice(DATA_DIR.length + 1)}.new ${KEPT.slice(DATA_DIR.length + 1)}; do unlinked "$f"; done
-# The owner's files from an install that didn't finish, back first.
+for f in ${ARCHIVE.slice(DATA_DIR.length + 1)} ${ARCHIVE.slice(DATA_DIR.length + 1)}.part ${RECORD.slice(DATA_DIR.length + 1)} ${RECORD.slice(DATA_DIR.length + 1)}.new ${KEPT_REL} ${KEPT_REL}.new; do unlinked "$f"; done
+# A path the script takes from a list is one inside the volume: never absolute, never through "..".
+inside() { case "$1" in ''|/*) return 1;; esac; case "/$1/" in */../*|*/./*|*//*) return 1;; esac; }
+# The owner's files from an install that didn't finish, back first. Their copy is whole: it is moved
+# into place only once it was. Each is a plain file inside the volume, put back as root.
+rm -rf "$k.new"
 if [ -d "$k" ]; then
-  (cd "$k/files" 2>/dev/null && find . -type f -o -type l) | while IFS= read -r p; do unlinked "\${p#./}"; done
-  (cd "$k/files" 2>/dev/null && tar -cf - .) | (cd "$d" && tar -xpf -)
-  if [ -f "$k/gone" ]; then while IFS= read -r p; do unlinked "$p"; rm -f "$d/$p"; done < "$k/gone"; fi
+  unlinked ${KEPT_REL}/files; unlinked ${KEPT_REL}/gone
+  (cd "$k/files" 2>/dev/null && find . -type f) | sed 's#^\\./##' | while IFS= read -r p; do
+    inside "$p" || continue; unlinked "$p"; case "$p" in */*) mkdir -p "$d/\${p%/*}";; esac; cp -p "$k/files/$p" "$d/$p"
+  done
+  if [ -f "$k/gone" ]; then while IFS= read -r p; do inside "$p" && unlinked "$p" && rm -f "$d/$p"; done < "$k/gone"; fi
   rm -rf "$k"; echo "[init] Put back your own files from a pack install that didn't finish"
 fi
 if [ ! -s "$a" ]; then
@@ -107,7 +116,7 @@ fi
 rm -rf "$t"; mkdir -p "$t"
 # The pack's paths, server overrides and the rest alike.
 unzip -Z1 "$a" > "$t/entries" 2>/dev/null || exec ${HELPER} "$@"
-sed -n -e 's#^server-overrides/##p' -e 's#^overrides/##p' "$t/entries" | grep -v '/$' | sort -u > "$t/paths"
+sed -n -e 's#^server-overrides/##p' -e 's#^overrides/##p' "$t/entries" | grep -v '/$' | while IFS= read -r p; do inside "$p" && echo "$p"; done | sort -u > "$t/paths"
 # No link on the way to any of them, where the install and this script write as root.
 while IFS= read -r p; do unlinked "$p"; unlinked "$p${FROM_PACK}"; done < "$t/paths"
 # The record, where it is whole; else none, and every file there is the owner's.
@@ -115,8 +124,12 @@ if [ "$(tail -n 1 "$r" 2>/dev/null)" = "${END}" ]; then sed '$d' "$r" > "$t/S"; 
 (cd "$d" && xargs -r -d '\\n' sha1sum < "$t/paths" 2>/dev/null) > "$t/C"
 awk '${OWNERS}' "$t/S" "$t/C" "$t/paths" > "$t/owners"
 sed -n 's/^keep //p' "$t/owners" > "$t/keep.list"; sed -n 's/^gone //p' "$t/owners" > "$t/gone.list"
-rm -rf "$k"; mkdir -p "$k/files" && cp "$t/gone.list" "$k/gone"
-(cd "$d" && tar -cf - --verbatim-files-from -T "$t/keep.list") | (cd "$k/files" && tar -xpf -)
+# The owner's files set aside, whole, before the install may touch them; or no install at all.
+mkdir -p "$k.new/files" && cp "$t/gone.list" "$k.new/gone" || : > "$t/failed"
+{ (cd "$d" && tar -cf - --verbatim-files-from -T "$t/keep.list") || : > "$t/failed"; } | { (cd "$k.new/files" && tar -xpf -) || : > "$t/failed"; }
+if [ -e "$t/failed" ] || ! mv "$k.new" "$k"; then
+  rm -rf "$k.new" "$t"; echo "[init] Couldn't set your own files aside, so the pack wasn't installed; nothing was changed" >&2; exit 1
+fi
 ${HELPER} "$@"; s=$?
 # The pack's copy of each of the owner's files, as the install left it.
 cut -c6- "$t/owners" | (cd "$d" && xargs -r -d '\\n' sha1sum 2>/dev/null) > "$t/N"
