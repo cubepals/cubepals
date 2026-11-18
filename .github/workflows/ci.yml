@@ -365,6 +365,22 @@ jobs:
           done
           docker tag mirror.gcr.io/library/alpine:3.22 alpine:3.22
           docker tag quay.io/curl/curl:8.22.0 curlimages/curl:8.22.0
+      # The start scripts' tests run in both images a Minecraft server runs, the Ubuntu build and
+      # the Alpine one whose tools are BusyBox's (apps/control/src/infra/docker/paper-launch-images.test.ts).
+      # Pulled here from the image's own GitHub registry, never Docker Hub, and tagged with the
+      # names the runtime asks for; only in the job that runs those tests.
+      - name: Pull the server images
+        if: matrix.group == 'Machine providers'
+        run: |
+          release=$(sed -n "s/^const IMAGE_RELEASE = '\([^']*\)'$/\1/p" apps/control/src/minecraft/runtime-spec.ts)
+          for image in "$release-java25" "$release-java25-alpine"; do
+            for wait in 2 5 10 20 40 0; do
+              docker pull -q "ghcr.io/itzg/minecraft-server:$image" && break
+              [ "$wait" = 0 ] && exit 1
+              sleep "$wait"
+            done
+            docker tag "ghcr.io/itzg/minecraft-server:$image" "itzg/minecraft-server:$image"
+          done
       # The edge's tests run a real mc-router: the one the edge's image is built with, copied out
       # of the image apps/edge/Dockerfile names.
       - name: Fetch mc-router
