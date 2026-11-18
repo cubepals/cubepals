@@ -155,7 +155,9 @@ fi
 # What the pack placed, for the next install, once this one succeeded.
 if [ $s -eq 0 ]; then
   cut -c6- "$t/owners" > "$t/kept"
-  { cat "$t/N"; (cd "$d" && grep -vxF -f "$t/kept" "$t/paths" | xargs -r -d '\\n' sha1sum 2>/dev/null); echo "${END}"; } > "$r.new" && mv -f "$r.new" "$r"
+  # A path this install left out keeps what the record knew of it, so an owner's change or deletion holds.
+  { cat "$t/N"; (cd "$d" && grep -vxF -f "$t/kept" "$t/paths" | xargs -r -d '\\n' sha1sum 2>/dev/null)
+    awk 'NR == FNR { e[$0]; next } substr($0, 43) in e' "$t/excluded" "$t/S"; echo "${END}"; } > "$r.new" && mv -f "$r.new" "$r"
 fi
 rm -rf "$k" "$t"
 exit $s

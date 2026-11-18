@@ -209,6 +209,14 @@ describe('a pack’s files', () => {
     expect(read(`options.txt${FROM_PACK}`)).toBe('o = 1')
   })
 
+  test('stay deleted when an install in between leaves them out', () => {
+    install(v1, 'one')
+    unlinkSync(join(data, 'options.txt'))
+    install(v1, 'one', { MODRINTH_OVERRIDES_EXCLUSIONS: 'options.txt' })
+    install(v1, 'one')
+    expect(there('options.txt')).toBe(false)
+  })
+
   test('take the server’s override over the pack’s other one', () => {
     install(pack({ 'server.properties': 'client' }, { 'server.properties': 'server' }), 'one')
     expect(read('server.properties')).toBe('server')
