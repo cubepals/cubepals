@@ -61,6 +61,7 @@ import { type Edge, join, login } from './lib/minecraft.ts'
 import { ownGameJoins } from './lib/own-game-joins.ts'
 import { type Api, people } from './lib/people.ts'
 import { restNow } from './lib/rest-now.ts'
+import { javaOnMachine } from './lib/running-java.ts'
 import { seedIn } from './lib/seed-reply.ts'
 import { reachDatabase } from './lib/staging-database.ts'
 
@@ -388,7 +389,7 @@ class Journey {
         `Fly shows ${machines.map((m) => m.state).join(', ')}`,
       )
       const volumes = (await volumesOf(this.server.id)).map((v) => `${v.size_gb} GB`).join(', ')
-      return `${this.address()} (${this.server.id}), ${up.memoryTier} in ${took}; Fly: ${machines.length} machine, ${volumes}`
+      return `${this.address()} (${this.server.id}), ${up.memoryTier} in ${took}; Fly: ${machines.length} machine, ${volumes}; ${await javaOnMachine(appOf(this.server.id))}`
     })
     return this.server.id !== ''
   }
