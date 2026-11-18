@@ -37,6 +37,8 @@ import {
 import { UNLINKED } from '../../minecraft/volume-links.ts'
 import { NOT_ARCHIVED } from '../ports/runtime.ts'
 
+/** Whether this run is root's, as the step's is in a machine. */
+const ROOT = process.getuid?.() === 0
 let root = ''
 let shims = ''
 let fetched = 0
@@ -95,6 +97,12 @@ beforeAll(async () => {
     )
     await chmod(join(shims, 'zstd'), 0o755)
   }
+  // The step runs as root in a machine, where it gives the volume to root. A run as anyone else, as
+  // CI's, can't: a stand-in takes the call, and only root's run checks who owns it.
+  if (!ROOT) {
+    await writeFile(join(shims, 'chown'), '#!/bin/sh\nexit 0\n')
+    await chmod(join(shims, 'chown'), 0o755)
+  }
 })
 
 afterAll(async () => {
@@ -131,7 +139,7 @@ describe('a world brought back in its own machine', () => {
       expect(await start(data, name)).toBe(0)
       expect(await listed(data)).toEqual([RESTORED_MARK, 'lost+found', 'server.properties', 'world'])
       expect(await readFile(join(data, 'world', 'level.dat'), 'utf8')).toBe('the archived world')
-      expect((await stat(data)).uid).toBe(0)
+      if (ROOT) expect((await stat(data)).uid).toBe(0)
     }
   })
 
