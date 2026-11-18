@@ -75,6 +75,9 @@ const noticesRecorded = (record: ReturnType<typeof recorder>) => ({
   clear: record('notices.clear', { ...NOTICE, limitedAt: new Date(LIMIT_AT) }),
 })
 
+/** What opening a live watch of a console answers: where the realtime role is, and the ticket. */
+const WATCH = { fallbackUrl: 'wss://rt.test/transport-io', ticket: 'ticket' }
+
 /** What the server finder answers: the one server it was asked for. */
 const FOUND = [{ id: SERVER, slug: 'v0idworld', name: 'Void', status: 'stopped', owner: OWNER }]
 
@@ -155,6 +158,9 @@ function recordingApi(calls: Array<[string, ...unknown[]]>) {
     feed: {
       recent: record('feed.recent', [{ at: new Date(0), text: 'Done (2.1s)!', level: 'info' }]),
     } as unknown as OpsApiOptions['feed'],
+    consoleWatch: {
+      open: record('consoleWatch.open', WATCH),
+    } as unknown as OpsApiOptions['consoleWatch'],
     mods: {
       search: record('mods.search', {
         total: 1,
@@ -449,6 +455,12 @@ describe('the operators’ API: a server’s console, identity and mods', () => 
     expect((await call('GET', `/servers/${SERVER}/console?lines=many`)).status).toBe(400)
   })
 
+  test('opens a live watch of a console for the operator who asked', async () => {
+    const watch = await call('POST', `/servers/${SERVER}/console/watch`)
+    expect(await watch.json()).toEqual(WATCH)
+    expect(named('consoleWatch.open')).toEqual([['consoleWatch.open', ADA, SERVER]])
+  })
+
   test('sets a server’s identity, address and server list message as its settings pages do', async () => {
     const identity = {
       name: 'Island',
@@ -641,7 +653,14 @@ test('the mount keeps the control plane’s platform switches when the web’s s
   const view = async () => ({ startsEnabled: true })
   const app = { platform: { view }, servers: {} } as unknown as ControlPlane
   // What main.node.ts passes is everything the web's API is given, `platform` included.
-  const api = { health: {}, flySuspend: {}, moderation: {}, platform: { capabilities: {} } }
+  const api = {
+    health: {},
+    flySuspend: {},
+    moderation: {},
+    platform: { capabilities: {} },
+    tickets: {},
+    realtime: { fallbackUrl: 'wss://rt.test/transport-io' },
+  }
   const apis = operatorApis(app, api as unknown as Parameters<typeof operatorApis>[1], 'operator-token')
   const answer = await apis.fetch(
     new Request('http://internal/ops/v1/platform', { headers: { authorization: 'Bearer operator-token' } }),

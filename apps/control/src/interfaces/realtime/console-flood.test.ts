@@ -64,6 +64,7 @@ describe('a server flooding its console', () => {
     const events: EventBus = { publish: async () => {}, subscribe: async () => async () => {} }
     const tickets: RealtimeTickets = {
       issue: async () => 'ticket',
+      issueForOperator: async () => 'ticket',
       verify: async () => ({ userId: 'user-1', sessionId: 'session-1' }),
     }
     const feed = {

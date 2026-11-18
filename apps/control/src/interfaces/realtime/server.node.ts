@@ -22,13 +22,17 @@ import { listenWebSocket } from 'transport-io/websocket-node-transport'
 import type { ConsoleFeed, ConsoleLine } from '../../app/console/feed.ts'
 import { observeRealtime, realtimeConnected } from '../../app/platform/telemetry.ts'
 import type { DomainEvent, EventBus } from '../../app/ports/events.ts'
-import type { RealtimeTickets, TicketHolder } from '../../app/ports/tickets.ts'
+import { type Holder, isOperator, type RealtimeTickets } from '../../app/ports/tickets.ts'
 import { tuning } from '../../app/tuning.ts'
 import { originAllowed } from '../http/origins.ts'
+import { type ConsoleAccess, operatorAccess, personAccess } from './console-access.ts'
 import { type ConsoleBatch, ConsoleBatcher, SINGLE_LINES_PER_SECOND } from './console-batches.ts'
 
-/** Each session is its ticket's: the account, and the sign-in session that asked for it. */
-type Peer = TicketHolder
+/**
+ * Each session is its ticket's: the account and the sign-in session that asked for it, or an
+ * operator watching one console.
+ */
+type Peer = Holder
 
 export interface RealtimeOptions {
   listen: { host: string; port: number }
@@ -42,6 +46,8 @@ export interface RealtimeOptions {
   presence: (serverId: string) => Promise<{ uuid: string; name: string }[]>
   /** How often an open session is checked again: RECHECK_MS unless a test says otherwise. */
   recheckMs?: number
+  /** How long an operator's session may watch its console: OPERATOR_WATCH_MS unless a test says otherwise. */
+  operatorWatchMs?: number
 }
 
 const userRoom = (userId: string) => `user:${userId}`
@@ -84,8 +90,10 @@ function countBrowsers(tails: Map<string, AbortController>) {
 }
 
 /**
- * Lets in a browser from Cubepals' own pages with a ticket that verifies. Each answer is timed and
- * counted by the transport it came over, and why it was refused if it was.
+ * Lets in a browser from Cubepals' own pages with a ticket that verifies. A client that names no
+ * origin is not a page: it is let in only with an operator's ticket, from the operators' tools
+ * (`ops.ts console --follow`). Each answer is timed and counted by the transport it came over, and
+ * why it was refused if it was.
  */
 const authorizer =
   (options: Pick<RealtimeOptions, 'allowedOrigins' | 'tickets'>, transport: 'webtransport' | 'websocket') =>
@@ -94,6 +102,12 @@ const authorizer =
     const answered = <T>(outcome: string, answer: T): T => {
       realtimeConnected(transport, outcome, performance.now() - began)
       return answer
+    }
+    if (!headers.origin) {
+      const operator = await options.tickets.verify(query.get('ticket') ?? '')
+      return operator !== null && isOperator(operator)
+        ? answered('operator', operator)
+        : answered('origin', refuse(REALTIME_REFUSALS.origin))
     }
     if (!originAllowed(headers.origin, options.allowedOrigins))
       return answered('origin', refuse(REALTIME_REFUSALS.origin))
@@ -104,15 +118,16 @@ const authorizer =
   }
 
 /**
- * The consoles one session follows: each `watch` is let in while the session's sign-in stands,
- * within the account's and the connection's limits (`AbuseLimits`), and only to a console the
- * account may watch; it is sent what the server printed before. Every `recheckMs` the sign-in and
+ * The consoles one session follows: each `watch` is let in while the session's `access` stands,
+ * within its share and the connection's limit (`AbuseLimits.consolesPerConnection`), and only to a
+ * console it may watch; it is sent what the server printed before. Every `recheckMs` the access and
  * each console are checked again. Returns what stops the rechecks, for when the session closes.
  */
 function followConsoles(
   peer: ServerPeer<RealtimeMap, Peer>,
   deps: {
     feed: ConsoleFeed
+    access: ConsoleAccess
     recheckMs: number
     startTail: (serverId: string) => Promise<void>
     stopTailIfUnwatched: (serverId: string) => void
@@ -123,28 +138,28 @@ function followConsoles(
     await peer.leave(consoleRoom(serverId))
     await peer.leave(singleLineRoom(serverId))
   }
-  const { feed } = deps
-  const { userId } = peer.data
+  const { feed, access } = deps
   /** The consoles this session follows, or is being let into: what counts against its limit. */
   const following = new Set<string>()
   /** The consoles whose room this session has joined. */
   const open = new Set<string>()
 
-  /** Whether the session's sign-in still stands; when it doesn't, the session is closed. */
-  const stillSignedIn = async () => {
-    if (await feed.stillSignedIn(peer.data)) return true
-    peer.close(CloseCode.WT_UNAUTHORIZED, 'signed out')
+  /** Whether the session may still watch; when it may not (signed out, its time up), it is closed. */
+  const stillAllowed = async () => {
+    const ended = await access.ended()
+    if (ended === null) return true
+    peer.close(CloseCode.WT_UNAUTHORIZED, ended)
     return false
   }
   /**
-   * Whether a watch may open its console now: `wait` while the account has opened its share of
-   * consoles this minute, `closed` once the sign-in has ended, `barred` for a console the account
-   * may not watch.
+   * Whether a watch may open its console now: `wait` while the session has opened its share of
+   * consoles this minute, `closed` once it may watch nothing more, `barred` for a console it may
+   * not watch.
    */
   const admission = async (serverId: string) => {
-    if (!(await feed.mayOpen(userId))) return 'wait'
-    if (!(await stillSignedIn())) return 'closed'
-    return (await feed.canWatch(userId, serverId)) ? 'open' : 'barred'
+    if (!(await access.mayOpen())) return 'wait'
+    if (!(await stillAllowed())) return 'closed'
+    return (await access.mayWatch(serverId)) ? 'open' : 'barred'
   }
 
   /**
@@ -211,9 +226,8 @@ function followConsoles(
   }
   // An admin who stops being one keeps only the consoles of servers they own.
   const recheck = async () => {
-    if (!(await stillSignedIn())) return
-    for (const serverId of [...following])
-      if (!(await feed.canWatch(userId, serverId))) await unwatch(serverId)
+    if (!(await stillAllowed())) return
+    for (const serverId of [...following]) if (!(await access.mayWatch(serverId))) await unwatch(serverId)
   }
 
   peer.on('watch', ({ serverId, batched }) => void watch(serverId, batched === true).catch(settle('a watch')))
@@ -321,9 +335,15 @@ export async function startRealtime(options: RealtimeOptions): Promise<{ stop():
 
   server.onSession((peer: ServerPeer<RealtimeMap, Peer>) => {
     browsers.opened()
-    peer.join(userRoom(peer.data.userId)).catch(settle('joining a person to their room'))
+    const holder = peer.data
+    // An operator has no account, so no room of hints: only the one console its ticket names.
+    if (!isOperator(holder))
+      peer.join(userRoom(holder.userId)).catch(settle('joining a person to their room'))
     const stopFollowing = followConsoles(peer, {
       feed: options.console,
+      access: isOperator(holder)
+        ? operatorAccess(holder, { forMs: options.operatorWatchMs })
+        : personAccess(options.console, holder),
       recheckMs: options.recheckMs ?? RECHECK_MS,
       startTail,
       stopTailIfUnwatched,

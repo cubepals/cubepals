@@ -43,6 +43,7 @@ describe('an event that arrives as realtime subscribes', () => {
     }
     const tickets: RealtimeTickets = {
       issue: async () => 'ticket',
+      issueForOperator: async () => 'ticket',
       verify: async () => ({ userId: 'user-1', sessionId: 'session-1' }),
     }
     const feed = {

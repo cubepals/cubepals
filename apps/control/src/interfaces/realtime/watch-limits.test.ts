@@ -72,6 +72,7 @@ beforeAll(async () => {
   // Each test signs in as its own account: the ticket is the account's id.
   const tickets: RealtimeTickets = {
     issue: async ({ userId }) => userId,
+    issueForOperator: async ({ operator }) => operator,
     verify: async (ticket) => ({ userId: ticket, sessionId: `session-${ticket}` }),
   }
   // The feed's own count of consoles opened, beside made-up answers for what the database holds.

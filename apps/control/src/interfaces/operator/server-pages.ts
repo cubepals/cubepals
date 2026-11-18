@@ -4,10 +4,10 @@
 
 /**
  * What an owner does on a server's own pages, as operators do it under `/ops/v1/servers/:id`: the
- * console (a command, and the lines it printed lately), the identity settings (name, description,
- * icon or picture, tags and address) and the server list message, the mods page (list, search,
- * plan, add and remove) and the players page (the whitelist, operators, bans and helpers, and the
- * moderation tools). Each route calls the service the web's own route calls, as the operator, so
+ * console (a command, the lines it printed lately, and a ticket to watch it live), the identity
+ * settings (name, description, icon or picture, tags and address) and the server list message,
+ * the mods page (list, search, plan, add and remove) and the players page (the whitelist,
+ * operators, bans and helpers, and the moderation tools). Each route calls the service the web's own route calls, as the operator, so
  * the audit log says `operator:<name>`. Beside them, the notice an owner gets when Cubepals changes
  * their server, sent again for a change made before notices existed. The server's life itself
  * (made, started, trashed) is `ops.ts`'s.
@@ -30,6 +30,7 @@ import { z } from 'zod'
 import type { AccessService } from '../../app/access/service.ts'
 import type { OperatorActor } from '../../app/actor.ts'
 import type { ConsoleFeed } from '../../app/console/feed.ts'
+import type { OperatorConsoleWatch } from '../../app/console/operator-watch.ts'
 import type { ConsoleService } from '../../app/console/service.ts'
 import { AppError, NotFound } from '../../app/errors.ts'
 import type { ModerationService } from '../../app/moderation/service.ts'
@@ -44,6 +45,7 @@ import { bodyOf, OPS_BASE, operatorOf } from './gate.ts'
 
 export interface ServerPagesOptions {
   console: Pick<ConsoleService, 'run'>
+  consoleWatch: Pick<OperatorConsoleWatch, 'open'>
   feed: Pick<ConsoleFeed, 'recent'>
   servers: Pick<MinecraftServerService, 'saveIdentity'>
   notices: Pick<OwnerNotices, 'changeAddress' | 'addressChanged' | 'unlisted'>
@@ -91,7 +93,11 @@ export function serverPageRoutes(app: Hono, options: ServerPagesOptions): void {
   playerRoutes(app, options)
 }
 
-function consoleRoutes(app: Hono, { console, feed, queries }: ServerPagesOptions): void {
+function consoleRoutes(app: Hono, { console, consoleWatch, feed, queries }: ServerPagesOptions): void {
+  // A ticket to watch the console live through the realtime role, as its owner would, for a while.
+  app.post(`${SERVER}/console/watch`, async (c) =>
+    c.json(await consoleWatch.open(operatorOf(c), c.req.param('id'))),
+  )
   app.post(`${SERVER}/console`, async (c) => {
     const { command } = CommandBody.parse(await bodyOf(c))
     return c.json({ output: await console.run(operatorOf(c), c.req.param('id'), command) })

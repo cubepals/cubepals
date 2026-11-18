@@ -16,6 +16,7 @@ import { schema } from '@blockly/db'
 import { and, eq } from 'drizzle-orm'
 import { Impersonation } from '../../app/accounts/impersonation.ts'
 import { ensureStanding, grantAdmin, stillSignedIn } from '../../app/accounts/persistence.ts'
+import { isOperator } from '../../app/ports/tickets.ts'
 import { createApiApp } from '../../interfaces/http/api.ts'
 import type { Services } from '../../interfaces/trpc/trpc.ts'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
@@ -258,7 +259,9 @@ describe.skipIf(!hasDatabase)('what keeps a realtime session open', () => {
     const response = await read('realtime.connectInfo', jar)
     expect(response.status).toBe(200)
     const [answer] = (await response.json()) as [{ result: { data: { ticket: string } } }]
-    return tickets.verify(answer.result.data.ticket)
+    // A sign-in's ticket is a person's, never an operator's.
+    const holder = await tickets.verify(answer.result.data.ticket)
+    return holder === null || isOperator(holder) ? null : holder
   }
 
   test('its sign-in, until it is signed out or its account suspended', async () => {
