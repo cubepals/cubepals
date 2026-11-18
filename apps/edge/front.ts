@@ -23,6 +23,9 @@
  * loopback only, on a port picked at random each start, and it says whose each connection is in a
  * PROXY v2 header (`bedrock.ts`). The public door never believes such a header.
  *
+ * Minecraft 26.4's query properties (`?_o=…` after a hostname) are cut from every handshake, so
+ * what comes after reads the hostname as a client before 26.4 sent it (`host-query.ts`).
+ *
  * Not for routing: which server a hostname reaches is mc-router's, and the agent's.
  */
 
@@ -35,8 +38,9 @@ import {
 } from '../../packages/contracts/src/proxy-header.ts'
 import { withoutForwarding } from './forwarding.ts'
 import { turnAway } from './hold.ts'
+import { withoutQuery } from './host-query.ts'
 import type { Gate } from './limits.ts'
-import { connectionClosed, connectionEnded, type Edition, firstByteAfter } from './metrics.ts'
+import { connectionClosed, connectionEnded, type Edition, firstByteAfter, hostQueried } from './metrics.ts'
 import { hostnameOf, readVarInt } from './notice.ts'
 import { watchSession } from './session-end.ts'
 import { sourceKey, type Visits } from './visits.ts'
@@ -109,6 +113,13 @@ const READY_WAIT_MS = 30_000
 
 /** How long a connection has to say where it is going, as mc-router allows. */
 const GREETING_MS = 5_000
+/**
+ * The most bytes a handshake's hostname takes: from Minecraft 26.4, 1024 characters
+ * (`ClientIntentionPacket`'s `stringUtf8(1024)`), read as up to three bytes each, as the game reads them.
+ */
+const MOST_HOST_BYTES = 1024 * 3
+/** The most a handshake packet takes: its id, protocol, hostname's length and hostname, port and intent. */
+const MOST_HANDSHAKE = 1 + 5 + 3 + MOST_HOST_BYTES + 2 + 5
 /** Far more than a PROXY header and a handshake ever take. */
 const MOST_GREETING = 4096
 /** Any line of PROXY protocol v1 fits in this, by its specification. */
@@ -146,7 +157,7 @@ export function readHandshake(bytes: Uint8Array): Handshake | 'more' | 'bad' {
   if (bytes[0] === 0xfe) return { hostname: '', protocol: -1, joining: false }
   const length = readVarInt(bytes, 0)
   if (length === null) return bytes.length < 5 ? 'more' : 'bad'
-  if (length.value <= 0 || length.value > 1024) return 'bad'
+  if (length.value <= 0 || length.value > MOST_HANDSHAKE) return 'bad'
   // A handshake is packet 0: anything else is not Minecraft, and needn't be waited for.
   if (bytes.length > length.next && bytes[length.next] !== 0) return 'bad'
   if (length.next + length.value > bytes.length) return 'more'
@@ -388,7 +399,7 @@ class Arrival {
       joinsOpen++
       this.#client.once('close', () => joinsOpen--)
     }
-    let sent = this.#geyser ? this.#received : withoutForwarding(this.#received)
+    let sent = this.#passedOn(handshake)
     if (!plain(handshake.hostname)) {
       try {
         sent = concat(headerFor(this.#source, port), sent)
@@ -401,6 +412,16 @@ class Arrival {
     this.#handed = true
     this.#measure(toRouter, handshake.joining ? 'join' : 'ping', known(handshake.hostname))
     visit?.admitted(toRouter)
+  }
+
+  /**
+   * What the connection has sent, as it goes on: without forwarding, unless Geyser's, and without
+   * 26.4's query properties, counting the keys it carried.
+   */
+  #passedOn(handshake: Handshake): Uint8Array {
+    const unqueried = withoutQuery(this.#geyser ? this.#received : withoutForwarding(this.#received))
+    if (unqueried.keys.length > 0) hostQueried(handshake.joining ? 'join' : 'ping', unqueried.keys)
+    return unqueried.bytes
   }
 
   /** What a ping's answer goes back through: its server's owner's notice, if any. A join's goes as it is. */
