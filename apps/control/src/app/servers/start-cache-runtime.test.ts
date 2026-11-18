@@ -257,6 +257,22 @@ describe('a recording a server’s Java can’t write', () => {
     expect(state()).toBe('failed')
   })
 
+  test('a server whose recordings failed made another way records again, once, this way', () => {
+    start()
+    start()
+    start()
+    expect(state()).toBe('failed')
+    // As a start before the way was said left it: what it ran, failed, and nothing more.
+    const file = data(`${CACHE}.state`)
+    writeFileSync(file, `${readFileSync(file, 'utf8').trim().split('\n').slice(0, 2).join('\n')}\n`)
+    expect(start()).toEqual([RECORDING, recorded()])
+    // Failing this way too, it is given up on as before.
+    start()
+    expect(start()).toEqual([ran('')])
+    expect(state()).toBe('failed')
+    expect(start()).toEqual([ran('')])
+  })
+
   test('a 3 GB machine with a 2,048 MB heap records: the heap isn’t touched up front, so the exit has room', () => {
     // The kernel counts about 2.97 GB of production's 3 GB machines.
     memory(2_970_000)
