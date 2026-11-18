@@ -183,6 +183,8 @@ export interface FailureJson {
 export interface SetAsideJson {
   path: string
   inWorld: boolean
+  /** The world it was set aside from, where `inWorld`: it goes back into that world alone. */
+  worldId?: string
   /** The failure that named it, as its owner read it. */
   why: string
   at: string
@@ -244,6 +246,8 @@ export interface ResumePartsJson {
   stopCheaters: string
   ownFiles: string
   identity: string
+  /** Files asked back from where they were set aside; absent on boots kept before it was. */
+  putBack?: string
 }
 
 export interface ObservedJson {

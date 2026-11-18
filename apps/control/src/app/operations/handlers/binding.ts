@@ -4,9 +4,8 @@
 
 /**
  * A server's runtime binding as operations hold it: the compute its handle names, and the
- * configuration it was last booted with. It reads and writes the binding row, and once a boot ran,
- * the files set aside that its owner asked back (`servers/set-aside.ts`), and nothing else of the
- * server; what a boot changes in the server's status, and the power intervals it opens, are
+ * configuration it was last booted with. It reads and writes the binding row and nothing else of
+ * the server; what a boot changes in the server's status, and the power intervals it opens, are
  * each handler's own final transaction.
  */
 import type { AppliedConfigJson, Db, Tx } from '@blockly/db'
@@ -18,7 +17,6 @@ import type { ProgressSink, RuntimeHandle } from '../../ports/runtime.ts'
 import { knownSlow } from '../../runtimes/hosts.ts'
 import type { Runtimes } from '../../runtimes/router.ts'
 import { findServer, loadRuntime, memoryKept, saveApplied, saveHandle } from '../../servers/persistence.ts'
-import { settleSetAside } from '../../servers/set-aside.ts'
 import type { DesiredRuntime } from '../../servers/specs.ts'
 import { tuning } from '../../tuning.ts'
 import type { OperationContext, OperationHandler } from '../runner.ts'
@@ -101,11 +99,10 @@ export function serverBinding(deps: {
 
   /**
    * What a server now runs, saved; its listing is looked at again, since trust is judged on the
-   * revision the server booted (§15.3). A file its owner asked back went back as it booted.
+   * revision the server booted (§15.3).
    */
   const booted = async (tx: Tx, serverId: string, config: AppliedConfigJson) => {
     await saveApplied(tx, serverId, config)
-    await settleSetAside(tx, serverId)
     await deps.jobs.enqueueEligibility([serverId], tx)
   }
 

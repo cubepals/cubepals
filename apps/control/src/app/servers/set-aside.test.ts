@@ -6,11 +6,15 @@
  * A start that stops on a file its output names: which file may be set aside, and the start that
  * sets it aside, comes up, and puts it back when its owner asks.
  */
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
+import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test'
 import { randomUUID } from 'node:crypto'
+import { schema } from '@blockly/db'
+import { eq } from 'drizzle-orm'
 import type { PinnedMod } from '../../domain/mods/artifact.ts'
+import { SET_ASIDE_VARIABLE } from '../../minecraft/set-aside.ts'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
-import { chooseAside, loadSetAside } from './set-aside.ts'
+import type { RuntimeHandle } from '../ports/runtime.ts'
+import { chooseAside, loadSetAside, settlePutBack } from './set-aside.ts'
 
 const jar = (fileName: string) => ({ artifact: { fileName }, loaders: ['fabric'] }) as unknown as PinnedMod
 const fabric = (...names: string[]) => ({ loader: 'fabric' as const, mods: names.map(jar) })
@@ -47,8 +51,11 @@ describe.skipIf(!hasDatabase)('a start that stops on a datapack', () => {
     h = await startHarness()
   }, 30_000)
 
-  afterAll(async () => {
+  afterEach(() => {
     h.minecraft.breakOn(() => null)
+  })
+
+  afterAll(async () => {
     await h.close()
   })
 
@@ -65,8 +72,15 @@ describe.skipIf(!hasDatabase)('a start that stops on a datapack', () => {
     )
     await h.app.servers.start(owner, id, randomUUID())
     await h.until(id, 'running', 30_000)
+    const world = (await h.server(id)).activeWorldId
     expect(await loadSetAside(h.db, id)).toMatchObject([
-      { path: 'datapacks/far-end.zip', inWorld: true, back: false, why: expect.stringContaining('far-end') },
+      {
+        path: 'datapacks/far-end.zip',
+        inWorld: true,
+        worldId: world,
+        back: false,
+        why: expect.stringContaining('far-end'),
+      },
     ])
     expect((await h.app.queries.get(owner, id)).setAside).toHaveLength(1)
     expect(h.runtime.machine(id)?.spec.env.BLOCKLY_SET_ASIDE).toBe('aside world datapacks/far-end.zip')
@@ -95,4 +109,44 @@ describe.skipIf(!hasDatabase)('a start that stops on a datapack', () => {
     expect(failed.lifecycle.failure?.remedy).toBe('mods')
     expect(await loadSetAside(h.db, id)).toHaveLength(1)
   }, 90_000)
+
+  test('a put back is settled only where the volume shows it went back, and only if that start was told', async () => {
+    const owner = await h.user()
+    const { id } = await h.create(owner, { name: 'Three Files' })
+    await h.until(id, 'running')
+    await h.settled(id)
+    const file = (path: string, back: boolean) => ({
+      path,
+      inWorld: false,
+      why: 'x',
+      at: '2026-11-18T10:00:00Z',
+      back,
+    })
+    await h.db
+      .update(schema.minecraftServers)
+      .set({
+        setAside: [file('mods/gone.jar', true), file('mods/kept.jar', true), file('mods/later.jar', true)],
+      })
+      .where(eq(schema.minecraftServers.id, id))
+    const ran: string[][] = []
+    await settlePutBack(
+      {
+        db: h.db,
+        runtime: {
+          exec: async (_handle, command) => {
+            ran.push([...command])
+            return { exitCode: 0, stdout: 'server mods/kept.jar\n', stderr: '' }
+          },
+        },
+        bindingOf: async () => ({ handle: 'handle' as unknown as RuntimeHandle }),
+      },
+      id,
+      { spec: { env: { [SET_ASIDE_VARIABLE]: 'back server mods/gone.jar\nback server mods/kept.jar' } } },
+    )
+    expect(ran).toHaveLength(1)
+    expect(await loadSetAside(h.db, id)).toMatchObject([
+      { path: 'mods/kept.jar', back: false },
+      { path: 'mods/later.jar', back: true },
+    ])
+  }, 60_000)
 })

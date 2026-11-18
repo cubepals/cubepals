@@ -18,10 +18,12 @@ import { eq } from 'drizzle-orm'
 import type { ServerRevision } from '../../domain/revision/revision.ts'
 import type { MinecraftServer } from '../../domain/server/server.ts'
 import { datapacksOf } from '../../minecraft/datapacks.ts'
-import { type Aside, asideOf } from '../../minecraft/set-aside.ts'
+import { type Aside, asideOf, askedBack, stillKept } from '../../minecraft/set-aside.ts'
 import { type Actor, authorize, requestedBy } from '../actor.ts'
 import { DiagnosedFailure, NotFound, PlainFailure } from '../errors.ts'
 import type { EventBus } from '../ports/events.ts'
+import type { RuntimeHandle, RuntimeSpec } from '../ports/runtime.ts'
+import type { Runtimes } from '../runtimes/router.ts'
 import { loadRevision, lockServer } from './persistence.ts'
 
 /** What a server has set aside now, as its row keeps it, every path checked again. */
@@ -63,7 +65,7 @@ export function chooseAside(
  */
 export async function setAsideFor(
   db: Db,
-  server: Pick<MinecraftServer, 'id' | 'desiredRevisionId'>,
+  server: Pick<MinecraftServer, 'id' | 'desiredRevisionId' | 'activeWorldId'>,
   error: unknown,
 ): Promise<unknown> {
   if (!(error instanceof DiagnosedFailure) || error.files.length === 0) return error
@@ -75,7 +77,14 @@ export async function setAsideFor(
     if (server === null) return false
     const now = await loadSetAside(tx, serverId)
     if (now.some((aside) => aside.path === file.path && aside.inWorld === file.inWorld)) return false
-    const entry: SetAsideJson = { ...file, why: error.message, at: new Date().toISOString(), back: false }
+    const world = file.inWorld && server.activeWorldId !== null ? { worldId: server.activeWorldId } : {}
+    const entry: SetAsideJson = {
+      ...file,
+      ...world,
+      why: error.message,
+      at: new Date().toISOString(),
+      back: false,
+    }
     await tx
       .update(schema.minecraftServers)
       .set({ setAside: [...now, entry] })
@@ -99,14 +108,43 @@ export async function startNotes(
   return { notLoaded: [...server.notLoaded], setAside: await loadSetAside(q, server.id) }
 }
 
-/** After a boot that came up: what its owner asked back is back, so it is no longer listed. */
-export async function settleSetAside(q: Queryable, serverId: string): Promise<void> {
-  const now = await loadSetAside(q, serverId)
-  if (!now.some((file) => file.back)) return
-  await q
-    .update(schema.minecraftServers)
-    .set({ setAside: now.filter((file) => !file.back) })
-    .where(eq(schema.minecraftServers.id, serverId))
+/**
+ * After a start that came up: of the files that start was asked to put back, each no longer kept
+ * aside went back, and is off the list. One still kept, because something new took its place, is
+ * listed as aside again, with its way back. One asked back after the start's spec was built is left
+ * for the next start, which is told of it.
+ */
+export async function settlePutBack(
+  deps: {
+    db: Db
+    runtime: Pick<Runtimes, 'exec'>
+    bindingOf: (serverId: string) => Promise<{ handle: RuntimeHandle | null }>
+  },
+  serverId: string,
+  desired: { spec: Pick<RuntimeSpec, 'env'> },
+): Promise<void> {
+  const asked = askedBack(desired.spec.env)
+  if (asked.length === 0) return
+  const { handle } = await deps.bindingOf(serverId)
+  if (handle === null) return
+  const read = await deps.runtime
+    .exec(handle, stillKept(asked, desired.spec.env.LEVEL ?? 'world'), 20)
+    .catch(() => null)
+  if (read === null || read.exitCode !== 0) return
+  const kept = new Set(read.stdout.split('\n'))
+  const where = (file: Aside) => `${file.inWorld ? 'world' : 'server'} ${file.path}`
+  const wasAsked = (file: Aside) => asked.some((one) => where(one) === where(file))
+  await deps.db.transaction(async (tx) => {
+    if ((await lockServer(tx, serverId)) === null) return
+    const now = await loadSetAside(tx, serverId)
+    const next = now.flatMap((file) =>
+      !file.back || !wasAsked(file) ? [file] : kept.has(where(file)) ? [{ ...file, back: false }] : [],
+    )
+    await tx
+      .update(schema.minecraftServers)
+      .set({ setAside: next })
+      .where(eq(schema.minecraftServers.id, serverId))
+  })
 }
 
 /** The owner's way back: a file set aside goes back at the next start, or stays aside after all. */

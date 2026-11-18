@@ -5,7 +5,7 @@
 /** Which files a failure may have set aside: paths out of a log, checked as the untrusted text they are. */
 import { describe, expect, test } from 'bun:test'
 import { diagnose } from './diagnosis.ts'
-import { asideOf, SET_ASIDE_VARIABLE, setAsideEnv } from './set-aside.ts'
+import { asideOf, askedBack, SET_ASIDE_VARIABLE, setAsideEnv } from './set-aside.ts'
 
 describe('a path a log names', () => {
   test('a mod jar under mods/, however the loader prints it', () => {
@@ -82,12 +82,30 @@ describe('what a failure names', () => {
 describe('what a start is told', () => {
   test('a line per file, and none for a path that isn’t one', () => {
     expect(
-      setAsideEnv([
-        { path: 'datapacks/far-end.zip', inWorld: true, back: false },
-        { path: 'mods/jei.jar', inWorld: false, back: true },
-        { path: 'mods/../server.properties', inWorld: false, back: false },
-      ]),
+      setAsideEnv(
+        [
+          { path: 'datapacks/far-end.zip', inWorld: true, worldId: 'w1', back: false },
+          { path: 'mods/jei.jar', inWorld: false, back: true },
+          { path: 'mods/../server.properties', inWorld: false, back: false },
+        ],
+        'w1',
+      ),
     ).toEqual({ [SET_ASIDE_VARIABLE]: 'aside world datapacks/far-end.zip\nback server mods/jei.jar' })
-    expect(setAsideEnv([])).toEqual({})
+    expect(setAsideEnv([], 'w1')).toEqual({})
+  })
+
+  test('a datapack is only ever looked for in the world it was set aside from', () => {
+    const files = [{ path: 'datapacks/far-end.zip', inWorld: true, worldId: 'w1', back: true }]
+    expect(setAsideEnv(files, 'w2')).toEqual({})
+    expect(askedBack(setAsideEnv(files, 'w1'))).toEqual([{ path: 'datapacks/far-end.zip', inWorld: true }])
+  })
+
+  test('what a start asks back is read back checked', () => {
+    expect(
+      askedBack({
+        [SET_ASIDE_VARIABLE]: 'aside server mods/a.jar\nback server mods/b.jar\nback server ../etc/passwd',
+      }),
+    ).toEqual([{ path: 'mods/b.jar', inWorld: false }])
+    expect(askedBack({})).toEqual([])
   })
 })

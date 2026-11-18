@@ -28,7 +28,7 @@ import {
   VITALS_ENV,
   withoutOwnSteps,
 } from '../../minecraft/runtime-spec.ts'
-import { SET_ASIDE_VARIABLE } from '../../minecraft/set-aside.ts'
+import { askedBack, SET_ASIDE_VARIABLE } from '../../minecraft/set-aside.ts'
 import { stopCheatersEnv } from '../../minecraft/stop-cheaters.ts'
 import { loadStanding } from '../accounts/persistence.ts'
 import type { BuiltPack } from '../artifacts/brand-pack.ts'
@@ -295,7 +295,12 @@ export class RuntimeSpecs {
     const parts = Object.values(progressed)
     const compatPart =
       compat.length === 0 ? [] : [compat.join(','), COMPAT_PREFIX, ...parts.map((p) => `progression:${p}`)]
-    const startOnly = [...compatPart, ...grim, ...newer, shown]
+    // A file its owner asked back goes back only as a server boots: one asleep boots for it. A
+    // server with none asked back has the key it had.
+    const putBack = askedBack(labelled.env).map(
+      (file) => `put-back:${file.inWorld ? 'world' : 'server'}:${file.path}`,
+    )
+    const startOnly = [...compatPart, ...grim, ...newer, shown, ...putBack]
     const resumesOn = createHash('sha256')
       .update(`${driftDigest} ${startOnly.join(' ')}`)
       .digest('hex')
@@ -317,6 +322,7 @@ export class RuntimeSpecs {
         stopCheaters: grim,
         ownFiles: newer,
         identity: shown,
+        putBack,
       }),
     }
   }

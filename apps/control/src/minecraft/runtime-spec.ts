@@ -22,7 +22,7 @@ import { WAITING_DATAPACK } from './duels-waiting.ts'
 import { DATA_DIR, JAR_LISTS, jarsOf } from './jars.ts'
 import { PAPER_DEFAULTS_STEP } from './paper-defaults.ts'
 import { GAME_PORT, RCON_PORT } from './ports.ts'
-import { type Aside, SET_ASIDE_STEP, setAsideEnv } from './set-aside.ts'
+import { SET_ASIDE_STEP, type SetAsideFile, setAsideEnv } from './set-aside.ts'
 import { STARTER_STEP, starterEnv, startsOnOf } from './starter.ts'
 import { STOP_CHEATERS_STEP } from './stop-cheaters.ts'
 import { VANILLA_PAPER_STEP } from './vanilla-paper.ts'
@@ -72,7 +72,7 @@ export interface RuntimeSpecInput {
    */
   floodgateKey?: string | null
   /** The files set aside for this server, and those its owner asked back (`set-aside.ts`). */
-  setAside?: readonly (Aside & { back: boolean })[]
+  setAside?: readonly SetAsideFile[]
 }
 
 interface PlanLimits {
@@ -671,7 +671,7 @@ export function toRuntimeSpec(input: RuntimeSpecInput): RuntimeSpec {
       ...settingsEnv(revision.settings),
       ...modsEnv(input),
       ...datapacksEnv(revision, input.artifactUrl),
-      ...setAsideEnv(input.setAside ?? []),
+      ...setAsideEnv(input.setAside ?? [], input.world.id),
       ...carriedEnv(revision, world.levelName, input.artifactUrl, placedHere),
       ...limitsEnv(input.limits),
       ...brandPackEnv(input),

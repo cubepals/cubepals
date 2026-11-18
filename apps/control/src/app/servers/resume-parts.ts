@@ -6,7 +6,7 @@
  * What a server's resume key (`resumesOn`, `specs.ts`) is made of, kept part by part beside what a
  * boot applied, so a wake that boots where it could have resumed says which part changed since
  * the machine went to sleep: one field of what drift compares (`drift:image`, `drift:env.MOTD`),
- * or what only a start reads (`compat`, `stopCheaters`, `ownFiles`, `identity`).
+ * or what only a start reads (`compat`, `stopCheaters`, `ownFiles`, `identity`, `putBack`).
  *
  * Only says; it decides nothing. The key itself is built as before, from the same parts, so a
  * deploy of this changes no server's key and boots nothing.
@@ -49,6 +49,7 @@ export function resumeParts(parts: {
   stopCheaters: readonly string[]
   ownFiles: readonly string[]
   identity: string
+  putBack?: readonly string[]
 }): ResumePartsJson {
   const of = (values: readonly string[]) => (values.length === 0 ? '' : short(values))
   return {
@@ -57,6 +58,7 @@ export function resumeParts(parts: {
     stopCheaters: of(parts.stopCheaters),
     ownFiles: of(parts.ownFiles),
     identity: short(parts.identity),
+    putBack: of(parts.putBack ?? []),
   }
 }
 
@@ -69,8 +71,8 @@ export function changedParts(before: ResumePartsJson | undefined, now: ResumePar
   if (before === undefined) return ['unknown']
   const fields = new Set([...Object.keys(before.drift), ...Object.keys(now.drift)])
   const drift = [...fields].filter((field) => before.drift[field] !== now.drift[field]).sort()
-  const startOnly = (['compat', 'stopCheaters', 'ownFiles', 'identity'] as const).filter(
-    (part) => before[part] !== now[part],
+  const startOnly = (['compat', 'stopCheaters', 'ownFiles', 'identity', 'putBack'] as const).filter(
+    (part) => (before[part] ?? '') !== (now[part] ?? ''),
   )
   return [...drift.map((field) => `drift:${field}`), ...startOnly]
 }

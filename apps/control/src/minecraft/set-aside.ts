@@ -53,12 +53,46 @@ export function asideOf(named: string, inWorld: boolean): Aside | null {
   return parts[0] === 'mods' && parts.length >= 2 && /\.jar$/i.test(path) ? { path, inWorld } : null
 }
 
-/** The variable for a start: each file to keep aside, and each its owner asked back. */
-export function setAsideEnv(files: readonly (Aside & { back: boolean })[]): Record<string, string> {
+/** A file set aside as a start is told of it: in the world it was set aside from, where it is in one. */
+export interface SetAsideFile extends Aside {
+  back: boolean
+  worldId?: string
+}
+
+/**
+ * The variable for a start of `worldId`: each file to keep aside, and each its owner asked back. A
+ * datapack set aside from one world is never looked for in another the server runs now.
+ */
+export function setAsideEnv(files: readonly SetAsideFile[], worldId: string): Record<string, string> {
   const lines = files
-    .filter((file) => asideOf(file.path, file.inWorld) !== null)
+    .filter(
+      (file) => asideOf(file.path, file.inWorld) !== null && (!file.inWorld || file.worldId === worldId),
+    )
     .map((file) => `${file.back ? 'back' : 'aside'} ${file.inWorld ? 'world' : 'server'} ${file.path}`)
   return lines.length === 0 ? {} : { [SET_ASIDE_VARIABLE]: lines.join('\n') }
+}
+
+/** The files a start's variable asks back, each checked again. */
+export function askedBack(env: Readonly<Record<string, string>>): Aside[] {
+  return (env[SET_ASIDE_VARIABLE] ?? '').split('\n').flatMap((line) => {
+    const [how, where, path] = line.split(' ')
+    const file = how === 'back' && path !== undefined ? asideOf(path, where === 'world') : null
+    return file === null ? [] : [file]
+  })
+}
+
+/**
+ * A command that prints, of `files`, each still kept aside (`world <path>` or `server <path>`): one
+ * the step couldn't put back because something new took its place. `level` is the world's folder.
+ */
+export function stillKept(files: readonly Aside[], level: string): string[] {
+  const tests = files
+    .filter(() => PART.test(level))
+    .map((file) => {
+      const rel = file.inWorld ? `${level}/${file.path}` : file.path
+      return `[ -e '${DATA_DIR}/${ASIDE_DIR}/${rel}' ] && echo '${file.inWorld ? 'world' : 'server'} ${file.path}';`
+    })
+  return ['sh', '-c', `${tests.join(' ')} true`]
 }
 
 /**

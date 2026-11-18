@@ -11,7 +11,7 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { mkdir, mkdtemp, readFile, readlink, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { SET_ASIDE_STEP, SET_ASIDE_VARIABLE } from '../../minecraft/set-aside.ts'
+import { SET_ASIDE_STEP, SET_ASIDE_VARIABLE, stillKept } from '../../minecraft/set-aside.ts'
 import { UNLINKED } from '../../minecraft/volume-links.ts'
 
 describe('setting a file aside, a copy kept', () => {
@@ -59,6 +59,20 @@ describe('setting a file aside, a copy kept', () => {
     await run('back server mods/jei.jar')
     expect(await read('mods/jei.jar')).toBe('new copy')
     expect(await read('.blockly-set-aside/mods/jei.jar')).toBe('old copy')
+  })
+
+  test('what is still kept after a put back is read from the volume', async () => {
+    const [program = 'sh', flag = '-c', script = ''] = stillKept(
+      [
+        { path: 'mods/jei.jar', inWorld: false },
+        { path: 'datapacks/far-end.zip', inWorld: true },
+      ],
+      'world',
+    )
+    const step = Bun.spawn([program, flag, script.replace(/\/data(?![A-Za-z])/g, volume)], { stdout: 'pipe' })
+    expect(await step.exited).toBe(0)
+    // The jar stayed aside, since a new one took its place; the datapack went back.
+    expect((await new Response(step.stdout).text()).trim()).toBe('server mods/jei.jar')
   })
 
   test('a line that isn’t one Blockly writes moves nothing', async () => {
