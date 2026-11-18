@@ -52,9 +52,9 @@ import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
-import { SECOND_MS } from '@blockly/contracts/durations'
 import { authWorks } from './lib/auth-through-website.ts'
 import { pingIndexNow } from './lib/indexnow.ts'
+import { untilItRuns } from './lib/terraform-retries.ts'
 import { buildWorker } from './lib/web-worker.ts'
 import {
   edgePlacement,
@@ -142,9 +142,6 @@ function run(command: string, args: string[], env: NodeJS.ProcessEnv, input?: st
     process.exit(1)
   }
 }
-
-/** How long a stopped Terraform apply waits before it runs again. */
-const APPLY_RETRY_MS = 15 * SECOND_MS
 
 const git = (...args: string[]) => spawnSync('git', args, { encoding: 'utf8' }).stdout.trim()
 
@@ -417,27 +414,22 @@ async function apply(): Promise<void> {
   writeFileSync(backend, backendConfig(values.CLOUDFLARE_ACCOUNT_ID ?? ''))
   const terraform = (...args: string[]) => run('terraform', [`-chdir=${ENVIRONMENT_DIR}`, ...args], env)
   terraform('init', '-input=false', `-backend-config=${backend}`)
-  // Fly's API sometimes times out while Terraform reads an app's secrets ("List Secrets Error …
-  // deadline exceeded"), which stops a plan or apply before it changes anything. Terraform changes
-  // only what differs, so the same command run again rides that out: two more tries, a little apart.
+  // A stop is tried again, the waits growing (`lib/terraform-retries.ts`): Fly's API sometimes fails
+  // while Terraform reads an app's secrets, before anything changes.
   const retried = (...args: string[]) => {
-    for (let tries = 1; ; tries++) {
-      const done = spawnSync('terraform', [`-chdir=${ENVIRONMENT_DIR}`, ...args], {
-        stdio: 'inherit',
-        env,
-      })
-      if (done.error) throw new Error(`terraform: ${done.error.message}. Is it installed?`)
-      if (done.status === 0) return
-      // One stopped by a signal, as a cancelled deploy is, stops the deploy here: never run again.
-      if (tries === 3 || done.status === null) {
-        say(
-          `terraform ${args[0]} stopped (${done.signal ?? `exit ${done.status}`}). Fix what it says, then run apply again.`,
-        )
-        process.exit(1)
-      }
-      say(`terraform ${args[0]} stopped (exit ${done.status}); trying again.`)
-      Bun.sleepSync(APPLY_RETRY_MS)
-    }
+    const done = untilItRuns(
+      () => {
+        const ran = spawnSync('terraform', [`-chdir=${ENVIRONMENT_DIR}`, ...args], { stdio: 'inherit', env })
+        if (ran.error) throw new Error(`terraform: ${ran.error.message}. Is it installed?`)
+        return ran
+      },
+      { wait: Bun.sleepSync, say: (line) => say(`terraform ${args[0]} ${line}`) },
+    )
+    if (done.status === 0) return
+    say(
+      `terraform ${args[0]} stopped (${done.signal ?? `exit ${done.status}`}). Fix what it says, then run apply again.`,
+    )
+    process.exit(1)
   }
 
   if (bucketFirst) {
