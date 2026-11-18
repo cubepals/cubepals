@@ -41,86 +41,85 @@ async function* printing(serverId: string, signal: AbortSignal): AsyncIterable<C
   await new Promise((resolve) => signal.addEventListener('abort', resolve, { once: true }))
 }
 
-describe('an operator watching a console', () => {
-  let realtime: { stop(): Promise<void> }
-  let fallbackPort: number
-  const tickets = new JoseRealtimeTickets('ticket-secret-0123456789abcdef', 'test')
-  /** Hands a domain event to the realtime role, as the database's NOTIFY does. */
-  let publish: (event: DomainEvent) => void = () => undefined
-  /** Every check a person's watch makes; an operator's makes none of them. */
-  const asked: string[] = []
-  const NativeWebSocket = globalThis.WebSocket
+let realtime: { stop(): Promise<void> }
+let fallbackPort: number
+const tickets = new JoseRealtimeTickets('ticket-secret-0123456789abcdef', 'test')
+/** Hands a domain event to the realtime role, as the database's NOTIFY does. */
+let publish: (event: DomainEvent) => void = () => undefined
+/** Every check a person's watch makes; an operator's makes none of them. */
+const asked: string[] = []
+const NativeWebSocket = globalThis.WebSocket
 
-  beforeAll(async () => {
-    globalThis.WebSocket = class extends NativeWebSocket {
-      constructor(url: string | URL, protocols?: string | string[]) {
-        super(url, { headers: { Origin: ORIGIN }, ...(protocols ? { protocols } : {}) } as never)
-      }
-    } as typeof WebSocket
-    const cert = await mintPinnedCertificate('127.0.0.1')
-    fallbackPort = await freePort()
-    const events: EventBus = {
-      publish: async () => {},
-      subscribe: async (handler) => {
-        publish = handler
-        return async () => {}
-      },
+beforeAll(async () => {
+  globalThis.WebSocket = class extends NativeWebSocket {
+    constructor(url: string | URL, protocols?: string | string[]) {
+      super(url, { headers: { Origin: ORIGIN }, ...(protocols ? { protocols } : {}) } as never)
     }
-    const feed = {
-      canWatch: async () => {
-        asked.push('canWatch')
-        return false
-      },
-      stillSignedIn: async () => {
-        asked.push('stillSignedIn')
-        return false
-      },
-      mayOpen: async () => {
-        asked.push('mayOpen')
-        return false
-      },
-      recent: async (serverId: string) => [{ at: new Date(0), text: `${serverId} before`, level: 'info' }],
-      tail: printing,
-    } as unknown as ConsoleFeed
-    realtime = await startRealtime({
-      listen: { host: '127.0.0.1', port: await freePort() },
-      fallbackListen: { host: '127.0.0.1', port: fallbackPort },
-      tls: { cert: cert.cert, privKey: cert.privKey },
-      allowedOrigins: [ORIGIN],
-      events,
-      tickets,
-      console: feed,
-      presence: async () => [],
-      recheckMs: RECHECK_MS,
-      operatorWatchMs: WATCH_MS,
-    })
-  })
-
-  afterAll(async () => {
-    globalThis.WebSocket = NativeWebSocket
-    await realtime?.stop()
-  })
-
-  /** A session opened with an operator's ticket for WATCHED, and what it was sent. */
-  async function operator() {
-    const ticket = await tickets.issueForOperator({ operator: 'ops-agent', serverId: WATCHED })
-    const client = new Client<RealtimeMap>({
-      contract: realtimeContract,
-      connect: () =>
-        connectWebSocket({ url: `ws://127.0.0.1:${fallbackPort}/transport-io?ticket=${ticket}` }),
-    })
-    const histories: string[] = []
-    const lines: string[] = []
-    client.on('consoleHistory', ({ serverId }) => void histories.push(serverId))
-    client.on('consoleLines', (batch) => void lines.push(...batch.lines.map((l) => l.text)))
-    const connected = new Promise<void>((resolve) =>
-      client.onSession((state) => state.status === 'connected' && resolve()),
-    )
-    await client.connect()
-    await connected
-    return { client, histories, lines, snapshot: () => client.getSnapshot() }
+  } as typeof WebSocket
+  const cert = await mintPinnedCertificate('127.0.0.1')
+  fallbackPort = await freePort()
+  const events: EventBus = {
+    publish: async () => {},
+    subscribe: async (handler) => {
+      publish = handler
+      return async () => {}
+    },
   }
+  const feed = {
+    canWatch: async () => {
+      asked.push('canWatch')
+      return false
+    },
+    stillSignedIn: async () => {
+      asked.push('stillSignedIn')
+      return false
+    },
+    mayOpen: async () => {
+      asked.push('mayOpen')
+      return false
+    },
+    recent: async (serverId: string) => [{ at: new Date(0), text: `${serverId} before`, level: 'info' }],
+    tail: printing,
+  } as unknown as ConsoleFeed
+  realtime = await startRealtime({
+    listen: { host: '127.0.0.1', port: await freePort() },
+    fallbackListen: { host: '127.0.0.1', port: fallbackPort },
+    tls: { cert: cert.cert, privKey: cert.privKey },
+    allowedOrigins: [ORIGIN],
+    events,
+    tickets,
+    console: feed,
+    presence: async () => [],
+    recheckMs: RECHECK_MS,
+    operatorWatchMs: WATCH_MS,
+  })
+})
 
+afterAll(async () => {
+  globalThis.WebSocket = NativeWebSocket
+  await realtime?.stop()
+})
+
+/** A session opened with an operator's ticket for WATCHED, and what it was sent. */
+async function operator() {
+  const ticket = await tickets.issueForOperator({ operator: 'ops-agent', serverId: WATCHED })
+  const client = new Client<RealtimeMap>({
+    contract: realtimeContract,
+    connect: () => connectWebSocket({ url: `ws://127.0.0.1:${fallbackPort}/transport-io?ticket=${ticket}` }),
+  })
+  const histories: string[] = []
+  const lines: string[] = []
+  client.on('consoleHistory', ({ serverId }) => void histories.push(serverId))
+  client.on('consoleLines', (batch) => void lines.push(...batch.lines.map((l) => l.text)))
+  const connected = new Promise<void>((resolve) =>
+    client.onSession((state) => state.status === 'connected' && resolve()),
+  )
+  await client.connect()
+  await connected
+  return { client, histories, lines, snapshot: () => client.getSnapshot() }
+}
+
+describe('an operator watching a console', () => {
   test('streams the console its ticket names, refuses any other, and asks nothing of an account', async () => {
     const o = await operator()
     o.client.emit('watch', { serverId: OTHER, topic: 'console', batched: true })
@@ -171,7 +170,9 @@ describe('an operator watching a console', () => {
       globalThis.WebSocket = PagesWebSocket
     }
   }, 20_000)
+})
 
+describe('what an operator’s session never gets or sends', () => {
   test('is sent none of the hints for the server’s owner, even about the server it watches', async () => {
     const o = await operator()
     const hints: string[] = []
