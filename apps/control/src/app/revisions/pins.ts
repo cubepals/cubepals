@@ -8,7 +8,7 @@
  * lists is `LoaderBuilds`'; choosing the server type is the caller's.
  */
 import type { Loader, RevisionDraft } from '../../domain/revision/revision.ts'
-import { LOADER_LABELS, plainOnPaper } from '../../minecraft/versions.ts'
+import { LOADER_LABELS, supports } from '../../minecraft/versions.ts'
 import { AppError } from '../errors.ts'
 import { type LoaderBuilds, LoaderBuildsUnavailable } from '../ports/loaders.ts'
 
@@ -54,8 +54,9 @@ export async function pinUnpinned(builds: LoaderBuilds, draft: RevisionDraft): P
 
 /**
  * The Paper build plain Minecraft runs on (`runsOnPaper`): Paper's current stable build where
- * plain Minecraft runs on Paper for the release (`plainOnPaper`), and null, Mojang's own server,
- * where it doesn't. A list
+ * Cubepals offers Paper for the release, and null, Mojang's own server, where it doesn't. Whether a
+ * new plain server starts on Paper at all is `plainOnPaper`'s (`firstPin`); an owner's own choice,
+ * Bedrock, or a world already on Paper takes Paper wherever it is offered. A list
  * that can't be read leaves a new server on Mojang's own (`plain`), as every server was before
  * Paper became the default, and a change waits until it can be read (`refuse`), as any change of
  * server type does.
@@ -65,7 +66,7 @@ export async function paperPin(
   gameVersion: string,
   unreadable: 'plain' | 'refuse',
 ): Promise<string | null> {
-  if (!plainOnPaper(gameVersion)) return null
+  if (!supports(gameVersion, 'paper')) return null
   try {
     return await builds.current('paper', gameVersion)
   } catch (error) {

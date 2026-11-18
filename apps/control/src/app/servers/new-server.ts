@@ -249,7 +249,7 @@ async function firstPin(
   const fresh =
     request.from === undefined || request.from.kind === 'template' || request.from.kind === 'world'
   if (loader === 'vanilla' && fresh && (chosen?.mods ?? []).every((mod) => isDatapack(mod)))
-    return paperPin(builds, gameVersion, 'plain')
+    return plainOnPaper(gameVersion) ? paperPin(builds, gameVersion, 'plain') : null
   return loaderPin(builds, loader, gameVersion)
 }
 

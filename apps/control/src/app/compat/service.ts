@@ -50,7 +50,7 @@ import {
 import { COMPAT, PERFORMANCE, runsPlugin, VIABACKWARDS, VIAREWIND, VIAVERSION } from '../../minecraft/mods.ts'
 import { PERFORMANCE_PINS, type PerformancePins } from '../../minecraft/performance-pins.ts'
 import { GRIM, runsOwnGrim } from '../../minecraft/stop-cheaters.ts'
-import { offeredVersions, plainOnPaper, supports } from '../../minecraft/versions.ts'
+import { offeredVersions, supports } from '../../minecraft/versions.ts'
 import type { ModService } from '../mods/service.ts'
 import type { GeyserMc } from '../ports/geysermc.ts'
 
@@ -348,7 +348,7 @@ export async function joinsNow(
   const placed = booted ? (run.applied?.compat ?? []) : projectsOf(await compatFor(q, revision))
   // Whether it lets Bedrock players in, as its choice says, and whether its other versions stop them.
   const paper = runsPaper(revision)
-  const moves = !paper && isPlain(revision) && plainOnPaper(revision.gameVersion)
+  const moves = !paper && isPlain(revision) && supports(revision.gameVersion, 'paper')
   const on = paper && bedrockOf(revision)
   const bedrock = paper || moves ? { on, needsOtherVersions: on && !bedrockWanted(revision), moves } : null
   return { joins: joinsOf(revision, placed), bedrock: run.offered === true ? bedrock : false }

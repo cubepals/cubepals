@@ -123,16 +123,25 @@ describe.skipIf(!hasDatabase)('plain Minecraft on Paper', () => {
     expect(env(id).TYPE).toBe('VANILLA')
   }, 60_000)
 
-  test('a world on Paper moving to a release whose plain servers run on Mojang’s own runs on it', async () => {
+  test('on 26.3, plain servers start on Mojang’s own, a world on Paper keeps it, and an owner can choose it', async () => {
     const owner = await h.user('Jo', 'plus')
     const { id } = await h.create(owner, { name: 'Ahead', gameVersion: '26.2' })
     await h.until(id, 'running')
     await h.settled(id)
+    // A world already on Paper moving up keeps the server it runs on.
     await plainOn(owner, id, '26.3')
-    expect(await desired(id)).toMatchObject({ gameVersion: '26.3', loaderVersion: null })
-    expect(env(id).TYPE).toBe('VANILLA')
-    expect(await lastChange(id)).toContainEqual({ field: 'onPaper', from: true, to: false })
-  }, 60_000)
+    expect(await desired(id)).toMatchObject({ gameVersion: '26.3', loaderVersion: '60' })
+    expect(env(id)).toMatchObject({ TYPE: 'PAPER', PAPER_BUILD: '60' })
+
+    // A new plain 26.3 server is on Mojang's own, and its owner's "Run on Paper" moves it.
+    const fresh = await h.create(owner, { name: 'Fresh', gameVersion: '26.3' })
+    await h.until(fresh.id, 'running')
+    await h.settled(fresh.id)
+    expect((await desired(fresh.id)).loaderVersion).toBeNull()
+    await plainOn(owner, fresh.id, '26.3', true)
+    expect(await desired(fresh.id)).toMatchObject({ gameVersion: '26.3', loaderVersion: '60' })
+    expect(await lastChange(fresh.id)).toContainEqual({ field: 'onPaper', from: false, to: true })
+  }, 90_000)
 
   test('a world on Paper moves to a mod loader, and rolling back puts it on Paper again', async () => {
     // Fabric comes with Plus.
