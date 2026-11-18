@@ -28,7 +28,10 @@ import { ICON_STEP, imageFor } from '../../minecraft/runtime-spec.ts'
 const SOCKET = '/var/run/docker.sock'
 const docker = new Docker({ socketPath: SOCKET })
 
-/** Both images, as the product picks them; CI pulls them ("Pull the server images"). */
+/**
+ * Both images, as the product picks them. CI pulls them in the job that runs this file ("Pull the
+ * server images"), and that step fails the job if a pull fails; elsewhere one not pulled is skipped.
+ */
 const IMAGES = {
   ubuntu: imageFor({ gameVersion: '26.3', loader: 'paper', modpack: null }),
   alpine: imageFor({ gameVersion: '26.3', loader: 'vanilla', modpack: null }),
@@ -70,27 +73,36 @@ describe.skipIf(!existsSync(SOCKET))('the icon step in the images a server runs'
     if (root) rmSync(root, { recursive: true, force: true })
   })
 
+  const pulled = (image: string) => Bun.spawnSync(['docker', 'image', 'inspect', image]).exitCode === 0
   for (const [name, image] of Object.entries(IMAGES)) {
-    test(`${name}: the icon is put in place byte for byte, the server's own, and the image is given none`, async () => {
-      rmSync(join(root, 'data'), { recursive: true, force: true })
-      mkdirSync(join(root, 'data'))
-      const said = await iconStep(image, 'file:///t/icon.png')
-      expect(said).toContain('ICON=none OVERRIDE_ICON=none')
-      const placed = join(root, 'data', 'server-icon.png')
-      expect(readFileSync(placed).equals(ICON)).toBe(true)
-      expect(statSync(placed).uid).toBe(1000)
-      // The same icon again is left as it is.
-      const before = statSync(placed).mtimeMs
-      expect(await iconStep(image, 'file:///t/icon.png')).toContain('ICON=none OVERRIDE_ICON=none')
-      expect(statSync(placed).mtimeMs).toBe(before)
-    }, 120_000)
+    test.skipIf(!pulled(image))(
+      `${name}: the icon is put in place byte for byte, the server's own, and the image is given none`,
+      async () => {
+        rmSync(join(root, 'data'), { recursive: true, force: true })
+        mkdirSync(join(root, 'data'))
+        const said = await iconStep(image, 'file:///t/icon.png')
+        expect(said).toContain('ICON=none OVERRIDE_ICON=none')
+        const placed = join(root, 'data', 'server-icon.png')
+        expect(readFileSync(placed).equals(ICON)).toBe(true)
+        expect(statSync(placed).uid).toBe(1000)
+        // The same icon again is left as it is.
+        const before = statSync(placed).mtimeMs
+        expect(await iconStep(image, 'file:///t/icon.png')).toContain('ICON=none OVERRIDE_ICON=none')
+        expect(statSync(placed).mtimeMs).toBe(before)
+      },
+      120_000,
+    )
 
-    test(`${name}: an icon curl can't fetch is left to the image, which has ImageMagick`, async () => {
-      rmSync(join(root, 'data'), { recursive: true, force: true })
-      mkdirSync(join(root, 'data'))
-      const said = await iconStep(image, 'file:///t/missing.png')
-      expect(said).toContain('ICON=file:///t/missing.png OVERRIDE_ICON=TRUE')
-      expect(existsSync(join(root, 'data', 'server-icon.png'))).toBe(false)
-    }, 120_000)
+    test.skipIf(!pulled(image))(
+      `${name}: an icon curl can't fetch is left to the image, which has ImageMagick`,
+      async () => {
+        rmSync(join(root, 'data'), { recursive: true, force: true })
+        mkdirSync(join(root, 'data'))
+        const said = await iconStep(image, 'file:///t/missing.png')
+        expect(said).toContain('ICON=file:///t/missing.png OVERRIDE_ICON=TRUE')
+        expect(existsSync(join(root, 'data', 'server-icon.png'))).toBe(false)
+      },
+      120_000,
+    )
   }
 })
