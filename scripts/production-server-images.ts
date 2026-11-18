@@ -69,7 +69,26 @@ export async function inRegistry(
   throw new Error(`registry.fly.io answered ${response.status} for ${app}:${tag}`)
 }
 
-/** `fly deploy --build-only --push` of the server image, as the apps' own images are built (production-edge-deploy.ts). */
+const REPOSITORY = resolve(import.meta.dir, '..')
+
+/**
+ * The arguments of `fly deploy --build-only --push` for the server image, as the apps' own images
+ * are built (production-edge-deploy.ts). Fly works in the image's folder and reads `--config` from
+ * there, so the app's config, given from the repository root, is made absolute first.
+ */
+export function flyBuildArgs(
+  app: string,
+  config: string,
+  tag: string,
+  args: Readonly<Record<string, string>>,
+): string[] {
+  const flags = ['deploy', dirname(SERVER_DOCKERFILE), '--build-only', '--push', '--remote-only']
+  flags.push('--dockerfile', SERVER_DOCKERFILE, '--image-label', tag)
+  flags.push('--config', resolve(REPOSITORY, config), '--app', app)
+  for (const [name, value] of Object.entries(args)) flags.push('--build-arg', `${name}=${value}`)
+  return flags
+}
+
 function flyBuild(
   app: string,
   config: string,
@@ -77,9 +96,7 @@ function flyBuild(
   args: Readonly<Record<string, string>>,
   env: NodeJS.ProcessEnv,
 ) {
-  const flags = ['deploy', dirname(SERVER_DOCKERFILE), '--build-only', '--push', '--remote-only']
-  flags.push('--dockerfile', SERVER_DOCKERFILE, '--image-label', tag, '--config', config, '--app', app)
-  for (const [name, value] of Object.entries(args)) flags.push('--build-arg', `${name}=${value}`)
+  const flags = flyBuildArgs(app, config, tag, args)
   let built = spawnSync('fly', flags, { stdio: 'inherit', env })
   // Depot's builders speak gRPC over TLS, which an intercepting proxy breaks; Fly's own come in over WireGuard.
   if (built.status !== 0) built = spawnSync('fly', [...flags, '--depot=false'], { stdio: 'inherit', env })

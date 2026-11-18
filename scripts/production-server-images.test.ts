@@ -7,9 +7,11 @@
  * only what is missing and goes on past a build that stops.
  */
 import { describe, expect, test } from 'bun:test'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
+import { isAbsolute } from 'node:path'
 import {
   buildServerImages,
+  flyBuildArgs,
   inRegistry,
   SERVER_DOCKERFILE,
   SERVER_IMAGE_BUILDS,
@@ -39,6 +41,24 @@ describe('a server image tag', () => {
     // Each base named in the Dockerfile's header is the one built.
     for (const { args } of SERVER_IMAGE_BUILDS)
       expect(DOCKERFILE).toContain((args.BASE ?? '').replace('mirror.gcr.io/library/', ''))
+  })
+})
+
+describe('the build', () => {
+  // Fly works in the image's folder and reads --config from there; a relative path found nothing.
+  test('gives Fly the app config as an absolute path that exists, and every build argument', () => {
+    const args = flyBuildArgs('bly-prod-control', 'infra/fly/control.toml', 'server-java8-abc', {
+      BASE: 'b',
+      MC_HELPER_VERSION: 'h',
+    })
+    const config = args[args.indexOf('--config') + 1] ?? ''
+    expect(isAbsolute(config)).toBe(true)
+    expect(existsSync(config)).toBe(true)
+    expect(args.slice(0, 2)).toEqual(['deploy', SERVER_DOCKERFILE.replace(/\/Dockerfile$/, '')])
+    expect(args).toContain('--build-only')
+    expect(args).toContain('--push')
+    expect(args.join(' ')).toContain('--image-label server-java8-abc')
+    expect(args.join(' ')).toContain('--build-arg BASE=b --build-arg MC_HELPER_VERSION=h')
   })
 })
 
