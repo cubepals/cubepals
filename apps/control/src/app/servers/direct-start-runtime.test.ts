@@ -18,6 +18,7 @@ import {
   mkdtempSync,
   readFileSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -218,12 +219,30 @@ describe('a record on a volume the server can write', () => {
     expect(boot()).toEqual(SCRIPTED)
   })
 
-  test('is left alone where the volume is root’s: nothing starts at once as root', () => {
+  test('on a volume mounted as root’s, as Fly mounts it at every boot, is run once the volume is the server user’s, as the image makes it', () => {
     if (!AS_ROOT) return
     boot()
     rmSync(join(root, 'gosu.log'), { force: true })
     chownSync(join(root, 'data'), 0, 0)
-    expect(boot()).toEqual(SCRIPTED)
-    expect(handedOver()).toEqual([])
+    chownSync(record(), 0, 0)
+    expect(boot()).toEqual([`[init] Changing ownership of {data} to ${SERVER_USER} ...`, DIRECT, RAN])
+    // Everything on it is the server user's again, as after the image's own `chown -R`.
+    expect(statSync(join(root, 'data')).uid).toBe(SERVER_USER)
+    expect(statSync(`${record()}.last`).uid).toBe(SERVER_USER)
+    const as = `${SERVER_USER}:${SERVER_USER}`
+    expect(handedOver()).toEqual([`${as} direct-start check`, `${as} direct-start run`])
+  })
+
+  test('is left alone where the image runs the server as root, or keeps the volume’s owner: nothing starts at once as root', () => {
+    if (!AS_ROOT) return
+    for (const env of [{ UID: '0', GID: '0' }, { SKIP_CHOWN_DATA: 'true' }]) {
+      chownSync(join(root, 'data'), 0, 0)
+      boot(env)
+      rmSync(join(root, 'gosu.log'), { force: true })
+      chownSync(join(root, 'data'), 0, 0)
+      expect(boot(env)).toEqual(SCRIPTED)
+      expect(handedOver()).toEqual([])
+      expect(statSync(join(root, 'data')).uid).toBe(0)
+    }
   })
 })
