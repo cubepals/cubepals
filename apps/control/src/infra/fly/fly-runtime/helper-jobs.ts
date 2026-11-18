@@ -12,10 +12,12 @@
  */
 
 import {
+  GZIP_MAGIC,
   NOT_ARCHIVED,
   type PartsUpload,
   type PutPart,
   type UploadTarget,
+  ZSTD_MAGIC,
 } from '../../../app/ports/runtime.ts'
 import { job } from './helper-machine.ts'
 
@@ -119,17 +121,26 @@ export function partsPut(line: string): PutPart[] {
  * Given the `sha256` the archive was written with, the bytes downloaded are hashed as they are
  * unpacked, every one of them, what follows the archive's end included, and a different hash
  * empties the volume and fails the job: a wrong or swapped archive never reaches a server.
+ *
+ * gzip or zstd, told apart by the archive's first four bytes, read on their own first. The
+ * inflater's failure fails the job (the helper runs under pipefail), and each stage drains what
+ * is left of its input once it ends, so one that stops early never cuts off the one before it.
  */
 export function restoreJob(url: string, sha256?: string | null): string {
-  const untar = 'tar -xzf - -C /data --no-same-owner --no-same-permissions'
-  if (!sha256) return job([`  curl -fsSL ${quote(url)} | ${untar} &&`, ...SETTLE].join('\n'))
+  const untar = 'tar -xf - -C /data --no-same-owner --no-same-permissions'
+  const unpack = `{ $i; i_ended=$?; cat > /dev/null; exit $i_ended; } | { ${untar}; untarred=$?; cat > /dev/null; exit $untarred; }`
+  const inflater = [
+    ...INFLATER.map((line) => `  ${line}`),
+    `  i=$(inflater "$(curl -fsSL -r 0-3 ${quote(url)} | head -c 4 | od -An -tx1 | tr -d ' \\n')") &&`,
+  ]
+  if (!sha256) return job([...inflater, `  curl -fsSL ${quote(url)} | ${unpack} &&`, ...SETTLE].join('\n'))
   if (!/^[0-9a-f]{64}$/i.test(sha256)) throw new Error(`${sha256} isn't a sha256`)
   return job(
     [
+      ...inflater,
       '  rm -f /tmp/archive.pipe /tmp/archive.sha256 && mkfifo /tmp/archive.pipe &&',
       "  { sha256sum < /tmp/archive.pipe | cut -d' ' -f1 > /tmp/archive.sha256 & } &&",
-      // tar stops at the archive's end: the rest is read too, so the hash covers every byte.
-      `  curl -fsSL ${quote(url)} | tee /tmp/archive.pipe | { ${untar}; untarred=$?; cat > /dev/null; exit $untarred; } &&`,
+      `  curl -fsSL ${quote(url)} | tee /tmp/archive.pipe | ${unpack} &&`,
       '  wait &&',
       `  if [ "$(cat /tmp/archive.sha256)" != ${quote(sha256.toLowerCase())} ]; then`,
       '    find /data -mindepth 1 -delete; echo "the archive downloaded isn\'t the one recorded: $(cat /tmp/archive.sha256)" >&2; exit 1;',
@@ -138,6 +149,21 @@ export function restoreJob(url: string, sha256?: string | null): string {
     ].join('\n'),
   )
 }
+
+const hex = (bytes: readonly number[]) => bytes.map((byte) => byte.toString(16).padStart(2, '0')).join('')
+/**
+ * Shell: `inflater <hex>` prints the command that inflates an archive starting with those bytes,
+ * gzip or zstd (`GZIP_MAGIC`, `ZSTD_MAGIC`), and fails for neither.
+ */
+const INFLATER = [
+  'inflater() {',
+  '  case "$1" in',
+  `    ${hex(ZSTD_MAGIC)}*) echo "zstd -dcq" ;;`,
+  `    ${hex(GZIP_MAGIC)}*) echo "gzip -dc" ;;`,
+  '    *) echo "the archive is neither gzip nor zstd" >&2; return 1 ;;',
+  '  esac',
+  '}',
+]
 
 /** What a restore does once the archive is unpacked, as the job's comment says. */
 const SETTLE = [
