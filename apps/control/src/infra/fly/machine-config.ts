@@ -3,7 +3,13 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { createHash } from 'node:crypto'
-import type { ProgressSink, RuntimeSpec, RuntimeTags } from '../../app/ports/runtime.ts'
+import {
+  type ProgressSink,
+  RESTORE_MARKS,
+  RESTORE_VARIABLES,
+  type RuntimeSpec,
+  type RuntimeTags,
+} from '../../app/ports/runtime.ts'
 import type { FlySchemas } from './client.ts'
 
 type Machine = FlySchemas['Machine']
@@ -132,14 +138,11 @@ export async function startStep(progress: ProgressSink, existing: Machine | null
   await progress.step(asleep === null ? 'booting' : 'resuming')
 }
 
-/**
- * The variable the game image's own restore step reads (`minecraft/restore-step.ts`, whose test
- * holds the two equal): `<sha256> <link>`.
- */
-export const RESTORE_VARIABLE = 'BLOCKLY_RESTORE'
+/** The variable the game's own restore step reads, `<sha256> <link>` (`RESTORE_VARIABLES`). */
+export const [RESTORE_VARIABLE] = RESTORE_VARIABLES
 
-/** The mark the step writes once the world is whole (`RESTORED_MARK`, held equal by its test). */
-export const RESTORED_MARK = '.blockly-restored'
+/** The mark the step writes once the world is whole (`RESTORE_MARKS`). */
+export const [, RESTORED_MARK] = RESTORE_MARKS
 
 /**
  * What a machine is given to bring its world back from an archive itself, before its server

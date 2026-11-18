@@ -19,19 +19,27 @@
  * until the new one is whole, which a helper machine does (`infra/fly`).
  */
 
-import type { RuntimeObservation } from '../app/ports/runtime.ts'
+import type {
+  NOT_ARCHIVED,
+  RESTORE_MARKS,
+  RESTORE_VARIABLES,
+  RuntimeObservation,
+} from '../app/ports/runtime.ts'
 import { ARCHIVE_INFLATER } from './archive-unpack.ts'
 import { DATA_DIR } from './jars.ts'
 
-/** `<sha256> <link>`: every copy a world rests in has its sha256. Held equal to Fly's copy. */
-export const RESTORE_VARIABLE = 'BLOCKLY_RESTORE'
+/**
+ * `<sha256> <link>`: every copy a world rests in has its sha256. The runtime port's name
+ * (`RESTORE_VARIABLES`), typed so: minecraft/ takes only types from it.
+ */
+export const RESTORE_VARIABLE: (typeof RESTORE_VARIABLES)[0] = 'BLOCKLY_RESTORE'
 
 /**
- * The marks at the top of the volume: one while a restore runs, one once it is whole. Neither is
- * archived (`NOT_ARCHIVED`).
+ * The marks at the top of the volume: one while a restore runs, one once it is whole. The port's
+ * (`RESTORE_MARKS`), and neither is archived (`NOT_ARCHIVED`).
  */
-export const RESTORING_MARK = '.blockly-restoring'
-export const RESTORED_MARK = '.blockly-restored'
+export const RESTORING_MARK: (typeof RESTORE_MARKS)[0] & (typeof NOT_ARCHIVED)[number] = '.blockly-restoring'
+export const RESTORED_MARK: (typeof RESTORE_MARKS)[1] & (typeof NOT_ARCHIVED)[number] = '.blockly-restored'
 
 /** The exit that says the world couldn't be brought back, as distinct from a start that failed. */
 export const RESTORE_FAILED_EXIT = 75

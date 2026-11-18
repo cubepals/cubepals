@@ -63,11 +63,20 @@ interface PortSpec {
  * Names at the top of a server's storage that no archive of it holds, and no measure of it
  * counts: what its workload makes again by itself, such as a startup cache. A runtime that
  * archives the storage as files leaves them out; a copy of the whole disk has them, a provider's
- * volume snapshot or a node's own. The restore marks are a machine's own record of bringing its
- * world back (`minecraft/restore-step.ts`, held equal by its test): one carried in an archive would
- * say a later volume was restored before it was.
+ * volume snapshot or a node's own. The restore marks (`RESTORE_MARKS`) are a machine's own record of
+ * bringing its world back: one carried in an archive would say a later volume was restored before
+ * it was.
  */
 export const NOT_ARCHIVED = ['.blockly-remade', '.blockly-restoring', '.blockly-restored'] as const
+
+/**
+ * A machine that brings its world back from an archive itself, before its server starts
+ * (`minecraft/restore-step.ts`, whose names take these types): the variable that names the archive,
+ * `<sha256> <link>`, and the marks at the top of its storage, one while it runs and one once the
+ * world is whole. A runtime sets the variable and reads the marks; neither mark is archived.
+ */
+export const RESTORE_VARIABLES = ['BLOCKLY_RESTORE'] as const
+export const RESTORE_MARKS = ['.blockly-restoring', '.blockly-restored'] as const
 
 /**
  * How an archive of a server's storage may be compressed, told by its first bytes: gzip, as every
