@@ -7,7 +7,7 @@ import { createHash, randomBytes } from 'node:crypto'
 import { chmod, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { gzipSync, zstdCompressSync } from 'node:zlib'
+import { gzipSync, constants as zlib, zstdCompressSync } from 'node:zlib'
 import type { RuntimeSpec } from '../../app/ports/runtime.ts'
 import { MemoryStore } from '../../testing/memory-store.ts'
 import { script, scriptOnNew, type Verb, workloadConfig } from './sandbox-scripts.ts'
@@ -327,6 +327,13 @@ describe('the sandbox program’s restore', () => {
     await writeFile(join(snaps, 'g.tar.gz'), gzipSync(packed))
     await writeFile(join(snaps, 'z.tar.gz'), zstdCompressSync(packed))
     await writeFile(join(snaps, 'x.tar.gz'), 'neither gzip nor zstd, at any length')
+    // Whole tar inside, a wrong checksum around it: gzip's CRC-32, zstd's content checksum.
+    const crc = gzipSync(packed)
+    crc[crc.length - 8] = (crc.at(-8) ?? 0) ^ 0xff
+    await writeFile(join(snaps, 'crc.tar.gz'), crc)
+    const sum = zstdCompressSync(packed, { params: { [zlib.ZSTD_c_checksumFlag]: 1 } })
+    sum[sum.length - 1] = (sum.at(-1) ?? 0) ^ 0xff
+    await writeFile(join(snaps, 'sum.tar.gz'), sum)
     await mkdir(shims)
     await writeFile(join(shims, 'sudo'), '#!/bin/sh\n[ "$1" = -n ] && shift\nexec "$@"\n')
     await writeFile(join(shims, 'docker'), '#!/bin/sh\nexit 0\n')
@@ -363,5 +370,13 @@ describe('the sandbox program’s restore', () => {
     await writeFile(join(volumes, data, 'kept'), 'still here')
     expect(run('x.tar.gz')).toStartWith('failed')
     expect((await readdir(join(volumes, data))).sort()).toEqual(['kept', 'world'])
+  })
+
+  test('one whose checksum is wrong is refused, and the world stays as it was', async () => {
+    await writeFile(join(volumes, data, 'kept'), 'still here')
+    for (const file of ['crc.tar.gz', 'sum.tar.gz']) {
+      expect(run(file)).toStartWith('failed')
+      expect((await readdir(join(volumes, data))).sort()).toEqual(['kept', 'world'])
+    }
   })
 })

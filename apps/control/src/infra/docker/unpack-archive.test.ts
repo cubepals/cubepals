@@ -5,7 +5,7 @@
 /**
  * The Docker runtime filling a volume from an archive, in its archiver's own image: gzip, as every
  * archive so far, and zstd, told apart by their first bytes; and a download that is neither leaves
- * the world as it was.
+ * the world as it was, as does one whose checksum is wrong under whole tar headers.
  */
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { randomUUID } from 'node:crypto'
@@ -15,7 +15,7 @@ import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { gzipSync, zstdCompressSync } from 'node:zlib'
+import { gzipSync, constants as zlib, zstdCompressSync } from 'node:zlib'
 import Docker from 'dockerode'
 import { unpackArchive } from './docker-runtime/archives.ts'
 import { helperRunner } from './docker-runtime/helper.ts'
@@ -42,6 +42,13 @@ describe.skipIf(!existsSync(SOCKET))('a Docker volume filled from an archive', (
     served.set('/world.tgz', gzipSync(packed))
     served.set('/world.tzst', zstdCompressSync(packed))
     served.set('/garbage', Buffer.from('not an archive at all'.repeat(10)))
+    // Whole tar inside, a wrong checksum around it: gzip's CRC-32, zstd's content checksum.
+    const crc = gzipSync(packed)
+    crc[crc.length - 8] = (crc.at(-8) ?? 0) ^ 0xff
+    served.set('/crc.tgz', crc)
+    const sum = zstdCompressSync(packed, { params: { [zlib.ZSTD_c_checksumFlag]: 1 } })
+    sum[sum.length - 1] = (sum.at(-1) ?? 0) ^ 0xff
+    served.set('/sum.tzst', sum)
     server = createServer((request, response) => {
       const body = served.get(request.url ?? '')
       if (body === undefined) return response.writeHead(404).end()
@@ -85,5 +92,15 @@ describe.skipIf(!existsSync(SOCKET))('a Docker volume filled from an archive', (
     })
     await expect(unpackArchive(helper, volume, { url: `${base}/garbage` })).rejects.toThrow()
     expect(await files()).toBe('./old')
+  }, 120_000)
+
+  test('one whose checksum is wrong fails, and the world stays as it was', async () => {
+    await helper(READER, ['sh', '-c', 'find /to -mindepth 1 -delete && echo kept > /to/old'], {
+      mounts: [{ Type: 'volume', Source: volume, Target: '/to' }],
+    })
+    for (const name of ['/crc.tgz', '/sum.tzst']) {
+      await expect(unpackArchive(helper, volume, { url: `${base}${name}` })).rejects.toThrow()
+      expect(await files()).toBe('./old')
+    }
   }, 120_000)
 })

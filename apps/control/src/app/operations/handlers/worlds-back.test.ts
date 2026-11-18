@@ -12,7 +12,7 @@ import { afterAll, beforeAll, expect, test } from 'bun:test'
 import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { gzipSync, zstdCompressSync } from 'node:zlib'
+import { gzipSync, constants as zlib, zstdCompressSync } from 'node:zlib'
 import { until } from '@blockly/contracts/waits'
 import { DATA_DIR } from '../../../minecraft/jars.ts'
 import { bringWorldsBackCommand } from '../../../minecraft/worlds.ts'
@@ -29,10 +29,17 @@ beforeAll(async () => {
   const tar = Bun.spawnSync(['tar', '-cf', join(root, 'w.tar'), '-C', join(root, 'w'), '.'])
   if (tar.exitCode !== 0) throw new Error('tar failed')
   const packed = await readFile(join(root, 'w.tar'))
+  // Whole tar inside, a wrong checksum around it: gzip's CRC-32, zstd's content checksum.
+  const crc = gzipSync(packed)
+  crc[crc.length - 8] = (crc.at(-8) ?? 0) ^ 0xff
+  const sum = zstdCompressSync(packed, { params: { [zlib.ZSTD_c_checksumFlag]: 1 } })
+  sum[sum.length - 1] = (sum.at(-1) ?? 0) ^ 0xff
   for (const [name, bytes] of [
     ['gzip', gzipSync(packed)],
     ['zstd', zstdCompressSync(packed)],
     ['neither', Buffer.from('not an archive')],
+    ['crc', crc],
+    ['sum', sum],
   ] as const) {
     await writeFile(join(root, `${name}.archive`), bytes)
     archives.set(name, `file://${join(root, `${name}.archive`)}`)
@@ -74,4 +81,9 @@ test('a gzip archive and a zstd one alike replace the world there', async () => 
 
 test('an archive in neither leaves the world as it was', async () => {
   expect(await back(archives.get('neither') ?? '')).toBe('1 current')
+})
+
+test('one whose checksum is wrong leaves the world as it was', async () => {
+  expect(await back(archives.get('crc') ?? '')).toBe('1 current')
+  expect(await back(archives.get('sum') ?? '')).toBe('1 current')
 })

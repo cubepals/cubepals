@@ -83,18 +83,21 @@ export function bringWorldsBackCommand(url: string, directories: readonly string
     ARCHIVE_INFLATER,
     `cd ${DATA_DIR} || exit 1`,
     `t=${BRINGING_BACK}`,
-    'rm -rf -- "$t" "$t.done" && mkdir -- "$t" || exit 1',
+    'rm -rf -- "$t" "$t.done" "$t.broken" && mkdir -- "$t" || exit 1',
     '(',
     '  s=1',
     // gzip or zstd, by the archive's first bytes, read on their own before it is streamed whole.
+    // sh has no pipefail: a download or an inflater that fails (a bad checksum under whole tar
+    // headers) leaves a mark, so tar's success alone never puts a damaged world back.
     '  if i=$(inflater "$(curl -fsS -r 0-3 "$0" | head -c 4 | od -An -tx1 | tr -d " \\n")") &&',
-    '    curl -fsS "$0" | $i | tar -xf - -C "$t" --no-anchored -- "$@"; then',
+    '    { curl -fsS "$0" || : > "$t.broken"; } | { $i || : > "$t.broken"; } |',
+    '    tar -xf - -C "$t" --no-anchored -- "$@" && [ ! -e "$t.broken" ]; then',
     '    s=0',
     '    for d in "$@"; do',
     '      if [ -e "$t/$d" ]; then rm -rf -- "$d" && mv -- "$t/$d" "$d" || s=1; fi',
     '    done',
     '  fi',
-    '  rm -rf -- "$t"',
+    '  rm -rf -- "$t" "$t.broken"',
     '  echo "$s" > "$t.done"',
     ') </dev/null >/dev/null 2>&1 &',
   ].join('\n')
