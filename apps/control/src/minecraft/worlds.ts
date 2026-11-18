@@ -7,6 +7,7 @@
  * so, the level names it runs, the command that removes worlds it no longer keeps, and the one
  * that copies worlds back from a copy of the volume.
  */
+import { ARCHIVE_INFLATER } from './archive-unpack.ts'
 import { DATA_DIR } from './jars.ts'
 import { starterOf } from './starter.ts'
 
@@ -72,19 +73,22 @@ export function pruneWorldsCommand(levelNames: readonly string[]): readonly stri
 const BRINGING_BACK = '.blockly-worlds-back'
 
 /**
- * One exec that starts copying `directories` back from the gzipped tarball of a volume at `url`,
+ * One exec that starts copying `directories` back from the tarball of a volume at `url`, gzip or zstd,
  * in the background, so a big world isn't held to the time an exec may take. Each is unpacked
  * beside the volume's first, then takes the place of what is there, whole. The link and the names
  * are arguments, never part of the script. `WORLDS_BACK` reads how it went.
  */
 export function bringWorldsBackCommand(url: string, directories: readonly string[]): readonly string[] {
   const script = [
+    ARCHIVE_INFLATER,
     `cd ${DATA_DIR} || exit 1`,
     `t=${BRINGING_BACK}`,
     'rm -rf -- "$t" "$t.done" && mkdir -- "$t" || exit 1',
     '(',
     '  s=1',
-    '  if curl -fsS "$0" | tar -xzf - -C "$t" --no-anchored -- "$@"; then',
+    // gzip or zstd, by the archive's first bytes, read on their own before it is streamed whole.
+    '  if i=$(inflater "$(curl -fsS -r 0-3 "$0" | head -c 4 | od -An -tx1 | tr -d " \\n")") &&',
+    '    curl -fsS "$0" | $i | tar -xf - -C "$t" --no-anchored -- "$@"; then',
     '    s=0',
     '    for d in "$@"; do',
     '      if [ -e "$t/$d" ]; then rm -rf -- "$d" && mv -- "$t/$d" "$d" || s=1; fi',

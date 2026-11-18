@@ -12,7 +12,8 @@
 import { createHash } from 'node:crypto'
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import type { ArchiveTarget, PutPart } from '../../../app/ports/runtime.ts'
+import { zstdDecompressSync } from 'node:zlib'
+import { type ArchiveTarget, GZIP_MAGIC, type PutPart, ZSTD_MAGIC } from '../../../app/ports/runtime.ts'
 import { run } from './command.ts'
 
 /**
@@ -58,14 +59,21 @@ export async function exportArchive(
   }
 }
 
-/** The archive at `url`, downloaded beside `dir` and unpacked into it. */
+/**
+ * The archive at `url`, downloaded beside `dir` and unpacked into it: gzip or zstd, by its first
+ * bytes, zstd inflated here so that tar needs no zstd of its own.
+ */
 export async function unpackArchive(url: string, dir: string): Promise<void> {
   const response = await fetch(url)
   if (!response.ok) throw new Error(`Downloading the archive answered ${response.status}`)
-  const file = `${dir}.download.tar.gz`
-  await writeFile(file, Buffer.from(await response.arrayBuffer()))
+  const bytes = Buffer.from(await response.arrayBuffer())
+  const starts = (magic: readonly number[]) => magic.every((byte, at) => bytes[at] === byte)
+  const codec = starts(ZSTD_MAGIC) ? 'zstd' : starts(GZIP_MAGIC) ? 'gzip' : null
+  if (codec === null) throw new Error('The archive is neither gzip nor zstd')
+  const file = `${dir}.download.tar`
+  await writeFile(file, codec === 'zstd' ? zstdDecompressSync(bytes) : bytes)
   try {
-    await run('tar', ['-xzf', file, '-C', dir])
+    await run('tar', [codec === 'zstd' ? '-xf' : '-xzf', file, '-C', dir])
   } finally {
     await rm(file, { force: true })
   }
