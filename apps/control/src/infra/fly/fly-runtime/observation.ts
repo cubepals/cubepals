@@ -98,6 +98,6 @@ export function observationOf(machine: Machine | null, now = new Date()): Runtim
   }
   // The restart policy (on-failure) starts it again after a failed exit, and the event stays.
   if (state !== 'stopped' && exit && !exit.requested && (exit.code !== 0 || exit.oom) && exit.at > 0)
-    return { state, at: now, failedAt: new Date(exit.at), ...killed }
+    return { state, at: now, failedAt: new Date(exit.at), failedCode: exit.code, ...killed }
   return { state, at: now, ...killed }
 }

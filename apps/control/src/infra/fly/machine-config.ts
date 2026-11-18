@@ -133,6 +133,22 @@ export async function startStep(progress: ProgressSink, existing: Machine | null
 }
 
 /**
+ * The variable the game image's own restore step reads (`minecraft/restore-step.ts`, whose test
+ * holds the two equal): `<sha256> <link>`, or `- <link>` with none recorded.
+ */
+export const RESTORE_VARIABLE = 'BLOCKLY_RESTORE'
+
+/**
+ * What a machine is given to bring its world back from an archive itself, before its server
+ * starts. Set on that one machine's config, never in the spec: the next config the spec writes
+ * leaves it out, and the step's own mark keeps a start before then from doing it again.
+ */
+export function restoreInMachine(url: string, sha256: string | null | undefined): Record<string, string> {
+  if (sha256 && !/^[0-9a-f]{64}$/i.test(sha256)) throw new Error(`${sha256} isn't a sha256`)
+  return { [RESTORE_VARIABLE]: `${sha256 ? sha256.toLowerCase() : '-'} ${url}` }
+}
+
+/**
  * A RuntimeSpec as a Fly machine. Every port is a raw TCP or UDP service on the app's Flycast
  * address; the platform never starts or stops the machine by itself, so power has one writer.
  * Secrets travel as app secrets, never in the config. A config replaces the machine's metadata

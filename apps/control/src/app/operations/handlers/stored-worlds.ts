@@ -12,6 +12,7 @@ import { DAY_MS } from '@blockly/contracts/durations'
 import { type AppliedConfigJson, type Db, schema, type Tx } from '@blockly/db'
 import { entitlementsOf } from '../../../domain/account/entitlements.ts'
 import type { MinecraftServer } from '../../../domain/server/server.ts'
+import { stoppedByRestore } from '../../../minecraft/restore-step.ts'
 import { markReseed } from '../../access/persistence.ts'
 import { loadControls, loadStanding } from '../../accounts/persistence.ts'
 import { type BackupRecord, expireSnapshotsOf, setExpiry, storedCopy } from '../../backups/persistence.ts'
@@ -39,7 +40,7 @@ const KEEPING_REBUILDS_STORAGE =
 
 export function storedWorlds(deps: {
   db: Db
-  runtime: Pick<Runtimes, 'providers' | 'stop' | 'release' | 'restore'>
+  runtime: Pick<Runtimes, 'providers' | 'stop' | 'release' | 'restore' | 'observe'>
   specs: Pick<RuntimeSpecs, 'desired'>
   boot: Pick<BootSequence, 'run'>
   transitions: ServerTransitions
@@ -238,11 +239,13 @@ export function storedWorlds(deps: {
       await markReseed(db, server.id)
       try {
         const download = await archives.presignGet(copy.archiveKey, IMPORT_LINK_SECONDS, 'runtime')
+        // Booted at once, and let go if that fails (`bootsAtOnce`).
         const restored = await runtime.restore(
           binding.handle,
           { kind: 'archive', download, sha256: copy.sha256 },
           desired.spec,
           progressSink(ctx, server),
+          { bootsAtOnce: true },
         )
         await saveHandle(db, server.id, restored, server.regionKey)
         const started = await startCompute(server.id, restored)
@@ -251,8 +254,7 @@ export function storedWorlds(deps: {
         // Sent to the trash while it woke: the decommission behind this takes what it made.
         if (error instanceof NoLongerApplies) throw error
         // What went wrong is the platform's to read; the owner reads that the world is safe.
-        await backToStored(server.id, ctx.op.id, inFull(error))
-        const words = ownersWords(error)
+        const words = await wakeFailed(db, runtime, backToStored, server.id, ctx.op.id, error)
         return {
           status: 'failed',
           reason: `We couldn’t wake it just now${words === null ? '' : ` (${words})`}. Its world is safe; try again in a minute.`,
@@ -283,6 +285,28 @@ export function storedWorlds(deps: {
   }
 
   return { store, unstore }
+}
+
+/** What an owner reads, in the wake's failure, when its world couldn't be brought back. */
+const NOT_BACK = 'its world couldn’t be brought back from its copy'
+
+/**
+ * A wake that failed, its world put back to rest, and what its owner reads of why, or null. The
+ * server's machine is read before it is let go: a start its own restore stopped
+ * (`stoppedByRestore`) is said as a world that couldn't be brought back, not as a failed boot.
+ */
+async function wakeFailed(
+  db: Db,
+  runtime: Pick<Runtimes, 'providers' | 'observe'>,
+  backToStored: (serverId: string, wakeId: string, reason: string) => Promise<void>,
+  serverId: string,
+  wakeId: string,
+  error: unknown,
+): Promise<string | null> {
+  const { handle } = await loadRuntime(db, serverId, runtime.providers)
+  const notBack = handle !== null && stoppedByRestore(await runtime.observe(handle).catch(() => null))
+  await backToStored(serverId, wakeId, notBack ? `${NOT_BACK}. ${inFull(error)}` : inFull(error))
+  return notBack ? NOT_BACK : ownersWords(error)
 }
 
 /**

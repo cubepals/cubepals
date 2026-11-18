@@ -46,6 +46,7 @@ test('a crash for want of memory says when, beside its exit; a stop that went as
   expect(restarted).toMatchObject({
     state: 'running',
     failedAt: new Date(at),
+    failedCode: 137,
     killedForMemoryAt: new Date(at),
   })
 })

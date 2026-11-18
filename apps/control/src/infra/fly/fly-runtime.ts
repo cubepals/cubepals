@@ -117,7 +117,15 @@ import {
   requireVolume,
   volumesOf,
 } from './handle.ts'
-import { asleepOn, heldTags, META, machineConfig, portsOf, startStep } from './machine-config.ts'
+import {
+  asleepOn,
+  heldTags,
+  META,
+  machineConfig,
+  portsOf,
+  restoreInMachine,
+  startStep,
+} from './machine-config.ts'
 
 export { keyFromApp } from './fly-runtime/apps.ts'
 export { exportJob, partBatches, partsJob, partsPut, restoreJob } from './fly-runtime/helper-jobs.ts'
@@ -443,6 +451,12 @@ export class FlyRuntime implements MinecraftRuntime {
     }
     await progress.step('storage')
     let volume: Volume
+    // A server with no machine left that is booted at once, as one waking from rest, brings its
+    // world back in the machine it boots, before its server starts: no helper is made, started and
+    // destroyed first, and the image is pulled once. One that still has its world keeps it until the
+    // new volume is whole, which only a helper can promise, since a new machine replaces the old
+    // before it boots; and a move or a backup's restore counts on the world being there on return.
+    let restoring: Record<string, string> = {}
     if (from.kind === 'snapshot') {
       const snapshot = decodeSnapshot(from.snapshot)
       if (snapshot.app !== ref.app) throw new Error('That snapshot belongs to another server')
@@ -464,23 +478,27 @@ export class FlyRuntime implements MinecraftRuntime {
         this.snapshotLifetimeDays,
       )
       const volumeId = idOf(volume, 'a volume')
-      await volumeReady(this.#fly, ref.app, volumeId)
-      const job = restoreJob(from.download.url, from.sha256)
-      await whenRoom(
-        this.#roomWait,
-        () => helperJob(this.#fly, this.#deployment, ref.app, ref.region, volumeId, job),
-        {
-          waiting: () => progress.step('waiting_for_room'),
-          refused: () => deleteVolume(this.#fly, ref.app, volumeId),
-        },
-      )
+      if (options.bootsAtOnce && ref.machineId === null)
+        restoring = restoreInMachine(from.download.url, from.sha256)
+      else {
+        await volumeReady(this.#fly, ref.app, volumeId)
+        const job = restoreJob(from.download.url, from.sha256)
+        await whenRoom(
+          this.#roomWait,
+          () => helperJob(this.#fly, this.#deployment, ref.app, ref.region, volumeId, job),
+          {
+            waiting: () => progress.step('waiting_for_room'),
+            refused: () => deleteVolume(this.#fly, ref.app, volumeId),
+          },
+        )
+      }
     }
     // Nothing is replaced until the old world is kept; if it isn't, the new volume goes.
     await options.kept?.catch(async (error: unknown) => {
       await deleteVolume(this.#fly, ref.app, idOf(volume, 'a volume')).catch(() => undefined)
       throw error
     })
-    const next = await this.#replace(ref, volume, ref.region, spec, progress)
+    const next = await this.#replace(ref, volume, ref.region, spec, progress, { env: restoring })
     if (from.kind === 'archive') await clearEarlierWakes(this.#fly, ref.app, idOf(volume, 'a volume'))
     return next
   }
@@ -668,8 +686,14 @@ export class FlyRuntime implements MinecraftRuntime {
   // ─── internals ────────────────────────────────────────────────────────────────────────────
 
   /** The machine it replaces, or updates, hands on its tags. */
-  #config(key: string, spec: RuntimeSpec, volumeId: string, from: Machine | null): MachineConfig {
-    return machineConfig(spec, volumeId, {
+  #config(
+    key: string,
+    spec: RuntimeSpec,
+    volumeId: string,
+    from: Machine | null,
+    env: Readonly<Record<string, string>> = {},
+  ): MachineConfig {
+    return machineConfig({ ...spec, env: { ...spec.env, ...env } }, volumeId, {
       deployment: this.#deployment,
       server: key,
       tags: heldTags(from?.config?.metadata),
@@ -691,7 +715,7 @@ export class FlyRuntime implements MinecraftRuntime {
     region: string,
     spec: RuntimeSpec,
     progress: ProgressSink,
-    options: { hostLost?: boolean; keepStorage?: boolean } = {},
+    options: { hostLost?: boolean; keepStorage?: boolean; env?: Readonly<Record<string, string>> } = {},
   ): Promise<RuntimeHandle> {
     await progress.step('compute')
     const volumeId = idOf(volume, 'a volume')
@@ -705,7 +729,7 @@ export class FlyRuntime implements MinecraftRuntime {
           )
     const wasRunning = !options.hostLost && old?.state === 'started'
     const secretsVersion = await setSecrets(this.#fly, ref.app, spec.secrets)
-    const config = this.#config(ref.serverId, spec, volumeId, old)
+    const config = this.#config(ref.serverId, spec, volumeId, old, options.env)
     const name = `minecraft-${Date.now().toString(36)}`
     const make = () => createMachine(this.#fly, ref.app, region, config, secretsVersion, name)
     const machine = await whenRoom(this.#roomWait, make, {

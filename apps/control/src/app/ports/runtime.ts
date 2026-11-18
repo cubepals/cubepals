@@ -63,9 +63,11 @@ interface PortSpec {
  * Names at the top of a server's storage that no archive of it holds, and no measure of it
  * counts: what its workload makes again by itself, such as a startup cache. A runtime that
  * archives the storage as files leaves them out; a copy of the whole disk has them, a provider's
- * volume snapshot or a node's own.
+ * volume snapshot or a node's own. The restore marks are a machine's own record of bringing its
+ * world back (`minecraft/restore-step.ts`, held equal by its test): one carried in an archive would
+ * say a later volume was restored before it was.
  */
-export const NOT_ARCHIVED = ['.blockly-remade'] as const
+export const NOT_ARCHIVED = ['.blockly-remade', '.blockly-restoring', '.blockly-restored'] as const
 
 /**
  * How an archive of a server's storage may be compressed, told by its first bytes: gzip, as every
@@ -147,6 +149,8 @@ export interface RuntimeObservation {
    * leave it stopped: the same configuration, which usually stops the same way.
    */
   failedAt?: Date
+  /** That failed run's exit code, where the provider says. */
+  failedCode?: number
   /** The provider can't reach the host the compute is on; its storage may be gone with it. */
   hostLost?: boolean
   /**
@@ -223,6 +227,14 @@ export interface RestoreOptions {
    * is as it was.
    */
   kept?: Promise<unknown>
+  /**
+   * The caller boots the server as soon as this returns, and lets it go if that fails, as a wake
+   * from rest does. A runtime may then bring an archive's world back in the server's own machine
+   * as it starts, rather than before it returns; one that fails stops that start with the game's
+   * restore exit (`minecraft/restore-step.ts`). A move or a backup's restore, which count on the
+   * world being there when this returns, never set it.
+   */
+  bootsAtOnce?: boolean
 }
 
 /** Presigned by the ArchiveStore; consumed inside one operation, never persisted. */
