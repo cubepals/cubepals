@@ -398,7 +398,7 @@ count, and unpack beside the data before swapping it in by rename.
 **Archives** are gzip tarballs with `./`-relative paths, Blockly's existing archive format, with
 a sha256 recorded at upload. A restore from the fleet's own copy in the store sends it, and the
 node checks it; so does a restore from an application archive, with the sha256 its backup recorded
-when it was written (`backups.sha256`). An uploaded world, an archive made before that was kept,
+when it was written (`backups.sha256`), and so does Fly's restore helper. An uploaded world, an archive made before that was kept,
 and a snapshot's local copy carry none. gzip's fastest level: on real Minecraft data a fresh world
 compresses to about a quarter, while jars and libraries barely compress; on already-compressed
 region data packing is the bottleneck (73 MB/s single-threaded on the test VM).

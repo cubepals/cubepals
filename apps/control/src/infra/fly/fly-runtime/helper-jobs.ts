@@ -115,16 +115,35 @@ export function partsPut(line: string): PutPart[] {
  * user's (itzg's `start`, unless `SKIP_CHOWN_DATA`). It says `restored` only once the volume
  * holds it all: the server boots on the volume after the helper is destroyed, and without the
  * flush the files written last could come back empty, its level.dat among them.
+ *
+ * Given the `sha256` the archive was written with, the bytes downloaded are hashed as they are
+ * unpacked, every one of them, what follows the archive's end included, and a different hash
+ * empties the volume and fails the job: a wrong or swapped archive never reaches a server.
  */
-export function restoreJob(url: string): string {
+export function restoreJob(url: string, sha256?: string | null): string {
+  const untar = 'tar -xzf - -C /data --no-same-owner --no-same-permissions'
+  if (!sha256) return job([`  curl -fsSL ${quote(url)} | ${untar} &&`, ...SETTLE].join('\n'))
+  if (!/^[0-9a-f]{64}$/i.test(sha256)) throw new Error(`${sha256} isn't a sha256`)
   return job(
     [
-      `  curl -fsSL ${quote(url)} | tar -xzf - -C /data --no-same-owner --no-same-permissions &&`,
-      '  find /data -xdev ! -type f ! -type d -exec rm -f {} + &&',
-      '  chmod -R ug-s /data &&',
-      '  chown 0:0 /data &&',
-      '  sync &&',
-      '  echo restored',
+      '  rm -f /tmp/archive.pipe /tmp/archive.sha256 && mkfifo /tmp/archive.pipe &&',
+      "  { sha256sum < /tmp/archive.pipe | cut -d' ' -f1 > /tmp/archive.sha256 & } &&",
+      // tar stops at the archive's end: the rest is read too, so the hash covers every byte.
+      `  curl -fsSL ${quote(url)} | tee /tmp/archive.pipe | { ${untar}; untarred=$?; cat > /dev/null; exit $untarred; } &&`,
+      '  wait &&',
+      `  if [ "$(cat /tmp/archive.sha256)" != ${quote(sha256.toLowerCase())} ]; then`,
+      '    find /data -mindepth 1 -delete; echo "the archive downloaded isn\'t the one recorded: $(cat /tmp/archive.sha256)" >&2; exit 1;',
+      '  fi &&',
+      ...SETTLE,
     ].join('\n'),
   )
 }
+
+/** What a restore does once the archive is unpacked, as the job's comment says. */
+const SETTLE = [
+  '  find /data -xdev ! -type f ! -type d -exec rm -f {} + &&',
+  '  chmod -R ug-s /data &&',
+  '  chown 0:0 /data &&',
+  '  sync &&',
+  '  echo restored',
+]
