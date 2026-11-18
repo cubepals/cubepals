@@ -212,12 +212,13 @@ inflater() {
   esac
 }
 # gzip or zstd, by the archive's first bytes; checked whole before the world is emptied. pipefail
-# keeps the inflater's own failure (a bad checksum under whole tar headers) from tar's success.
+# keeps the inflater's own failure (a bad checksum under whole tar headers) from tar's success, and
+# tar's input is drained after it ends, so zeros padding the last record never cut the inflater off.
 fill() {
   running && fail "the workload is running"
   inflate=$(inflater "$(sudo -n head -c 4 "$1" | od -An -tx1 | tr -d ' \n')") || fail "the archive is neither gzip nor zstd"
-  ( set -o pipefail; sudo -n $inflate "$1" | sudo -n tar -tf - >/dev/null ) || fail "the archive is not whole"
-  sudo -n find "$DATA" -mindepth 1 -delete && ( set -o pipefail; sudo -n $inflate "$1" | sudo -n tar -xf - -C "$DATA" ) || fail "unpacking the world"
+  ( set -o pipefail; sudo -n $inflate "$1" | { sudo -n tar -tf - >/dev/null; s=$?; cat >/dev/null; exit $s; } ) || fail "the archive is not whole"
+  sudo -n find "$DATA" -mindepth 1 -delete && ( set -o pipefail; sudo -n $inflate "$1" | { sudo -n tar -xf - -C "$DATA"; s=$?; cat >/dev/null; exit $s; } ) || fail "unpacking the world"
 }
 restore_snapshot() {
   settle

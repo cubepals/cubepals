@@ -88,10 +88,12 @@ export function bringWorldsBackCommand(url: string, directories: readonly string
     '  s=1',
     // gzip or zstd, by the archive's first bytes, read on their own before it is streamed whole.
     // sh has no pipefail: a download or an inflater that fails (a bad checksum under whole tar
-    // headers) leaves a mark, so tar's success alone never puts a damaged world back.
+    // headers) leaves a mark, so tar's success alone never puts a damaged world back. tar's input
+    // is drained after it ends, so zeros padding the last record never cut the inflater off.
     '  if i=$(inflater "$(curl -fsS -r 0-3 "$0" | head -c 4 | od -An -tx1 | tr -d " \\n")") &&',
     '    { curl -fsS "$0" || : > "$t.broken"; } | { $i || : > "$t.broken"; } |',
-    '    tar -xf - -C "$t" --no-anchored -- "$@" && [ ! -e "$t.broken" ]; then',
+    '    (tar -xf - -C "$t" --no-anchored -- "$@"; r=$?; cat > /dev/null; exit $r) &&',
+    '    [ ! -e "$t.broken" ]; then',
     '    s=0',
     '    for d in "$@"; do',
     '      if [ -e "$t/$d" ]; then rm -rf -- "$d" && mv -- "$t/$d" "$d" || s=1; fi',

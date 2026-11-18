@@ -109,9 +109,11 @@ export async function unpackArchive(
         INFLATER,
         `${CURL} -o /tmp/world.archive "$SOURCE" &&`,
         'inflate=$(inflater "$(head -c 4 /tmp/world.archive | od -An -tx1 | tr -d " \\n")") &&',
-        '$inflate /tmp/world.archive | tar -tf - > /dev/null &&',
+        // tar's input is drained after it ends, so zeros padding the last record never cut the
+        // inflater off, which pipefail would count as a failure.
+        '$inflate /tmp/world.archive | { tar -tf - > /dev/null; s=$?; cat > /dev/null; exit $s; } &&',
         'find /to -mindepth 1 -delete &&',
-        '$inflate /tmp/world.archive | tar -xf - -C /to',
+        '$inflate /tmp/world.archive | { tar -xf - -C /to; s=$?; cat > /dev/null; exit $s; }',
       ].join('\n'),
     ],
     {

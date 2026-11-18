@@ -39,6 +39,10 @@ describe.skipIf(!existsSync(SOCKET))('a Docker volume filled from an archive', (
     const tar = Bun.spawnSync(['tar', '-cf', join(dir, 'world.tar'), '-C', join(dir, 'world'), '.'])
     if (tar.exitCode !== 0) throw new Error('tar failed')
     const packed = await readFile(join(dir, 'world.tar'))
+    // Whole and valid, its last record zeros past tar's end: tar is done before gzip is.
+    const pad = Bun.spawnSync(['tar', '-b', '512', '-cf', join(dir, 'pad.tar'), '-C', join(dir, 'world'), '.'])
+    if (pad.exitCode !== 0) throw new Error('tar failed')
+    served.set('/pad.tgz', gzipSync(await readFile(join(dir, 'pad.tar'))))
     served.set('/world.tgz', gzipSync(packed))
     served.set('/world.tzst', zstdCompressSync(packed))
     served.set('/garbage', Buffer.from('not an archive at all'.repeat(10)))
@@ -76,8 +80,8 @@ describe.skipIf(!existsSync(SOCKET))('a Docker volume filled from an archive', (
       })
     ).trim()
 
-  test('a gzip archive and a zstd one both fill it', async () => {
-    for (const name of ['/world.tgz', '/world.tzst']) {
+  test('a gzip archive, a zstd one and one padded with zeros all fill it', async () => {
+    for (const name of ['/world.tgz', '/world.tzst', '/pad.tgz']) {
       await helper(READER, ['sh', '-c', 'find /to -mindepth 1 -delete && echo stale > /to/old'], {
         mounts: [{ Type: 'volume', Source: volume, Target: '/to' }],
       })

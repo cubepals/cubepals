@@ -29,6 +29,9 @@ beforeAll(async () => {
   const tar = Bun.spawnSync(['tar', '-cf', join(root, 'w.tar'), '-C', join(root, 'w'), '.'])
   if (tar.exitCode !== 0) throw new Error('tar failed')
   const packed = await readFile(join(root, 'w.tar'))
+  // Whole and valid, its last record zeros past tar's end: tar is done before gzip is.
+  const pad = Bun.spawnSync(['tar', '-b', '512', '-cf', join(root, 'pad.tar'), '-C', join(root, 'w'), '.'])
+  if (pad.exitCode !== 0) throw new Error('tar failed')
   // Whole tar inside, a wrong checksum around it: gzip's CRC-32, zstd's content checksum.
   const crc = gzipSync(packed)
   crc[crc.length - 8] = (crc.at(-8) ?? 0) ^ 0xff
@@ -38,6 +41,7 @@ beforeAll(async () => {
     ['gzip', gzipSync(packed)],
     ['zstd', zstdCompressSync(packed)],
     ['neither', Buffer.from('not an archive')],
+    ['pad', gzipSync(await readFile(join(root, 'pad.tar')))],
     ['crc', crc],
     ['sum', sum],
   ] as const) {
@@ -77,6 +81,10 @@ async function back(archive: string): Promise<string> {
 test('a gzip archive and a zstd one alike replace the world there', async () => {
   expect(await back(archives.get('gzip') ?? '')).toBe('0 archived')
   expect(await back(archives.get('zstd') ?? '')).toBe('0 archived')
+})
+
+test('one whose last record is zeros past the end replaces it too', async () => {
+  expect(await back(archives.get('pad') ?? '')).toBe('0 archived')
 })
 
 test('an archive in neither leaves the world as it was', async () => {

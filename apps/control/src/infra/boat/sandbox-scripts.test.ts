@@ -321,11 +321,15 @@ describe('the sandbox program’s restore', () => {
     const tar = Bun.spawnSync(['tar', '-cf', join(root, 'w.tar'), '-C', world, '.'])
     if (tar.exitCode !== 0) throw new Error('tar failed')
     const packed = await readFile(join(root, 'w.tar'))
+    // Whole and valid, its last record zeros past tar's end: tar is done before gzip is.
+    const pad = Bun.spawnSync(['tar', '-b', '512', '-cf', join(root, 'pad.tar'), '-C', world, '.'])
+    if (pad.exitCode !== 0) throw new Error('tar failed')
     const snaps = join(volumes, 'blockly-snapshots', '_data')
     await mkdir(snaps, { recursive: true })
     await mkdir(join(volumes, 'blockly-data', '_data'), { recursive: true })
     await writeFile(join(snaps, 'g.tar.gz'), gzipSync(packed))
     await writeFile(join(snaps, 'z.tar.gz'), zstdCompressSync(packed))
+    await writeFile(join(snaps, 'pad.tar.gz'), gzipSync(await readFile(join(root, 'pad.tar'))))
     await writeFile(join(snaps, 'x.tar.gz'), 'neither gzip nor zstd, at any length')
     // Whole tar inside, a wrong checksum around it: gzip's CRC-32, zstd's content checksum.
     const crc = gzipSync(packed)
@@ -357,8 +361,8 @@ describe('the sandbox program’s restore', () => {
       .stdout.toString()
       .trim()
 
-  test('a gzip snapshot and a zstd one both come back whole', async () => {
-    for (const file of ['g.tar.gz', 'z.tar.gz']) {
+  test('a gzip snapshot, a zstd one and one padded with zeros all come back whole', async () => {
+    for (const file of ['g.tar.gz', 'z.tar.gz', 'pad.tar.gz']) {
       await writeFile(join(volumes, data, 'stale'), 'from before')
       expect(run(file)).toBe('ok restored')
       expect(await readdir(join(volumes, data))).toEqual(['world'])
