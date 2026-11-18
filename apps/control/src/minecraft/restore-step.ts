@@ -42,10 +42,13 @@ const WORK = '/tmp/blockly-restore'
 /**
  * The step. sh has no pipefail on the image's Ubuntu builds (dash), so a download, an inflater or
  * tar that fails leaves a mark, and each drains what is left of its input once it ends, so one
- * that stops early never cuts off the one before it.
+ * that stops early never cuts off the one before it. It runs as root, after the server has had the
+ * volume: a link at either mark is replaced first (`unlinked`, `volume-links.ts`), so neither the
+ * look nor the write follows one outside it.
  */
 export const RESTORE_STEP = [
   `${ARCHIVE_INFLATER}\n`,
+  `if [ -n "$${RESTORE_VARIABLE}" ]; then unlinked ${RESTORED_MARK}; unlinked ${RESTORING_MARK}; fi;`,
   `if [ -n "$${RESTORE_VARIABLE}" ] && [ ! -e ${DATA_DIR}/${RESTORED_MARK} ]; then`,
   `if [ -e ${DATA_DIR}/${RESTORING_MARK} ] || [ -z "$(find ${DATA_DIR} -mindepth 1 -maxdepth 1 ! -name lost+found | head -n 1)" ]; then`,
   `sha=\${${RESTORE_VARIABLE}%% *}; url=\${${RESTORE_VARIABLE}#* }; w=${WORK};`,

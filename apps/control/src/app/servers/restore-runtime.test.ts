@@ -34,6 +34,7 @@ import {
   restoreEnv,
   stoppedByRestore,
 } from '../../minecraft/restore-step.ts'
+import { UNLINKED } from '../../minecraft/volume-links.ts'
 import { NOT_ARCHIVED } from '../ports/runtime.ts'
 
 let root = ''
@@ -111,7 +112,10 @@ async function volume(): Promise<string> {
 /** Runs the step on `data` with the archive at `name`, checked against `hash`; its exit. */
 async function start(data: string, name: string, hash: string = sha256(served.get(name) ?? Buffer.alloc(0))) {
   const env = name === '' ? {} : restoreEnv(`http://127.0.0.1:${store.port}${name}`, hash)
-  const script = RESTORE_STEP.replaceAll('/tmp/blockly-restore', `${data}-work`).replaceAll('/data', data)
+  // As a start runs it: after what replaces a link where a step writes (`runtime-spec.ts`).
+  const script = `${UNLINKED} ${RESTORE_STEP}`
+    .replaceAll('/tmp/blockly-restore', `${data}-work`)
+    .replaceAll('/data', data)
   return Bun.spawn(['/bin/sh', '-c', script], {
     env: { PATH: `${shims}:${process.env.PATH}`, ...env },
     stderr: 'ignore',
@@ -169,6 +173,21 @@ describe('a world brought back in its own machine', () => {
     await writeFile(join(data, 'half-written.mca'), 'partial')
     expect(await start(data, '/world.tgz')).toBe(0)
     expect(await listed(data)).toEqual([RESTORED_MARK, 'lost+found', 'server.properties', 'world'])
+  })
+
+  test('a link at either mark is taken away before root reads or writes it; what it named is untouched', async () => {
+    const outside = join(root, 'outside-the-volume')
+    await writeFile(outside, 'not the volume’s')
+    // A server that took the done mark away and put links where both marks go, once its world was back.
+    const data = await volume()
+    expect(await start(data, '/world.tgz')).toBe(0)
+    await rm(join(data, RESTORED_MARK))
+    await symlink(outside, join(data, RESTORING_MARK))
+    await symlink(outside, join(data, RESTORED_MARK))
+    await start(data, '/world.tgz')
+    expect(await readFile(outside, 'utf8')).toBe('not the volume’s')
+    // Both links gone, and a world there: left as it is, nothing written.
+    expect(await listed(data)).toEqual(['lost+found', 'server.properties', 'world'])
   })
 
   test('a volume holding anything else is left as it is, and nothing is fetched', async () => {
