@@ -11,7 +11,7 @@
 # blocklyd, which the node endpoint hands to hosts as they join (FLEET_BLOCKLYD_BIN): one release
 # of cubepals/blocklyd, static (musl), pinned by digest. `bun scripts/blocklyd.ts bump <version>`
 # moves this line and the copies of the release's files beside the fleet adapter together.
-FROM ghcr.io/cubepals/blocklyd:0.3.7@sha256:3fbdf78e00b3b755efd8b4a81e4f34915ce19763e7a77d5dc3c659fd9de05993 AS blocklyd
+FROM ghcr.io/cubepals/blocklyd:0.3.8@sha256:f90a38623d30418a2a60d1214c4a72b48ff34d7375d555d1da0cb7ee9e20dcd0 AS blocklyd
 
 # The join reporter, the Paper plugin Cubepals places on servers (apps/reporter): built here from
 # its sources with the Gradle its wrapper names, and stored as an artifact as the control plane
