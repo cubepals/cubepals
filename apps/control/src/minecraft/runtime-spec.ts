@@ -19,6 +19,7 @@ import { CARRIED_STEP, carriedEnv, placesFiles } from './carried.ts'
 import { DATAPACKS_STEP, datapacksEnv, datapacksOf } from './datapacks.ts'
 import { DIRECT_START_STEP } from './direct-start.ts'
 import { WAITING_DATAPACK } from './duels-waiting.ts'
+import { heapEnv } from './heap-flags.ts'
 import { DATA_DIR, JAR_LISTS, jarsOf } from './jars.ts'
 import { PAPER_DEFAULTS_STEP } from './paper-defaults.ts'
 import { GAME_PORT, RCON_PORT } from './ports.ts'
@@ -165,7 +166,7 @@ const LOADER_VERSION_VARS: Partial<Record<Loader, string>> = {
  * 39,000 to 54,000 classes against vanilla's 25,000, and the metaspace, code cache and mixin
  * machinery live outside the heap. A live run proved the point — a modpack on the smallest size
  * with three quarters as heap sat at 93% of the container's memory before anybody joined, since
- * Aikar's flags pre-touch the whole heap at startup. Two thirds leaves a modded server about a
+ * Aikar's flags then pre-touched the whole heap at startup (`heap-flags.ts`). Two thirds leaves a modded server about a
  * gigabyte outside the heap, and still gives it three times the live heap the research measured.
  *
  * A vanilla 3 GB server needs that gigabyte too. Five bots exploring apart on one (2026-09-28)
@@ -188,6 +189,9 @@ function heapMb(input: Pick<RuntimeSpecInput, 'revision' | 'memoryTier'>): numbe
  */
 const ALPINE_JAVA: ReadonlySet<number> = new Set([21, 25])
 
+/** The tag suffix of the image's Alpine build, which runs musl in place of glibc. */
+const ALPINE = '-alpine'
+
 /**
  * The image a server runs. Plain Minecraft gets the image's Alpine build where there is one: 205 MB
  * compressed against 350, and its wake on Boat came back faster. Everything that loads mods or
@@ -206,7 +210,7 @@ export function imageFor(
     revision.modpack === null &&
     jarModsOf({ loader: revision.loader, mods: revision.mods ?? [] }).length === 0 &&
     !runsOnPaper(revision)
-  return `${IMAGE}:${IMAGE_RELEASE}-java${java}${plain && ALPINE_JAVA.has(java) ? '-alpine' : ''}`
+  return `${IMAGE}:${IMAGE_RELEASE}-java${java}${plain && ALPINE_JAVA.has(java) ? ALPINE : ''}`
 }
 
 /**
@@ -681,8 +685,7 @@ export function toRuntimeSpec(input: RuntimeSpecInput): RuntimeSpec {
       // The control plane is the only writer of power state (§0, decision 3).
       ENABLE_AUTOPAUSE: 'FALSE',
       ENABLE_AUTOSTOP: 'FALSE',
-      MEMORY: `${heapMb(input)}M`,
-      USE_AIKAR_FLAGS: 'TRUE',
+      ...heapEnv(heapMb(input), javaFor(revision.gameVersion), !imageFor(revision).endsWith(ALPINE)),
       STOP_DURATION: String(STOP_DURATION_SECONDS),
     },
     secrets: { RCON_PASSWORD: input.rconPassword, ...bedrock.secrets },
