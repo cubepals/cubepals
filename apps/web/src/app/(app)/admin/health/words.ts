@@ -25,6 +25,7 @@ const KINDS: Record<string, string> = {
   relocate: 'Move',
   access_sync: 'Access sync',
   prune_worlds: 'Prune worlds',
+  warm_spawn: 'Warm spawn',
   decommission: 'Decommission',
   purge: 'Purge',
 }

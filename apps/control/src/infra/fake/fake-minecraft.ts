@@ -31,6 +31,7 @@
  *
  * Parts (`fake-minecraft/`):
  * - `access-commands.ts`: what the whitelist, op, ban and pardon commands answer and change.
+ * - `chunks.ts`: the force-loaded chunks around spawn, and whether each is loaded yet.
  * - `game-rules.ts`: the world's game rules, by each release's names, apart for each dimension on Paper.
  * - `image.ts`: the jars and the pack the image installs on the volume before the game starts.
  * - `inventories.ts`: what each player carries, and the world's storage of emptied inventories.
@@ -64,6 +65,7 @@ import {
   pardonIp,
   whitelist,
 } from './fake-minecraft/access-commands.ts'
+import { chunks } from './fake-minecraft/chunks.ts'
 import { FakeGameRules } from './fake-minecraft/game-rules.ts'
 import {
   installJars,
@@ -512,7 +514,7 @@ export class FakeMinecraft implements FakeWorkload, ServerConsole, ReadinessProb
     // Paper knows the game's own commands by their full name too; vanilla doesn't.
     const verb =
       server.env.TYPE === 'PAPER' ? named.toLowerCase().replace(/^minecraft:/, '') : named.toLowerCase()
-    const answer = await this.#answer(server, verb, rest, source)
+    const answer = chunks(server.dir, verb, rest) ?? (await this.#answer(server, verb, rest, source))
     server.log.say(`[Server thread/INFO]: [${source}: ${answer}]`)
     if (this.#unanswered?.test(input.trim())) throw new Error(`No answer to ${input.trim()}`)
     return answer

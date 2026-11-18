@@ -9,7 +9,7 @@
  * runner), with the edge's Xbox sign-in check off for Bedrock, as the Bedrock E2E workflow has it:
  *
  *   bun scripts/join-times.ts [--n 5] [--templates arcade,duels] [--states awake,sleep,cold,rest]
- *                             [--clients java,bedrock]
+ *                             [--clients java,bedrock,raw]
  *
  * For each template it makes a server as Cubepals runs its own (marked official, account checks
  * off so a client with no account gets in), then for each state and client joins it `n` times,
@@ -19,6 +19,15 @@
  *   sleep  stopped by its owner, as the idle check stops it: suspended where staging suspends
  *   cold   asleep, with its machine stopped, as Fly dropping its memory leaves it
  *   rest   in the archive store, its machine and volume let go
+ *   new        a new server of the template, its first join, after its spawn warm-up is done
+ *   unwarmed   a new server of the template, its first join, with no spawn warm-up
+ *
+ * The two new states make a server for every join and alternate, one of each in turn, so both see
+ * staging alike. An unwarmed server has its warm-up's operation recorded as done before its first
+ * boot ends, so none is queued (`warm_spawn`, once per world).
+ *
+ * The `raw` client is the game's own protocol (`lib/raw-join.ts`), for a release mineflayer doesn't
+ * speak (26.3): in the world at the first packet of play, and it leaves at once.
  *
  * Each player stays in the world past the control plane's presence reading, so its wake counts as
  * joined. Each join prints one JSON line; the run ends with a table of the time from the connection to
@@ -44,9 +53,11 @@ import { reachDatabase } from './lib/staging-database.ts'
 const WEB = 'https://staging.cubepals.com'
 const PLAY_DOMAIN = 'play.staging.cubepals.com'
 const MAIL_PORT_HERE = 18035
-const STATES = ['awake', 'sleep', 'cold', 'rest'] as const
+const STATES = ['awake', 'sleep', 'cold', 'rest', 'new', 'unwarmed'] as const
+/** States whose every join is a new server's first. */
+const FRESH: readonly State[] = ['new', 'unwarmed']
 type State = (typeof STATES)[number]
-const CLIENTS = ['java', 'bedrock'] as const
+const CLIENTS = ['java', 'bedrock', 'raw'] as const
 type Client = (typeof CLIENTS)[number]
 /** The Java version the probe speaks; Cubepals' own Paper servers take it through their Via plugins. */
 const JAVA_VERSION = '1.21.11'
@@ -64,8 +75,8 @@ const { values } = parseArgs({
   options: {
     n: { type: 'string', default: '5' },
     templates: { type: 'string', default: 'arcade,duels' },
-    states: { type: 'string', default: STATES.join(',') },
-    clients: { type: 'string', default: CLIENTS.join(',') },
+    states: { type: 'string', default: 'awake,sleep,cold,rest' },
+    clients: { type: 'string', default: 'java,bedrock' },
   },
 })
 const runs = Number(values.n)
@@ -122,7 +133,7 @@ async function waitFor(made: Made, want: (view: any) => boolean, what: string, l
 const settled = (made: Made) => waitFor(made, (v) => v.activeOperation === null, 'settled')
 
 /** An account of Cubepals' own, on a plan that runs the template, and its server made from it, up. */
-async function make(template: string): Promise<Made> {
+async function make(template: string, createdHook?: (id: string) => Promise<void>): Promise<Made> {
   for (let i = 0; i < 30; i++) {
     if (
       await fetch(`http://127.0.0.1:${MAIL_PORT_HERE}/api/v1/info`).then(
@@ -152,6 +163,7 @@ async function make(template: string): Promise<Made> {
     from: { kind: 'template', key: template },
   })
   const made: Made = { template, id: created.id, slug: created.slug, api }
+  await createdHook?.(made.id)
   await waitFor(made, (v) => v.status === 'running' && v.activeOperation === null, 'came up')
   // As Cubepals runs its own: official, and account checks off for a client with no account.
   await sql(
@@ -214,29 +226,31 @@ async function into(made: Made, wanted: State): Promise<string> {
 /** One client's join, as the last JSON line it printed. */
 async function joinOnce(client: Client, address: string, name: string): Promise<Record<string, unknown>> {
   const args =
-    client === 'java'
-      ? [
-          'bun',
-          'scripts/lib/players-probe.ts',
-          'join',
-          address,
-          name,
-          JAVA_VERSION,
-          String(JOIN_SECONDS),
-          String(STAY_SECONDS),
-        ]
-      : [
-          'bun',
-          'tools/bedrock-join/join.ts',
-          '--address',
-          address,
-          '--username',
-          name,
-          '--hold',
-          String(STAY_SECONDS),
-          '--timeout',
-          String(JOIN_SECONDS),
-        ]
+    client === 'raw'
+      ? ['bun', 'scripts/lib/raw-join.ts', address, name, String(JOIN_SECONDS)]
+      : client === 'java'
+        ? [
+            'bun',
+            'scripts/lib/players-probe.ts',
+            'join',
+            address,
+            name,
+            JAVA_VERSION,
+            String(JOIN_SECONDS),
+            String(STAY_SECONDS),
+          ]
+        : [
+            'bun',
+            'tools/bedrock-join/join.ts',
+            '--address',
+            address,
+            '--username',
+            name,
+            '--hold',
+            String(STAY_SECONDS),
+            '--timeout',
+            String(JOIN_SECONDS),
+          ]
   const run = Bun.spawn(args, { stdout: 'pipe', stderr: 'pipe' })
   const out = await new Response(run.stdout).text()
   await run.exited
@@ -252,7 +266,7 @@ async function joinOnce(client: Client, address: string, name: string): Promise<
 
 /** From the connection to the player in the world, in ms; null when the join didn't get there. */
 function inWorldMs(client: Client, result: Record<string, unknown>): number | null {
-  if (client === 'java') return ((result.steps ?? {}) as Record<string, number>).spawned ?? null
+  if (client !== 'bedrock') return ((result.steps ?? {}) as Record<string, number>).spawned ?? null
   return ((result.spawnMs ?? []) as (number | null)[])[0] ?? null
 }
 
@@ -260,14 +274,70 @@ const percentile = (sorted: readonly number[], p: number) =>
   sorted[Math.min(sorted.length - 1, Math.ceil((p / 100) * sorted.length) - 1)] ?? 0
 const secondsOf = (ms: number) => (ms / 1000).toFixed(1)
 
+/** A line of the table: n, p50 and p90 of the times in the world. */
+function row(template: string, state: State, client: Client, times: number[], failed: number): string {
+  const sorted = [...times].sort((a, b) => a - b)
+  const at = (p: number) => (sorted.length ? secondsOf(percentile(sorted, p)) : '-')
+  return `| ${template} | ${state} | ${client} | ${sorted.length}${failed ? ` (${failed} failed)` : ''} | ${at(50)} | ${at(90)} |`
+}
+
+/** A new server's warm-up recorded as done before its first boot ends, so none is queued. */
+async function unwarmed(id: string): Promise<void> {
+  await sql(
+    `insert into server_operations (id, server_id, kind, status, input, requested_by, idempotency_key, finished_at)
+     select gen_random_uuid(), id, 'warm_spawn', 'cancelled', '{}', 'join-times', 'warm_spawn:' || active_world_id, now()
+     from minecraft_servers where id = '${id}'`,
+  )
+}
+
+/** Seconds from the server's first boot ending to its warm-up done, once it is; null if it never ran. */
+async function warmedAfter(made: Made): Promise<number | null> {
+  for (const deadline = Date.now() + 300 * SECOND_MS; Date.now() < deadline; ) {
+    const [row] = await sql(
+      `select w.status, extract(epoch from w.finished_at - p.finished_at) as after
+       from server_operations w join server_operations p on p.server_id = w.server_id and p.kind = 'provision'
+       where w.server_id = '${made.id}' and w.kind = 'warm_spawn'`,
+    )
+    if (row === undefined) return null
+    if (row.status === 'succeeded') return Number(row.after)
+    if (row.status !== 'queued' && row.status !== 'running') return null
+    await Bun.sleep(1000)
+  }
+  return null
+}
+
+/** One first join to a new server of `template` per state, in turn, `runs` times; each server goes after. */
+async function freshJoins(template: string, fresh: State[], client: Client): Promise<void> {
+  const times = new Map<State, number[]>(fresh.map((s) => [s, []]))
+  for (let i = 0; i < runs; i++)
+    for (const wanted of fresh) {
+      const server = await make(template, wanted === 'unwarmed' ? unwarmed : undefined)
+      const warmed = wanted === 'new' ? await warmedAfter(server) : null
+      const result = await joinOnce(client, `${server.slug}.${PLAY_DOMAIN}`, `First${i}`)
+      say(JSON.stringify({ template, state: wanted, client, warmedAfterS: warmed, ...result }))
+      const ms = inWorldMs(client, result)
+      if (ms === null) failures++
+      else times.get(wanted)?.push(ms)
+      const view = await server.api('servers.get', { serverId: server.id }, 'GET')
+      await server
+        .api('servers.delete', { serverId: server.id, confirmName: view.name })
+        .catch(() => undefined)
+    }
+  for (const [wanted, all] of times) rows.push(row(template, wanted, client, all, 0))
+}
+
 const made: Made[] = []
 const rows: string[] = []
 let failures = 0
 const lines = new Map<string, Set<string>>()
 try {
-  for (const template of templates) made.push(await make(template))
+  const fresh = states.filter((s) => FRESH.includes(s))
+  const kept = states.filter((s) => !FRESH.includes(s))
+  for (const template of templates)
+    for (const client of fresh.length > 0 ? clients : []) await freshJoins(template, fresh, client)
+  for (const template of kept.length > 0 ? templates : []) made.push(await make(template))
   for (const server of made)
-    for (const wanted of states)
+    for (const wanted of kept)
       for (const client of clients) {
         const times: number[] = []
         let failed = 0
@@ -286,10 +356,7 @@ try {
             lines.set(key, (lines.get(key) ?? new Set()).add(seen.line.replaceAll('\n', ' / ')))
           }
         }
-        const sorted = times.sort((a, b) => a - b)
-        rows.push(
-          `| ${server.template} | ${wanted} | ${client} | ${times.length}${failed ? ` (${failed} failed)` : ''} | ${times.length ? secondsOf(percentile(sorted, 50)) : '-'} | ${times.length ? secondsOf(percentile(sorted, 90)) : '-'} |`,
-        )
+        rows.push(row(server.template, wanted, client, times, failed))
       }
 } finally {
   say('\n| Server | State | Client | n | p50 (s) | p90 (s) |\n| --- | --- | --- | --- | --- | --- |')

@@ -42,6 +42,8 @@ const RETRIES: Record<OperationKind, number> = {
   store: 3,
   // A wake that fails puts the world back, stored, whole: the owner or the next join tries again.
   unstore: 0,
+  // An attempt cut short leaves its force-load on: the next one finds it and takes it off.
+  warm_spawn: 2,
 }
 
 /** Operations a player waits on to play: they go ahead of everything else queued (ports/jobs.ts). */

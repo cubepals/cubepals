@@ -19,6 +19,7 @@
         "scripts/quality/*.mjs",
         "scripts/lib/suspend-probe.ts",
         "scripts/lib/players-probe.ts",
+        "scripts/lib/raw-join.ts",
         "scripts/lib/load-probe.ts"
       ],
       "project": ["scripts/**/*.{ts,mjs}"],

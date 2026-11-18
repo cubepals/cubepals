@@ -67,6 +67,7 @@ export type OperationKind =
   | 'purge'
   | 'store'
   | 'unstore'
+  | 'warm_spawn'
 
 interface Failure {
   during: Phase
