@@ -120,6 +120,8 @@ export interface OperationContext {
   server: MinecraftServer
   step(step: OperationStep): Promise<void>
   mark(mark: OperationMark): Promise<void>
+  /** Whether this attempt made `mark`; absent where nothing tracks them, as none was then. */
+  marked?(mark: OperationMark): boolean
   /** The step this attempt last went through, or null before its first. */
   reached(): OperationStep | null
   /**
@@ -227,6 +229,7 @@ export class OperationRunner {
     await markRunning(this.#db, op.id)
     await this.#progress(op, server, null, 'running')
     let reached: OperationStep | null = null
+    const made = new Set<OperationMark>()
     const ctx: OperationContext = {
       op,
       server,
@@ -237,7 +240,11 @@ export class OperationRunner {
         await recordStep(this.#db, op.id, step)
         await this.#progress(op, server, step, 'running')
       },
-      mark: (mark) => recordMark(this.#db, op.id, mark),
+      mark: (mark) => {
+        made.add(mark)
+        return recordMark(this.#db, op.id, mark)
+      },
+      marked: (mark) => made.has(mark),
       stillApplies: async () => {
         const latest = await findServer(this.#db, server.id)
         return latest !== null && handler.runsWhen.includes(latest.lifecycle.status)

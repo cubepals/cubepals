@@ -76,6 +76,7 @@ import {
   machineOnVolume,
   minecraftMachine,
   readMachine,
+  relaunched,
   sleepMachine,
   startMachine,
   startMarks,
@@ -278,6 +279,9 @@ export class FlyRuntime implements MinecraftRuntime {
     // What Fly says of the start is kept: whether it moved the machine, and what it took it for.
     const answer = await startMachine(this.#fly, app, idOf(machine, 'a machine'))
     for (const mark of startMarks(answer, asleep !== null)) await progress.mark?.(mark)
+    // Fly may launch it anew rather than resume it: then nobody waits on an answer from memory.
+    if (existing !== null && asleep !== null && (await relaunched(this.#fly, app, existing)))
+      await progress.mark?.('relaunched')
     return handle
   }
 

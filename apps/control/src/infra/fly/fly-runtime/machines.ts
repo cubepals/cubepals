@@ -405,6 +405,19 @@ export function startMarks(answer: StartAnswer | null, resuming: boolean): Runti
   return marks
 }
 
+/**
+ * Whether Fly launched a machine anew as a start woke it from its sleep: it gives the machine a new
+ * version as it does (the version's id is a ULID of that moment), which a resume never does, nor a
+ * start from stopped. The launch boots from the disk, the memory Fly kept for it dropped. Read once
+ * the start has answered, by which time Fly has made it; a machine Fly no longer has, or one that
+ * names no version, says nothing.
+ */
+export async function relaunched(fly: FlyClient, app: string, before: Machine): Promise<boolean> {
+  if (before.instance_id === undefined || before.id === undefined) return false
+  const now = await readUnlessGone(fly, app, before.id)
+  return now?.instance_id !== undefined && now.instance_id !== before.instance_id
+}
+
 /** The machine once Fly has finished preparing it, or stopping it. */
 async function settled(fly: FlyClient, app: string, machineId: string): Promise<Machine | null> {
   const deadline = Date.now() + SETTLE_SECONDS * 1000

@@ -233,3 +233,32 @@ test('a resume whose log can’t be read goes on as a boot, but isn’t marked a
   expect(await resume.cameBack(ctx, handle, () => endpoint)).toBe(false)
   expect(marks).toEqual(['resume_observing', 'resume_running'])
 })
+
+test('a resume its runtime saw launched anew goes on as a boot at once, waiting on no answer', async () => {
+  const marks: string[] = []
+  const asked = { pings: 0, running: 0 }
+  const resume = new Resume({
+    runtime: {
+      waitRunning: async () => {
+        asked.running++
+      },
+      forceStop: async () => {},
+      start: async (value) => value,
+    },
+    probe: {
+      ping: async () => {
+        asked.pings++
+        return answer
+      },
+    },
+    logs: { recent: async () => [], tail: async function* () {} },
+  })
+  const ctx = {
+    op: { id: 'resume-relaunched', kind: 'start' },
+    mark: async (mark: string) => void marks.push(mark),
+    marked: (mark: string): boolean => mark === 'relaunched',
+  } as OperationContext
+  expect(await resume.cameBack(ctx, handle, () => endpoint)).toBe(false)
+  expect(marks).toEqual(['resume_booted'])
+  expect(asked).toEqual({ pings: 0, running: 0 })
+})

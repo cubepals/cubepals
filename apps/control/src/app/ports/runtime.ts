@@ -179,13 +179,17 @@ type RuntimeStep = 'allocating' | 'waiting_for_room' | 'storage' | 'compute' | '
  * itself, where it says: `moved_host`, started on another host than it slept on; and, for a
  * resume, `started_from:<state>`, the state the provider had it in when asked. And
  * `slow_host:<region>/<name>`, a host known to be slow that a new server's first storage landed on,
- * where the runtime made that storage again elsewhere before anything ran on it.
+ * where the runtime made that storage again elsewhere before anything ran on it. And `relaunched`:
+ * a resume the provider made a fresh launch of, on its own, as the start was asked for, so it
+ * boots from its storage, the memory it kept dropped; a start that reads it waits on no answer
+ * from memory (`resume.ts`).
  */
 export type RuntimeMark =
   | 'not_asleep'
   | 'other_spec'
   | 'no_compute'
   | 'moved_host'
+  | 'relaunched'
   | `started_from:${string}`
   | `slow_host:${string}`
 
