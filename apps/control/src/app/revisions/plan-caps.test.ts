@@ -43,7 +43,7 @@ describe.skipIf(!hasDatabase)('plan limits on configurations', () => {
     const env = h.runtime.machine(id)?.spec.env ?? {}
     expect(env.PLAYER_IDLE_TIMEOUT).toBe('15')
     expect(env.MAX_WORLD_SIZE).toBe('2500')
-    expect(env.MEMORY).toBe('2048M')
+    expect(env.MAX_MEMORY).toBe('2048M')
     const view = await h.app.queries.get(owner, id)
     expect(view.partySize).toBe('5')
     expect(view.movesToSize).toBeNull()
