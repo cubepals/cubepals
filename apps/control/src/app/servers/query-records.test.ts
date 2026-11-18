@@ -277,6 +277,7 @@ function runningView(
     crash: null,
     failure: null,
     notLoaded: [],
+    setAside: [],
     gameVersion: DEFAULT_GAME_VERSION,
     joins: { oldest: DEFAULT_GAME_VERSION, newer: false, otherVersions: null },
     bedrock: false,
