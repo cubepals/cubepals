@@ -465,7 +465,7 @@ export class FlyRuntime implements MinecraftRuntime {
       )
       const volumeId = idOf(volume, 'a volume')
       await volumeReady(this.#fly, ref.app, volumeId)
-      const job = restoreJob(from.download.url)
+      const job = restoreJob(from.download.url, from.sha256)
       await whenRoom(
         this.#roomWait,
         () => helperJob(this.#fly, this.#deployment, ref.app, ref.region, volumeId, job),

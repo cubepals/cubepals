@@ -120,6 +120,35 @@ describe.skipIf(!existsSync(SOCKET))('a helper job that writes to the volume', (
       .catch(() => undefined)
   })
 
+  // A world with bytes after the tar's end: tar stops at its end, and the hash still covers them.
+  const packed = [
+    'mkdir -p /tmp/w/world && echo level > /tmp/w/world/level.dat',
+    'tar -cf /tmp/a.tar -C /tmp/w . && head -c 102400 /dev/zero >> /tmp/a.tar && gzip -c /tmp/a.tar > /tmp/a.tgz',
+    "sha=$(sha256sum /tmp/a.tgz | cut -d' ' -f1)",
+  ].join('\n')
+  /** What the volume holds after `script`, read in the same helper: its files, or `empty`. */
+  const holds = (script: string) =>
+    `${script}\necho "$(cat /tmp/job.result) | $(cd /data && find . -mindepth 1 -type f | sort | tr '\\n' ' ')" > /tmp/job.result`
+  /** The job with the archive's own sha256, read when the script runs; or with `wrong`. */
+  const checked = (wrong?: string) =>
+    restoreJob('file:///tmp/a.tgz', wrong ?? 'f'.repeat(64)).replace(
+      `'${'f'.repeat(64)}'`,
+      wrong ? `'${wrong}'` : '"$sha"',
+    )
+
+  test('an archive whose sha256 is the one recorded is restored, every byte of it hashed', async () => {
+    const said = await run(holds(`find /data -mindepth 1 -delete\n${packed}\n${checked()}`), flushed)
+    expect(said).toBe('ok restored | ./world/level.dat')
+  }, 120_000)
+
+  test('an archive that isn’t the one recorded fails the restore, and leaves nothing on the volume', async () => {
+    const said = await run(
+      holds(`find /data -mindepth 1 -delete\n${packed}\n${checked('0'.repeat(64))}`),
+      flushed,
+    )
+    expect(said).toBe('failed 1 |')
+  }, 120_000)
+
   test('flushes the world it restored before it says so', async () => {
     const made =
       'mkdir -p /tmp/w/world && echo level > /tmp/w/world/level.dat && tar -czf /tmp/a.tgz -C /tmp/w .'
@@ -234,3 +263,11 @@ describe.skipIf(!existsSync(SOCKET) || !s3.endpoint || !s3.bucket)(
     }, 120_000)
   },
 )
+
+test('a restore checks the sha256 it is given, refuses one that isn’t a sha256, and checks none without one', () => {
+  const sha = 'AB'.repeat(32)
+  expect(restoreJob('https://store.example/a.tgz', sha)).toContain(`!= '${sha.toLowerCase()}' ]`)
+  expect(() => restoreJob('https://store.example/a.tgz', 'abc; rm -rf /')).toThrow("isn't a sha256")
+  for (const none of [undefined, null, ''])
+    expect(restoreJob('https://store.example/a.tgz', none)).not.toContain('sha256sum')
+})
