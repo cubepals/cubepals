@@ -215,9 +215,19 @@ jobs:
       - name: Ask production for its pages and its API
         run: bun scripts/site-check.ts https://cubepals.com 180 --api
       # As a browser asks it, over WebTransport and its WebSocket fallback, until both answer: a
-      # deploy that leaves realtime down fails here, however Fly reported the machine.
+      # deploy that leaves realtime down fails here, however Fly reported the machine. From main's
+      # checkout, as the guard runs: the commit deployed may be an older nightly's, without it.
       - name: Ask realtime over both its transports
-        run: node scripts/realtime-check.node.ts rt.cubepals.com 600
+        working-directory: ${{ runner.temp }}/guard
+        # WebTransport's install fetches its binary from GitHub's releases, which refuse a burst of
+        # downloads now and then, so the install retries as CI's does.
+        run: |
+          for wait in 5 15 30 0; do
+            bun install --frozen-lockfile && break
+            [ "$wait" = 0 ] && exit 1
+            sleep "$wait"
+          done
+          node scripts/realtime-check.node.ts rt.cubepals.com 600
       - name: Leave no value behind
         if: always()
         run: rm -f local/production/production.env local/production/backend.hcl infra/terraform/environments/production/config.auto.tfvars.json infra/terraform/environments/production/production.tfplan

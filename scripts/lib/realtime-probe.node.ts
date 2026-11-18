@@ -48,8 +48,18 @@ export const realtimeUrls = (host: string): Record<Transport, string> => ({
 })
 
 const refusals: readonly string[] = Object.values(REALTIME_REFUSALS)
-const within = <T>(promise: Promise<T>, ms: number): Promise<T | 'late'> =>
-  Promise.race([promise, new Promise<'late'>((resolve) => setTimeout(() => resolve('late'), ms).unref())])
+/**
+ * A promise's value, or `late` once `ms` have passed. The timer holds the process until one of them
+ * settles: a socket that fails without the event awaited would otherwise leave nothing running,
+ * and Node ends a script whose top-level await can't settle (exit 13).
+ */
+function within<T>(promise: Promise<T>, ms: number): Promise<T | 'late'> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const late = new Promise<'late'>((resolve) => {
+    timer = setTimeout(() => resolve('late'), ms)
+  })
+  return Promise.race([promise, late]).finally(() => clearTimeout(timer))
+}
 const say = (ms: number) => (ms < SECOND_MS ? `${Math.round(ms)} ms` : `${Math.round(ms / 100) / 10} s`)
 
 /** What a refusal, or its absence, says once the handshake is done. */
@@ -125,6 +135,10 @@ async function overWebSocket(url: string): Promise<RealtimeAnswer> {
   const closed = new Promise<string>((resolve) => {
     socket.addEventListener('open', () => {
       opened = performance.now() - began
+    })
+    // A connection that never opens may say so with `error` alone.
+    socket.addEventListener('error', () => {
+      if (opened === undefined) resolve('')
     })
     socket.addEventListener('close', (event) => resolve(event.reason))
   })
