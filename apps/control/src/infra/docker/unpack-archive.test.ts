@@ -40,7 +40,16 @@ describe.skipIf(!existsSync(SOCKET))('a Docker volume filled from an archive', (
     if (tar.exitCode !== 0) throw new Error('tar failed')
     const packed = await readFile(join(dir, 'world.tar'))
     // Whole and valid, its last record zeros past tar's end: tar is done before gzip is.
-    const pad = Bun.spawnSync(['tar', '-b', '512', '-cf', join(dir, 'pad.tar'), '-C', join(dir, 'world'), '.'])
+    const pad = Bun.spawnSync([
+      'tar',
+      '-b',
+      '512',
+      '-cf',
+      join(dir, 'pad.tar'),
+      '-C',
+      join(dir, 'world'),
+      '.',
+    ])
     if (pad.exitCode !== 0) throw new Error('tar failed')
     served.set('/pad.tgz', gzipSync(await readFile(join(dir, 'pad.tar'))))
     served.set('/world.tgz', gzipSync(packed))
