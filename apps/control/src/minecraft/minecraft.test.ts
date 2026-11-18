@@ -179,12 +179,12 @@ describe('toRuntimeSpec', () => {
     // Left out of what drift compares with the message, so neither restarts a world.
     expect(IDENTITY_ENV).toEqual(['ICON', 'OVERRIDE_ICON', 'MOTD'])
     // curl fetches it before the image does, so the image's Java helper doesn't at every start:
-    // the same icon again is left alone, and another is handed over as a file.
+    // the same icon again is left alone, another is put in place, and the image is given none.
     const [shell, flag, script] = withIcon.entrypoint ?? []
     expect([shell, flag]).toEqual(['/bin/sh', '-c'])
     expect(script).toContain('curl -fsSL --max-time 10 -o /tmp/blockly-icon "$ICON"')
-    expect(script).toContain('cmp -s /tmp/blockly-icon /data/server-icon.png; then unset OVERRIDE_ICON')
-    expect(script).toContain('export ICON=/tmp/blockly-icon')
+    expect(script).toContain('|| install -m 644 -o 1000 -g 1000 /tmp/blockly-icon /data/server-icon.png')
+    expect(script).toContain('unset ICON OVERRIDE_ICON; elif ! command -v identify')
     // Last of Blockly's steps, what spares the image work it would redo, then what starts the
     // server without the image's scripts where nothing changed; drift never sees either.
     expect(script).toEndWith(`${WAKE_STEP} ${DIRECT_START_STEP} exec /image/scripts/start "$@"`)
