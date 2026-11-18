@@ -64,7 +64,11 @@ describe.skipIf(!hasDatabase)('plain Minecraft on Paper', () => {
 
   test('a Paper server is made on 26.3, with Paper’s build', async () => {
     const made = await h.create(await h.user('Sky', 'plus'), { loader: 'paper', gameVersion: '26.3' })
-    expect(await desired(made.id)).toMatchObject({ loader: 'paper', gameVersion: '26.3', loaderVersion: '60' })
+    expect(await desired(made.id)).toMatchObject({
+      loader: 'paper',
+      gameVersion: '26.3',
+      loaderVersion: '60',
+    })
     await h.until(made.id, 'running')
     await h.settled(made.id)
     expect(env(made.id)).toMatchObject({ TYPE: 'PAPER', VERSION: '26.3', PAPER_BUILD: '60' })
