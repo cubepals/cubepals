@@ -60,16 +60,25 @@ export async function followConsole(
     connect: () => connectWebSocket({ url: url.href }),
   })
   const seen: Followed = { histories: 0, batches: 0, lines: 0, notShown: 0, endedBy: null }
+  // A line printed as the watch opens can come in both the earlier lines and the first batch; the
+  // console page knows each by its time and text, and so does this, saying it once.
+  const said = new Set<string>()
+  const sayOnce = (line: Line) => {
+    const key = `${line.at}|${line.text}`
+    if (said.has(key)) return
+    said.add(key)
+    say(followLine(line))
+  }
   client.on('consoleHistory', ({ serverId, lines }) => {
     if (serverId !== watch.serverId) return
     seen.histories++
-    for (const line of lines) say(followLine(line))
+    for (const line of lines) sayOnce(line)
   })
   client.on('consoleLines', ({ serverId, lines, unshown }) => {
     if (serverId !== watch.serverId) return
     seen.batches++
     seen.lines += lines.length
-    for (const line of lines) say(followLine(line))
+    for (const line of lines) sayOnce(line)
     if (unshown !== null) {
       seen.notShown += unshown.count
       say(notShownLine(unshown))

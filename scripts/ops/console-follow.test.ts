@@ -50,7 +50,11 @@ describe('following a console from the operators’ tools', () => {
       events: { publish: async () => {}, subscribe: async () => async () => {} },
       tickets,
       console: {
-        recent: async () => [{ at: new Date(0), text: 'Done (2.1s)!', level: 'info' }],
+        // The first line it prints live is in the earlier lines too, as when a watch opens mid-print.
+        recent: async () => [
+          { at: new Date(0), text: 'Done (2.1s)!', level: 'info' },
+          { at: new Date(1_700_000_000_000), text: 'line 0', level: 'info' },
+        ],
         tail: flood,
       } as unknown as ConsoleFeed,
       presence: async () => [],
@@ -71,6 +75,8 @@ describe('following a console from the operators’ tools', () => {
     )
     expect(seen).toEqual({ histories: 1, batches: 2, lines: LINES_PER_SECOND, notShown: 200, endedBy: null })
     expect(said[0]).toBe('1970-01-01T00:00:00.000Z  Done (2.1s)!')
+    // Said once, though it came in both the earlier lines and the first batch.
+    expect(said.filter((line) => line.endsWith('  line 0'))).toHaveLength(1)
     expect(
       said.some((line) =>
         line.endsWith('200 lines not shown: the server printed faster than anyone can read.'),
