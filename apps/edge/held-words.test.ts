@@ -124,7 +124,10 @@ test('a longer wait finishes the login, shows the line once configuring, follows
   await after(120)
   const login = heard().filter((p) => p.id !== 0x04)
   expect(login.map((p) => p.id)).toEqual([ids(777).login.finished])
-  expect(Array.from(login[0]?.body ?? [])).toEqual([...UUID, ...string('Alex'), 0])
+  // 26.3's Login Finished: the profile, then a session uuid of the edge's own.
+  const profile = [...UUID, ...string('Alex'), 0]
+  expect(Array.from(login[0]?.body.subarray(0, profile.length) ?? [])).toEqual(profile)
+  expect(login[0]?.body.length).toBe(profile.length + 16)
   // Nothing more until the client acknowledges, then its settings, as a client sends them.
   await after(30)
   expect(heard().length).toBe(heard().filter((p) => p.id === 0x04).length + 1)
