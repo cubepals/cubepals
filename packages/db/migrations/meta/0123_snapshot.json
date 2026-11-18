@@ -1,5 +1,5 @@
 {
-  "id": "0ca8c5cf-552b-4d9b-a1df-ef6abe319528",
+  "id": "fcd5e685-5c58-4f70-b08b-81eb7f029cb1",
   "prevId": "556d4dd4-45ea-46ea-a2e7-a0d66a2897e5",
   "version": "7",
   "dialect": "postgresql",
@@ -9012,13 +9012,6 @@
           "notNull": true,
           "default": "'{}'"
         },
-        "set_aside": {
-          "name": "set_aside",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'[]'::jsonb"
-        },
         "desired_revision_id": {
           "name": "desired_revision_id",
           "type": "uuid",
@@ -10898,7 +10891,8 @@
         "decommission",
         "purge",
         "store",
-        "unstore"
+        "unstore",
+        "warm_spawn"
       ]
     },
     "public.operation_status": {

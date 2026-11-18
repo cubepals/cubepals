@@ -278,6 +278,7 @@ export const OPERATION_KINDS = [
   'purge',
   'store',
   'unstore',
+  'warm_spawn',
 ] as const
 export type OperationKind = (typeof OPERATION_KINDS)[number]
 

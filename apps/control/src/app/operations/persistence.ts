@@ -184,7 +184,7 @@ export const APART: readonly OperationKind[] = ['archive']
  * Work that doesn't change what the server is doing: it never locks the owner's pages, and the
  * server page doesn't show it as the server's progress.
  */
-const BACKGROUND = ['access_sync', 'backup', 'archive', 'prune_worlds'] as const
+const BACKGROUND = ['access_sync', 'backup', 'archive', 'prune_worlds', 'warm_spawn'] as const
 
 /** The foreground operation people see on the server page. Background work is not shown. */
 /** Whether a move of the server failed, or was refused, since `since`. */

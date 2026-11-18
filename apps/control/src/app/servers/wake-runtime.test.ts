@@ -28,7 +28,9 @@ function run(then: string, env: Record<string, string> = {}): string {
   const step = WAKE_STEP.replaceAll('/tmp/blockly-bin', join(root, 'shim'))
     .replaceAll('/data', join(root, 'data'))
     .replaceAll('/usr/bin/mc-image-helper', join(root, 'bin/mc-image-helper'))
+  // The image's scripts run in the volume, where the helper keeps its manifests.
   const result = Bun.spawnSync(['/bin/sh', '-c', `${step} ${then}`], {
+    cwd: join(root, 'data'),
     env: { PATH: process.env.PATH ?? '', JAVA_HOME: join(root, 'jdk'), ...env },
   })
   return result.stdout.toString().trim()
@@ -61,18 +63,48 @@ describe('the helper’s stand-in', () => {
   })
 })
 
-describe('Paper’s default configs', () => {
-  const defaults = ['bukkit.yml', 'spigot.yml', 'config/paper-global.yml', 'config/paper-world-defaults.yml']
-  const skipped = (type: string) => run('echo "$SKIP_DOWNLOAD_DEFAULTS"', { TYPE: type })
+describe('CurseForge’s files', () => {
+  const placing = (files: string) =>
+    run(
+      `mc-image-helper curseforge-files --use-http2=true --default-category mc-mods --mod-loader FABRIC "${files}"`,
+    )
 
-  test('are fetched while any of them is missing', () => {
-    for (const file of defaults.slice(1)) writeFileSync(join(root, 'data', file), 'kept: true\n')
-    expect(skipped('PAPER')).toBe('')
+  test('are left alone without a JVM where none are listed and none were placed', () => {
+    expect(placing('')).toBe('')
   })
 
-  test('are left alone once all four are on the volume, which the image would copy over nothing', () => {
-    for (const file of defaults) writeFileSync(join(root, 'data', file), 'kept: true\n')
+  test('go to the helper where some are listed, or some were placed before, which it takes away', () => {
+    expect(placing('jei:1234')).toStartWith('helper curseforge-files')
+    writeFileSync(join(root, 'data/.curseforge-files-manifest.json'), '{}')
+    expect(placing('')).toStartWith('helper curseforge-files')
+  })
+})
+
+describe('Paper’s default configs', () => {
+  const skipped = (type: string) => run('echo "$SKIP_DOWNLOAD_DEFAULTS"', { TYPE: type })
+
+  // They came from a third party's repository; Paper writes its own for any it doesn't find.
+  test('are never fetched on Paper, even onto a new server', () => {
     expect(skipped('PAPER')).toBe('true')
     expect(skipped('VANILLA')).toBe('')
+  })
+})
+
+describe('Fabric’s installer', () => {
+  const installer = (type: string) => run('echo "$FABRIC_LAUNCHER_VERSION"', { TYPE: type })
+
+  test('is pinned, so a start never asks Fabric for the newest', () => {
+    expect(installer('FABRIC')).toMatch(/^\d+\.\d+\.\d+$/)
+    expect(installer('PAPER')).toBe('')
+  })
+})
+
+describe('spark’s background profiler', () => {
+  const profiler = (type: string) => run('echo "$SPARK_BACKGROUNDPROFILER"', { TYPE: type })
+
+  // It samples for as long as the server runs, whether or not anyone looks; `/spark` stays.
+  test('is off on Paper, where spark comes bundled, and left alone elsewhere', () => {
+    expect(profiler('PAPER')).toBe('false')
+    expect(profiler('FABRIC')).toBe('')
   })
 })

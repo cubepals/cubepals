@@ -1566,7 +1566,9 @@ the control plane's **internal listener**: 6PN on Fly, loopback or the compose n
   restarting, or not routed yet) is sent at once to a third listener in the agent:
   - It wakes the server (`POST /edge/v1/wake`, again every time one comes back `starting`; joins
     to the same server share one ask) and holds the player meanwhile, for up to 3 minutes
-    (`WAKE_HOLD_MS`).
+    (`WAKE_HOLD_MS`). Asks start at least 2 s apart: one that already waited the control plane's
+    whole window is asked again at once, one answered early waits out the rest
+    (`apps/edge/wake-while.ts`).
   - While it holds, it sends the client a login query every 10 s, on a channel no client knows.
     Every client since 1.13 answers it, and hearing from the server keeps it waiting. The answers
     are the hold's own and never reach the server.

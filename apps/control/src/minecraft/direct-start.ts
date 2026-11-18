@@ -47,6 +47,7 @@
  */
 
 import { DATA_DIR } from './jars.ts'
+import { LAUNCH_MAKER, LAUNCH_MAKER_LINES } from './paper-launch.ts'
 import { CACHED_RUNNER, CACHED_RUNNER_LINES } from './start-cache.ts'
 import { SHIM_DIR } from './wake-step.ts'
 
@@ -110,11 +111,12 @@ const written = (path: string, lines: readonly string[]): string =>
 
 /**
  * The step, after every other of Blockly's and before the image's own entrypoint, which it leaves
- * to run wherever it doesn't hand the start over. Its lines hold no single quote but the two
- * files' and the cache's, so each of those is written as one argument per line.
+ * to run wherever it doesn't hand the start over. Its lines hold no single quote but the files'
+ * it writes (its own two, the cache's and Paper's manifest maker), so each of those is written as
+ * one argument per line.
  */
 export const DIRECT_START_STEP = [
-  `${written(RUNNER, RUNNER_LINES)} && ${written(STARTER, STARTER_LINES)} && ${written(CACHED_RUNNER, CACHED_RUNNER_LINES)} && export SERVER_RUNNER=${RUNNER};`,
+  `${written(RUNNER, RUNNER_LINES)} && ${written(STARTER, STARTER_LINES)} && ${written(CACHED_RUNNER, CACHED_RUNNER_LINES)} && ${written(LAUNCH_MAKER, LAUNCH_MAKER_LINES)} && export SERVER_RUNNER=${RUNNER};`,
   `awk "BEGIN { for (name in ENVIRON) print name }" > ${GIVEN};`,
   `export BLOCKLY_START_KEY=$({ awk "BEGIN { for (name in ENVIRON) if (name !~ /^(${PASSING})$/) print name \\"=\\" ENVIRON[name] }" | sort; cat /image/scripts/start*; } 2>/dev/null | sha256sum | cut -c1-64);`,
   // Whose the volume is, which the image's own start makes the server's user; never root's.

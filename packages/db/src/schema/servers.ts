@@ -332,6 +332,8 @@ export const operationKind = pgEnum('operation_kind', [
   'store',
   /** A stored world brought back onto fresh storage and compute, and booted. */
   'unstore',
+  /** A new world's spawn generated after its first boot, before anyone joins. */
+  'warm_spawn',
 ])
 export const operationStatus = pgEnum('operation_status', [
   'queued',

@@ -17,6 +17,12 @@ import { LABEL_DEPLOYMENT, LABEL_DIGEST, LABEL_PORTS, LABEL_SERVER, LABEL_STOP_T
 /** Processes and threads a game container may hold: a big pack's JVM runs a few hundred. */
 const GAME_PIDS = 4096
 
+/**
+ * The healthcheck test that turns off the one an image declares (Docker Engine API,
+ * `HealthConfig.Test`: `["NONE"]` disables the image's healthcheck).
+ */
+const NO_HEALTH_CHECK = ['NONE']
+
 /** The create options of `ref`'s container, running `spec` on `network` for `deployment`. */
 export function gameContainer(
   ref: DockerRef,
@@ -48,6 +54,10 @@ export function gameContainer(
     ExposedPorts: exposed,
     StopSignal: spec.stop.signal,
     StopTimeout: spec.stop.timeoutSeconds,
+    // The image's own check stays off: Blockly's status ping says whether a server answers, and
+    // nothing reads Docker's verdict. itzg's `mc-health` runs as root here every 30 s and sources
+    // `/data/.mc-health.env`, a file the server's mods can write.
+    Healthcheck: { Test: NO_HEALTH_CHECK },
     HostConfig: {
       Mounts: [{ Type: 'volume', Source: ref.volume, Target: spec.storage.mountPath }],
       Memory: spec.resources.memoryMb * 1024 * 1024,

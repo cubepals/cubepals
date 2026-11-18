@@ -69,8 +69,12 @@ afterEach(() => rmSync(root, { recursive: true, force: true }))
 const COMMAND = '--stop-duration 60s -- java -XX:+AlwaysPreTouch -Xmx1996M -jar ./server.jar nogui'
 const ran = (options: string) =>
   `ran: --stop-duration 60s -- java ${options}-XX:+AlwaysPreTouch -Xmx1996M -jar ./server.jar nogui`
+/** A start that records: without the option that touches the whole heap first, which the exit needs room beside. */
 const recorded = () =>
-  ran(`-XX:AOTMode=record -XX:AOTConfiguration=${data(`${CACHE}.conf`)} `).replaceAll(root, '{root}')
+  `ran: --stop-duration 60s -- java -XX:AOTMode=record -XX:AOTConfiguration=${data(`${CACHE}.conf`)} -Xmx1996M -jar ./server.jar nogui`.replaceAll(
+    root,
+    '{root}',
+  )
 const cached = () => ran(`-XX:AOTCache=${data(CACHE)} `).replaceAll(root, '{root}')
 
 /** One start of the server: the script, given the words the runner would have been. */
@@ -247,26 +251,40 @@ describe('a recording a server’s Java can’t write', () => {
   test('a recording begun before the count was kept counts as one', () => {
     start()
     const file = data(`${CACHE}.state`)
-    writeFileSync(file, readFileSync(file, 'utf8').trim().split('\n').slice(0, 2).join('\n') + '\n')
+    writeFileSync(file, `${readFileSync(file, 'utf8').trim().split('\n').slice(0, 2).join('\n')}\n`)
     expect(start()).toEqual([RECORDING, recorded()])
     expect(start()).toEqual([ran('')])
     expect(state()).toBe('failed')
   })
 
-  test('a machine without the memory beside its heap to write a recording runs as it is, and leaves no recording behind', () => {
-    // A 3 GB machine with a 1,996 MB heap: the kernel counts about 2.97 GB.
+  test('a 3 GB machine with a 2,048 MB heap records: the heap isn’t touched up front, so the exit has room', () => {
+    // The kernel counts about 2.97 GB of production's 3 GB machines.
     memory(2_970_000)
-    expect(start()).toEqual([ran('')])
+    const command = COMMAND.replace('-Xmx1996M', '-Xmx2048M')
+    expect(startThenExit(command)).toEqual([RECORDING, recorded().replace('-Xmx1996M', '-Xmx2048M')])
+    // Only the recording leaves the option out: the starts after keep the server's own.
+    expect(start(command)).toEqual([
+      '[init] Making this server a quicker start from its last one',
+      cached().replace('-Xmx1996M', '-Xmx2048M'),
+    ])
+  })
+
+  test('a machine without the memory beside its heap to write a recording runs as it is, and leaves no recording behind', () => {
+    // A 2 GB machine with a 1,536 MB heap: the kernel counts about 1.91 GB.
+    memory(1_910_000)
+    expect(start(COMMAND.replace('-Xmx1996M', '-Xmx1536M'))).toEqual([
+      ran('').replace('-Xmx1996M', '-Xmx1536M'),
+    ])
     expect(existsSync(data(`${CACHE}.state`))).toBe(false)
     // One recording from before the machine was measured is given up on, not waited for.
     memory(16 * 1024 * 1024)
     start()
     expect(state()).toBe('recording')
-    memory(2_900_000)
+    memory(2_700_000)
     expect(start()).toEqual([ran('')])
     expect(existsSync(data(`${CACHE}.state`))).toBe(false)
     // A heap given in gigabytes is read as one, and room beside it is enough.
-    memory(4_000_000)
+    memory(3_800_000)
     expect(start(COMMAND.replace('-Xmx1996M', '-Xmx3G'))).toEqual([ran('').replace('-Xmx1996M', '-Xmx3G')])
     // A 4 GB machine as the kernel counts it, with a modded server's 2,662 MB heap: it has room.
     memory(4_013_292)
