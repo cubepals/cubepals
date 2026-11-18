@@ -23,7 +23,7 @@ import {
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { DIRECT_START_STEP } from '../../minecraft/direct-start.ts'
+import { DIRECT_START_STEP, KEEP_ASLEEP, TAKE_BACK } from '../../minecraft/direct-start.ts'
 import { bootMilestone } from '../../minecraft/logs.ts'
 import { RECORDING } from '../../minecraft/start-cache.ts'
 import { NOT_ARCHIVED } from '../ports/runtime.ts'
@@ -55,6 +55,10 @@ beforeEach(() => {
     'password=$RCON_PASSWORD; [ -n "$password" ] || password=none',
     'echo "ran in $(pwd): $* (password $password)"',
     `[ -f ${join(root, 'copy-while-running')} ] && cp -a ${join(root, 'data')} ${join(root, 'copy')}`,
+    // What the control plane runs on the machine while the server runs (a sleep, a resume), then
+    // the provider dropping the memory it kept: everything stops where it is, its keeper included.
+    `[ -f ${join(root, 'while-running')} ] && sh ${join(root, 'while-running')}`,
+    `[ -f ${join(root, 'memory-lost')} ] && kill -9 $PPID`,
     `exit "$(cat ${join(root, 'ends-with')} 2>/dev/null || echo 0)"`,
   ])
   // No room on the volume for a Java startup cache, which has tests of its own
@@ -268,6 +272,139 @@ describe('a boot after the world was replaced', () => {
     writeFileSync(join(root, 'data/.blockly-start'), 'a record from before it moved\n')
     boot()
     expect(existsSync(join(root, 'data/.blockly-start'))).toBe(false)
+  })
+})
+
+/** What the control plane runs on the machine, there while the server runs, in order. */
+function whileRunning(...commands: (readonly string[])[]): void {
+  writeFileSync(
+    join(root, 'while-running'),
+    `${commands.map((command) => `( ${command[2]?.replaceAll('/data', join(root, 'data'))} )`).join('\n')}\n`,
+  )
+}
+
+/** The server put to sleep with its world saved, its memory then dropped by the provider. */
+function sleptThenMemoryLost(): void {
+  whileRunning(KEEP_ASLEEP)
+  writeFileSync(join(root, 'memory-lost'), '')
+  boot()
+  rmSync(join(root, 'memory-lost'))
+  rmSync(join(root, 'while-running'))
+}
+
+describe('a boot after a sleep whose memory the provider dropped', () => {
+  test('starts at once: the sleep kept the record, as a clean stop does', () => {
+    expect(boot()).toEqual(SCRIPTED)
+    sleptThenMemoryLost()
+    expect(existsSync(record())).toBe(true)
+    expect(boot()).toEqual([DIRECT, RAN])
+  })
+
+  test('from a sleep after a start the scripts ran too', () => {
+    whileRunning(KEEP_ASLEEP)
+    writeFileSync(join(root, 'memory-lost'), '')
+    expect(boot()).toEqual(SCRIPTED)
+    rmSync(join(root, 'memory-lost'))
+    rmSync(join(root, 'while-running'))
+    expect(boot()).toEqual([DIRECT, RAN])
+  })
+
+  test('goes through the scripts where the world was restored while it slept', () => {
+    boot()
+    sleptThenMemoryLost()
+    refilledFromArchive()
+    expect(boot().slice(-2)).toEqual(SCRIPTED)
+  })
+
+  test('goes through the scripts where a setting changed while it slept', () => {
+    boot()
+    sleptThenMemoryLost()
+    expect(boot({ DIFFICULTY: 'easy' })).toEqual(SCRIPTED)
+  })
+})
+
+describe('a sleep whose memory came back', () => {
+  test('runs on with its record pending again: a crash after it leaves none', () => {
+    boot()
+    whileRunning(KEEP_ASLEEP, TAKE_BACK)
+    writeFileSync(join(root, 'ends-with'), '137')
+    expect(boot()).toEqual([DIRECT, RAN])
+    expect(existsSync(record())).toBe(false)
+    rmSync(join(root, 'ends-with'))
+    rmSync(join(root, 'while-running'))
+    expect(boot()).toEqual(SCRIPTED)
+  })
+
+  test('where the record never went back to pending, a crash still leaves none', () => {
+    boot()
+    whileRunning(KEEP_ASLEEP)
+    writeFileSync(join(root, 'ends-with'), '137')
+    boot()
+    expect(existsSync(record())).toBe(false)
+    rmSync(join(root, 'ends-with'))
+    rmSync(join(root, 'while-running'))
+    expect(boot()).toEqual(SCRIPTED)
+  })
+
+  test('and a clean stop after it keeps the record, as ever', () => {
+    boot()
+    whileRunning(KEEP_ASLEEP, TAKE_BACK)
+    boot()
+    rmSync(join(root, 'while-running'))
+    expect(boot()).toEqual([DIRECT, RAN])
+  })
+})
+
+describe('the sleep’s and the resume’s moves of the record', () => {
+  /** One of them, run as the control plane runs it on the machine: as root where this is. */
+  const run = (command: readonly string[]) =>
+    Bun.spawnSync(['sh', '-c', command[2]?.replaceAll('/data', join(root, 'data')) ?? 'false'], {
+      env: { PATH: `${join(root, 'bin')}:${process.env.PATH ?? ''}` },
+    })
+
+  test('run as the user the volume belongs to, never as root', () => {
+    boot()
+    rmSync(join(root, 'gosu.log'), { force: true })
+    whileRunning(KEEP_ASLEEP, TAKE_BACK)
+    boot()
+    const as = `${SERVER_USER}:${SERVER_USER}`
+    expect(handedOver().filter((line) => line.endsWith('sh -c'))).toEqual(
+      AS_ROOT ? [`${as} sh -c`, `${as} sh -c`] : [],
+    )
+  })
+
+  test('a link put where the pending record goes moves nothing over root’s', () => {
+    if (!AS_ROOT) return
+    boot()
+    whileRunning(KEEP_ASLEEP)
+    writeFileSync(join(root, 'memory-lost'), '')
+    boot()
+    rmSync(join(root, 'memory-lost'))
+    // A record kept for the sleep, then its pending name made a link to a folder of root's, as a
+    // mod could, so a move as root would put the server's record in that folder.
+    mkdirSync(join(root, 'roots'))
+    writeFileSync(join(root, 'roots/start'), 'root’s own\n')
+    const remade = join(root, 'data/.blockly-remade')
+    Bun.spawnSync(['ln', '-s', join(root, 'roots'), join(remade, 'start.pending')])
+    rmSync(join(root, 'gosu.log'), { force: true })
+    // A gosu that drops to the user as the image's does, with this machine's setpriv.
+    tool('gosu', [
+      `echo "$1 $(basename "$2") $3" >> ${join(root, 'gosu.log')}`,
+      'user=$1; shift',
+      'exec setpriv --reuid "${user%:*}" --regid "${user#*:}" --clear-groups "$@"',
+    ])
+    run(TAKE_BACK)
+    expect(handedOver()).toEqual([`${SERVER_USER}:${SERVER_USER} sh -c`])
+    expect(readFileSync(join(root, 'roots/start'), 'utf8')).toBe('root’s own\n')
+  })
+
+  test('on a volume that is root’s, move nothing', () => {
+    if (!AS_ROOT) return
+    boot()
+    rmSync(join(root, 'gosu.log'), { force: true })
+    chownSync(join(root, 'data'), 0, 0)
+    expect(run(KEEP_ASLEEP).exitCode).toBe(0)
+    expect(handedOver()).toEqual([])
   })
 })
 

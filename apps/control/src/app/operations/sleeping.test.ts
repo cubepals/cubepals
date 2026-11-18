@@ -14,6 +14,7 @@ import { writeFile } from 'node:fs/promises'
 import { DAY_MS } from '@blockly/contracts/durations'
 import { schema } from '@blockly/db'
 import { and, desc, eq } from 'drizzle-orm'
+import { KEEP_ASLEEP, TAKE_BACK } from '../../minecraft/direct-start.ts'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
 import { MemoryStore } from '../../testing/memory-store.ts'
 import type { UserActor } from '../actor.ts'
@@ -109,6 +110,21 @@ const sleepsUnjoined = async (id: string) => {
   expect(h.runtime.machine(id)?.state).toBe('suspended')
 }
 
+/**
+ * What the control plane asks the machine to do with a direct start's record (`direct-start.ts`),
+ * said as `keep` and `take back`, while every command still runs as the fake runtime runs it.
+ */
+function asked(): string[] & { done: () => void } {
+  const ran: string[] = []
+  const real = h.runtime.exec.bind(h.runtime)
+  const exec = spyOn(h.runtime, 'exec').mockImplementation((handle, command, seconds) => {
+    if (command === KEEP_ASLEEP) ran.push('keep')
+    if (command === TAKE_BACK) ran.push('take back')
+    return real(handle, command, seconds)
+  })
+  return Object.assign(ran, { done: () => exec.mockRestore() })
+}
+
 describe.skipIf(!hasDatabase)('which stops put a server to sleep', () => {
   test('an idle stop and its owner’s stop put it to sleep, and a start wakes it as it was', async () => {
     const { owner, id } = await running()
@@ -134,6 +150,40 @@ describe.skipIf(!hasDatabase)('which stops put a server to sleep', () => {
     // Each wake is kept as a resume, apart from the boots before them.
     expect(await lastWakeSeconds(h.db, id, 'resumed')).not.toBeNull()
     expect(await lastWakeSeconds(h.db, id, 'booted')).toBeNull()
+  }, 60_000)
+
+  test('a sleep keeps its start written down for a boot should the memory go, and a resume makes it pending again', async () => {
+    const { owner, id } = await running()
+    const ran = asked()
+    try {
+      await stop(owner, id, 'idle')
+      // Kept once the world was saved, before its memory was.
+      expect(ran.filter((what) => what === 'keep')).toHaveLength(1)
+      expect(h.runtime.machine(id)?.state).toBe('suspended')
+      ran.length = 0
+      await start(owner, id)
+      await h.until(id, 'running')
+      expect(ran.filter((what) => what === 'take back')).toHaveLength(1)
+    } finally {
+      ran.done()
+    }
+    // Left running, it would hold a place the describes after it count on.
+    await stop(owner, id)
+  }, 60_000)
+
+  test('a sleep refused for its world unsaved keeps nothing written down', async () => {
+    const { owner, id } = await running()
+    const ran = asked()
+    // The save before the sleep is refused: it stops for real, saving on its way down.
+    h.minecraft.refuseCommands(/^save-all/)
+    try {
+      await stop(owner, id, 'idle')
+      expect(await stepsOfLast(h, id, 'stop')).toContain('unsaved')
+      expect(ran).not.toContain('keep')
+    } finally {
+      ran.done()
+      h.minecraft.refuseCommands(null)
+    }
   }, 60_000)
 
   test('a machine found stopped though its last sleep kept its memory reads, on the record, as memory lost', async () => {

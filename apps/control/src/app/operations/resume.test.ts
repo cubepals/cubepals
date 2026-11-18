@@ -5,6 +5,7 @@
 /** A ready game outruns stale provider state; both losing waits are cancelled and hangs still recover. */
 import { expect, test } from 'bun:test'
 import { SECOND_MS } from '@blockly/contracts/durations'
+import { TAKE_BACK } from '../../minecraft/direct-start.ts'
 import type { GameEndpoint, ReadinessProbe } from '../ports/minecraft.ts'
 import type { RuntimeHandle } from '../ports/runtime.ts'
 import { Resume } from './resume.ts'
@@ -179,6 +180,7 @@ test('an observation whose deadline already ended opens no game connection', asy
 test('a resume the provider turned into a boot from disk goes on as one, and its record says so', async () => {
   const marks: string[] = []
   const since = new Date()
+  const ran: (readonly string[])[] = []
   const resume = new Resume({
     runtime: {
       waitRunning: async () => {},
@@ -186,6 +188,10 @@ test('a resume the provider turned into a boot from disk goes on as one, and its
         throw new Error('a boot is never killed')
       },
       start: async (value) => value,
+      exec: async (_handle, command) => {
+        ran.push(command)
+        return { exitCode: 0, stdout: '', stderr: '' }
+      },
     },
     probe: {
       ping: async () => {
@@ -206,6 +212,36 @@ test('a resume the provider turned into a boot from disk goes on as one, and its
   } as OperationContext
   expect(await resume.cameBack(ctx, handle, () => endpoint, since)).toBe(false)
   expect(marks).toEqual(['resume_observing', 'resume_running', 'resume_booted'])
+  // Its boot started from whatever record its sleep kept: nothing is made pending.
+  expect(ran).toEqual([])
+})
+
+test('a game back as it was makes the record its sleep kept pending again, and waits on nothing for it', async () => {
+  const ran: (readonly string[])[] = []
+  let finish = () => {}
+  const resume = new Resume({
+    runtime: {
+      waitRunning: async () => {},
+      forceStop: async () => {},
+      start: async (value) => value,
+      exec: (_handle, command) => {
+        ran.push(command)
+        // Never answers until the test says so: the resume can't be waiting on it.
+        return new Promise((resolve) => {
+          finish = () => resolve({ exitCode: 0, stdout: '', stderr: '' })
+        })
+      },
+    },
+    probe: { ping: async () => answer },
+    logs: { recent: async () => [], tail: async function* () {} },
+  })
+  const ctx = {
+    op: { id: 'resume-test', kind: 'start' },
+    mark: async () => {},
+  } as unknown as OperationContext
+  expect(await resume.cameBack(ctx, handle, () => endpoint)).toBe(true)
+  expect(ran).toEqual([TAKE_BACK])
+  finish()
 })
 
 test('a resume whose log can’t be read goes on as a boot, but isn’t marked as one', async () => {
