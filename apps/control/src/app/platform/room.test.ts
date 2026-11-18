@@ -169,11 +169,13 @@ describe.skipIf(!hasDatabase)('the servers people already have, first', () => {
     }
     expect(await line('Free')).toEqual([
       ['provision', -1],
+      ['warm_spawn', 0],
       ['stop', 0],
       ['start', 1],
     ])
     expect(await line('Plus')).toEqual([
       ['provision', -1],
+      ['warm_spawn', 0],
       ['stop', 0],
       ['start', 2],
     ])

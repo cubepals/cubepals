@@ -349,6 +349,7 @@ test('public operation choices remain compatible with stored progress and revisi
     'purge',
     'store',
     'unstore',
+    'warm_spawn',
   ])
   expect(server.CHANGE_KINDS).toEqual(['pack', 'version', 'mods', 'world', 'settings'])
   expect(server.DIFFICULTIES).toEqual(['peaceful', 'easy', 'normal', 'hard'])

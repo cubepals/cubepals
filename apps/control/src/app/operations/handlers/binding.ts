@@ -59,6 +59,8 @@ export function serverBinding(deps: {
   db: Db
   runtime: Pick<Runtimes, 'providers' | 'start' | 'stop' | 'forceStop' | 'locate'>
   jobs: Pick<JobQueue, 'enqueueEligibility'>
+  /** Asked before a boot's configuration is saved over the last one (`spawn-warm-up.ts`). */
+  warmUp?: (tx: Tx, serverId: string, config: AppliedConfigJson) => Promise<void>
 }) {
   const { db, runtime } = deps
 
@@ -99,9 +101,10 @@ export function serverBinding(deps: {
 
   /**
    * What a server now runs, saved; its listing is looked at again, since trust is judged on the
-   * revision the server booted (§15.3).
+   * revision the server booted (§15.3), and a world it booted for the first time has its spawn made.
    */
   const booted = async (tx: Tx, serverId: string, config: AppliedConfigJson) => {
+    await deps.warmUp?.(tx, serverId, config)
     await saveApplied(tx, serverId, config)
     await deps.jobs.enqueueEligibility([serverId], tx)
   }

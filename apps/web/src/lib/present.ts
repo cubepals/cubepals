@@ -362,6 +362,7 @@ const BUSY_WORD: Record<OperationView['kind'], string> = {
   purge: 'Taking it down',
   store: 'Letting it rest',
   unstore: 'Restoring your world',
+  warm_spawn: 'Preparing the spawn',
 }
 
 export const busyWord = (operation: OperationView | null): string | undefined =>
