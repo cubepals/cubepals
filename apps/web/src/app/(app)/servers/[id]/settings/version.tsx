@@ -12,7 +12,7 @@ import { busyFor } from '../../../../../lib/button-busy'
 import { type Outcome, said, useOutcome } from '../../../../../lib/outcome'
 import { loaderLabel, presentConflict, presentPlan, runsOnPaper } from '../../../../../lib/present'
 import { Button, FormSection, Note, Select, Skeleton } from '../../../../../ui'
-import { ConfirmChange, changeable, planLines, RevokedChoice, useChanged, whatHappens } from './shared'
+import { ConfirmChange, planLines, RevokedChoice, takesChange, useChanged, whatHappens } from './shared'
 
 const LOADER_HELP: Record<Loader, string> = {
   vanilla: 'Minecraft as it comes.',
@@ -87,7 +87,7 @@ function VersionForm({
   const upgrade = gameVersion !== view.gameVersion
   const retype = loader !== view.loader
   const paper = paperAfter(view, { gameVersion, loader, loaders })
-  const allowed = changeable(view)
+  const allowed = takesChange(view)
   // Every mod is resolved again for the new version and type; the owner sees how before choosing.
   const plan = useQuery({
     ...trpc.servers.planVersion.queryOptions({ serverId: view.id, gameVersion, loader }),

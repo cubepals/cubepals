@@ -29,7 +29,7 @@ import { differences, FIELDS, type Field, named, numberProblems, onRunning, type
 import { GameNumbers } from './game-numbers'
 import { RangeField } from './range-field'
 import { messageProblem, ServerMessage } from './server-message'
-import { ConfirmChange, changeable, planLines, useChanged, whatHappens } from './shared'
+import { ConfirmChange, planLines, takesChange, useChanged, whatHappens } from './shared'
 import { compareSizes } from './sizing'
 import { type Sizing, useSizing } from './use-sizing'
 
@@ -109,7 +109,7 @@ function GameForm({
   const changes = valid ? differences(current, draft) : []
   const resized = valid && sizing.size !== view.partySize
   const dirty = changes.length > 0 || resized
-  const allowed = changeable(view)
+  const allowed = takesChange(view)
   const taking = (how: Takes) => FIELDS.filter((field) => options.takes[field] === how)
   const restarts =
     view.movesToSize !== null ||

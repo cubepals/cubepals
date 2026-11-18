@@ -41,8 +41,8 @@ import { useModUpdates } from '../mod-updates'
 import {
   ChangeState,
   ConfirmChange,
-  changeable,
   RevokedChoice,
+  takesChange,
   useChanged,
   whatHappens,
 } from '../settings/shared'
@@ -93,7 +93,7 @@ function PlayingAPack({ view, list }: { view: ServerView; list: ModsView }) {
   const pack = list.modpack
   const [moving, setMoving] = useState<PackMove | null>(null)
   const update = list.packUpdate
-  const allowed = changeable(view)
+  const allowed = takesChange(view)
   const toUpdate = () => {
     if (pack === null || update === null) return
     setMoving({
@@ -269,7 +269,7 @@ export default function ModsPage() {
     mods.data !== undefined &&
     mods.data.modpack === null &&
     withUpdates(mods.data, updates.versions).length > 0
-  useAskedUpdate(found && server.data !== undefined && changeable(server.data).ok, () => {
+  useAskedUpdate(found && server.data !== undefined && takesChange(server.data).ok, () => {
     if (mods.data !== undefined) setPending(updateAll(mods.data, updates))
   })
 
@@ -332,7 +332,7 @@ function Installed({
   onChange: (pending: Pending) => void
 }) {
   const noun = list.kind === 'plugins' ? 'plugins' : list.kind === 'datapacks' ? 'datapacks' : 'mods'
-  const allowed = changeable(view)
+  const allowed = takesChange(view)
   // Cubepals looks for updates itself, each time this page is read, and offers only what it checked.
   const found = updatesLine(list, updates.versions)
   return (
@@ -457,7 +457,7 @@ function Search({
     ...trpc.mods.search.queryOptions({ serverId: view.id, text: settled }),
     placeholderData: (previous) => previous,
   })
-  const allowed = changeable(view)
+  const allowed = takesChange(view)
   const noun = list.kind === 'plugins' ? 'plugins' : list.kind === 'datapacks' ? 'datapacks' : 'mods'
   // On a plan that plays Minecraft as it comes, searching still works; adding one is where the
   // plan that runs them is offered, instead of a change that would only be refused.
@@ -583,7 +583,7 @@ function Uploads({
   const own = useOwnUploads(view, 'mod', (done) =>
     onChange({ title: `Add ${done.fileName}?`, change: { addUploads: [done.uploadId] } }),
   )
-  const allowed = changeable(view)
+  const allowed = takesChange(view)
   const noun = list.kind === 'plugins' ? 'plugin' : 'mod'
   const installed = new Set(list.mods.map((m) => m.id))
 
