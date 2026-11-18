@@ -347,7 +347,11 @@ their change is `full`.
    nothing; `dig +short anything.play.cubepals.com` gives the edge's address.
 2. `https://bly-prod-control.fly.dev/api/health` answers, and `https://cubepals.com` loads. `https://www.cubepals.com` goes to
    `https://cubepals.com`.
-3. `fly logs -a bly-prod-realtime` shows the certificate for `rt.cubepals.com` issued.
+3. `fly logs -a bly-prod-realtime` shows the certificate for `rt.cubepals.com` issued, and
+   `node scripts/realtime-check.node.ts rt.cubepals.com` says realtime refused a session over
+   WebTransport and over its WebSocket fallback, as it refuses any without a ticket. Deploy
+   production asks the same after every deploy, for up to ten minutes, and the uptime check every
+   five.
 4. **Sign in with Google** at `https://cubepals.com` with the address in `ADMIN_EMAILS`. Admin
    appears in the menu.
 5. **Sign in by email** with another address: the mail arrives from `hello@cubepals.com`.
