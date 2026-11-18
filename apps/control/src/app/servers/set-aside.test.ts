@@ -10,7 +10,6 @@ import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test
 import { randomUUID } from 'node:crypto'
 import { schema } from '@blockly/db'
 import { eq } from 'drizzle-orm'
-import { SET_ASIDE_VARIABLE } from '../../minecraft/set-aside.ts'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
 import { DiagnosedFailure, PlainFailure } from '../errors.ts'
 import type { RuntimeHandle } from '../ports/runtime.ts'
@@ -78,13 +77,14 @@ describe.skipIf(!hasDatabase)('a start that stops on a datapack', () => {
     expect(h.runtime.machine(id)?.spec.env.BLOCKLY_SET_ASIDE).toBe('aside world datapacks/far-end.zip')
 
     // Put back: at the next start, and only then is it off the list.
-    await h.app.servers.setAside.putBack(owner, id, 'datapacks/far-end.zip', true)
+    await h.app.servers.setAside.putBack(owner, id, { path: 'datapacks/far-end.zip', worldId: world }, true)
     expect((await h.app.queries.get(owner, id)).setAside?.[0]?.back).toBe(true)
     h.minecraft.breakOn(() => null)
-    await h.app.servers.stop(owner, id, randomUUID())
-    await h.until(id, 'stopped')
-    await h.app.servers.start(owner, id, randomUUID())
-    await h.until(id, 'running', 30_000)
+    // A restart is a boot too: it puts the file back, and is what settles it.
+    const before = (await h.server(id)).version
+    await h.app.servers.restart(owner, id, randomUUID())
+    await h.until(id, (s) => s.lifecycle.status === 'running' && s.version > before + 1, 30_000)
+    await h.settled(id)
     expect(await loadSetAside(h.db, id)).toEqual([])
   }, 90_000)
 
@@ -102,43 +102,36 @@ describe.skipIf(!hasDatabase)('a start that stops on a datapack', () => {
     expect(await loadSetAside(h.db, id)).toHaveLength(1)
   }, 90_000)
 
-  test('a put back is settled only where the volume shows it went back, and only if that start was told', async () => {
+  test('a put back is settled after any boot, only where the volume shows it went back', async () => {
     const owner = await h.user()
     const { id } = await h.create(owner, { name: 'Three Files' })
     await h.until(id, 'running')
     await h.settled(id)
-    const file = (path: string, back: boolean) => ({
+    const file = (path: string, inWorld = false, worldId?: string) => ({
       path,
-      inWorld: false,
+      inWorld,
+      ...(worldId === undefined ? {} : { worldId }),
       why: 'x',
       at: '2026-11-18T10:00:00Z',
-      back,
+      back: true,
     })
+    const elsewhere = file('datapacks/far-end.zip', true, randomUUID())
     await h.db
       .update(schema.minecraftServers)
-      .set({
-        setAside: [file('mods/gone.jar', true), file('mods/kept.jar', true), file('mods/later.jar', true)],
-      })
+      .set({ setAside: [file('mods/gone.jar'), file('mods/kept.jar'), elsewhere] })
       .where(eq(schema.minecraftServers.id, id))
     const ran: string[][] = []
-    await settlePutBack(
-      {
-        db: h.db,
-        runtime: {
-          exec: async (_handle, command) => {
-            ran.push([...command])
-            return { exitCode: 0, stdout: 'server mods/kept.jar\n', stderr: '' }
-          },
-        },
-        bindingOf: async () => ({ handle: 'handle' as unknown as RuntimeHandle }),
-      },
-      id,
-      { spec: { env: { [SET_ASIDE_VARIABLE]: 'back server mods/gone.jar\nback server mods/kept.jar' } } },
-    )
+    const exec = async (_handle: RuntimeHandle, command: readonly string[]) => {
+      ran.push([...command])
+      return { exitCode: 0, stdout: 'server mods/kept.jar\n', stderr: '' }
+    }
+    await settlePutBack({ db: h.db, runtime: { exec } }, id, 'handle' as unknown as RuntimeHandle)
+    // The one gone went back. The one still kept, and another world's, stay asked back.
     expect(ran).toHaveLength(1)
+    expect(ran[0]?.join(' ')).not.toContain('far-end')
     expect(await loadSetAside(h.db, id)).toMatchObject([
-      { path: 'mods/kept.jar', back: false },
-      { path: 'mods/later.jar', back: true },
+      { path: 'mods/kept.jar', back: true },
+      { path: 'datapacks/far-end.zip', back: true },
     ])
   }, 60_000)
 })
@@ -183,5 +176,31 @@ describe.skipIf(!hasDatabase)('a datapack set aside in one world', () => {
     expect((await loadSetAside(h.db, id)).map((file) => file.worldId)).toEqual(['world-a', now])
     // Named again in this world, it isn't moved twice.
     expect(await setAsideFor(h.db, { id, activeWorldId: now }, failure)).toBe(failure)
+  }, 60_000)
+
+  test('put back acts on one world’s copy, not the same path in another', async () => {
+    const owner = await h.user()
+    const { id } = await h.create(owner, { name: 'Two Packs' })
+    await h.until(id, 'running')
+    await h.settled(id)
+    const path = 'datapacks/far-end.zip'
+    const [a, b] = [randomUUID(), randomUUID()]
+    const aside = (worldId: string) => ({
+      path,
+      inWorld: true,
+      worldId,
+      why: 'x',
+      at: '2026-11-18T10:00:00Z',
+      back: false,
+    })
+    await h.db
+      .update(schema.minecraftServers)
+      .set({ setAside: [aside(a), aside(b)] })
+      .where(eq(schema.minecraftServers.id, id))
+    await h.app.servers.setAside.putBack(owner, id, { path, worldId: b }, true)
+    expect((await loadSetAside(h.db, id)).map((file) => [file.worldId, file.back])).toEqual([
+      [a, false],
+      [b, true],
+    ])
   }, 60_000)
 })

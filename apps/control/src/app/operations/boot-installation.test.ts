@@ -97,8 +97,8 @@ function fixture(
       },
     },
     rconPasswords: () => ['fixture-password'],
-    notLoaded: async (...args: unknown[]) => {
-      details.notLoaded.push(args)
+    cameUp: async (...args: unknown[]) => {
+      details.notLoaded.push(args.slice(0, 2))
     },
   })
   const ctx = {

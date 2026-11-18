@@ -63,7 +63,7 @@ import type { LoaderBuilds } from './ports/loaders.ts'
 import type { Locks } from './ports/locks.ts'
 import type { PlayerProfiles, ReadinessProbe, ServerConsole } from './ports/minecraft.ts'
 import type { LogSource, Mailer, PlayAddressing, RegionCatalog } from './ports/platform.ts'
-import type { HostCpu } from './ports/runtime.ts'
+import type { HostCpu, RuntimeHandle } from './ports/runtime.ts'
 import { progressionAtStart } from './progression/progression.ts'
 import { ProgressionSwitch } from './progression/switch.ts'
 import { RevisionService } from './revisions/service.ts'
@@ -79,7 +79,7 @@ import { OwnerNotices } from './servers/owner-notices.ts'
 import { markNotLoaded } from './servers/persistence.ts'
 import { ServerQueries } from './servers/queries.ts'
 import { MinecraftServerService } from './servers/service.ts'
-import { SetAsideChoice } from './servers/set-aside.ts'
+import { SetAsideChoice, settlePutBack } from './servers/set-aside.ts'
 import { RuntimeSpecs } from './servers/specs.ts'
 import { TellPlayers } from './servers/tell-players.ts'
 import { ServerTransitions } from './servers/transitions.ts'
@@ -169,11 +169,15 @@ export interface ControlPlaneSettings {
 }
 
 /**
- * What a start keeps and does as it boots: marks the owner's mods that didn't load, starts once
- * without Cubepals' own, and keeps what it read of its host.
+ * What a start keeps and does as it boots: marks the owner's mods that didn't load and settles
+ * the files its owner asked back once it is up, starts once without Cubepals' own, and keeps what
+ * it read of its host.
  */
-const atBoot = (db: Db) => ({
-  notLoaded: (serverId: string, names: string[]) => markNotLoaded(db, serverId, names),
+const atBoot = (db: Db, runtime: Pick<Runtimes, 'exec'>) => ({
+  cameUp: async (serverId: string, names: string[], handle: RuntimeHandle) => {
+    await markNotLoaded(db, serverId, names)
+    await settlePutBack({ db, runtime }, serverId, handle)
+  },
   ownMods: [ownModsOf(db), progressionAtStart(db)],
   hostSeen: (provider: string, cpu: HostCpu) => hostSeen(db, provider, cpu),
 })
@@ -329,7 +333,7 @@ export function composeControlPlane(ports: ControlPlanePorts, settings: ControlP
     packs: contents,
     console: ports.console,
     rconPasswords: (serverId) => specs.rconPasswords(serverId),
-    ...atBoot(db),
+    ...atBoot(db, runtime),
   })
   const runner = new OperationRunner(
     { db, transitions, events },

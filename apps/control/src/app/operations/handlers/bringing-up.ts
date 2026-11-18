@@ -28,7 +28,7 @@ import { heldStorage } from '../../servers/kept-storage.ts'
 import { loadRevision, lockServer, type RuntimeBinding, saveHandle } from '../../servers/persistence.ts'
 import { changedParts } from '../../servers/resume-parts.ts'
 import { desiredRuns } from '../../servers/revision-reads.ts'
-import { setAsideFor, settlePutBack } from '../../servers/set-aside.ts'
+import { setAsideFor } from '../../servers/set-aside.ts'
 import type { DesiredRuntime, RuntimeSpecs } from '../../servers/specs.ts'
 import type { ServerTransitions } from '../../servers/transitions.ts'
 import { clearPresence, closeInterval, openInterval } from '../../servers/usage.ts'
@@ -361,7 +361,7 @@ export function bringingUp(deps: {
         const started = await transitions.outcome(tx, server, { type: 'started' })
         await enqueuePrune(tx, transitions, started)
       })
-      return settlePutBack(deps, ctx.server.id, desired).then(() => ({ status: 'succeeded' as const }))
+      return { status: 'succeeded' }
     },
   }
 

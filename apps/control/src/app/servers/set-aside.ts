@@ -20,9 +20,9 @@ import { type Aside, asideOf, askedBack, stillKept } from '../../minecraft/set-a
 import { type Actor, authorize, requestedBy } from '../actor.ts'
 import { DiagnosedFailure, NotFound, PlainFailure } from '../errors.ts'
 import type { EventBus } from '../ports/events.ts'
-import type { RuntimeHandle, RuntimeSpec } from '../ports/runtime.ts'
+import type { RuntimeHandle } from '../ports/runtime.ts'
 import type { Runtimes } from '../runtimes/router.ts'
-import { lockServer } from './persistence.ts'
+import { findServer, loadWorld, lockServer } from './persistence.ts'
 
 /** What a server has set aside now, as its row keeps it, every path checked again. */
 export async function loadSetAside(q: Queryable, serverId: string): Promise<SetAsideJson[]> {
@@ -107,43 +107,44 @@ export async function startNotes(
 }
 
 /**
- * After a start that came up: of the files that start was asked to put back, each no longer kept
- * aside went back, and is off the list. One still kept, because something new took its place, is
- * listed as aside again, with its way back. One asked back after the start's spec was built is left
- * for the next start, which is told of it.
+ * After any boot that came up, on `handle`: each file its owner asked back that this boot could
+ * reach (the server's own, or the world it runs) and whose kept copy is gone went back, and is off
+ * the list. One still kept stays asked back: the request came after this boot was built, or
+ * something new took its place, and the next boot tries again without ever overwriting it.
  */
 export async function settlePutBack(
-  deps: {
-    db: Db
-    runtime: Pick<Runtimes, 'exec'>
-    bindingOf: (serverId: string) => Promise<{ handle: RuntimeHandle | null }>
-  },
+  deps: { db: Db; runtime: Pick<Runtimes, 'exec'> },
   serverId: string,
-  desired: { spec: Pick<RuntimeSpec, 'env'> },
+  handle: RuntimeHandle,
 ): Promise<void> {
-  const asked = askedBack(desired.spec.env)
+  const server = await findServer(deps.db, serverId)
+  if (server === null) return
+  const reachable = (file: SetAsideJson) => !file.inWorld || file.worldId === server.activeWorldId
+  const asked = (await loadSetAside(deps.db, serverId)).filter((file) => file.back && reachable(file))
   if (asked.length === 0) return
-  const { handle } = await deps.bindingOf(serverId)
-  if (handle === null) return
-  const read = await deps.runtime
-    .exec(handle, stillKept(asked, desired.spec.env.LEVEL ?? 'world'), 20)
-    .catch(() => null)
+  const level =
+    server.activeWorldId === null ? 'world' : (await loadWorld(deps.db, server.activeWorldId)).levelName
+  const read = await deps.runtime.exec(handle, stillKept(asked, level), 20).catch(() => null)
   if (read === null || read.exitCode !== 0) return
   const kept = new Set(read.stdout.split('\n'))
-  const where = (file: Aside) => `${file.inWorld ? 'world' : 'server'} ${file.path}`
-  const wasAsked = (file: Aside) => asked.some((one) => where(one) === where(file))
+  const back = (file: SetAsideJson) => asked.includes(file) && !kept.has(where(file))
   await deps.db.transaction(async (tx) => {
     if ((await lockServer(tx, serverId)) === null) return
     const now = await loadSetAside(tx, serverId)
-    const next = now.flatMap((file) =>
-      !file.back || !wasAsked(file) ? [file] : kept.has(where(file)) ? [{ ...file, back: false }] : [],
-    )
+    const gone = new Set(asked.filter(back).map(identity))
     await tx
       .update(schema.minecraftServers)
-      .set({ setAside: next })
+      .set({ setAside: now.filter((file) => !(file.back && gone.has(identity(file)))) })
       .where(eq(schema.minecraftServers.id, serverId))
   })
 }
+
+/** Where a file is, as the step and `stillKept` say it. */
+const where = (file: Aside): string => `${file.inWorld ? 'world' : 'server'} ${file.path}`
+
+/** A file set aside, told apart from the same path set aside from another world. */
+const identity = (file: Pick<SetAsideJson, 'path' | 'inWorld' | 'worldId'>): string =>
+  `${where(file)} ${file.worldId ?? ''}`
 
 /** The owner's way back: a file set aside goes back at the next start, or stays aside after all. */
 export class SetAsideChoice {
@@ -155,18 +156,25 @@ export class SetAsideChoice {
     this.#events = events
   }
 
-  async putBack(actor: Actor, serverId: string, path: string, back: boolean): Promise<void> {
+  async putBack(
+    actor: Actor,
+    serverId: string,
+    file: { path: string; worldId?: string | null },
+    back: boolean,
+  ): Promise<void> {
     if (actor.kind !== 'user') throw new NotFound('Server')
     await this.#db.transaction(async (tx) => {
       const server = authorize(actor, await lockServer(tx, serverId))
       if (server.deletedAt !== null) throw new NotFound('Server')
       const now = await loadSetAside(tx, serverId)
-      if (!now.some((file) => file.path === path)) throw new NotFound('File')
+      const chosen = (one: SetAsideJson) =>
+        one.path === file.path && (one.worldId ?? null) === (file.worldId ?? null)
+      if (!now.some(chosen)) throw new NotFound('File')
       const version = server.version + 1
       await tx
         .update(schema.minecraftServers)
         .set({
-          setAside: now.map((file) => (file.path === path ? { ...file, back } : file)),
+          setAside: now.map((one) => (chosen(one) ? { ...one, back } : one)),
           version,
           updatedAt: new Date(),
         })
@@ -176,7 +184,7 @@ export class SetAsideChoice {
         action: back ? 'server.set_aside_put_back' : 'server.set_aside_kept',
         subjectType: 'server',
         subjectId: server.id,
-        data: { path },
+        data: { path: file.path, worldId: file.worldId ?? null },
       })
       await this.#events.publish(tx, {
         type: 'server_changed',

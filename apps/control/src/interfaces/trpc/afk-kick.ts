@@ -21,7 +21,7 @@ export const serverIdleKick = {
   }),
   /** A file set aside for a start goes back at the next one, or stays aside; it restarts nothing. */
   putBack: authedProcedure.input(PutAsideBackInput).mutation(async ({ ctx, input }) => {
-    await ctx.services.servers.setAside.putBack(ctx.actor, input.serverId, input.path, input.back)
+    await ctx.services.servers.setAside.putBack(ctx.actor, input.serverId, input, input.back)
     return ctx.services.queries.get(ctx.actor, input.serverId)
   }),
 }

@@ -27,7 +27,7 @@ export function SetAside({ server }: { server: ServerView }) {
       <div className="bk-stack" style={{ gap: 'var(--space-8)' }}>
         {files.map((file) => (
           <div
-            key={file.path}
+            key={`${file.path} ${file.worldId ?? ''}`}
             className="bk-row bk-wrap"
             style={{ gap: 'var(--space-12)', justifyContent: 'space-between' }}
           >
@@ -36,7 +36,14 @@ export function SetAside({ server }: { server: ServerView }) {
               variant="outline"
               size="sm"
               disabled={putBack.isPending}
-              onClick={() => putBack.mutate({ serverId: server.id, path: file.path, back: !file.back })}
+              onClick={() =>
+                putBack.mutate({
+                  serverId: server.id,
+                  path: file.path,
+                  worldId: file.worldId ?? null,
+                  back: !file.back,
+                })
+              }
             >
               {file.back ? 'Cancel' : 'Put it back'}
             </Button>

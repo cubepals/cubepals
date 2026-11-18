@@ -165,7 +165,7 @@ export class BootSequence {
   readonly #packs: Pick<PackContents, 'load' | 'leaveOutAfterCrash' | 'keepAfterCrash'> | null
   readonly #console: ServerConsole
   readonly #passwords: (serverId: string) => string[]
-  readonly #notLoaded: (serverId: string, names: string[]) => Promise<void>
+  readonly #cameUp: (serverId: string, names: string[], handle: RuntimeHandle) => Promise<void>
   readonly #ownMods: OwnMods[]
   readonly #hostSeen: HostNotes['seen']
 
@@ -185,8 +185,8 @@ export class BootSequence {
     /** For the settings the game keeps in its world, which a start sets by command. */
     console: ServerConsole
     rconPasswords: (serverId: string) => string[]
-    /** Keeps what a start that came up left out of what it was told to load, by name. */
-    notLoaded?: (serverId: string, names: string[]) => Promise<void>
+    /** Keeps what a boot that came up left out of what it was told to load, by name, on `handle`. */
+    cameUp?: (serverId: string, names: string[], handle: RuntimeHandle) => Promise<void>
     /**
      * Cubepals' own mods, each group as a start that fails with it asks (the performance mods,
      * Offline world progression's mod); absent, none are placed.
@@ -205,7 +205,7 @@ export class BootSequence {
     this.#packs = deps.packs ?? null
     this.#console = deps.console
     this.#passwords = deps.rconPasswords
-    this.#notLoaded = deps.notLoaded ?? (async () => undefined)
+    this.#cameUp = deps.cameUp ?? (async () => undefined)
     this.#ownMods = deps.ownMods ?? []
     this.#hostSeen = deps.hostSeen
   }
@@ -339,7 +339,7 @@ export class BootSequence {
     // may have begun after a line printed early, so this run's own log is read too.
     const recent = await this.#logs.recent(handle, RUN_LINES_READ).catch(() => [])
     const said = [...leftOut, ...lastRun(recent.map((line) => line.text)).filter(saysNotLoaded)]
-    await this.#notLoaded(server.id, notLoaded(said, revision.mods))
+    await this.#cameUp(server.id, notLoaded(said, revision.mods), handle)
   }
 
   /**

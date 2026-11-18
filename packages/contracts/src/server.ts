@@ -371,6 +371,8 @@ export const SetTellPlayersInput = z.object({ serverId: ServerId, tell: z.boolea
 export const PutAsideBackInput = z.object({
   serverId: ServerId,
   path: z.string().min(1).max(300),
+  /** The world it was set aside from, where it is a datapack: the same path can be aside in two. */
+  worldId: z.string().uuid().nullable().optional(),
   back: z.boolean(),
 })
 
@@ -641,7 +643,14 @@ export interface ServerView {
    * The files Cubepals set aside, a copy kept, because a start stopped on them: where each was,
    * the failure that named it, and whether its owner asked it back for the next start.
    */
-  setAside?: Array<{ path: string; inWorld: boolean; why: string; at: string; back: boolean }>
+  setAside?: Array<{
+    path: string
+    inWorld: boolean
+    worldId?: string
+    why: string
+    at: string
+    back: boolean
+  }>
   gameVersion: string
   /** Which players' games join it; null for a release Cubepals can't tell of. */
   joins: JoinsView | null
