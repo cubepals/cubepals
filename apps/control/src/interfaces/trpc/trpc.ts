@@ -50,6 +50,7 @@ import type { AfkKick } from '../../app/servers/afk-kick.ts'
 import type { OwnerNotices } from '../../app/servers/owner-notices.ts'
 import type { ServerQueries } from '../../app/servers/queries.ts'
 import type { MinecraftServerService } from '../../app/servers/service.ts'
+import type { SetAsideChoice } from '../../app/servers/set-aside.ts'
 import type { TellPlayers } from '../../app/servers/tell-players.ts'
 import type { SharingQueries } from '../../app/sharing/queries.ts'
 import type { SharingService } from '../../app/sharing/service.ts'
@@ -64,6 +65,7 @@ export interface Services {
     tellPlayers: TellPlayers
     performanceMods: PerformanceSwitch
     progression: ProgressionSwitch
+    setAside: SetAsideChoice
   }
   /** A new address goes through here, so its owner hears when someone else gave it. */
   notices: OwnerNotices

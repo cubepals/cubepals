@@ -8,9 +8,13 @@
  * keep that work in a file (its AOT cache, JEP 483 and 514) and start from it. Measured on the
  * image this runs, one CPU, the server's own command with the cache added: a Fabric 26.3 server
  * with eleven mods reached `Done` in 22.5 to 25.2 s in place of 27.9 to 33.5 s, Paper 26.2 in 48
- * s in place of 53 to 55 s. What it holds is Java's and the libraries' classes, which the mod
- * loaders leave to Java's own class loader; Minecraft's and the mods' go through the loader's and
- * are loaded as ever.
+ * s in place of 53 to 55 s. What it links ahead is only what Java's own class loaders load. A
+ * loader's own (Fabric's, Paperclip's) is kept as a parsed copy that Java matches by checksum and
+ * links as ever: measured with JDK 25, a Fabric 26.3 start read 4,405 of Minecraft's 15,103
+ * classes from the cache, and none of Fabric Loader's own, which its launcher loads in a loader of
+ * its own too. So Paper starts from its class path where it can (`paper-launch.ts`), which puts
+ * all of Paper and Minecraft in the cache. NeoForge, which the image starts through the shell
+ * script its installer writes, is given none: its command has no `java` for this to find.
  *
  * Java writes such a cache from a run of the real thing, in two halves. A start with no cache
  * records what it loads, which Java writes down as it exits (`-XX:AOTMode=record`). The start
@@ -55,6 +59,7 @@
 
 import type { NOT_ARCHIVED } from '../app/ports/runtime.ts'
 import { DATA_DIR } from './jars.ts'
+import { LAUNCH_LINES } from './paper-launch.ts'
 import { SHIM_DIR } from './wake-step.ts'
 
 /** The folder on the volume that no archive holds (`NOT_ARCHIVED`): a cache is made again. */
@@ -119,12 +124,15 @@ export const CACHED_RUNNER_LINES = [
   '#!/bin/sh',
   `cache=${CACHE}; conf=$cache.conf; state=${CACHE_STATE}`,
   'plain() { exec mc-server-runner "$@"; }',
-  'n=0; at=0; jar=0; file=; bare=',
+  'n=0; at=0; jar=0; file=; bare=; launch=; lstate=',
   'for w; do n=$((n + 1)); if [ $at = 0 ]; then if [ "$w" = java ]; then at=$n; fi; elif [ $jar = 0 ]; then if [ "$w" = -jar ]; then jar=$n; fi; elif [ $n = $((jar + 1)) ]; then file=$w; fi; done',
   '[ -n "$BLOCKLY_START_KEY" ] && [ -n "$file" ] && [ -f "$file" ] || plain "$@"',
   `home=\${JAVA_HOME:-$(dirname "$(dirname "$(readlink -f "$(command -v java)")")")}`,
   `[ "$(sed -n "s/^JAVA_VERSION=\\"\\([0-9]*\\).*/\\1/p" "$home/release" 2>/dev/null)" = ${JAVA} ] || plain "$@"`,
-  'fp=$({ cat "$home/release"; stat -c "%s %Y" "$file"; n=0; for w; do n=$((n + 1)); if [ $n -gt $at ] && [ $n -le $((jar + 1)) ]; then printf "%s\\n" "$w"; fi; done; } 2>/dev/null | sha256sum | cut -c1-64)',
+  // Paper from its class path, where the jar is Paperclip (`paper-launch.ts`).
+  ...LAUNCH_LINES,
+  // What it is made for covers every jar a manifest jar names: its state's first line is their sizes and times.
+  'fp=$({ cat "$home/release"; stat -c "%s %Y" "$file"; if [ "$file" = "$launch" ]; then sed -n 1p "$lstate"; fi; n=0; for w; do n=$((n + 1)); if [ $n -gt $at ] && [ $n -le $((jar + 1)) ]; then printf "%s\\n" "$w"; fi; done; } 2>/dev/null | sha256sum | cut -c1-64)',
   'with() { more=$1; shift; n=0; for w; do n=$((n + 1)); if [ $n = 1 ]; then set --; fi; if [ -n "$bare" ] && [ "$w" = -XX:+AlwaysPreTouch ]; then continue; fi; set -- "$@" "$w"; if [ $n = $at ]; then set -- "$@" $more; fi; done; exec mc-server-runner "$@"; }',
   `make() ( n=0; for w; do n=$((n + 1)); if [ $n = 1 ]; then set --; fi; if [ $n -gt $at ] && [ $n -lt $jar ] && [ "$w" != -XX:+AlwaysPreTouch ]; then set -- "$@" "$w"; fi; done; exec java "$@" -XX:AOTMode=create -XX:AOTConfiguration=$conf -XX:AOTCache=$cache.new -cp "$file" >/dev/null 2>&1 )`,
   `mkdir -p ${CACHE_DIR} 2>/dev/null || plain "$@"`,

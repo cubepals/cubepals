@@ -175,6 +175,22 @@ export interface FailureJson {
   remedy?: string
 }
 
+/**
+ * A file Blockly moved aside, a copy kept, because a start's own output named it as what stopped
+ * the server (`minecraft/set-aside.ts`). `path` is under the server's data, or under the world it
+ * runs where `inWorld`; `back` is its owner's ask to put it back at the next start.
+ */
+export interface SetAsideJson {
+  path: string
+  inWorld: boolean
+  /** The world it was set aside from, where `inWorld`: it goes back into that world alone. */
+  worldId?: string
+  /** The failure that named it, as its owner read it. */
+  why: string
+  at: string
+  back: boolean
+}
+
 export interface AppliedConfigJson {
   revisionId: string
   worldId: string
@@ -230,6 +246,8 @@ export interface ResumePartsJson {
   stopCheaters: string
   ownFiles: string
   identity: string
+  /** Files asked back from where they were set aside; absent on boots kept before it was. */
+  putBack?: string
 }
 
 export interface ObservedJson {

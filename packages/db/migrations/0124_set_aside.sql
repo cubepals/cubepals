@@ -1,0 +1,1 @@
+ALTER TABLE "minecraft_servers" ADD COLUMN "set_aside" jsonb DEFAULT '[]'::jsonb NOT NULL;

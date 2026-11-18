@@ -91,6 +91,7 @@ import {
   revisionHistory,
 } from './revision-reads.ts'
 import type { MinecraftServerService } from './service.ts'
+import { startNotes } from './set-aside.ts'
 import { serverSettingsView } from './settings-view.ts'
 import { lastsOnceRestored } from './temporary.ts'
 import {
@@ -669,7 +670,7 @@ export class ServerQueries {
             remedy: server.lifecycle.failure.remedy ?? null,
           }
         : null,
-      notLoaded: [...server.notLoaded],
+      ...(await startNotes(this.#db, server)),
       gameVersion: revision.gameVersion,
       ...(await addedAtStart(this.#db, this.#setups.compat, server.id, revision, { running, applied })),
       loader: revision.loader,

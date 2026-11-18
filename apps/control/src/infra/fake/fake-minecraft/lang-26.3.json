@@ -25,6 +25,17 @@
     "arguments.nbtpath.nothing_found": "Found no elements matching %s",
     "commands.data.merge.failed": "Nothing changed. The specified properties already have these values",
     "commands.kill.success.single": "Killed %s",
-    "commands.summon.success": "Summoned new %s"
+    "commands.summon.success": "Summoned new %s",
+    "commands.execute.conditional.pass": "Test passed",
+    "commands.execute.conditional.fail": "Test failed",
+    "commands.forceload.added.failure": "No chunks were marked for force loading",
+    "commands.forceload.added.multiple": "Marked %s chunks in %s from %s to %s to be force loaded",
+    "commands.forceload.added.none": "No force loaded chunks were found in %s",
+    "commands.forceload.list.multiple": "%s force loaded chunks were found in %s at: %s",
+    "commands.forceload.list.single": "A force loaded chunk was found in %s at: %s",
+    "commands.forceload.query.failure": "Chunk at %s in %s is not marked for force loading",
+    "commands.forceload.query.success": "Chunk at %s in %s is marked for force loading",
+    "commands.forceload.removed.failure": "No chunks were removed from force loading",
+    "commands.forceload.removed.multiple": "Unmarked %s chunks in %s from %s to %s for force loading"
   }
 }

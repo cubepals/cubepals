@@ -50,6 +50,7 @@ describe('a watch from a peer that leaves while it is checked', () => {
     const events: EventBus = { publish: async () => {}, subscribe: async () => async () => {} }
     const tickets: RealtimeTickets = {
       issue: async () => 'ticket',
+      issueForOperator: async () => 'ticket',
       verify: async () => ({ userId: 'user-1', sessionId: 'session-1' }),
     }
     // The database takes a moment to say whose the server is, as it does under any load.

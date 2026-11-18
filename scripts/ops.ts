@@ -49,6 +49,11 @@
  *   bun scripts/ops.ts console <server> [command] [--lines n]
  *                                                   a command sent and its answer, or without one
  *                                                   the lines the console printed lately
+ *   bun scripts/ops.ts console <server> --follow [--seconds n]
+ *                                                   the console watched live through the realtime
+ *                                                   role, as its owner's page watches it, for n
+ *                                                   seconds (60 unless given, 15 minutes at
+ *                                                   most); the watch is in the audit log
  *   bun scripts/ops.ts identity <server> [--name <name>] [--description <text>]
  *                               [--icon <key>|none] [--tags a,b] [--address <slug>]
  *                                                   what its identity settings set
@@ -133,6 +138,8 @@
  *   one a line and grouped, and the database now.
  * - `vitals-report.ts`: how servers tick: the platform now, one a line, and one server's minutes.
  * - `timeline-report.ts`: one server's operations, joins and signals in time order.
+ * - `console-follow.ts`: a server's console watched live through the realtime role, as its owner's
+ *   page watches it (`console --follow`).
  */
 import type { HealthOperationView, HealthView, HealthWindow, OperationStepsView } from '@blockly/contracts'
 import type {
@@ -141,14 +148,16 @@ import type {
   DiagnosticsSummaryView,
   DiagnosticView,
 } from '@blockly/contracts/diagnostics'
-import { DAY_MS, HOUR_MS, MINUTE_MS } from '@blockly/contracts/durations'
+import { DAY_MS, HOUR_MS, MINUTE_MS, SECOND_MS } from '@blockly/contracts/durations'
 import type { JoinDetailView, JoinView, SignalView } from '@blockly/contracts/join-records'
 import type { ServerVitalsView, VitalsListView } from '@blockly/contracts/server-vitals'
 import { z } from 'zod'
+import { OPERATOR_WATCH_MS } from '../apps/control/src/interfaces/realtime/console-access.ts'
 import { healthReport, operationLine, stepsReport } from './lib/health-report.ts'
 import { flags, operatorCli, withoutSecrets } from './lib/operator-cli.ts'
 import { ConsoleCommand, namesServer, PLATFORM } from './lib/operator-inputs.ts'
 import { reachProduction } from './lib/production-reach.ts'
+import { followConsole, followedLine, type WatchTicket } from './ops/console-follow.ts'
 import { databaseReport, diagnosisReport, diagnosticLine, summaryReport } from './ops/diagnostics-report.ts'
 import { joinLine, joinReport, signalLine } from './ops/join-report.ts'
 import { timelineReport } from './ops/timeline-report.ts'
@@ -160,6 +169,10 @@ const { positional, options } = flags(rest)
 const option = (name: string) => options.get(name)?.at(-1)
 
 const { fail, api } = operatorCli('ops', '/ops/v1', 'docs/production.md')
+
+/** How long `console --follow` watches unless told, and the most: the realtime role's own limit. */
+const FOLLOW_SECONDS = 60
+const FOLLOW_SECONDS_MOST = OPERATOR_WATCH_MS / SECOND_MS
 
 const say = (line: string) => process.stdout.write(`${withoutSecrets(line)}\n`)
 const show = (value: unknown) => say(JSON.stringify(value, null, 2))
@@ -350,7 +363,16 @@ switch (command) {
     break
   }
   case 'console': {
-    const server = `/servers/${await serverId()}/console`
+    const id = await serverId()
+    const server = `/servers/${id}/console`
+    if (option('follow')) {
+      const seconds = Number(option('seconds') ?? FOLLOW_SECONDS)
+      if (!Number.isInteger(seconds) || seconds < 1 || seconds > FOLLOW_SECONDS_MOST)
+        fail(`--seconds is a whole number from 1 to ${FOLLOW_SECONDS_MOST}`)
+      const watch = (await api('POST', `${server}/watch`)) as WatchTicket
+      say(followedLine(await followConsole({ ...watch, serverId: id }, seconds, say)))
+      break
+    }
     const sent = positional.slice(1).join(' ')
     if (sent && !ConsoleCommand.safeParse(sent).success)
       fail('a console command is one line of plain text, without control characters')

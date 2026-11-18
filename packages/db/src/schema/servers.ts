@@ -35,6 +35,7 @@ import type {
   PinnedModJson,
   PinnedModpackJson,
   ServerSettingsJson,
+  SetAsideJson,
 } from '../json.ts'
 import { users } from './auth.ts'
 import { createdAt, ts, updatedAt } from './columns.ts'
@@ -120,6 +121,8 @@ export const minecraftServers = pgTable(
      * everything loaded; set again at every start.
      */
     notLoaded: text('not_loaded').array().notNull().default([]),
+    /** The files Blockly set aside for a start that stopped on them, each with the way back. */
+    setAside: jsonb('set_aside').$type<SetAsideJson[]>().notNull().default([]),
     desiredRevisionId: uuid('desired_revision_id').references((): AnyPgColumn => serverRevisions.id),
     activeWorldId: uuid('active_world_id').references((): AnyPgColumn => worlds.id),
     version: integer('version').notNull().default(0),
@@ -329,6 +332,8 @@ export const operationKind = pgEnum('operation_kind', [
   'store',
   /** A stored world brought back onto fresh storage and compute, and booted. */
   'unstore',
+  /** A new world's spawn generated after its first boot, before anyone joins. */
+  'warm_spawn',
 ])
 export const operationStatus = pgEnum('operation_status', [
   'queued',

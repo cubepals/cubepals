@@ -3,9 +3,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { SECOND_MS } from '@blockly/contracts/durations'
-import type { Db } from '@blockly/db'
+import { type Db, schema } from '@blockly/db'
 import { type ConsoleLevel, classifyLine } from '../../minecraft/logs.ts'
 import { isAdmin, stillSignedIn } from '../accounts/persistence.ts'
+import { type OperatorActor, requestedBy } from '../actor.ts'
+import { NotFound } from '../errors.ts'
 import type { Limits } from '../ports/limits.ts'
 import type { LogSource } from '../ports/platform.ts'
 import type { TicketHolder } from '../ports/tickets.ts'
@@ -52,6 +54,23 @@ export class ConsoleFeed {
   /** Whether `userId` may open one more console this minute (`AbuseLimits.consoleWatchesPerMinute`). */
   mayOpen(userId: string): Promise<boolean> {
     return this.#limits.allow(`console-watch:${userId}`, tuning().abuse.consoleWatchesPerMinute)
+  }
+
+  /**
+   * An operator's live watch of a server's console, written to the audit log under their name
+   * before its ticket is issued (`operator-watch.ts`). The server's id, or NotFound.
+   */
+  async operatorWatches(actor: OperatorActor, serverId: string): Promise<string> {
+    const server = await findServer(this.#db, serverId)
+    if (server === null) throw new NotFound('Server')
+    await this.#db.insert(schema.auditLog).values({
+      actor: requestedBy(actor),
+      action: 'console.watch',
+      subjectType: 'server',
+      subjectId: server.id,
+      data: {},
+    })
+    return server.id
   }
 
   /** A server's console is its owner's to watch, and any platform admin's (§13). */

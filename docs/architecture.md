@@ -1656,6 +1656,12 @@ Replacing mc-router means rewriting `apps/edge` against the same protocol. Nothi
   - Every minute each session's sign-in is checked again, and each console it follows: a session
     whose sign-in has ended (signed out, a password reset, a test account's use over) or whose
     account is no longer active is closed; a console it may no longer watch is left.
+  - An operator watches one console without a person's session (`ops.ts console <server>
+    --follow`): the operators' API (`OPERATOR_TOKEN`) writes `console.watch` to the audit log and
+    issues a ticket that names the operator and the server, no account and no sign-in. The realtime
+    role lets that ticket into that one console only, joins no `user:` room, and closes the session
+    after 15 minutes (`console-access.ts`). A client that sends no `Origin`, which a browser always
+    does, is let in only with such a ticket.
   - When a console room's member count goes 0→1, the realtime role starts
     `LogSource.tail(handle)`, and each new watcher gets the last 200 lines from
     `LogSource.recent` as `consoleHistory`, one read shared by everyone opening it at once. At

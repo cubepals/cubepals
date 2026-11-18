@@ -4,6 +4,7 @@
 
 import { describe, expect, test } from 'bun:test'
 import { createHmac } from 'node:crypto'
+import { SignJWT } from 'jose'
 import { JoseRealtimeTickets } from './jose-tickets.ts'
 
 const SECRET = 'ticket-secret-0123456789abcdef'
@@ -70,5 +71,52 @@ describe('JoseRealtimeTickets', () => {
     expect(await tickets.verify(old)).toBeNull()
     expect(await tickets.verify('')).toBeNull()
     expect(await tickets.verify('not.a.ticket')).toBeNull()
+  })
+
+  describe("an operator's ticket", () => {
+    const OPERATOR = { operator: 'ops-agent', serverId: '6f1c2c49-6c39-4d3c-9d0b-0f8f2d0f6a11' }
+    /** A ticket signed with the right secret and audience, with whatever claims a test gives it. */
+    const signed = (subject: string, claims: Record<string, string>) =>
+      new SignJWT(claims)
+        .setProtectedHeader({ alg: 'HS256' })
+        .setSubject(subject)
+        .setAudience('local')
+        .setJti(crypto.randomUUID())
+        .setIssuedAt(new Date('2026-09-19T12:00:00Z'))
+        .setExpirationTime(new Date('2026-09-19T12:01:00Z'))
+        .sign(new TextEncoder().encode(SECRET))
+
+    test('names the operator and the one server, and no account or sign-in', async () => {
+      expect(await tickets.verify(await tickets.issueForOperator(OPERATOR))).toEqual(OPERATOR)
+    })
+
+    test('opens one session, as a person’s does', async () => {
+      const ticket = await tickets.issueForOperator(OPERATOR)
+      expect(await tickets.verify(ticket)).toEqual(OPERATOR)
+      expect(await tickets.verify(ticket)).toBeNull()
+    })
+
+    test('is refused when it also names a sign-in session, or when its subject is an account', async () => {
+      const mixed = { sid: 'session-1', op: OPERATOR.operator, srv: OPERATOR.serverId }
+      expect(await tickets.verify(await signed(`operator:${OPERATOR.operator}`, mixed))).toBeNull()
+      const asAccount = { op: OPERATOR.operator, srv: OPERATOR.serverId }
+      expect(await tickets.verify(await signed('user-1', asAccount))).toBeNull()
+    })
+
+    test('is refused without its server, or with an operator subject and a sign-in instead', async () => {
+      expect(await tickets.verify(await signed('operator:ops-agent', { op: 'ops-agent' }))).toBeNull()
+      expect(await tickets.verify(await signed('operator:ops-agent', { sid: 'session-1' }))).toBeNull()
+    })
+
+    test('is refused past its minute, as a person’s is', async () => {
+      const ticket = await tickets.issueForOperator(OPERATOR)
+      const later = new JoseRealtimeTickets(SECRET, 'local', { now: at('2026-09-19T12:01:01Z') })
+      expect(await later.verify(ticket)).toBeNull()
+    })
+
+    test('a person’s ticket never reads as an operator’s', async () => {
+      expect(await tickets.verify(await tickets.issue(HOLDER))).toEqual(HOLDER)
+      expect(await tickets.verify(await signed('user-1', { sid: 'session-1' }))).toEqual(HOLDER)
+    })
   })
 })

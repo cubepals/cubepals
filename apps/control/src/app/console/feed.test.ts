@@ -7,6 +7,7 @@ import { SECOND_MS } from '@blockly/contracts/durations'
 import { schema } from '@blockly/db'
 import { eq } from 'drizzle-orm'
 import { type Harness, hasDatabase, startHarness } from '../../testing/harness.ts'
+import { NotFound } from '../errors.ts'
 import type { LogSource } from '../ports/platform.ts'
 import { ConsoleFeed } from './feed.ts'
 
@@ -84,5 +85,17 @@ describe.skipIf(!hasDatabase)('console history', () => {
     await Bun.sleep(3 * SECOND_MS)
     await feed.recent(created.id, 50)
     expect(reads).toBe(2)
+  }, 30_000)
+
+  test('an operator’s live watch is in the audit log under their name, and a server nobody has is not', async () => {
+    const owner = await h.user()
+    const created = await h.create(owner)
+    const operator = { kind: 'operator', name: 'ops-agent' } as const
+    expect(await h.app.feed.operatorWatches(operator, created.id)).toBe(created.id)
+    const written = await h.db.select().from(schema.auditLog).where(eq(schema.auditLog.subjectId, created.id))
+    expect(written.filter((row) => row.action === 'console.watch').map((row) => row.actor)).toEqual([
+      'operator:ops-agent',
+    ])
+    await expect(h.app.feed.operatorWatches(operator, crypto.randomUUID())).rejects.toBeInstanceOf(NotFound)
   }, 30_000)
 })
