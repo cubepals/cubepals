@@ -131,9 +131,26 @@ function Invalidation() {
 /** How often a page refetches what it shows while realtime is away. */
 const DISCONNECTED_POLL_MS = 10_000
 
+/** What a server printed since the last batch, and how many lines before it weren't sent. */
+export type PrintedBatch = Pick<RealtimeMap['consoleLines']['payload'], 'lines' | 'unshown'>
+
+/**
+ * What a watched server prints, in batches of about 100 ms. A realtime process from before
+ * batches sends each line on its own (`consoleLine`); that arrives here as a batch of one, so a
+ * page open across a deploy keeps showing the console.
+ */
+export function useConsoleLines(serverId: string, handler: (batch: PrintedBatch) => void): void {
+  realtime.useEvent('consoleLines', ({ serverId: from, lines, unshown }) => {
+    if (from === serverId) handler({ lines, unshown })
+  })
+  realtime.useEvent('consoleLine', ({ serverId: from, ...line }) => {
+    if (from === serverId) handler({ lines: [line], unshown: null })
+  })
+}
+
 /**
  * Watches a server's console for as long as the component is on the page: what it printed
- * before arrives as `consoleHistory`, then each new line as `consoleLine`. Watching belongs to a
+ * before arrives as `consoleHistory`, then what is new in batches (`useConsoleLines`). Watching belongs to a
  * session, so a reconnect watches again.
  */
 export function useWatchConsole(serverId: string): void {

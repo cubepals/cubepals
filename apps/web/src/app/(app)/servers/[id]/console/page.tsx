@@ -7,7 +7,7 @@
 import { useMutation } from '@tanstack/react-query'
 import { useRef, useState } from 'react'
 import { messageOf, useTRPC } from '../../../../../lib/api'
-import { realtime, useWatchConsole } from '../../../../../lib/realtime'
+import { realtime, useConsoleLines, useWatchConsole } from '../../../../../lib/realtime'
 import { Console, type ConsoleLine, Note } from '../../../../../ui'
 import { useServer } from '../use-server'
 
@@ -23,6 +23,10 @@ const clock = (iso: string) =>
     second: '2-digit',
     hour12: false,
   })
+
+/** Said in the console's place when a server printed faster than anyone reads. */
+const notShown = (count: number) =>
+  `${count.toLocaleString()} ${count === 1 ? 'line' : 'lines'} not shown: the server printed faster than anyone can read.`
 
 export default function ConsolePage() {
   const server = useServer()
@@ -55,8 +59,11 @@ export default function ConsolePage() {
 
   useWatchConsole(server.id)
 
-  realtime.useEvent('consoleLine', (line) => {
-    if (line.serverId === server.id && fresh(line)) merge([shown(line)])
+  useConsoleLines(server.id, ({ lines, unshown }) => {
+    const incoming = lines.filter(fresh).map(shown)
+    if (unshown !== null)
+      incoming.push(shown({ at: unshown.at, text: notShown(unshown.count), level: 'setup' }))
+    merge(incoming)
   })
   // What the server printed before this page watched it, sent when watching starts.
   realtime.useEvent('consoleHistory', (history) => {

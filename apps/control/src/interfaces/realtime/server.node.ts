@@ -20,6 +20,7 @@ import type { DomainEvent, EventBus } from '../../app/ports/events.ts'
 import type { RealtimeTickets, TicketHolder } from '../../app/ports/tickets.ts'
 import { tuning } from '../../app/tuning.ts'
 import { originAllowed } from '../http/origins.ts'
+import { ConsoleBatcher } from './console-batches.ts'
 
 /** Each session is its ticket's: the account, and the sign-in session that asked for it. */
 type Peer = TicketHolder
@@ -231,15 +232,22 @@ export async function startRealtime(options: RealtimeOptions): Promise<{ stop():
     if (tails.has(serverId) || server.memberCount(consoleRoom(serverId)) === 0) return
     const controller = new AbortController()
     tails.set(serverId, controller)
+    const batches = new ConsoleBatcher(({ lines, unshown }) => {
+      void server
+        .to(consoleRoom(serverId))
+        .emit('consoleLines', {
+          serverId,
+          lines: lines.map((l) => ({ at: l.at.toISOString(), text: l.text, level: l.level })),
+          unshown: unshown && { count: unshown.count, at: unshown.at.toISOString() },
+        })
+        .catch(settle('sending console lines'))
+    })
     try {
-      for await (const line of options.console.tail(serverId, controller.signal)) {
-        void server
-          .to(consoleRoom(serverId))
-          .emit('consoleLine', { serverId, at: line.at.toISOString(), text: line.text, level: line.level })
-      }
+      for await (const line of options.console.tail(serverId, controller.signal)) batches.add(line)
     } catch {
       // The workload went away; its next start re-opens the tail for anyone still watching.
     } finally {
+      batches.close()
       if (tails.get(serverId) === controller) tails.delete(serverId)
     }
   }
