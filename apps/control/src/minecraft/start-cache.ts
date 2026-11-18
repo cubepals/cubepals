@@ -92,19 +92,26 @@ const TIGHT_KB = 256 * 1024
  * kilobytes. Java writes the recording as it exits, and that takes memory the running server
  * doesn't: measured on Paper 26.3 with a 2,048 MB heap and Aikar's flags, about 450 MB above the
  * heap while it runs and 440 MB more as it writes the recording. The kernel's own count of a
- * machine's memory is about 180 MB under its size (4,013,292 kB on a 4 GB machine): on production's
- * 3 GB machines with a 2,048 MB heap, which leaves about 880 MB, every such exit was killed for
- * want of memory and nothing was written; a 4 GB machine with a 2,662 MB heap, about 1,257 MB
- * beside it, wrote its recording and made its cache.
+ * machine's memory is about 180 MB under its size (4,013,292 kB on a 4 GB machine), so production's
+ * 3 GB machines with a 2,048 MB heap leave about 880 MB beside it.
+ *
+ * With the whole heap touched at its start (`-XX:+AlwaysPreTouch`, Aikar's flags), every such exit
+ * was killed for want of memory and nothing was written. So a start that records leaves that one
+ * option out (`bare`), and its heap holds only the pages it used. Measured on Paper 26.2 with the
+ * Via plugins and Floodgate, a 2,048 MB heap, on the image a server runs, Docker holding it to
+ * 2,900 MB, about what such a machine has: with the option the exit was killed and the recording
+ * was empty; without it the recording was written, and still was at 2,700 MB with 3,072 chunks
+ * generated before the stop, and at 2,400 MB for a start stopped once it was up.
  */
-const SPARE_KB = 1024 * 1024
+const SPARE_KB = 768 * 1024
 
 /** The recordings a start may begin for what it runs before one never written is given up on. */
 const TRIES = 2
 
 /**
  * The script, line by line. Its words are the runner's own, then `--`, `java`, Java's options,
- * `-jar`, the jar, and the server's own. `with` runs them with more options put after `java`;
+ * `-jar`, the jar, and the server's own. `with` runs them with more options put after `java`, less
+ * the one that touches the whole heap first where `bare` is set;
  * `make` writes the cache from the recording, with Java's options as the server has them but the
  * one that touches the whole heap first.
  */
@@ -112,13 +119,13 @@ export const CACHED_RUNNER_LINES = [
   '#!/bin/sh',
   `cache=${CACHE}; conf=$cache.conf; state=${CACHE_STATE}`,
   'plain() { exec mc-server-runner "$@"; }',
-  'n=0; at=0; jar=0; file=',
+  'n=0; at=0; jar=0; file=; bare=',
   'for w; do n=$((n + 1)); if [ $at = 0 ]; then if [ "$w" = java ]; then at=$n; fi; elif [ $jar = 0 ]; then if [ "$w" = -jar ]; then jar=$n; fi; elif [ $n = $((jar + 1)) ]; then file=$w; fi; done',
   '[ -n "$BLOCKLY_START_KEY" ] && [ -n "$file" ] && [ -f "$file" ] || plain "$@"',
   `home=\${JAVA_HOME:-$(dirname "$(dirname "$(readlink -f "$(command -v java)")")")}`,
   `[ "$(sed -n "s/^JAVA_VERSION=\\"\\([0-9]*\\).*/\\1/p" "$home/release" 2>/dev/null)" = ${JAVA} ] || plain "$@"`,
   'fp=$({ cat "$home/release"; stat -c "%s %Y" "$file"; n=0; for w; do n=$((n + 1)); if [ $n -gt $at ] && [ $n -le $((jar + 1)) ]; then printf "%s\\n" "$w"; fi; done; } 2>/dev/null | sha256sum | cut -c1-64)',
-  'with() { more=$1; shift; n=0; for w; do n=$((n + 1)); if [ $n = 1 ]; then set --; fi; set -- "$@" "$w"; if [ $n = $at ]; then set -- "$@" $more; fi; done; exec mc-server-runner "$@"; }',
+  'with() { more=$1; shift; n=0; for w; do n=$((n + 1)); if [ $n = 1 ]; then set --; fi; if [ -n "$bare" ] && [ "$w" = -XX:+AlwaysPreTouch ]; then continue; fi; set -- "$@" "$w"; if [ $n = $at ]; then set -- "$@" $more; fi; done; exec mc-server-runner "$@"; }',
   `make() ( n=0; for w; do n=$((n + 1)); if [ $n = 1 ]; then set --; fi; if [ $n -gt $at ] && [ $n -lt $jar ] && [ "$w" != -XX:+AlwaysPreTouch ]; then set -- "$@" "$w"; fi; done; exec java "$@" -XX:AOTMode=create -XX:AOTConfiguration=$conf -XX:AOTCache=$cache.new -cp "$file" >/dev/null 2>&1 )`,
   `mkdir -p ${CACHE_DIR} 2>/dev/null || plain "$@"`,
   `room=$(df -Pk ${DATA_DIR} 2>/dev/null | awk "NR == 2 { print \\$4 }")`,
@@ -143,5 +150,6 @@ export const CACHED_RUNNER_LINES = [
   `if [ "$room" -lt ${ROOM_KB} ] || [ -z "$fits" ]; then rm -f $conf $cache $cache.new $state; plain "$@"; fi`,
   `rm -f $conf $cache $cache.new; printf "%s\\n" "$fp" ${RECORDS} "$tries" > $state || plain "$@"`,
   `echo "${RECORDING}"`,
-  'with "-XX:AOTMode=record -XX:AOTConfiguration=$conf" "$@"',
+  // Recorded with the heap untouched until used: Java writes the recording beside it as it exits (`SPARE_KB`).
+  'bare=1; with "-XX:AOTMode=record -XX:AOTConfiguration=$conf" "$@"',
 ]
