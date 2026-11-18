@@ -10,10 +10,12 @@
 import { describe, expect, test } from 'bun:test'
 import type { ConsoleLine } from '../../app/console/feed.ts'
 import {
+  BATCH_CHARS,
   BATCH_MS,
   type BatchClock,
   type ConsoleBatch,
   ConsoleBatcher,
+  LINE_CHARS,
   LINES_PER_SECOND,
 } from './console-batches.ts'
 
@@ -128,5 +130,23 @@ describe('a console tail', () => {
     expect(sent[0]?.lines).toHaveLength(LINES_PER_SECOND)
     expect(sent[0]?.unshown?.count).toBe(2)
     expect(pending()).toBe(0)
+  })
+
+  test('cuts a line longer than any sent, and says so with an ellipsis', () => {
+    const { batches, sent } = batcher()
+    batches.add({ ...line(1), text: 'x'.repeat(LINE_CHARS + 10) })
+    batches.close()
+    expect(sent[0]?.lines[0]?.text).toBe(`${'x'.repeat(LINE_CHARS)}…`)
+  })
+
+  test('sends a batch early rather than let it grow past what one message carries', () => {
+    const { batches, sent } = batcher()
+    const count = Math.ceil((3 * BATCH_CHARS) / LINE_CHARS)
+    for (let n = 0; n < count; n++) batches.add({ ...line(n), text: 'x'.repeat(LINE_CHARS) })
+    batches.close()
+    expect(sent.length).toBeGreaterThanOrEqual(3)
+    for (const batch of sent)
+      expect(batch.lines.reduce((sum, l) => sum + l.text.length, 0)).toBeLessThanOrEqual(BATCH_CHARS)
+    expect(sent.reduce((sum, b) => sum + b.lines.length, 0)).toBe(count)
   })
 })

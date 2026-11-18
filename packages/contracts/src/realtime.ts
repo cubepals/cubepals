@@ -43,7 +43,10 @@ export const realtimeContract = defineContract({
     reliable(z.object({ serverId, minutes: z.number().int(), minutesLeft: z.number().int() })),
   ),
   listingChanged: fromServer(reliable(z.object({ serverId }))),
-  /** One line a server printed. Kept for pages loaded before `consoleLines`; nothing sends it now. */
+  /**
+   * One line a server printed, for a page loaded before `consoleLines`: sent to a watch that
+   * doesn't ask for batches, held to the same lines a second.
+   */
   consoleLine: fromServer(reliable(z.object({ serverId, ...line }))),
   /**
    * What a server printed since the last of these, about every 100 ms, and how many lines before
@@ -60,7 +63,10 @@ export const realtimeContract = defineContract({
   ),
   /** What the server printed before someone started watching, sent to them alone (§13). */
   consoleHistory: fromServer(reliable(z.object({ serverId, lines: z.array(z.object(line)) }))),
-  watch: fromClient(reliable(z.object({ serverId, topic: z.enum(['console']) }))),
+  /** `batched` asks for `consoleLines`; a page from before them leaves it out and gets `consoleLine`. */
+  watch: fromClient(
+    reliable(z.object({ serverId, topic: z.enum(['console']), batched: z.literal(true).optional() })),
+  ),
   unwatch: fromClient(reliable(z.object({ serverId, topic: z.enum(['console']) }))),
 })
 

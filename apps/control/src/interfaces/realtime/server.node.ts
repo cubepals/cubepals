@@ -14,13 +14,13 @@ import {
 } from 'transport-io'
 import { listenHttp3 } from 'transport-io/node-transport'
 import { listenWebSocket } from 'transport-io/websocket-node-transport'
-import type { ConsoleFeed } from '../../app/console/feed.ts'
+import type { ConsoleFeed, ConsoleLine } from '../../app/console/feed.ts'
 import { observeRealtime, realtimeConnected } from '../../app/platform/telemetry.ts'
 import type { DomainEvent, EventBus } from '../../app/ports/events.ts'
 import type { RealtimeTickets, TicketHolder } from '../../app/ports/tickets.ts'
 import { tuning } from '../../app/tuning.ts'
 import { originAllowed } from '../http/origins.ts'
-import { ConsoleBatcher } from './console-batches.ts'
+import { type ConsoleBatch, ConsoleBatcher, SINGLE_LINES_PER_SECOND } from './console-batches.ts'
 
 /** Each session is its ticket's: the account, and the sign-in session that asked for it. */
 type Peer = TicketHolder
@@ -41,6 +41,8 @@ export interface RealtimeOptions {
 
 const userRoom = (userId: string) => `user:${userId}`
 const consoleRoom = (serverId: string) => `console:${serverId}`
+/** Watchers of a page loaded before batches, sent each line on its own (`consoleLine`). */
+const singleLineRoom = (serverId: string) => `console-line:${serverId}`
 
 /** How many earlier lines a console gets when it opens. */
 const BACKFILL = 200
@@ -108,6 +110,11 @@ function followConsoles(
     stopTailIfUnwatched: (serverId: string) => void
   },
 ): () => void {
+  /** Leaves a console's rooms, both kinds: leaving one the session isn't in does nothing. */
+  const leaveConsole = async (serverId: string) => {
+    await peer.leave(consoleRoom(serverId))
+    await peer.leave(singleLineRoom(serverId))
+  }
   const { feed } = deps
   const { userId } = peer.data
   /** The consoles this session follows, or is being let into: what counts against its limit. */
@@ -143,7 +150,7 @@ function followConsoles(
     return turn
   }
 
-  const watch = async (serverId: string) => {
+  const watch = async (serverId: string, batched: boolean) => {
     if (!following.has(serverId) && following.size >= tuning().abuse.consolesPerConnection) return
     following.add(serverId)
     const turn = nextTurn(serverId)
@@ -157,7 +164,7 @@ function followConsoles(
       if (answer === 'wait') return await giveUp()
       if (answer === 'closed' || !current()) return
       if (answer === 'barred') return await unwatch(serverId)
-      await openConsole(serverId, current)
+      await openConsole(serverId, batched, current)
     } catch (error) {
       await giveUp()
       throw error
@@ -167,11 +174,12 @@ function followConsoles(
    * Joins a console let in and sends it what came before, while its watch is still the latest. An
    * unwatch that came while it was joining leaves again; a newer watch goes on alone.
    */
-  const openConsole = async (serverId: string, current: () => boolean) => {
-    await peer.join(consoleRoom(serverId))
+  const openConsole = async (serverId: string, batched: boolean, current: () => boolean) => {
+    await peer.leave((batched ? singleLineRoom : consoleRoom)(serverId))
+    await peer.join((batched ? consoleRoom : singleLineRoom)(serverId))
     if (!current()) {
       if (following.has(serverId)) return
-      await peer.leave(consoleRoom(serverId))
+      await leaveConsole(serverId)
       deps.stopTailIfUnwatched(serverId)
       return
     }
@@ -190,7 +198,7 @@ function followConsoles(
     nextTurn(serverId)
     following.delete(serverId)
     open.delete(serverId)
-    await peer.leave(consoleRoom(serverId))
+    await leaveConsole(serverId)
     deps.stopTailIfUnwatched(serverId)
   }
   // An admin who stops being one keeps only the consoles of servers they own.
@@ -200,10 +208,83 @@ function followConsoles(
       if (!(await feed.canWatch(userId, serverId))) await unwatch(serverId)
   }
 
-  peer.on('watch', ({ serverId }) => void watch(serverId).catch(settle('a watch')))
+  peer.on('watch', ({ serverId, batched }) => void watch(serverId, batched === true).catch(settle('a watch')))
   peer.on('unwatch', ({ serverId }) => void unwatch(serverId).catch(settle('an unwatch')))
   const rechecks = setInterval(() => void recheck().catch(settle('a recheck')), deps.recheckMs)
   return () => clearInterval(rechecks)
+}
+
+/**
+ * The consoles being followed: one tail per watched server, whose lines go to its watchers in
+ * batches (`console-batches.ts`), whole to pages that take them and line by line to older ones.
+ * A tail starts with its first watcher and ends with its last, or with the workload.
+ */
+function tailConsoles(
+  server: ReturnType<typeof createServer<RealtimeMap, Peer>>,
+  tails: Map<string, AbortController>,
+  feed: ConsoleFeed,
+) {
+  const watchers = (serverId: string) =>
+    server.memberCount(consoleRoom(serverId)) + server.memberCount(singleLineRoom(serverId))
+
+  const printed = (lines: ConsoleLine[]) =>
+    lines.map((l) => ({ at: l.at.toISOString(), text: l.text, level: l.level }))
+
+  /** A batch, whole, to the pages that take batches. */
+  const sendBatch = (serverId: string, { lines, unshown }: ConsoleBatch) => {
+    if (server.memberCount(consoleRoom(serverId)) === 0) return
+    void server
+      .to(consoleRoom(serverId))
+      .emit('consoleLines', {
+        serverId,
+        lines: printed(lines),
+        unshown: unshown && { count: unshown.count, at: unshown.at.toISOString() },
+      })
+      .catch(settle('sending console lines'))
+  }
+  /** A batch line by line, to pages from before batches; they have no way to show a count. */
+  const sendSingles = (serverId: string, { lines }: ConsoleBatch) => {
+    if (server.memberCount(singleLineRoom(serverId)) === 0) return
+    for (const line of printed(lines))
+      void server
+        .to(singleLineRoom(serverId))
+        .emit('consoleLine', { serverId, ...line })
+        .catch(settle('sending a console line'))
+  }
+
+  const startTail = async (serverId: string) => {
+    if (tails.has(serverId) || watchers(serverId) === 0) return
+    const controller = new AbortController()
+    tails.set(serverId, controller)
+    const batches = new ConsoleBatcher((batch) => sendBatch(serverId, batch))
+    const singles = new ConsoleBatcher((batch) => sendSingles(serverId, batch), {
+      perSecond: SINGLE_LINES_PER_SECOND,
+    })
+    try {
+      for await (const line of feed.tail(serverId, controller.signal)) {
+        batches.add(line)
+        singles.add(line)
+      }
+    } catch {
+      // The workload went away; its next start re-opens the tail for anyone still watching.
+    } finally {
+      batches.close()
+      singles.close()
+      if (tails.get(serverId) === controller) tails.delete(serverId)
+    }
+  }
+
+  const endTail = (serverId: string) => {
+    tails.get(serverId)?.abort()
+    tails.delete(serverId)
+  }
+
+  const stopTailIfUnwatched = (serverId: string) => {
+    if (watchers(serverId) > 0) return
+    endTail(serverId)
+  }
+
+  return { startTail, endTail, stopTailIfUnwatched }
 }
 
 /**
@@ -228,39 +309,7 @@ export async function startRealtime(options: RealtimeOptions): Promise<{ stop():
     authorize: authorizer(options, 'websocket'),
   })
 
-  const startTail = async (serverId: string) => {
-    if (tails.has(serverId) || server.memberCount(consoleRoom(serverId)) === 0) return
-    const controller = new AbortController()
-    tails.set(serverId, controller)
-    const batches = new ConsoleBatcher(({ lines, unshown }) => {
-      void server
-        .to(consoleRoom(serverId))
-        .emit('consoleLines', {
-          serverId,
-          lines: lines.map((l) => ({ at: l.at.toISOString(), text: l.text, level: l.level })),
-          unshown: unshown && { count: unshown.count, at: unshown.at.toISOString() },
-        })
-        .catch(settle('sending console lines'))
-    })
-    try {
-      for await (const line of options.console.tail(serverId, controller.signal)) batches.add(line)
-    } catch {
-      // The workload went away; its next start re-opens the tail for anyone still watching.
-    } finally {
-      batches.close()
-      if (tails.get(serverId) === controller) tails.delete(serverId)
-    }
-  }
-
-  const endTail = (serverId: string) => {
-    tails.get(serverId)?.abort()
-    tails.delete(serverId)
-  }
-
-  const stopTailIfUnwatched = (serverId: string) => {
-    if (server.memberCount(consoleRoom(serverId)) > 0) return
-    endTail(serverId)
-  }
+  const { startTail, endTail, stopTailIfUnwatched } = tailConsoles(server, tails, options.console)
 
   server.onSession((peer: ServerPeer<RealtimeMap, Peer>) => {
     browsers.opened()

@@ -159,7 +159,7 @@ export function useWatchConsole(serverId: string): void {
   const sessionId = connection.status === 'connected' ? connection.sessionId : null
   useEffect(() => {
     if (sessionId === null) return
-    client.emit('watch', { serverId, topic: 'console' })
+    client.emit('watch', { serverId, topic: 'console', batched: true })
     return () => client.emit('unwatch', { serverId, topic: 'console' })
   }, [client, sessionId, serverId])
 }

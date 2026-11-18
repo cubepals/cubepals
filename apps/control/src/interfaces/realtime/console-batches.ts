@@ -11,12 +11,26 @@
  * console opens with: those go to one watcher at once, as `consoleHistory`.
  */
 import { SECOND_MS } from '@blockly/contracts/durations'
+import { MAX_EMIT_PAYLOAD_BYTES } from 'transport-io'
 import type { ConsoleLine } from '../../app/console/feed.ts'
 
 /** How long a tail gathers lines before sending them: short enough to read as live. */
 export const BATCH_MS = 100
 /** The most lines a tail sends in a second, more than anyone reads while a server boots. */
 export const LINES_PER_SECOND = 1_000
+/**
+ * The most lines a second for a page from before batches, which is sent each line as a message of
+ * its own. transport-io closes a session that has 256 messages waiting to go, so a burst stays
+ * well under that.
+ */
+export const SINGLE_LINES_PER_SECOND = 100
+/** The longest line sent, as Docker splits its log lines; past it a line is cut and ends in `…`. */
+export const LINE_CHARS = 16_384
+/**
+ * How many characters of lines one batch carries before it goes out early: at three bytes a
+ * character, still under transport-io's largest message.
+ */
+export const BATCH_CHARS = Math.floor(MAX_EMIT_PAYLOAD_BYTES / 4)
 
 /** One message to a console's watchers: the lines, and how many lines before them weren't sent. */
 export interface ConsoleBatch {
@@ -39,7 +53,8 @@ const processClock: BatchClock = {
 }
 
 /**
- * Gathers one tail's lines and hands `send` a batch at most every `BATCH_MS`. Counting is by the
+ * Gathers one tail's lines and hands `send` a batch at most every `BATCH_MS`, or sooner when the
+ * lines gathered reach `BATCH_CHARS`. Counting is by the
  * second from the first line of each: within it, lines past `LINES_PER_SECOND` are counted, not
  * kept, and the count goes out once that second is over, with whatever lines come next. `close`
  * sends what is left, when the tail ends.
@@ -49,6 +64,7 @@ export class ConsoleBatcher {
   readonly #clock: BatchClock
   readonly #perSecond: number
   #pending: ConsoleLine[] = []
+  #pendingChars = 0
   #flushTimer: unknown = null
   /** When the current second began, and how many lines it has kept; null before its first line. */
   #second: { began: number; kept: number } | null = null
@@ -73,7 +89,11 @@ export class ConsoleBatcher {
     }
     if (this.#second.kept < this.#perSecond) {
       this.#second.kept++
-      this.#pending.push(line)
+      const kept =
+        line.text.length > LINE_CHARS ? { ...line, text: `${line.text.slice(0, LINE_CHARS)}…` } : line
+      if (this.#pendingChars + kept.text.length > BATCH_CHARS) this.#flush()
+      this.#pending.push(kept)
+      this.#pendingChars += kept.text.length
     } else {
       this.#unshown = { count: (this.#unshown?.count ?? 0) + 1, at: line.at }
       return
@@ -112,6 +132,7 @@ export class ConsoleBatcher {
     if (this.#pending.length === 0 && this.#owed === null) return
     const batch = { lines: this.#pending, unshown: this.#owed }
     this.#pending = []
+    this.#pendingChars = 0
     this.#owed = null
     this.#send(batch)
   }

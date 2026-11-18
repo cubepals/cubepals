@@ -1627,11 +1627,13 @@ Replacing mc-router means rewriting `apps/edge` against the same protocol. Nothi
     message about every 100 ms, at most 1,000 lines a second for each server. Lines past that
     aren't sent; `unshown` counts them (`{count, at}`, once a second at most), and the console
     says how many weren't shown. The server's own log keeps every line (`console-batches.ts`).
-  - `consoleLine {serverId, at, text, level}`: one line, from before batches; nothing sends it,
-    and the website still takes it from a realtime process deployed before them
+  - `consoleLine {serverId, at, text, level}`: one line, for a page loaded before batches, held
+    to 100 lines a second for each server; the website still takes it from a realtime process
+    deployed before batches. A line longer than 16 KiB is cut and ends in `…`.
   - `consoleHistory {serverId, lines}`: what the server printed before someone started watching,
     sent to that watcher alone
-  - client→server `watch {serverId, topic: 'console'}` / `unwatch` (the same shape)
+  - client→server `watch {serverId, topic: 'console', batched?}` / `unwatch`: `batched: true`
+    asks for `consoleLines`; a watch without it gets `consoleLine`
 - **Emits only.** Nothing uses `call` or `stream`, so the WebSocket fallback (Safari, networks
   with UDP blocked) gets identical behaviour.
 - **Rooms.**
