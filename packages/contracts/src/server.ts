@@ -372,7 +372,7 @@ export const PutAsideBackInput = z.object({
   serverId: ServerId,
   path: z.string().min(1).max(300),
   /** The world it was set aside from, where it is a datapack: the same path can be aside in two. */
-  worldId: z.string().uuid().nullable().optional(),
+  worldId: z.uuid().nullable().optional(),
   back: z.boolean(),
 })
 
