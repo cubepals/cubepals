@@ -148,18 +148,27 @@ const STARTER_LINES = [
 ]
 
 /**
- * What the control plane runs on the machine as a server that saved its world goes to sleep, just
- * before its memory is kept: the pending record is kept, as at a clean stop, and written to the
- * volume. A rename, so it stays the volume user's. Nothing pending, nothing kept.
+ * A move of the record, run as the user the volume belongs to and never as root: the control plane
+ * execs as root, and the record's folder is the server's to write, so a link put in its place
+ * would have root move a file of the server's over one of root's. Run as that user, it can move
+ * only what the server could already. A volume that is root's moves nothing, as no start is direct
+ * from one.
  */
-export const KEEP_ASLEEP = [
+const asVolumeUser = (script: string): readonly ['sh', '-c', string] => [
   'sh',
   '-c',
-  `[ ! -f ${PENDING} ] || { mv -f ${PENDING} ${RECORD} && sync; }`,
-] as const
+  `owner=$(stat -c %u:%g ${DATA_DIR}); me="$(id -u):$(id -g)"; case "$owner" in 0:*|*:0|*[!0-9:]*|"") exit 0;; esac; if [ "$owner" = "$me" ]; then exec sh -c '${script}'; elif [ "$me" = 0:0 ]; then exec gosu "$owner" sh -c '${script}'; fi`,
+]
+
+/**
+ * What the control plane runs on the machine as a server that saved its world goes to sleep, just
+ * before its memory is kept: the pending record is kept, as at a clean stop, and written to the
+ * volume. Nothing pending, nothing kept.
+ */
+export const KEEP_ASLEEP = asVolumeUser(`[ ! -f ${PENDING} ] || { mv -f ${PENDING} ${RECORD} && sync; }`)
 
 /** What it runs once a resume kept the memory: the record kept for the sleep is pending again. */
-export const TAKE_BACK = ['sh', '-c', `[ ! -f ${RECORD} ] || mv -f ${RECORD} ${PENDING}`] as const
+export const TAKE_BACK = asVolumeUser(`[ ! -f ${RECORD} ] || mv -f ${RECORD} ${PENDING}`)
 
 const written = (path: string, lines: readonly string[]): string =>
   `printf '%s\\n' ${lines.map((line) => `'${line}'`).join(' ')} > ${path} && chmod 755 ${path}`
