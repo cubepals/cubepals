@@ -30,6 +30,7 @@
  * needs none of the scripts, because nothing changed since the last one (`direct-start.ts`).
  */
 
+import { PACK_FILES_STEP } from './pack-files.ts'
 import { SPARK_STEP } from './spark.ts'
 
 /** Where the stand-ins live: the machine's own disk, made again at every start. */
@@ -76,4 +77,6 @@ export const WAKE_STEP = [
   'export MC_IMAGE_HELPER_OPTS="-XX:TieredStopAtLevel=1 -XX:+UseSerialGC";',
   // Not the image's work, but an export every start makes before Java, so it rides here.
   SPARK_STEP,
+  // The same: which of a pack's files are its own, before the image extracts them (`pack-files.ts`).
+  PACK_FILES_STEP,
 ].join(' ')
