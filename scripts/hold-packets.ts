@@ -7,12 +7,16 @@
  * as each release's own server reports them: `java -DbundlerMainClass=net.minecraft.data.Main -jar
  * server.jar --reports` writes `reports/packets.json`, every packet's id in every state. They move
  * between releases (26.3 put a packet before Show Dialog and Transfer), and minecraft-data lags
- * the newest releases, so the game itself is the source.
+ * the newest releases, so the game itself is the source. With them goes how the release lays out
+ * the two packets the hold writes itself, read from its jar with `javap` (`hold-layouts.ts`): a
+ * release whose layout the edge can't write is refused, so its clients keep the login hold.
  *
- *   bun scripts/hold-packets.ts bump    run each release's server for its report; needs Java 25
- *                                       (`JAVA=/path/to/java` where `java` is older)
+ *   bun scripts/hold-packets.ts bump    run each release's server for its report and read its
+ *                                       layouts; needs Java 25 (`JAVA=/path/to/java` where `java`
+ *                                       is older, and its `javap`, or `JAVAP=`)
  *   bun scripts/hold-packets.ts check   the copy names the jars Mojang publishes for its releases,
- *                                       and every protocol the edge knows from 1.21.6 on has one
+ *                                       every protocol the edge knows from 1.21.6 on has one, and
+ *                                       each has layouts the edge writes
  *
  * The protocols are the control plane's copy of minecraft-data's table
  * (apps/control/src/minecraft/protocol-versions.json, `scripts/protocols.ts`): a new release is a
@@ -20,9 +24,11 @@
  */
 import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
+import { type Layouts, LOGIN_FINISHED_LAYOUTS, TRANSFER_LAYOUTS } from '../apps/edge/hold-packet-ids.ts'
+import { layoutsOf, Mappings } from './hold-layouts.ts'
 
 const COPY = 'apps/edge/hold-packets.json'
 const RELEASES = 'apps/control/src/minecraft/protocol-versions.json'
@@ -62,6 +68,8 @@ export interface HoldPackets {
     transfer: number
     keepAliveAnswer: number
   }
+  /** How the release writes Login Finished and Transfer, read from its jar (`hold-layouts.ts`). */
+  layouts: Layouts
 }
 
 /** The ids the hold needs from a server's `packets.json`; throws naming any the report lacks. */
@@ -105,6 +113,8 @@ export interface World {
   fetch: (url: string) => Promise<Response>
   /** The Java that runs the servers: Mojang's 26.x servers need 25. */
   java: string
+  /** The `javap` that reads a server's classes for the hold's layouts: any JDK's will do. */
+  javap: string
   copy: string
   releases: string
   say: (line: string) => void
@@ -121,11 +131,43 @@ async function serverJar(
   world: World,
   manifest: Manifest,
   release: string,
-): Promise<{ sha1: string; url: string }> {
+): Promise<{ sha1: string; url: string; mappings?: string }> {
   const entry = manifest.versions.find((v) => v.id === release)
   if (entry === undefined) throw new Error(`Mojang's manifest has no ${release}`)
-  return (await json<{ downloads: { server: { sha1: string; url: string } } }>(world, entry.url)).downloads
-    .server
+  const { downloads } = await json<{
+    downloads: { server: { sha1: string; url: string }; server_mappings?: { url: string } }
+  }>(world, entry.url)
+  return {
+    ...downloads.server,
+    ...(downloads.server_mappings ? { mappings: downloads.server_mappings.url } : {}),
+  }
+}
+
+/**
+ * The layouts `release` writes, read with `javap` from the game's own jar, which its server's
+ * bundler unpacked into `dir` as it ran, and named by Mojang's mappings where the jar is obfuscated.
+ */
+async function layoutsIn(world: World, dir: string, release: string, mappingsUrl?: string): Promise<Layouts> {
+  const versions = join(dir, 'versions')
+  const unpacked = readdirSync(versions, { recursive: true, encoding: 'utf8' }).find((f) =>
+    f.endsWith('.jar'),
+  )
+  if (unpacked === undefined) throw new Error(`${release}'s server unpacked no jar of the game`)
+  const mappings =
+    mappingsUrl === undefined ? Mappings.NONE : new Mappings(await (await world.fetch(mappingsUrl)).text())
+  const javap = (className: string) => {
+    const run = spawnSync(world.javap, ['-c', '-p', '-cp', join(versions, unpacked), className], {
+      encoding: 'utf8',
+      maxBuffer: 64 * 1024 * 1024,
+    })
+    if (run.status !== 0) throw new Error(`javap couldn't read ${className} in ${release}: ${run.stderr}`)
+    return run.stdout
+  }
+  try {
+    return layoutsOf(javap, mappings)
+  } catch (error) {
+    throw new Error(`${release}: ${(error as Error).message}`)
+  }
 }
 
 /** Runs `release`'s server for its report, and takes the hold's ids from it. */
@@ -149,7 +191,8 @@ async function reportOf(
     )
     if (run.status !== 0) throw new Error(`${release}'s report failed: ${run.stderr || run.stdout}`)
     const report = JSON.parse(readFileSync(join(dir, 'out/reports/packets.json'), 'utf8')) as Report
-    return { protocol, release, jar: jar.sha1, ...idsOf(report) }
+    const layouts = await layoutsIn(world, dir, release, jar.mappings)
+    return { protocol, release, jar: jar.sha1, ...idsOf(report), layouts }
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }
@@ -172,16 +215,23 @@ async function bump(world: World): Promise<void> {
   writeFileSync(world.copy, `${JSON.stringify({ source: 'server.jar --reports', protocols }, null, 2)}\n`)
 }
 
+/** Whether `layouts` are ones the edge's dialog hold writes. */
+const writable = (layouts: Partial<Layouts> | undefined): boolean =>
+  (LOGIN_FINISHED_LAYOUTS as readonly unknown[]).includes(layouts?.loginFinished) &&
+  (TRANSFER_LAYOUTS as readonly unknown[]).includes(layouts?.transfer)
+
 /** What is wrong with the copy, against Mojang's manifest and the edge's protocols; nothing when it is right. */
 async function check(world: World): Promise<string[]> {
   const manifest = await json<Manifest>(world, MANIFEST)
-  const held = (JSON.parse(readFileSync(world.copy, 'utf8')) as { protocols: HoldPackets[] }).protocols
+  const held = (JSON.parse(readFileSync(world.copy, 'utf8')) as { protocols: Partial<HoldPackets>[] })
+    .protocols
   const wrong: string[] = []
   for (const { protocol, release } of releasesIn(world)) {
     const entry = held.find((p) => p.protocol === protocol)
     if (entry === undefined) wrong.push(`${release} (${protocol}) has no entry`)
     else if (entry.release !== release || entry.jar !== (await serverJar(world, manifest, release)).sha1)
       wrong.push(`${release} (${protocol}) wasn't reported from its own jar`)
+    else if (!writable(entry.layouts)) wrong.push(`${release} (${protocol}) has no layouts the edge writes`)
   }
   return wrong
 }
@@ -211,6 +261,7 @@ if (import.meta.main)
     await main(process.argv.slice(2), {
       fetch,
       java: process.env.JAVA ?? 'java',
+      javap: process.env.JAVAP ?? (process.env.JAVA ? join(dirname(process.env.JAVA), 'javap') : 'javap'),
       copy: COPY,
       releases: RELEASES,
       say: (line) => process.stdout.write(`${line}\n`),

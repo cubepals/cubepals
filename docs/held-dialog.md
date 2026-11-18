@@ -53,6 +53,32 @@ Dialog is 19 where 1.21.6 to 26.2 have 18, and its Transfer 12 where they have 1
 minecraft-data, which `scripts/protocols.ts` copies the protocol numbers from, has no packet data
 past 26.1, so it can't be the source for the releases most players run.
 
+## Packet layouts, from the game's own classes
+
+Two packets the hold writes itself change shape between releases, and a report gives ids, not
+shapes. A client that reads past the end of one drops the connection with a decoder error.
+
+| Protocol | Login Finished | Transfer |
+|---|---|---|
+| 771 to 775 (1.21.6 to 26.1.2) | profile: uuid, name, properties (none) | host, port |
+| 776, 777 (26.2, 26.3) | profile, then a session uuid | host, port |
+| 26.4 | profile, session uuid, then an options byte | host, port, then query properties |
+
+The session uuid is only for the client's telemetry, so the hold sends a random one. The options
+byte (`ConnectionOptionsPacket`: 1 encryption, 2 compression) is 0: the client then turns on
+neither and acknowledges the login at once, with no `apply_options` exchange
+(`ClientHandshakePacketListenerImpl.applyConnectionOptions`). The transfer's properties are
+none; its host is the hostname as routes name it, without the query a 26.4 client may have put in
+its handshake.
+
+`bump` reads both layouts from each release's jar with `javap` (`scripts/hold-layouts.ts`): the
+codecs the packet's `static {}` builds it from, or the writes of its own `write`, through Mojang's
+mappings for the releases before 26.1, whose jars are obfuscated. Each layout is kept beside the
+release's ids in `hold-packets.json`. A release written in a way the edge can't write stops the
+bump with how it is written, so its clients are never sent a packet they can't read; teach
+`dialog-hold.ts` and `hold-layouts.ts` the layout, then bump again. An entry with no layout the
+edge knows keeps the login hold.
+
 A new release is a bump of `scripts/protocols.ts`, then of this. The report needs the Java the
 release runs on (25 for 26.x: `JAVA=/path/to/java bun scripts/hold-packets.ts bump`).
 
@@ -126,7 +152,7 @@ every piece of logic here lives in its own tested module:
 |---|---|
 | `held-words.ts` | Speaks to a held client until its wait is over: the queries, the switch, the dialog and its keep-alives |
 | `dialog-hold.ts` | The dialog hold's packets: finishing the login, the dialog, keep-alive, transfer, disconnect; who gets one |
-| `hold-packet-ids.ts`, `hold-packets.json` | The ids, by protocol, from each release's own report |
+| `hold-packet-ids.ts`, `hold-packets.json` | The ids and layouts, by protocol, from each release's own report and jar |
 | `nbt.ts` | The NBT the dialog and the disconnect are written in |
 | `forwarding.ts` | The front door's handshake, where the edge's own transfers are to become joins |
 
