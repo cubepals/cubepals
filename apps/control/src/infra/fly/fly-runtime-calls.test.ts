@@ -172,6 +172,8 @@ describe('FlyRuntime calls, in order', () => {
       `POST ${at('/volumes')}`,
       `GET ${at('/volumes/vol_4')}`,
       `GET ${at('/volumes/vol_4')}`,
+      // The machine on the volume: whether it was to bring its world back itself.
+      `GET ${at('/machines')}`,
       `POST ${at('/machines')}`,
       `GET ${at('/machines/m_5')}`,
       `POST ${at('/machines/m_5/exec')}`,
@@ -192,6 +194,8 @@ describe('FlyRuntime calls, in order', () => {
       `POST ${at('/volumes')}`,
       `GET ${at('/volumes/vol_4')}`,
       `GET ${at('/volumes/vol_4')}`,
+      // The machine on the volume: whether it was to bring its world back itself.
+      `GET ${at('/machines')}`,
       `POST ${at('/machines')}`,
       `GET ${at('/machines/m_5')}`,
       `POST ${at('/machines/m_5/exec')}`,
