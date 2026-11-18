@@ -43,6 +43,8 @@ beforeEach(() => {
     [
       '#!/bin/sh',
       `cd ${data} && rm -rf ${root}/x && unzip -qq -o modpack.mrpack -d ${root}/x`,
+      // The image leaves the excluded overrides out (exact paths, at newlines or commas).
+      `printf '%s\\n' "$MODRINTH_OVERRIDES_EXCLUSIONS" | tr , '\\n' | while read -r e; do [ -n "$e" ] && rm -f ${root}/x/overrides/$e ${root}/x/server-overrides/$e; done`,
       `for s in overrides server-overrides; do if [ -d ${root}/x/$s ]; then cp -R ${root}/x/$s/. ${data}/; fi; done`,
       // What a full volume does to a file being put back: in its place, something it can't replace.
       `if [ -n "$BLOCK" ]; then rm -f ${data}/$BLOCK && mkdir -p ${data}/$BLOCK/x; fi`,
@@ -195,6 +197,16 @@ describe('a pack’s files', () => {
     for (const path of Object.keys(many)) writeFileSync(join(data, path), 'mine')
     expect(install(big, 'big').code).toBe(0)
     expect(Object.keys(many).every((path) => read(path) === 'mine')).toBe(true)
+  })
+
+  test('aren’t the pack’s where the install leaves them out, and stay the owner’s after', () => {
+    writeFileSync(join(data, 'options.txt'), 'o = mine')
+    expect(install(v1, 'one', { MODRINTH_OVERRIDES_EXCLUSIONS: 'options.txt' }).code).toBe(0)
+    expect(read('options.txt')).toBe('o = mine')
+    expect(record()).not.toContain('options.txt')
+    install(v1, 'one')
+    expect(read('options.txt')).toBe('o = mine')
+    expect(read(`options.txt${FROM_PACK}`)).toBe('o = 1')
   })
 
   test('take the server’s override over the pack’s other one', () => {

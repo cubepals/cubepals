@@ -32,6 +32,9 @@
  * it is replaced (`volume-links.ts`): the pack's paths, their copies beside them, the record and the
  * pack's archive.
  *
+ * A path the install leaves out (`MODRINTH_OVERRIDES_EXCLUSIONS`, which the image doesn't extract) isn't
+ * the pack's on that install: it is neither set aside nor recorded.
+ *
  * Not for the files a pack's index lists (its mods), which the image's own manifest keeps; nor
  * for Cubepals' own files (`carried.ts`), which, placed at an override path, count as the owner's.
  */
@@ -118,7 +121,10 @@ if [ ! -s "$a" ]; then
 fi
 # The pack's paths, server overrides and the rest alike.
 unzip -Z1 "$a" > "$t/entries" 2>/dev/null || exec ${HELPER} "$@"
-sed -n -e 's#^server-overrides/##p' -e 's#^overrides/##p' "$t/entries" | grep -v '/$' | while IFS= read -r p; do inside "$p" && echo "$p"; done | sort -u > "$t/paths"
+sed -n -e 's#^server-overrides/##p' -e 's#^overrides/##p' "$t/entries" | grep -v '/$' | while IFS= read -r p; do inside "$p" && echo "$p"; done | sort -u > "$t/all"
+# Less the ones this install leaves out (\`runtime-spec.ts\`, exact paths): the pack places none of them.
+printf '%s\\n' "$MODRINTH_OVERRIDES_EXCLUSIONS" | tr , '\\n' | sed '/^$/d' > "$t/excluded"
+grep -vxF -f "$t/excluded" "$t/all" > "$t/paths"
 # No link on the way to any of them, where the install and this script write as root.
 while IFS= read -r p; do unlinked "$p"; unlinked "$p${FROM_PACK}"; done < "$t/paths"
 # The record, where it is whole; else none, and every file there is the owner's.
