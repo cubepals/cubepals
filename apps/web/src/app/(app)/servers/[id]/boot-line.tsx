@@ -8,7 +8,7 @@ import type { OperationView, ServerView } from '@blockly/contracts'
 import { useEffect, useRef, useState } from 'react'
 import { useNow } from '../../../../lib/hooks'
 import { quietLine } from '../../../../lib/present'
-import { realtime, useWatchConsole } from '../../../../lib/realtime'
+import { realtime, useConsoleLines, useWatchConsole } from '../../../../lib/realtime'
 
 /** How long a line stays before the next may take its place, however fast the server talks. */
 const HOLD_MS = 1_600
@@ -51,10 +51,11 @@ export function BootLine({
   const [said, setSaid] = useState<{ text: string; at: number } | null>(null)
   // Mods arrive faster than anyone reads them: the line counts them instead of naming each one.
   const [landed, setLanded] = useState({ count: 0 })
-  realtime.useEvent('consoleLine', (line) => {
-    if (line.serverId !== server.id) return
-    if (worthShowing(line)) setSaid({ text: line.text, at: Date.now() })
-    else if (DOWNLOADED.test(line.text)) setLanded((was) => ({ count: was.count + 1 }))
+  useConsoleLines(server.id, ({ lines }) => {
+    const newest = lines.filter(worthShowing).at(-1)
+    if (newest) setSaid({ text: newest.text, at: Date.now() })
+    const downloaded = lines.filter((line) => !worthShowing(line) && DOWNLOADED.test(line.text)).length
+    if (downloaded > 0) setLanded((was) => ({ count: was.count + downloaded }))
   })
   // Opened partway through: the newest line so far, as if it had just been said.
   realtime.useEvent('consoleHistory', (history) => {

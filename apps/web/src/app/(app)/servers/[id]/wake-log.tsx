@@ -21,7 +21,7 @@ import Link from 'next/link'
 import { type CSSProperties, useEffect, useRef, useState } from 'react'
 import { useNow, useSince } from '../../../../lib/hooks'
 import { isBooting, isWake, presentProgress, quietLine, wakeLine } from '../../../../lib/present'
-import { realtime, useWatchConsole } from '../../../../lib/realtime'
+import { realtime, useConsoleLines, useWatchConsole } from '../../../../lib/realtime'
 import { type WakeWords, wakeWords } from '../../../../lib/wake-words'
 import { KEPT, type Line, lower, nextLines } from './wake-lines'
 
@@ -100,8 +100,8 @@ export function useWake(server: ServerView): Wake {
     // A burst keeps only its newest: nobody reads forty lines in a second.
     if (words !== null) pending.current = [...pending.current, words].slice(-(KEPT - 1))
   }
-  realtime.useEvent('consoleLine', (line) => {
-    if (line.serverId === server.id && phase === 'waking') hear(line)
+  useConsoleLines(server.id, ({ lines }) => {
+    if (phase === 'waking') for (const line of lines) hear(line)
   })
   // Opened partway through a wake: what it said since it began.
   realtime.useEvent('consoleHistory', (history) => {

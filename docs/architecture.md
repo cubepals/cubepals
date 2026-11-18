@@ -1632,10 +1632,17 @@ Replacing mc-router means rewriting `apps/edge` against the same protocol. Nothi
   - `sessionCap {serverId, minutes, minutesLeft}`: the run's end, a session cap or the day's play
     (`minutes` the cap or the day's), `minutesLeft` to go, or 0 as the server is stopped
   - `listingChanged {serverId}`: eligibility or moderation changed
-  - `consoleLine {serverId, at, text, level}`
+  - `consoleLines {serverId, lines, unshown}`: what a watched server printed, gathered into one
+    message about every 100 ms, at most 1,000 lines a second for each server. Lines past that
+    aren't sent; `unshown` counts them (`{count, at}`, once a second at most), and the console
+    says how many weren't shown. The server's own log keeps every line (`console-batches.ts`).
+  - `consoleLine {serverId, at, text, level}`: one line, for a page loaded before batches, held
+    to 100 lines a second for each server; the website still takes it from a realtime process
+    deployed before batches. A line longer than 16 KiB is cut and ends in `…`.
   - `consoleHistory {serverId, lines}`: what the server printed before someone started watching,
     sent to that watcher alone
-  - client→server `watch {serverId, topic: 'console'}` / `unwatch` (the same shape)
+  - client→server `watch {serverId, topic: 'console', batched?}` / `unwatch`: `batched: true`
+    asks for `consoleLines`; a watch without it gets `consoleLine`
 - **Emits only.** Nothing uses `call` or `stream`, so the WebSocket fallback (Safari, networks
   with UDP blocked) gets identical behaviour.
 - **Rooms.**

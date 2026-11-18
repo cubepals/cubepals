@@ -29,6 +29,7 @@ import { VANILLA_PAPER_STEP } from './vanilla-paper.ts'
 import { javaFor } from './versions.ts'
 import { UNLINKED } from './volume-links.ts'
 import { WAKE_STEP } from './wake-step.ts'
+import { watchdogEnv } from './watchdog.ts'
 import { levelTypeEnv } from './worlds.ts'
 
 /**
@@ -651,6 +652,7 @@ export function toRuntimeSpec(input: RuntimeSpecInput): RuntimeSpec {
     jars: pack === null ? (jarsOf(revision.loader)?.env ?? null) : null,
   })
   const reconstructible = reconstructibleOf(revision)
+  const packEnv = modpackEnv(input)
 
   return {
     image: imageFor(revision),
@@ -663,7 +665,7 @@ export function toRuntimeSpec(input: RuntimeSpecInput): RuntimeSpec {
       ...(pack === null && loaderVersionVar && revision.loaderVersion
         ? { [loaderVersionVar]: revision.loaderVersion }
         : {}),
-      ...modpackEnv(input),
+      ...packEnv,
       ...worldEnv(world),
       ...starterEnv(world, input.artifactUrl),
       ...settingsEnv(revision.settings),
@@ -689,6 +691,8 @@ export function toRuntimeSpec(input: RuntimeSpecInput): RuntimeSpec {
       MEMORY: `${heapMb(input)}M`,
       USE_AIKAR_FLAGS: 'TRUE',
       STOP_DURATION: String(STOP_DURATION_SECONDS),
+      // The game's watchdogs off: a freeze reads as one endless tick (`watchdog.ts`).
+      ...watchdogEnv(type === TYPES.paper, packEnv.JVM_DD_OPTS),
     },
     secrets: { RCON_PASSWORD: input.rconPassword, ...bedrock.secrets },
     resources: { memoryMb: totalMb },

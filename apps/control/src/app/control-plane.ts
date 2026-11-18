@@ -182,6 +182,9 @@ const atBoot = (db: Db) => ({
  * adapters; the operation tests build the same thing with fakes, so what they exercise is the
  * wiring that runs.
  */
+/** What the scheduled passes reach servers' games by: their consoles, and the status ping a silent one is checked with. */
+const speaking = ({ console, probe }: Pick<ControlPlanePorts, 'console' | 'probe'>) => ({ console, probe })
+
 export function composeControlPlane(ports: ControlPlanePorts, settings: ControlPlaneSettings) {
   const { db, events, runtime, profiles, formats } = ports
   const placement = new RuntimePlacement({
@@ -302,7 +305,7 @@ export function composeControlPlane(ports: ControlPlanePorts, settings: ControlP
     db,
     runtime,
     placement,
-    console: ports.console,
+    ...speaking(ports),
     specs,
     transitions,
     events,
