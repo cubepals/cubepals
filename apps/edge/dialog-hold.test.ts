@@ -6,7 +6,7 @@
 import { expect, test } from 'bun:test'
 import nbt from 'prismarine-nbt'
 import { DialogHold, dialogFor, loginStartOf, portOf } from './dialog-hold.ts'
-import { packetsFor } from './hold-packet-ids.ts'
+import { type HoldPackets, packetsFor } from './hold-packet-ids.ts'
 import table from './hold-packets.json' with { type: 'json' }
 import { type Join, packet, readVarInt, string, varInt } from './notice.ts'
 
@@ -38,7 +38,8 @@ const ids = (protocol: number) => {
 
 test('every protocol the report covers holds with a dialog, each with its own release’s ids', () => {
   expect(table.protocols.length).toBeGreaterThan(0)
-  for (const entry of table.protocols) expect(dialogFor(joinOf('a.play.test', entry.protocol))).toEqual(entry)
+  for (const entry of table.protocols)
+    expect<unknown>(dialogFor(joinOf('a.play.test', entry.protocol))).toEqual(entry)
   // 26.3 put a packet before Show Dialog and Transfer: its ids are its own.
   expect(ids(777).configuration.showDialog).toBe(ids(776).configuration.showDialog + 1)
 })
@@ -75,10 +76,45 @@ test('the port comes from the handshake, as the client dialled it', () => {
   expect(portOf(new Uint8Array(0))).toBeNull()
 })
 
+/** A release laid out as 26.4 lays out the two packets the hold writes, with 26.3's ids. */
+const as26_4 = (): HoldPackets => ({
+  ...ids(777),
+  layouts: { loginFinished: 'profile+session+options', transfer: 'host+port+properties' },
+})
+
 test('the login ends as an offline server ends it: the claimed uuid and name, no properties', () => {
   const sent = read(new DialogHold(ids(774)).finishLogin({ name: 'Alex', uuid: UUID }))
   expect(sent.id).toBe(ids(774).login.finished)
   expect(Array.from(sent.body)).toEqual([...UUID, ...string('Alex'), 0])
+})
+
+test('from 26.2 a session uuid follows the profile, a new one each login', () => {
+  for (const protocol of [776, 777]) {
+    expect(ids(protocol).layouts.loginFinished).toBe('profile+session')
+    const hold = new DialogHold(ids(protocol))
+    const first = read(hold.finishLogin({ name: 'Alex', uuid: UUID }))
+    const profile = [...UUID, ...string('Alex'), 0]
+    expect(first.id).toBe(ids(protocol).login.finished)
+    expect(first.body.length).toBe(profile.length + 16)
+    expect(Array.from(first.body.subarray(0, profile.length))).toEqual(profile)
+    const second = read(hold.finishLogin({ name: 'Alex', uuid: UUID }))
+    expect(Array.from(second.body.subarray(profile.length))).not.toEqual(
+      Array.from(first.body.subarray(profile.length)),
+    )
+  }
+})
+
+test('from 26.4 its options end it: none, so the client turns on no encryption or compression', () => {
+  const sent = read(new DialogHold(as26_4()).finishLogin({ name: 'Alex', uuid: UUID }))
+  const profile = [...UUID, ...string('Alex'), 0]
+  expect(sent.body.length).toBe(profile.length + 16 + 1)
+  expect(sent.body.at(-1)).toBe(0)
+})
+
+test('from 26.4 a transfer carries its own query properties: none', () => {
+  const sent = read(new DialogHold(as26_4()).transfer('a.play.test', 25565))
+  expect(sent.id).toBe(ids(777).configuration.transfer)
+  expect(Array.from(sent.body)).toEqual([...string('a.play.test'), ...varInt(25565), 0])
 })
 
 test('the client configures once it acknowledges the login, whatever came before or after', () => {

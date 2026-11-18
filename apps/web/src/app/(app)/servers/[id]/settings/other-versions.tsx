@@ -19,7 +19,7 @@ import { busyFor } from '../../../../../lib/button-busy'
 import { type Outcome, useOutcome } from '../../../../../lib/outcome'
 import { FormRow, FormSection, Toggle } from '../../../../../ui'
 import { joinsLine } from './joins-line'
-import { ConfirmChange, changeable, useChanged, whatHappens } from './shared'
+import { ConfirmChange, takesChange, useChanged, whatHappens } from './shared'
 
 /**
  * Which players' games join a Paper server: one line that says it, worked out from its version and
@@ -55,7 +55,7 @@ function OtherVersionsForm({
       },
     }),
   )
-  const allowed = changeable(view)
+  const allowed = takesChange(view)
   // The server's words only for work this switch started; anything else it waits out disabled.
   const busy = busyFor(outcome, view)
   const line = joinsLine(view)

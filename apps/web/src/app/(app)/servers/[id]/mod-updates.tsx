@@ -9,7 +9,7 @@ import { useQuery } from '@tanstack/react-query'
 import Link from 'next/link'
 import { useTRPC } from '../../../../lib/api'
 import { Note } from '../../../../ui'
-import { changeable } from './settings/shared'
+import { takesChange } from './settings/shared'
 import { updateHref, updatesLine } from './update-lines'
 
 /**
@@ -35,7 +35,7 @@ export function ModUpdates({ server }: { server: ServerView }) {
   const mods = useQuery(trpc.mods.list.queryOptions({ serverId: server.id }))
   const { versions } = useModUpdates(server.id)
   const line = mods.data === undefined ? null : updatesLine(mods.data, versions)
-  if (line === null || !changeable(server).ok) return null
+  if (line === null || !takesChange(server).ok) return null
   return (
     <Note tone="info">
       <span className="bk-row bk-wrap" style={{ gap: 'var(--space-12)', alignItems: 'center' }}>

@@ -28,6 +28,8 @@ export type Actor =
         /** The spend watchdog, pausing starts and creation once a day passes its limit. */
         | 'spend'
         | 'room'
+        /** A running server that stopped answering its console (`operations/schedules/silent.ts`). */
+        | 'silent'
     }
   /** Someone running the deployment through the operators' API (`interfaces/operator/`), by name. */
   | { kind: 'operator'; name: string }

@@ -1470,6 +1470,15 @@ the control plane's **internal listener**: 6PN on Fly, loopback or the compose n
   join is told "This server is busy right now · join again in a moment". Refusals are logged every
   10 s by limit and by server. mc-router's own limit stays as the machine's last guard (1,000 a
   second). The defaults are the edge's own, each overridable by its environment.
+- **Query properties in the hostname** (`apps/edge/host-query.ts`). From Minecraft 26.4 a client
+  writes `host?key=value&…` as the handshake's hostname: `_o`, the address the player typed, when
+  an SRV record led it to `host` (a player's own domain pointing at `<slug>.play.cubepals.com`);
+  `_id`, from an address typed `id@host`. The hostname may be 1024 characters. The front door cuts
+  the query off before the gate, mc-router and the server, so every reader after it sees the
+  hostname as a client before 26.4 sent it: mc-router 1.49.0 routes no hostname with a query, and
+  a later one routes on `_o`, which names no route here. `_id` goes too: the game reads it only
+  against `allowed-connection-ids`, which Cubepals never sets. `cubepals_edge_host_query_keys`
+  counts the handshakes that carried each key (`_o`, `_id`, other).
 - **A game the server can't take** is turned away at the front door, before the gate counts it
   or anything is woken (`apps/edge/clients.ts`). Each route carries `joins`: the protocol numbers
   of the clients its server takes, which the control plane works out from the release and server
@@ -1623,10 +1632,17 @@ Replacing mc-router means rewriting `apps/edge` against the same protocol. Nothi
   - `sessionCap {serverId, minutes, minutesLeft}`: the run's end, a session cap or the day's play
     (`minutes` the cap or the day's), `minutesLeft` to go, or 0 as the server is stopped
   - `listingChanged {serverId}`: eligibility or moderation changed
-  - `consoleLine {serverId, at, text, level}`
+  - `consoleLines {serverId, lines, unshown}`: what a watched server printed, gathered into one
+    message about every 100 ms, at most 1,000 lines a second for each server. Lines past that
+    aren't sent; `unshown` counts them (`{count, at}`, once a second at most), and the console
+    says how many weren't shown. The server's own log keeps every line (`console-batches.ts`).
+  - `consoleLine {serverId, at, text, level}`: one line, for a page loaded before batches, held
+    to 100 lines a second for each server; the website still takes it from a realtime process
+    deployed before batches. A line longer than 16 KiB is cut and ends in `…`.
   - `consoleHistory {serverId, lines}`: what the server printed before someone started watching,
     sent to that watcher alone
-  - client→server `watch {serverId, topic: 'console'}` / `unwatch` (the same shape)
+  - client→server `watch {serverId, topic: 'console', batched?}` / `unwatch`: `batched: true`
+    asks for `consoleLines`; a watch without it gets `consoleLine`
 - **Emits only.** Nothing uses `call` or `stream`, so the WebSocket fallback (Safari, networks
   with UDP blocked) gets identical behaviour.
 - **Rooms.**
@@ -2735,9 +2751,10 @@ known share one count. A refusal says Blockly is busy for a moment, and the stat
 - A start that stops or hangs is read for the signatures Minecraft, the loaders and the image
   print (`minecraft/diagnosis.ts`, the only place that knows them), in its last 300 lines after
   the server last said it had started. A match is a `DiagnosedFailure`: one sentence and one
-  remedy (`ours`, `more_room`, `mods`, `modpack` or `restore`; `retry` is tried again instead),
-  kept on the server's failure for the page to offer as one action. Out of memory offers the next
-  size by name.
+  remedy (`ours`, `more_room`, `mods`, `modpack`, `restore` or `newer_minecraft`; `retry` is tried
+  again instead), kept on the server's failure for the page to offer as one action
+  (`servers/[id]/failure-fix.ts`). Out of memory offers the next size by name; a world last played
+  on a newer Minecraft offers the version, never a backup, which is the same world.
 - What a plan doesn't run is said in the owner's terms, never in gigabytes (`planFit` in
   `app/servers/queries.ts`): a bigger server, a group past a size, mods. Such a choice is dimmed,
   with why and which plan would, from `planGap`, the rule creating is checked by.

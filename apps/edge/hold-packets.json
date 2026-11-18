@@ -15,6 +15,10 @@
         "showDialog": 19,
         "transfer": 12,
         "keepAliveAnswer": 4
+      },
+      "layouts": {
+        "loginFinished": "profile+session",
+        "transfer": "host+port"
       }
     },
     {
@@ -31,6 +35,10 @@
         "showDialog": 18,
         "transfer": 11,
         "keepAliveAnswer": 4
+      },
+      "layouts": {
+        "loginFinished": "profile+session",
+        "transfer": "host+port"
       }
     },
     {
@@ -47,6 +55,10 @@
         "showDialog": 18,
         "transfer": 11,
         "keepAliveAnswer": 4
+      },
+      "layouts": {
+        "loginFinished": "profile",
+        "transfer": "host+port"
       }
     },
     {
@@ -63,6 +75,10 @@
         "showDialog": 18,
         "transfer": 11,
         "keepAliveAnswer": 4
+      },
+      "layouts": {
+        "loginFinished": "profile",
+        "transfer": "host+port"
       }
     },
     {
@@ -79,6 +95,10 @@
         "showDialog": 18,
         "transfer": 11,
         "keepAliveAnswer": 4
+      },
+      "layouts": {
+        "loginFinished": "profile",
+        "transfer": "host+port"
       }
     },
     {
@@ -95,6 +115,10 @@
         "showDialog": 18,
         "transfer": 11,
         "keepAliveAnswer": 4
+      },
+      "layouts": {
+        "loginFinished": "profile",
+        "transfer": "host+port"
       }
     },
     {
@@ -111,6 +135,10 @@
         "showDialog": 18,
         "transfer": 11,
         "keepAliveAnswer": 4
+      },
+      "layouts": {
+        "loginFinished": "profile",
+        "transfer": "host+port"
       }
     }
   ]

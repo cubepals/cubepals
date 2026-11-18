@@ -5,11 +5,13 @@
 /** The hold's packet ids: taken from each release's own report, and checked against Mojang's manifest. */
 import { expect, test } from 'bun:test'
 import { createHash } from 'node:crypto'
-import { chmodSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import releases from '../apps/control/src/minecraft/protocol-versions.json' with { type: 'json' }
+import { packetsFor } from '../apps/edge/hold-packet-ids.ts'
 import held from '../apps/edge/hold-packets.json' with { type: 'json' }
+import { PACKETS } from './hold-layouts.ts'
 import { FIRST_DIALOG, idsOf, main, releasesToReport, type World } from './hold-packets.ts'
 
 /** A report as `server.jar --reports` writes `packets.json`, holding just these packets. */
@@ -79,15 +81,37 @@ const JAR = new TextEncoder().encode('a server jar')
 const SHA1 = createHash('sha1').update(JAR).digest('hex')
 const REPORT = report({ disconnect: 2, keep_alive: 4, show_dialog: 18, transfer: 11 })
 
-function worldOf(options: { jar?: Uint8Array; exit?: number; status?: number } = {}) {
+/** How `javap` prints the two packets' classes, cut to what their layout is read from. */
+const LISTINGS = {
+  [PACKETS.loginFinished]: `  static {};
+       0: getstatic     #45                 // Field net/minecraft/network/codec/ByteBufCodecs.GAME_PROFILE:Lnet/minecraft/network/codec/StreamCodec;
+       8: getstatic     #55                 // Field net/minecraft/core/UUIDUtil.STREAM_CODEC:Lnet/minecraft/network/codec/StreamCodec;
+`,
+  [PACKETS.transfer]: `  private void write(net.minecraft.network.FriendlyByteBuf);
+       5: invokevirtual #30                 // Method net/minecraft/network/FriendlyByteBuf.writeUtf:(Ljava/lang/String;)Lnet/minecraft/network/FriendlyByteBuf;
+      14: invokevirtual #34                 // Method net/minecraft/network/FriendlyByteBuf.writeVarInt:(I)Lnet/minecraft/network/FriendlyByteBuf;
+`,
+}
+
+function worldOf(options: { jar?: Uint8Array; exit?: number; status?: number; transfer?: string } = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'hold-packets-test-'))
   const java = join(dir, 'java')
-  // Writes the report where the server would, in the directory it is run from, or fails.
+  // Writes the report where the server would, in the directory it is run from, and unpacks the
+  // game's jar beside it as the bundler does; or fails.
   writeFileSync(
     java,
-    `#!/bin/sh\nmkdir -p out/reports && printf '%s' '${JSON.stringify(REPORT)}' > out/reports/packets.json\nexit ${options.exit ?? 0}\n`,
+    `#!/bin/sh\nmkdir -p out/reports versions/1 && printf '%s' '${JSON.stringify(REPORT)}' > out/reports/packets.json && : > versions/1/server-1.jar\nexit ${options.exit ?? 0}\n`,
   )
   chmodSync(java, 0o755)
+  // Prints the listing of the class it is asked for, from beside it, and fails for any other.
+  const listings = {
+    ...LISTINGS,
+    ...(options.transfer === undefined ? {} : { [PACKETS.transfer]: options.transfer }),
+  }
+  for (const [name, text] of Object.entries(listings)) writeFileSync(join(dir, `${name}.javap`), text)
+  const javap = join(dir, 'javap')
+  writeFileSync(javap, `#!/bin/sh\nfor last; do :; done\nexec cat "${dir}/$last.javap"\n`)
+  chmodSync(javap, 0o755)
   const releasesPath = join(dir, 'releases.json')
   writeFileSync(
     releasesPath,
@@ -119,6 +143,7 @@ function worldOf(options: { jar?: Uint8Array; exit?: number; status?: number } =
       return new Response(null, { status: 404 })
     },
     java,
+    javap,
     copy: join(dir, 'hold-packets.json'),
     releases: releasesPath,
     say: (line) => said.push(line),
@@ -143,6 +168,7 @@ test('bump runs each release’s own jar and writes its ids; check then finds no
       jar: SHA1,
       login: { finished: 2, acknowledged: 3 },
       configuration: { disconnect: 2, keepAlive: 4, showDialog: 18, transfer: 11, keepAliveAnswer: 4 },
+      layouts: { loginFinished: 'profile+session', transfer: 'host+port' },
     })),
   })
   expect(said).toEqual(['1.21.7 (772): reported', '1.21.6 (771): reported'])
@@ -164,6 +190,35 @@ test('check names a protocol with no entry, and one reported from another jar', 
   writeFileSync(world.copy, JSON.stringify(written))
   expect(await main(['check'], world)).toBe(1)
   expect(said.at(-1)).toContain("1.21.7 (772) wasn't reported from its own jar")
+})
+
+test('a release whose layout the edge can’t write stops a bump, and nothing is written', async () => {
+  const { world } = worldOf({
+    transfer: `  static {};
+       0: getstatic     #49                 // Field net/minecraft/network/codec/ByteBufCodecs.STRING_UTF8:Lnet/minecraft/network/codec/StreamCodec;
+`,
+  })
+  await expect(main(['bump'], world)).rejects.toThrow(
+    `1.21.7: ${PACKETS.transfer} is written as [ByteBufCodecs.STRING_UTF8], a layout the edge's dialog hold can't write`,
+  )
+  expect(existsSync(world.copy)).toBe(false)
+})
+
+test('check names an entry with no layouts the edge writes', async () => {
+  const { world, said } = worldOf()
+  await main(['bump'], world)
+  const written = JSON.parse(readFileSync(world.copy, 'utf8'))
+  delete written.protocols[0].layouts
+  written.protocols[1].layouts.transfer = 'host+port+cookies'
+  writeFileSync(world.copy, JSON.stringify(written))
+  expect(await main(['check'], world)).toBe(1)
+  expect(said.at(-1)).toBe(
+    `${world.copy}: 1.21.7 (772) has no layouts the edge writes; 1.21.6 (771) has no layouts the edge writes: run bump`,
+  )
+})
+
+test('every protocol in the copy has layouts the edge writes', () => {
+  for (const entry of held.protocols) expect(packetsFor(entry.protocol)?.layouts).toEqual(entry.layouts)
 })
 
 test('a jar that isn’t Mojang’s, a server that fails, a release the manifest lacks and a refused manifest stop a bump', async () => {

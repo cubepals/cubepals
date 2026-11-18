@@ -9,7 +9,7 @@ import table from './hold-packets.json' with { type: 'json' }
 test('the registry loads every reported release and refuses unreported protocols', async () => {
   const { packetsFor } = await import('./hold-packet-ids.ts')
   expect(table.protocols.length).toBeGreaterThan(0)
-  for (const entry of table.protocols) expect(packetsFor(entry.protocol)).toEqual(entry)
+  for (const entry of table.protocols) expect<unknown>(packetsFor(entry.protocol)).toEqual(entry)
   const protocols = table.protocols.map((entry) => entry.protocol)
   expect(packetsFor(Math.min(...protocols) - 1)).toBeNull()
   expect(packetsFor(Math.max(...protocols) + 1)).toBeNull()

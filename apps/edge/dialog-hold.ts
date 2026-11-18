@@ -25,6 +25,9 @@ import { type Join, packet, readVarInt, string, varInt } from './notice.ts'
 /** The most a configuring client sends while it waits: its settings, brand and channels, many times over. */
 const MOST_RECEIVED = 256 * 1024
 
+/** Login Finished's options byte from 26.4: no encryption, no compression (`ConnectionOptionsPacket`). */
+const NO_OPTIONS = 0
+
 /** A Login Start's fields, as 1.20.2 on send them: the name, then the account's uuid. */
 export interface LoginStart {
   name: string
@@ -94,9 +97,18 @@ export class DialogHold {
     this.#ids = ids
   }
 
-  /** Ends the login as an offline server would: the name and uuid the client gave, and no properties. */
+  /**
+   * Ends the login as an offline server would: the name and uuid the client gave, and no
+   * properties. From 26.2 a session uuid follows, which the client keeps only for its telemetry, so
+   * any will do; from 26.4 the connection's options, none, so the client turns on no encryption or
+   * compression and acknowledges the login at once.
+   */
   finishLogin(start: LoginStart): Uint8Array {
-    return packet(this.#ids.login.finished, [...start.uuid, ...string(start.name), ...varInt(0)])
+    const { loginFinished } = this.#ids.layouts
+    const profile = [...start.uuid, ...string(start.name), ...varInt(0)]
+    const session = loginFinished === 'profile' ? [] : [...crypto.getRandomValues(new Uint8Array(16))]
+    const options = loginFinished === 'profile+session+options' ? [NO_OPTIONS] : []
+    return packet(this.#ids.login.finished, [...profile, ...session, ...options])
   }
 
   /**
@@ -148,9 +160,13 @@ export class DialogHold {
     return packet(this.#ids.configuration.keepAlive, [...id])
   }
 
-  /** Sends the client to join `host`:`port` afresh. */
+  /**
+   * Sends the client to join `host`:`port` afresh: the hostname as routes name it (`hostnameOf`),
+   * with nothing after it. From 26.4 the packet carries query properties of its own, none here.
+   */
   transfer(host: string, port: number): Uint8Array {
-    return packet(this.#ids.configuration.transfer, [...string(host), ...varInt(port)])
+    const properties = this.#ids.layouts.transfer === 'host+port+properties' ? varInt(0) : []
+    return packet(this.#ids.configuration.transfer, [...string(host), ...varInt(port), ...properties])
   }
 
   /** Ends the hold with `words` on the disconnect screen. */

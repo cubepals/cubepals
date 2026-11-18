@@ -46,7 +46,7 @@ async function browser(port: number, userId: string) {
   )
   await client.connect()
   await connected
-  const watch = (serverId: string) => client.emit('watch', { serverId, topic: 'console' })
+  const watch = (serverId: string) => client.emit('watch', { serverId, topic: 'console', batched: true })
   const unwatch = (serverId: string) => client.emit('unwatch', { serverId, topic: 'console' })
   return { client, histories, watch, unwatch }
 }

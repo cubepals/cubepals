@@ -27,6 +27,11 @@ type Remedy =
   | 'modpack'
   /** A backup, where the world itself won't open. */
   | 'restore'
+  /**
+   * A newer Minecraft, where the world was last played on one: a world can't go back to an older
+   * release, so moving the server up is the way to open it, which its owner chooses.
+   */
+  | 'newer_minecraft'
   /** Starting it again: something that passes. */
   | 'retry'
 
@@ -182,9 +187,15 @@ const CHOSEN_BY_BLOCKLY = new Map([
  * One mod needing another, by name. `missing` is null where the loader doesn't say whether the
  * other is absent or at the wrong version (Forge up to 1.12).
  */
-function needs(mod: string, dependency: { id: string; name?: string }, missing: boolean | null): Diagnosis {
+function needs(
+  mod: string,
+  dependency: { id: string; name?: string },
+  missing: boolean | null,
+  line = '',
+): Diagnosis {
   if (dependency.id.toLowerCase() === 'minecraft')
     return { summary: `${mod} is made for another version of Minecraft.`, remedy: 'mods' }
+  if (dependency.id.toLowerCase() === 'java') return needsJava(mod, line)
   const chosen = CHOSEN_BY_BLOCKLY.get(dependency.id.toLowerCase())
   if (chosen !== undefined)
     return {
@@ -201,9 +212,46 @@ function needs(mod: string, dependency: { id: string; name?: string }, missing: 
   return { summary, remedy: 'mods', ...(missing === false ? {} : { missing: dependency.id }) }
 }
 
+/**
+ * A mod that needs another Java than the one its Minecraft runs on, as Fabric words it: `- Mod
+ * 'Foo' (foo) 1.0.0 requires version 99 or later of java, which is missing!`, or `requires version
+ * 99 of 'Java HotSpot(TM) 64-Bit Server VM' (java), but only the wrong version is present: 25!`.
+ * Cubepals picks the Java for each Minecraft, so this is ours, said with both versions where the
+ * line has them. The rule is after codex-minecraft's `FabricModJavaVersionProblem` (MIT).
+ */
+function needsJava(mod: string, line: string): Diagnosis {
+  const wanted = /requires version (\d+)(?:\.\d+)*( or later)? of/.exec(line)
+  const present = /wrong version is present: (\d+)/.exec(line)?.[1]
+  const java =
+    wanted === null
+      ? 'another version of Java'
+      : `Java ${wanted[1]}${wanted[2] === undefined ? '' : ' or newer'}`
+  const now = present === undefined ? '' : `, and this Minecraft runs on Java ${present}`
+  return {
+    summary: `${mod} needs ${java}${now}. Cubepals picks the Java itself, so this is ours to fix.`,
+    remedy: 'ours',
+  }
+}
+
 /** Fabric's line for one mod's need it can't meet (the signature below). */
 const FABRIC_NEED =
   /Mod '([^']+)' \([\w.-]+\)(?: \S+)? (requires|is incompatible with) .+? of (?:mod )?(?:'([^']+)' \()?([\w.-]+)\)?, (which is missing|but only the wrong version|which is disabled|but a matching version is present|yet (?:a )?conflicting version)/
+
+/** Native libraries of Java itself, and spark's profiler, which Paper bundles: a crash in one is ours. */
+const JAVA_LIBRARY =
+  /^(?:libjvm|libjava|libc|libpthread|ld-linux|libzip|libnio|libnet|libverify|libjimage|libawt|libasyncProfiler|libnetty)/i
+
+/** The files Paper's settings load from, by the frame that loads them. */
+const PAPER_FILE: Readonly<Record<string, string>> = {
+  Global: 'config/paper-global.yml',
+  WorldDefaults: 'config/paper-world-defaults.yml',
+}
+
+/** A path's last part: `/srv/server/mods/html.jar` is `html.jar`. */
+const fileName = (path: string): string => path.replace(/^.*\//, '')
+
+/** A datapack by the name its owner knows: its file without `.zip`. */
+const packName = (file: string): string => fileName(file).replace(/\.zip$/i, '')
 
 /** What a mod reaching for the game's screen on a server fails with. */
 const CLIENT_CLASS =
@@ -236,6 +284,46 @@ const SIGNATURES: readonly Signature[] = [
       summary:
         'Cubepals ran out of room for this server’s files. Nothing about your server is wrong; this one is ours.',
       remedy: 'ours',
+    }),
+  },
+  {
+    /**
+     * Java itself crashed, outside anything a stack trace shows: the JVM's fatal error report,
+     * whose `# Problematic frame:` line names the native library it crashed in (`# C
+     * [libjnoise.so+0x1115]`). A frame in Java's own code, or in a library of Java's, is ours; so is
+     * spark's profiler, which Paper bundles. Any other library came with a mod or plugin.
+     */
+    pattern: /^# A fatal error has been detected by the Java Runtime Environment/,
+    diagnose: (_, lines, at) => {
+      const frame = lines
+        .slice(at, at + 20)
+        .map((line, i, near) => (/^# Problematic frame:/.test(near[i - 1] ?? '') ? line : null))
+        .find((line) => line !== null)
+      const library = frame === undefined || frame === null ? null : /^#\s+C\s+\[([^\]+]+)/.exec(frame)?.[1]
+      if (library === undefined || library === null || JAVA_LIBRARY.test(library))
+        return {
+          summary: 'Java itself crashed while it ran. Nothing about your server is wrong; this one is ours.',
+          remedy: 'ours',
+        }
+      return {
+        summary: `Java crashed inside ${library}, a native library one of its mods or plugins brought.`,
+        remedy: 'mods',
+      }
+    },
+  },
+  {
+    /**
+     * A mod's file Fabric can't open as a jar: cut short, or not a jar at all (`Error analyzing
+     * [/data/mods/html.jar]: java.util.zip.ZipException: zip END header not found`), or a jar
+     * inside it that is (`Error analyzing nested jar META-INF/jars/lib.jar from [...]`). Before
+     * the resolver's own failure, which follows it. After codex-minecraft's
+     * `FabricCorruptModFileProblem` (MIT).
+     */
+    pattern:
+      /Error analyzing (?:nested jar \S+ from )?\[([^\]]+?\.jar)\]: (?:java\.util\.zip\.ZipException|java\.io\.EOFException)/,
+    diagnose: (match) => ({
+      summary: `${modName(fileName(match[1] ?? ''))}’s file is damaged, so it can’t be loaded. Removing it and adding it again fetches a whole copy.`,
+      remedy: 'mods',
     }),
   },
   {
@@ -338,7 +426,7 @@ const SIGNATURES: readonly Signature[] = [
           summary: `${mod} needs ${dependency.name}, which only runs in players’ games.`,
           remedy: 'mods',
         }
-      return needs(mod, dependency, match[5] === 'which is missing')
+      return needs(mod, dependency, match[5] === 'which is missing', match.input)
     },
   },
   {
@@ -495,6 +583,35 @@ const SIGNATURES: readonly Signature[] = [
     }),
   },
   {
+    /**
+     * A world last played on a newer Minecraft than the server runs: Paper names a chunk's data
+     * version against its own (`Server attempted to load chunk saved with newer version of
+     * minecraft! 2586 > 2584`). A backup is the same world, so restoring one changes nothing; a
+     * world can't go back to an older release, and moving the server up opens it, which its owner
+     * chooses (as a world brought from a newer Minecraft is, `app/backups/moved-up.ts`). Before
+     * the world that won't open, which it would otherwise read as. After codex-minecraft's
+     * `VersionDowngradeProblem` (MIT).
+     */
+    pattern: /attempted to load chunk saved with newer version of minecraft!/i,
+    diagnose: () => ({
+      summary:
+        'Its world was last played on a newer Minecraft than this server runs, and a world can’t go back to an older one. Moving the server up to a newer Minecraft opens it.',
+      remedy: 'newer_minecraft',
+    }),
+  },
+  {
+    /**
+     * A datapack whose files this Minecraft can't read: the game names it, `Failed to parse
+     * minecraft:the_end from pack file/far-end-ender-expansion-2-0-3-v1-17-1.zip`, usually one made
+     * for another release. After codex-minecraft's `DatapackParsingProblem` (MIT).
+     */
+    pattern: /Failed to parse \S+ from pack (?:file\/)?(\S+)/,
+    diagnose: (match) => ({
+      summary: `The datapack ${packName(match[1] ?? '')} has files this Minecraft can’t read, so its world couldn’t load. It may be made for another version.`,
+      remedy: 'mods',
+    }),
+  },
+  {
     pattern:
       /Failed to (?:load|read) (?:the )?world|world is corrupt|ChunkLoadingException|Exception reading .*\.mca|level\.dat.*(?:corrupt|missing)/i,
     diagnose: () => ({
@@ -518,10 +635,85 @@ const SIGNATURES: readonly Signature[] = [
     }),
   },
   {
+    /**
+     * A settings file of Paper's that doesn't read as YAML: configurate's `ParsingException`, the
+     * file named by the frame that loaded it (`initializeGlobalConfiguration`) and the place by the
+     * line under it (`in 'reader', line 134, column 8`). Cubepals writes these files, and places
+     * any a setup carries, so this is ours. After codex-minecraft's `ConfigurationParseProblem`
+     * (MIT).
+     */
+    pattern: /org\.spongepowered\.configurate\.loader\.ParsingException/,
+    diagnose: (_, lines, at) => {
+      const near = lines.slice(at, at + 30)
+      const which = near
+        .map((line) => /Configurations\.initialize(Global|WorldDefaults)Configuration\(/.exec(line)?.[1])
+        .find((found) => found !== undefined)
+      const line = near
+        .map((l) => / in 'reader', line (\d+), column \d+/.exec(l)?.[1])
+        .find((found) => found !== undefined)
+      const file = which === undefined ? 'One of Paper’s settings files' : `Paper’s ${PAPER_FILE[which]}`
+      return {
+        summary: `${file} has a mistake${line === undefined ? '' : ` on line ${line}`}, so the server couldn’t read its settings. Cubepals writes that file, so this one is ours.`,
+        remedy: 'ours',
+      }
+    },
+  },
+  {
+    /**
+     * `server.properties` with a broken `\u` escape, which Java's reader refuses before anything
+     * else starts. Cubepals writes the file, so this is ours. After codex-minecraft's
+     * `MalformedEncodingProblem` (MIT).
+     */
+    pattern: /IllegalArgumentException: Malformed \\uxxxx encoding/,
+    diagnose: () => ({
+      summary:
+        'Its server.properties has a character Java can’t read, so the server couldn’t read its settings. Cubepals writes that file, so this one is ours.',
+      remedy: 'ours',
+    }),
+  },
+  {
+    /**
+     * Paper's watchdog: the game's loop stopped for 10 seconds or more, and the thread dump under
+     * it shows what held it (`p31-watchdog.jar//com.repro.WatchdogPlugin.lambda$onEnable$0`). The
+     * first frame in a plugin's or mod's jar is named; with none, starting again is worth a try.
+     * After codex-minecraft's `WatchdogProblem` (MIT).
+     */
+    pattern:
+      /The server has not responded for \d+ seconds! Creating thread dump|The server has stopped responding!/,
+    diagnose: (_, lines, at) => {
+      const held = lines
+        .slice(at, at + 40)
+        .map((line) => /\s([\w.+-]+?)\.jar\/\//.exec(line)?.[1])
+        .find((jar) => jar !== undefined && !PLATFORM_JAR.test(jar) && !/^paper/i.test(jar))
+      if (held === undefined)
+        return {
+          summary: 'It stopped answering as it started. Starting it again usually clears that.',
+          remedy: 'retry',
+        }
+      return {
+        summary: `${modName(held)} held the server up until it stopped answering. It may not work with this Minecraft or with the others.`,
+        remedy: 'mods',
+      }
+    },
+  },
+  {
     pattern: /You need to agree to the EULA|Unable to access jarfile|Could not find or load main class/,
     diagnose: () => ({
       summary:
         'The server didn’t get as far as starting. Nothing about it is yours to fix — Cubepals sets all of that.',
+      remedy: 'ours',
+    }),
+  },
+  {
+    /**
+     * A server icon the game can't read as a picture. Minecraft and Paper go on without it, so it
+     * is last: only where nothing else here explains the stop. Cubepals places the icon, so this is
+     * ours. After codex-minecraft's `ServerIconInvalidProblem` (MIT).
+     */
+    pattern: /Couldn't load server icon/,
+    diagnose: () => ({
+      summary:
+        'Its server-list picture couldn’t be read as a picture. Cubepals places that picture, so this one is ours.',
       remedy: 'ours',
     }),
   },

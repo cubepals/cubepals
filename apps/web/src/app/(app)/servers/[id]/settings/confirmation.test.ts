@@ -8,7 +8,7 @@ import type { RestartWhen, ServerView } from '@blockly/contracts'
 import { SECOND_MS } from '@blockly/contracts/durations'
 import { Window } from 'happy-dom'
 import { act, createElement } from 'react'
-import { ConfirmChange, whatHappens } from './shared'
+import { ConfirmChange, changeable, takesChange, whatHappens } from './shared'
 
 function browserScope() {
   const browser = new Window({ url: 'http://localhost/settings' })
@@ -58,6 +58,20 @@ test('an empty running server explains saving, restarting and returning if the c
 })
 test('a sleeping server applies the change when it next starts', () => {
   expect(whatHappens(view(0, 'stopped'))).toBe('The change applies the next time the server starts.')
+})
+test('a server that failed to start takes a change to what it boots, and starts with it', () => {
+  const failed = (during: string) =>
+    ({
+      ...view(0, 'failed'),
+      activeOperation: null,
+      failure: { during, message: '', remedy: null },
+    }) as ServerView
+  expect(takesChange(failed('starting')).ok).toBe(true)
+  expect(takesChange(failed('updating')).ok).toBe(true)
+  expect(whatHappens(failed('starting'))).toBe('The server starts again with the change.')
+  // A first build that failed has its own ways on, and other changes wait for a server that works.
+  expect(takesChange(failed('provisioning')).ok).toBe(false)
+  expect(changeable(failed('starting')).ok).toBe(false)
 })
 test('confirmation waits for prerequisites and submits the chosen restart timing once ready', async () => {
   const dom = browserScope()

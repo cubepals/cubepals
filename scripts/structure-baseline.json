@@ -442,10 +442,6 @@
       "n": 21,
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
-    "apps/web/src/app/(app)/servers/[id]/page.tsx \u203a function Failed": {
-      "n": 21,
-      "reason": "Over the threshold when the check began, and not yet looked at."
-    },
     "apps/web/src/app/(app)/servers/[id]/settings/version.tsx \u203a function VersionForm": {
       "n": 17,
       "reason": "Over the threshold when the check began, and not yet looked at."
