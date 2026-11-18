@@ -12,7 +12,7 @@ import { busyFor } from '../../../../../lib/button-busy'
 import { type Outcome, useOutcome } from '../../../../../lib/outcome'
 import { runsOnPaper } from '../../../../../lib/present'
 import { Card, FormRow, Toggle } from '../../../../../ui'
-import { ConfirmChange, changeable, useChanged, whatHappens } from './shared'
+import { ConfirmChange, takesChange, useChanged, whatHappens } from './shared'
 
 /**
  * What almost nobody needs, closed until someone opens it: whether the server checks players with
@@ -60,7 +60,7 @@ function ServerSoftware({ view, outcome }: { view: ServerView; outcome: Outcome 
     }),
   )
   const on = runsOnPaper(view)
-  const allowed = changeable(view)
+  const allowed = takesChange(view)
   // The server's words only for work this switch started; anything else it waits out disabled.
   const busy = busyFor(outcome, view)
   const now = on
@@ -145,7 +145,7 @@ function OnlineAuthentication({ view, outcome }: { view: ServerView; outcome: Ou
     }),
   )
   const on = view.settings.onlineMode
-  const allowed = changeable(view)
+  const allowed = takesChange(view)
   // The server's words only for work this switch started; anything else it waits out disabled.
   const busy = busyFor(outcome, view)
   // Free keeps the check on; turning it on is always open.

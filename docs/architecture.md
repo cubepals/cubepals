@@ -2744,9 +2744,10 @@ known share one count. A refusal says Blockly is busy for a moment, and the stat
 - A start that stops or hangs is read for the signatures Minecraft, the loaders and the image
   print (`minecraft/diagnosis.ts`, the only place that knows them), in its last 300 lines after
   the server last said it had started. A match is a `DiagnosedFailure`: one sentence and one
-  remedy (`ours`, `more_room`, `mods`, `modpack` or `restore`; `retry` is tried again instead),
-  kept on the server's failure for the page to offer as one action. Out of memory offers the next
-  size by name.
+  remedy (`ours`, `more_room`, `mods`, `modpack`, `restore` or `newer_minecraft`; `retry` is tried
+  again instead), kept on the server's failure for the page to offer as one action
+  (`servers/[id]/failure-fix.ts`). Out of memory offers the next size by name; a world last played
+  on a newer Minecraft offers the version, never a backup, which is the same world.
 - What a plan doesn't run is said in the owner's terms, never in gigabytes (`planFit` in
   `app/servers/queries.ts`): a bigger server, a group past a size, mods. Such a choice is dimmed,
   with why and which plan would, from `planGap`, the rule creating is checked by.

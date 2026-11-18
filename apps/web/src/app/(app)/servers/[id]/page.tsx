@@ -52,6 +52,7 @@ import { FreeHoursUsed } from '../../free-hours-used'
 import { HoursLeft } from '../../hours-left'
 import { PlusOffer } from '../../plus-offer'
 import { BootLine } from './boot-line'
+import { failureFix } from './failure-fix'
 import { firstJoinWays, onPhone } from './first-join-ways'
 import { ModUpdates } from './mod-updates'
 import { useChanged } from './settings/shared'
@@ -556,6 +557,7 @@ function Failed({ server, wake }: { server: ServerView; wake: Wake }) {
   const resize = useMutation(trpc.servers.resize.mutationOptions({ onSuccess: (next) => changed(next) }))
   const remedy = server.failure?.remedy ?? null
   const bigger = server.roomier
+  const link = failureFix(server.id, remedy, server.failure?.during)
   const fix =
     remedy === 'more_room' && bigger !== null ? (
       <Button
@@ -572,19 +574,9 @@ function Failed({ server, wake }: { server: ServerView; wake: Wake }) {
       >
         {resize.isPending ? 'Making room…' : `Give it ${bigger.label}`}
       </Button>
-    ) : remedy === 'modpack' && server.failure?.during === 'provisioning' ? (
-      // Its first build failed on the pack: nothing was ever in it, so the way out is another
-      // pack, under the same name and address.
-      <Button variant="primary" href={`/servers/new?replace=${server.id}`}>
-        Pick another pack
-      </Button>
-    ) : remedy === 'mods' || remedy === 'modpack' ? (
-      <Button variant="primary" href={`/servers/${server.id}/mods`}>
-        {remedy === 'modpack' ? 'Look at its modpack' : 'Change its mods'}
-      </Button>
-    ) : remedy === 'restore' ? (
-      <Button variant="primary" href={`/servers/${server.id}/backups`}>
-        Restore a backup
+    ) : link !== null ? (
+      <Button variant="primary" href={link.href}>
+        {link.label}
       </Button>
     ) : null
 

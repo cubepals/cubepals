@@ -16,7 +16,7 @@ import { type DragEvent, useState } from 'react'
 import { droppedFiles } from '../../../../../lib/chosen-files'
 import { FileButton, FormSection, ICON, Note } from '../../../../../ui'
 import { PlusOffer } from '../../../plus-offer'
-import { changeable } from '../settings/shared'
+import { takesChange } from '../settings/shared'
 import { UploadRow, useOwnUploads } from './own-uploads'
 
 export function OwnDatapacks({
@@ -32,7 +32,7 @@ export function OwnDatapacks({
   const own = useOwnUploads(view, 'datapack', (done) =>
     onChange({ title: `Add ${done.fileName}?`, change: { addUploads: [done.uploadId] } }),
   )
-  const allowed = changeable(view)
+  const allowed = takesChange(view)
   const installed = new Set(list.mods.map((m) => m.id))
   const available = list.datapackUploads
   const open = available.available && allowed.ok && own.sending === null

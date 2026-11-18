@@ -534,8 +534,11 @@ export class RevisionService {
       if (next.draft) next.draft.acknowledgedRevoked = await acknowledged(tx, next.draft, options)
       const revision = next.draft ? await insertRevision(tx, server.id, next.draft, requestedBy(actor)) : null
       if (revision) await this.#artifacts.pinned(tx, revision.mods, revision.modpack)
-      // Rolling a failed server back boots it, and booting spends: the same check as a start.
-      const decision = decide(server.lifecycle, { type: command })
+      // A server that failed as it started takes a change the way going back does: it starts with
+      // it, which is how a failure's fix (a version, its mods) is tried. Booting spends: the same
+      // check as a start.
+      const sent = sentFor(command, server)
+      const decision = decide(server.lifecycle, { type: sent })
       if (decision.kind === 'accept' && decision.operation === 'start')
         await this.#policy.require(tx, server.ownerId, {
           kind: 'start_server',
@@ -548,7 +551,7 @@ export class RevisionService {
         ...(memoryTier ? { memoryTier } : {}),
       })
       const result = await this.#applyChange(tx, moved, {
-        command,
+        command: sent,
         requestedBy: requestedBy(actor),
         key: `${command}:${requestId}`,
         input: revision ? { revisionId: revision.id } : {},
@@ -628,6 +631,18 @@ export class RevisionService {
     return compareVersions(ran.gameVersion, desired.gameVersion) > 0 ? ran.gameVersion : desired.gameVersion
   }
 }
+
+/**
+ * A failed server a change starts again: one whose start or update failed, so its world is there to
+ * boot. One whose first build failed has its own ways on (another pack, starting over).
+ */
+const startsWithChange = (server: Pick<MinecraftServer, 'lifecycle'>): boolean =>
+  server.lifecycle.status === 'failed' &&
+  (server.lifecycle.failure?.during === 'starting' || server.lifecycle.failure?.during === 'updating')
+
+/** The command a change sends: on a server it starts again, the one going back sends, which boots it. */
+const sentFor = (command: 'apply' | 'rollback', server: Pick<MinecraftServer, 'lifecycle'>) =>
+  command === 'apply' && startsWithChange(server) ? 'rollback' : command
 
 export const draftOf = (revision: ServerRevision): RevisionDraft => ({
   gameVersion: revision.gameVersion,
