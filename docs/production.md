@@ -376,6 +376,7 @@ bun scripts/ops.ts --production limits you@example.com --servers 3 --running 2
 bun scripts/ops.ts --production create you@example.com "Test world"   # Free survival for five unless told
 bun scripts/ops.ts --production rest <server>                # its world to the archive store now
 bun scripts/ops.ts --production purge <server> --confirm "Test world" # out of the trash, for good, now
+bun scripts/ops.ts --production console <server> --follow --seconds 120  # its console live, as its owner sees it
 ```
 
 Production's health reads the same way, as the admin Health page (`/admin/health`) shows it: what

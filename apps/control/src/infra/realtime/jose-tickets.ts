@@ -7,11 +7,30 @@
  * (docs/dependency-audit.md). The audience is the deployment, so a ticket from one environment
  * never opens a session in another. Each ticket has its own id, and the realtime role (one per
  * deployment) remembers the ids it has let in until they expire, so a ticket opens one session.
+ * A person's ticket names their sign-in session; an operator's names the one console it opens.
  */
 import { randomUUID } from 'node:crypto'
 import { MINUTE_S, SECOND_MS } from '@blockly/contracts/durations'
-import { jwtVerify, SignJWT } from 'jose'
-import type { RealtimeTickets, TicketHolder } from '../../app/ports/tickets.ts'
+import { type JWTPayload, jwtVerify, SignJWT } from 'jose'
+import type { Holder, OperatorHolder, RealtimeTickets, TicketHolder } from '../../app/ports/tickets.ts'
+
+/** The subject of an operator's ticket starts with this, which no account's id does. */
+const OPERATOR_SUBJECT = 'operator:'
+
+/**
+ * Who a verified ticket's claims name: a person's ticket has a sign-in session (`sid`) and an
+ * account for its subject; an operator's has the operator (`op`), the server (`srv`) and a subject
+ * that says it is an operator's. Anything else, or a mix of the two, names nobody.
+ */
+function holderOf({ sub, sid, op, srv }: JWTPayload): Holder | null {
+  if (sub === undefined) return null
+  if (op !== undefined || srv !== undefined || sub.startsWith(OPERATOR_SUBJECT)) {
+    if (sid !== undefined || typeof op !== 'string' || typeof srv !== 'string') return null
+    if (op === '' || srv === '' || sub !== `${OPERATOR_SUBJECT}${op}`) return null
+    return { operator: op, serverId: srv }
+  }
+  return typeof sid === 'string' && sid !== '' ? { userId: sub, sessionId: sid } : null
+}
 
 /** Realtime tickets as `jose` signs and checks them, each one good for one session. */
 export class JoseRealtimeTickets implements RealtimeTickets {
@@ -30,10 +49,19 @@ export class JoseRealtimeTickets implements RealtimeTickets {
   }
 
   issue({ userId, sessionId }: TicketHolder): Promise<string> {
+    return this.#sign(userId, { sid: sessionId })
+  }
+
+  /** An operator's ticket names no account: its subject says so, and `srv` is the one console it opens. */
+  issueForOperator({ operator, serverId }: OperatorHolder): Promise<string> {
+    return this.#sign(`${OPERATOR_SUBJECT}${operator}`, { op: operator, srv: serverId })
+  }
+
+  #sign(subject: string, claims: Record<string, string>): Promise<string> {
     const now = this.#now()
-    return new SignJWT({ sid: sessionId })
+    return new SignJWT(claims)
       .setProtectedHeader({ alg: 'HS256' })
-      .setSubject(userId)
+      .setSubject(subject)
       .setAudience(this.#audience)
       .setJti(randomUUID())
       .setIssuedAt(now)
@@ -41,7 +69,7 @@ export class JoseRealtimeTickets implements RealtimeTickets {
       .sign(this.#key)
   }
 
-  async verify(ticket: string): Promise<TicketHolder | null> {
+  async verify(ticket: string): Promise<Holder | null> {
     const payload = await jwtVerify(ticket, this.#key, {
       algorithms: ['HS256'],
       audience: this.#audience,
@@ -52,13 +80,13 @@ export class JoseRealtimeTickets implements RealtimeTickets {
       () => null,
     )
     if (payload === null) return null
-    const { sub, jti, exp, sid } = payload
-    if (sub === undefined || jti === undefined || exp === undefined || typeof sid !== 'string' || sid === '')
-      return null
+    const holder = holderOf(payload)
+    const { jti, exp } = payload
+    if (holder === null || jti === undefined || exp === undefined) return null
     this.#forgetExpired()
     if (this.#used.has(jti)) return null
     this.#used.set(jti, exp * SECOND_MS)
-    return { userId: sub, sessionId: sid }
+    return holder
   }
 
   #forgetExpired() {

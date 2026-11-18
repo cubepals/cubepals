@@ -24,6 +24,7 @@ them up. Each command below has a tool of the same purpose, named after it.
 | Which servers lag, and whose are they? | `ops.ts vitals [--account <email>] [--since 24h]` | `vitals_list` |
 | How did this one server tick? | `ops.ts vitals <server> [--since 24h]` | `server_vitals` |
 | What does the server's own log say? | `ops.ts console <server> --lines 200` | `console_read` |
+| What does its console show live, as its owner sees it? | `ops.ts console <server> --follow [--seconds 60]` | none |
 | Is the platform as a whole up and fast? | `ops.ts health`, and the metrics ([metrics.md](metrics.md)) | `health` |
 
 Every command that takes a `<server>`, and every `--server`, takes what a player calls it: its slug,
