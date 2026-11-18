@@ -101,19 +101,21 @@ for f in ${ARCHIVE.slice(DATA_DIR.length + 1)} ${ARCHIVE.slice(DATA_DIR.length +
 inside() { case "$1" in ''|/*) return 1;; esac; case "/$1/" in */../*|*/./*|*//*) return 1;; esac; }
 # The owner's files from an install that didn't finish, back first. Their copy is whole: it is moved
 # into place only once it was. Each is a plain file inside the volume, put back as root.
-rm -rf "$k.new"
+rm -rf "$k.new" "$t"; mkdir -p "$t"
 if [ -d "$k" ]; then
   unlinked ${KEPT_REL}/files; unlinked ${KEPT_REL}/gone
   (cd "$k/files" 2>/dev/null && find . -type f) | sed 's#^\\./##' | while IFS= read -r p; do
-    inside "$p" || continue; unlinked "$p"; case "$p" in */*) mkdir -p "$d/\${p%/*}";; esac; cp -p "$k/files/$p" "$d/$p"
+    inside "$p" || continue; unlinked "$p"; case "$p" in */*) mkdir -p "$d/\${p%/*}";; esac; cp -pT "$k/files/$p" "$d/$p" || : > "$t/unrestored"
   done
   if [ -f "$k/gone" ]; then while IFS= read -r p; do inside "$p" && unlinked "$p" && rm -f "$d/$p"; done < "$k/gone"; fi
+  if [ -e "$t/unrestored" ]; then
+    rm -rf "$t"; echo "[init] Couldn't put back all your own files from a pack install that didn't finish; they're kept in ${KEPT_REL}, and the pack wasn't installed" >&2; exit 1
+  fi
   rm -rf "$k"; echo "[init] Put back your own files from a pack install that didn't finish"
 fi
 if [ ! -s "$a" ]; then
   curl -fsSL --retry 3 -o "$a.part" "$MODRINTH_MODPACK" && mv -f "$a.part" "$a" || { rm -f "$a.part"; exec ${HELPER} "$@"; }
 fi
-rm -rf "$t"; mkdir -p "$t"
 # The pack's paths, server overrides and the rest alike.
 unzip -Z1 "$a" > "$t/entries" 2>/dev/null || exec ${HELPER} "$@"
 sed -n -e 's#^server-overrides/##p' -e 's#^overrides/##p' "$t/entries" | grep -v '/$' | while IFS= read -r p; do inside "$p" && echo "$p"; done | sort -u > "$t/paths"
@@ -139,7 +141,10 @@ if [ $s -eq 0 ]; then
   done
 fi
 # Each owner's file back as it was.
-(cd "$k/files" && tar -cf - .) | (cd "$d" && tar -xpf -)
+{ (cd "$k/files" && tar -cf - .) || : > "$t/unrestored"; } | { (cd "$d" && tar -xpf -) || : > "$t/unrestored"; }
+if [ -e "$t/unrestored" ]; then
+  rm -rf "$t"; echo "[init] Couldn't put back all your own files after installing the pack; they're kept in ${KEPT_REL}, and the next start tries again" >&2; exit 1
+fi
 (cd "$d" && xargs -r -d '\\n' rm -f < "$t/gone.list")
 # What the pack placed, for the next install, once this one succeeded.
 if [ $s -eq 0 ]; then

@@ -44,6 +44,8 @@ beforeEach(() => {
       '#!/bin/sh',
       `cd ${data} && rm -rf ${root}/x && unzip -qq -o modpack.mrpack -d ${root}/x`,
       `for s in overrides server-overrides; do if [ -d ${root}/x/$s ]; then cp -R ${root}/x/$s/. ${data}/; fi; done`,
+      // What a full volume does to a file being put back: in its place, something it can't replace.
+      `if [ -n "$BLOCK" ]; then rm -f ${data}/$BLOCK && mkdir -p ${data}/$BLOCK/x; fi`,
       'echo "helper $1"',
       // An install cut short, as by a machine stopped mid-start: the script dies with the helper.
       'if [ -n "$KILL" ]; then kill -9 $PPID; fi',
@@ -238,6 +240,21 @@ describe('a pack’s install, as root', () => {
 })
 
 describe('a pack’s install that doesn’t finish', () => {
+  test('keeps the owner’s files set aside while they can’t be put back, and puts them back later', () => {
+    install(v1, 'one')
+    writeFileSync(join(data, 'config/a.toml'), 'a = mine')
+    const before = record()
+    expect(install(v2, 'two', { BLOCK: 'config/a.toml' }).code).not.toBe(0)
+    expect(record()).toBe(before)
+    expect(readFileSync(join(data, '.blockly-pack-kept/files/config/a.toml'), 'utf8')).toBe('a = mine')
+    // Still in the way at the next start: nothing is installed, and the copy stays.
+    expect(install(v2, 'two').code).not.toBe(0)
+    expect(there('.blockly-pack-kept/files/config/a.toml')).toBe(true)
+    rmSync(join(data, 'config/a.toml'), { recursive: true })
+    expect(install(v2, 'two').code).toBe(0)
+    expect(read('config/a.toml')).toBe('a = mine')
+  })
+
   test('never takes a path outside the volume from what it set aside', () => {
     const outside = join(root, 'outside.txt')
     writeFileSync(outside, 'outside')
