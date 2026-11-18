@@ -60,8 +60,11 @@ const UNPACKED: Record<string, string> = {
 }
 const sha = (text: string) => createHash('sha256').update(text).digest('hex')
 
-/** A Paperclip: a jar whose lists name each jar it unpacks, by its SHA-256, as Paper's does. */
-function paperclip(path: string, unpacked = UNPACKED) {
+/**
+ * A Paperclip: a jar whose lists name each jar it unpacks, by its SHA-256, as Paper's does. Without
+ * Paperclip's own class it is Mojang's server jar, which lists them the same way.
+ */
+function paperclip(path: string, unpacked = UNPACKED, launcher = 'io/papermc/paperclip/Main.class') {
   const list = (kind: string) =>
     Object.entries(unpacked)
       .filter(([where]) => where.startsWith(`${kind}/`))
@@ -76,11 +79,12 @@ function paperclip(path: string, unpacked = UNPACKED) {
       'z.writestr("META-INF/main-class", "org.bukkit.craftbukkit.Main\\n")',
       'z.writestr("META-INF/versions.list", sys.argv[2])',
       'z.writestr("META-INF/libraries.list", sys.argv[3])',
-      'z.writestr("io/papermc/paperclip/Main.class", "paperclip")',
+      'z.writestr(sys.argv[4], "launcher")',
     ].join('\n'),
     path,
     list('versions'),
     list('libraries'),
+    launcher,
   ])
   if (made.exitCode !== 0) throw new Error(made.stderr.toString())
 }
@@ -250,6 +254,12 @@ describe('Paper started from its class path', () => {
     unpack()
     writeFileSync(data('server.jar'), 'jar')
     expect(start(COMMAND.replace('./paper.jar', './server.jar'))).toEqual([ran('./server.jar')])
+    // Mojang's own jar, whose lists read as Paperclip's: asked to patch, it would start the server.
+    rmSync(data('versions'), { recursive: true })
+    paperclip(data('server.jar'), UNPACKED, 'net/minecraft/bundler/Main.class')
+    expect(start(COMMAND.replace('./paper.jar', './server.jar'))).toEqual([ran('./server.jar')])
+    expect(javaCalls()).toEqual([])
+    unpack()
     writeFileSync(join(root, 'release'), 'JAVA_VERSION="21.0.9"\n')
     expect(start()).toEqual([THROUGH_PAPERCLIP])
     writeFileSync(join(root, 'release'), 'JAVA_VERSION="25.0.4"\n')

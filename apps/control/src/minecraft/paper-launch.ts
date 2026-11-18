@@ -40,6 +40,11 @@ import { SHIM_DIR } from './wake-step.ts'
 
 /** Where the manifest jar is kept: beside the cache, in the folder no archive holds. */
 const LAUNCH = `${DATA_DIR}/.blockly-remade/launch.jar`
+/**
+ * What tells Paperclip from the jar Mojang ships, which lists what it unpacks the same way but
+ * starts the server whatever it is asked: Paperclip's own main class.
+ */
+const PAPERCLIP = 'io/papermc/paperclip/Main.class'
 /** The program that checks what Paperclip unpacked and writes the manifest jar. */
 export const LAUNCH_MAKER = `${SHIM_DIR}/paper-launch`
 
@@ -114,7 +119,7 @@ export const LAUNCH_LINES = [
   `launch=${LAUNCH}; lstate=$launch.state; paperclip=$file`,
   'lfp() { { stat -c "%s %Y" "$paperclip"; while IFS= read -r f; do stat -c "%n %s %Y" "$f"; done < $launch.list; } 2>/dev/null | sha256sum | cut -c1-64; }',
   `lmake() { python3 ${LAUNCH_MAKER} "$paperclip" $launch > $launch.list.new 2>/dev/null; }`,
-  'if [ "$file" != $launch ] && command -v python3 >/dev/null 2>&1 && unzip -l "$file" META-INF/versions.list >/dev/null 2>&1 && mkdir -p "$(dirname "$launch")"; then',
+  `if [ "$file" != $launch ] && command -v python3 >/dev/null 2>&1 && unzip -l "$file" ${PAPERCLIP} >/dev/null 2>&1 && mkdir -p "$(dirname "$launch")"; then`,
   'lphase=; if [ -s $launch ] && [ -s $launch.list ] && [ "$(sed -n 1p $lstate 2>/dev/null)" = "$(lfp)" ]; then lphase=$(sed -n 2p $lstate); fi',
   'if [ -z "$lphase" ]; then',
   'rm -f $launch $launch.list $lstate; lmake; made=$?',
