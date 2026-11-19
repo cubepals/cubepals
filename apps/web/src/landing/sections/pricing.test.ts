@@ -70,13 +70,12 @@ const plus: PublicPlan = {
 }
 const PLANS = [free, core, plus]
 
-const landing = (bedrock: boolean) =>
+const landing = () =>
   renderToStaticMarkup(
     createElement(Pricing, {
       plans: PLANS,
       create: '/servers/new',
       getPlan: (key: string, term = 'month') => `/checkout/${key}/${term}`,
-      bedrock,
     }),
   )
 /** The cards one by one, as written: each plan's own section, named for it. */
@@ -94,7 +93,7 @@ const outside = (html: string) =>
 const face = (card: string) => card.split('See everything in')[0] ?? ''
 
 describe('the landing’s plan cards', () => {
-  const html = landing(true)
+  const html = landing()
   const [coreCard = '', plusCard = ''] = cards(html)
   const [coreHtml = '', plusHtml = ''] = markup(html)
 
@@ -162,13 +161,6 @@ describe('the landing’s plan cards', () => {
     expect(face(plusCard).match(/Core/g)).toHaveLength(1)
     expect(face(plusCard).match(/mods/gi)).toHaveLength(1)
     expect(face(plusCard).match(/\$250/g)).toHaveLength(1)
-  })
-
-  test('Bedrock is promised only where it is on', () => {
-    const off = landing(false)
-    expect(off).not.toContain('Bedrock')
-    expect(face(cards(off)[0] ?? '')).toContain('You and 4 friends Backups, and your world to download')
-    expect(off.match(/<li class="type-body"><svg/g)).toHaveLength(6)
   })
 
   test('the details hold the hours, the trial, the rules and the prices', () => {

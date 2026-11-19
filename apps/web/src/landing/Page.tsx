@@ -19,7 +19,7 @@ import { Ours } from './sections/Ours'
 import { Pricing } from './sections/Pricing'
 import { Steps } from './sections/Steps'
 
-export function Page({ signedIn, create, plans, getPlan, arcade, ours, bedrock }: Landed) {
+export function Page({ signedIn, create, plans, getPlan, arcade, ours }: Landed) {
   const plus = plans.find((plan) => plan.mods)?.name ?? null
   // The most sessions any plan keeps to go back to, or what every paid plan keeps if the plans can't be read.
   const kept = Math.max(0, ...plans.map((plan) => plan.sessionsKept)) || PAID.backupsKept
@@ -27,10 +27,10 @@ export function Page({ signedIn, create, plans, getPlan, arcade, ours, bedrock }
     <>
       <SiteHeader signedIn={signedIn} create={create} marks="nav" over />
       <main>
-        <Opening create={create} plans={plans} arcade={arcade} bedrock={bedrock} />
+        <Opening create={create} plans={plans} arcade={arcade} />
         <Steps />
-        <Handled bedrock={bedrock} plus={plus} kept={kept} />
-        <Pricing plans={plans} create={create} getPlan={getPlan} bedrock={bedrock} />
+        <Handled plus={plus} kept={kept} />
+        <Pricing plans={plans} create={create} getPlan={getPlan} />
         <Ours ours={ours} />
         <Asked plans={plans} />
         <Closing create={create} plans={plans} />

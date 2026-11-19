@@ -27,12 +27,10 @@ export function Opening({
   create,
   plans,
   arcade,
-  bedrock,
 }: {
   create: string
   plans: readonly PublicPlan[]
   arcade: PublicStatus | null
-  bedrock: boolean
 }) {
   return (
     <section className={styles.opening} data-tone="ink" aria-labelledby="opening" {...seenMark('opening')}>
@@ -57,7 +55,7 @@ export function Opening({
             </div>
             <ul className={styles.facts}>
               <li>{trialSaid(plans)}</li>
-              {bedrock && <li>Java and Bedrock</li>}
+              <li>Java and Bedrock</li>
               <li>Open source</li>
             </ul>
             <Arcade status={arcade} className={styles.arcade} />
@@ -70,7 +68,7 @@ export function Opening({
           <p className={styles.runsLabel}>Runs</p>
           <ul className={styles.runsList}>
             <li>Java Edition</li>
-            {bedrock && <li>Bedrock Edition</li>}
+            <li>Bedrock Edition</li>
             {LOADERS.map((loader) => (
               <li key={loader}>{loaderLabel(loader)}</li>
             ))}

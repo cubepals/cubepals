@@ -13,7 +13,6 @@
  */
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { bedrockLive } from '../../../../lib/bedrock'
 import { OutLink, priceOf } from '../../../../ui'
 import { GuideArticle, GuideLink, guideMetadata, guidePlans, Part, Questions, Shot } from '../article'
 
@@ -156,9 +155,8 @@ export default async function Guide() {
           },
           {
             question: 'Does it work on Bedrock or consoles?',
-            answer: bedrockLive()
-              ? 'Yes. Friends on Bedrock, on phones, tablets or Windows, join the same server as Java friends. Xbox, PlayStation and Switch can’t add a server, so they can’t join. A server with mods can’t let them in yet.'
-              : 'Not yet. Cubepals runs Minecraft: Java Edition, and Bedrock players can’t join a Java server. Bedrock support is coming soon, so friends on phones and tablets can join too.',
+            answer:
+              'Yes. Friends on Bedrock, on phones, tablets or Windows, join the same server as Java friends. Xbox, PlayStation and Switch can’t add a server, so they can’t join. A server with mods can’t let them in yet.',
           },
           {
             question: 'Where do I start?',

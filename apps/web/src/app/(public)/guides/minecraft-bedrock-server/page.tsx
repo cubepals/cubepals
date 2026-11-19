@@ -7,13 +7,11 @@
  * from Mojang's own page, linked where it's named. What it says of Cubepals was
  * done on staging: the steps on the create page, the address and the join lines a server's page
  * and settings show, and a Bedrock join waking a sleeping server. Any server without mods takes
- * Bedrock players, since each runs on Paper, so the steps ask for no particular setup. Where
- * Bedrock is off (`bedrockLive`), the Cubepals part says it is coming instead, and the page is
- * unlisted. The pictures are from a local stack with Bedrock on.
+ * Bedrock players, since each runs on Paper, so the steps ask for no particular setup. The
+ * pictures are from a local stack.
  */
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { bedrockLive } from '../../../../lib/bedrock'
 import { OutLink } from '../../../../ui/out-link'
 import { GuideArticle, GuideLink, guideMetadata, Part, Questions, Shot } from '../article'
 
@@ -23,15 +21,12 @@ const PICTURES = `/guides/${SLUG}`
 export const generateMetadata = (): Metadata => guideMetadata(SLUG)
 
 export default function Guide() {
-  const live = bedrockLive()
   return (
     <GuideArticle slug={SLUG}>
       <p className="type-body">
         A Bedrock server is a world your friends on phones, tablets and Windows join from the Servers tab,
-        whether or not you’re playing.{' '}
-        {live
-          ? 'You can run one on your own computer, or make one your Java friends join too.'
-          : 'Here is how to run one on your own computer.'}
+        whether or not you’re playing. You can run one on your own computer, or make one your Java friends
+        join too.
       </p>
 
       <Part id="own-computer" title="On your own computer">
@@ -49,60 +44,56 @@ export default function Guide() {
         </p>
       </Part>
 
-      {live ? <OneServer /> : <ComingSoon />}
+      <OneServer />
 
-      {live && (
-        <Questions
-          items={[
-            {
-              question: 'Can Java and Bedrock players play together?',
-              answer:
-                'Yes, on the same server and in the same world. Java friends join from Multiplayer, Bedrock friends from Servers, with the same address.',
-            },
-            {
-              question: 'Can friends on Xbox, PlayStation or Switch join?',
-              answer: 'No. Those consoles can’t add a server, so they can’t join one by its address.',
-            },
-            {
-              question: 'Do I need to port forward?',
-              answer:
-                'No. Your friends join by the address, and nothing runs on your computer or your router.',
-            },
-            {
-              question: 'Is it free?',
-              answer: (
-                <>
-                  It starts with a free trial, with no card. <Link href="/pricing">Pricing</Link> has the
-                  plans.
-                </>
-              ),
-            },
-            {
-              question: 'My server is older. Can Bedrock friends join it?',
-              answer: (
-                <>
-                  Yes, if it has no mods. In its <strong>Settings</strong>, under{' '}
-                  <strong>Bedrock friends</strong>, let them in.
-                </>
-              ),
-            },
-            {
-              question: 'Can I keep Bedrock players out?',
-              answer: (
-                <>
-                  Yes. In the server’s <strong>Settings</strong>, under <strong>Bedrock friends</strong>,
-                  switch off <strong>Let them join</strong>. Java players aren’t affected.
-                </>
-              ),
-            },
-          ]}
-        />
-      )}
+      <Questions
+        items={[
+          {
+            question: 'Can Java and Bedrock players play together?',
+            answer:
+              'Yes, on the same server and in the same world. Java friends join from Multiplayer, Bedrock friends from Servers, with the same address.',
+          },
+          {
+            question: 'Can friends on Xbox, PlayStation or Switch join?',
+            answer: 'No. Those consoles can’t add a server, so they can’t join one by its address.',
+          },
+          {
+            question: 'Do I need to port forward?',
+            answer: 'No. Your friends join by the address, and nothing runs on your computer or your router.',
+          },
+          {
+            question: 'Is it free?',
+            answer: (
+              <>
+                It starts with a free trial, with no card. <Link href="/pricing">Pricing</Link> has the plans.
+              </>
+            ),
+          },
+          {
+            question: 'My server is older. Can Bedrock friends join it?',
+            answer: (
+              <>
+                Yes, if it has no mods. In its <strong>Settings</strong>, under{' '}
+                <strong>Bedrock friends</strong>, let them in.
+              </>
+            ),
+          },
+          {
+            question: 'Can I keep Bedrock players out?',
+            answer: (
+              <>
+                Yes. In the server’s <strong>Settings</strong>, under <strong>Bedrock friends</strong>, switch
+                off <strong>Let them join</strong>. Java players aren’t affected.
+              </>
+            ),
+          },
+        ]}
+      />
     </GuideArticle>
   )
 }
 
-/** Cubepals, where Bedrock is on: one server for both, step by step. */
+/** Cubepals: one server for both, step by step. */
 function OneServer() {
   return (
     <>
@@ -163,19 +154,5 @@ function OneServer() {
         <p>A server with mods or a modpack is for Java friends only for now.</p>
       </Part>
     </>
-  )
-}
-
-/** Cubepals, where Bedrock is off: what it is today, and that Bedrock is coming. */
-function ComingSoon() {
-  return (
-    <Part id="cubepals" title="On Cubepals">
-      <p>
-        Cubepals runs Minecraft: Java Edition today. Bedrock is coming soon, so friends on phones, tablets and
-        Windows can join the same server as Java friends. Until then,{' '}
-        <GuideLink to="minecraft-server-for-friends">making a server for friends</GuideLink> shows how a Java
-        server goes.
-      </p>
-    </Part>
   )
 }

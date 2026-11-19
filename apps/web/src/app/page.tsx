@@ -5,9 +5,8 @@
 import { Frame, landingOf } from '../landing/Landing'
 import { landingMetadata } from '../landing/metadata'
 import { Page } from '../landing/Page'
-import { bedrockLive } from '../lib/bedrock'
 
-export const generateMetadata = () => landingMetadata(bedrockLive())
+export const generateMetadata = () => landingMetadata()
 
 /**
  * The landing page: one page for every screen, scrolled as the browser scrolls it. Its sections are

@@ -57,7 +57,7 @@ const PLANS = [
 describe('the landing’s plans against an older plans API', () => {
   const landing = (plans: PublicPlan[]) =>
     renderToStaticMarkup(
-      createElement(Pricing, { plans, create: '/servers/new', getPlan: () => '/checkout', bedrock: false }),
+      createElement(Pricing, { plans, create: '/servers/new', getPlan: () => '/checkout' }),
     )
   const html = landing(PLANS)
 

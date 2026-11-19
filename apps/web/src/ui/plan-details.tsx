@@ -60,7 +60,7 @@ export type PointKind = 'friends' | 'bridge' | 'moon' | 'chest' | 'crowd' | 'anv
  * What you get on a plan, in three short lines, with no hours: those are in its details, with the
  * servers, the sessions it keeps and the rest.
  */
-export function offerPoints(plan: PublicPlan, bedrock: boolean): { said: string; kind: PointKind }[] {
+export function offerPoints(plan: PublicPlan): { said: string; kind: PointKind }[] {
   if (plan.mods)
     return [
       { said: `Up to ${plan.maxPlayers} players`, kind: 'crowd' },
@@ -69,9 +69,7 @@ export function offerPoints(plan: PublicPlan, bedrock: boolean): { said: string;
     ]
   return [
     { said: plan.maxPlayers > 1 ? `You and ${plan.maxPlayers - 1} friends` : 'Just you', kind: 'friends' },
-    bedrock
-      ? { said: 'Java and Bedrock together', kind: 'bridge' }
-      : { said: 'Backups, and your world to download', kind: 'chest' },
+    { said: 'Java and Bedrock together', kind: 'bridge' },
     { said: 'Sleeps when nobody’s on', kind: 'moon' },
   ]
 }

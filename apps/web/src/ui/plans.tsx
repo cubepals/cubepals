@@ -11,11 +11,6 @@ import { Badge } from './surfaces'
 import { Tip } from './tip'
 
 /**
- * Who a plan is for and what they play on it, as the person choosing would put it: the first thing
- * a card says, and never its hours. Core says Java and Bedrock friends play together only where
- * Bedrock is on (`lib/bedrock.ts`), and promises nothing about Bedrock where it is off.
- */
-/**
  * Whether a plan is on sale: only the API saying so (`available: false`) takes it off. A plans
  * answer from before the field existed, while the site and the API deploy minutes apart, shows
  * every plan as it always did.
@@ -39,10 +34,14 @@ export function gbSaid(plan: Pick<PublicPlan, 'sizes'>): string {
 export const extraHourOf = (plan: Pick<PublicPlan, 'extraHourCents'>): number | null =>
   typeof plan.extraHourCents === 'number' ? plan.extraHourCents : null
 
-export function pitchOf(plan: Pick<PublicPlan, 'key' | 'maxPlayers'>, bedrock = false): string {
+/**
+ * Who a plan is for and what they play on it, as the person choosing would put it: the first thing
+ * a card says, and never its hours.
+ */
+export function pitchOf(plan: Pick<PublicPlan, 'key' | 'maxPlayers'>): string {
   switch (plan.key) {
     case 'core':
-      return `Plain Minecraft for you and ${plan.maxPlayers - 1} friends${bedrock ? ', Java and Bedrock together' : ''}`
+      return `Plain Minecraft for you and ${plan.maxPlayers - 1} friends, Java and Bedrock together`
     case 'plus':
       return 'Mods, plugins and modpacks, for bigger groups'
     default:
@@ -238,15 +237,12 @@ export function PlanCard({
   current = false,
   action,
   mark,
-  bedrock = false,
   solid = plan.monthlyPriceCents > 0,
   note,
 }: {
   plan: PublicPlan
   /** The free trial, on the plan it starts. */
   trial?: PublicPlan | undefined
-  /** Whether Bedrock is on, for the card's first line (`lib/bedrock.ts`). */
-  bedrock?: boolean
   /** The card is the dark one: the player's own plan. */
   solid?: boolean
   /** Small print that belongs to this plan, under its details. */
@@ -264,7 +260,7 @@ export function PlanCard({
         <h3 className="type-eyebrow">{plan.name}</h3>
         {current && <Badge tone="grass">{current === 'trial' ? 'Your free trial' : 'Yours'}</Badge>}
       </div>
-      <p className="type-heading-sm bk-plan__pitch">{pitchOf(plan, bedrock)}</p>
+      <p className="type-heading-sm bk-plan__pitch">{pitchOf(plan)}</p>
       <p className="bk-plan__price">
         <span className="type-display-md bk-num">{dollars(plan.monthlyPriceCents)}</span>
         {plan.monthlyPriceCents > 0 && <span className="type-body-sm"> a month</span>}

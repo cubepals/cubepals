@@ -46,7 +46,6 @@ export function OfferCard({
   plan,
   plans,
   trial,
-  bedrock,
   mark,
   start,
   checkout,
@@ -55,8 +54,6 @@ export function OfferCard({
   plans: readonly PublicPlan[]
   /** The free trial, on the plan it starts: that card is the paper one. */
   trial?: PublicPlan | undefined
-  /** Whether Bedrock is on, for Core's lines (`lib/bedrock.ts`). */
-  bedrock: boolean
   /** The page's mark for the card coming into view. */
   mark?: Mark
   /** On the plan the trial starts: where Start free goes. */
@@ -93,7 +90,7 @@ export function OfferCard({
       </div>
       <CardButton name={plan.name} start={trial ? start : undefined} month={month} />
       <ul className={styles.points}>
-        {offerPoints(plan, bedrock).map((point) => (
+        {offerPoints(plan).map((point) => (
           <li key={point.said} className="type-body">
             <PixelIcon name={point.kind} size={24} />
             {point.said}

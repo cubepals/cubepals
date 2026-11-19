@@ -131,14 +131,9 @@ describe('plans as people read them', () => {
   })
 
   test('each card leads with who it is for, and never with hours', () => {
-    expect(pitchOf(core, true)).toBe('Plain Minecraft for you and 4 friends, Java and Bedrock together')
+    expect(pitchOf(core)).toBe('Plain Minecraft for you and 4 friends, Java and Bedrock together')
     expect(pitchOf(plus)).toBe('Mods, plugins and modpacks, for bigger groups')
     for (const plan of [core, plus]) expect(pitchOf(plan)).not.toMatch(/hour/i)
-  })
-
-  test('Core promises nothing about Bedrock until Bedrock is on', () => {
-    expect(pitchOf(core)).toBe('Plain Minecraft for you and 4 friends')
-    expect(pitchOf(core, false)).not.toMatch(/bedrock/i)
   })
 
   test('nothing a plan says is about machines but its servers’ size, and nothing says "turn on"', () => {
