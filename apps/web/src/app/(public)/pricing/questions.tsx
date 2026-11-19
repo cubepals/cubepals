@@ -9,7 +9,6 @@
 import type { PublicPlan } from '@blockly/contracts'
 import Link from 'next/link'
 import { dollars, EXTRA_HOUR_CENTS } from '../../../legal/figures'
-import { bedrockLive } from '../../../lib/bedrock'
 import { daysSaid, hoursAgainSaid } from '../../../lib/plans'
 import { eachOf, extraHourOf, forSale } from '../../../ui'
 import { detailMark } from '../steps'
@@ -96,11 +95,9 @@ function changeSaid(core: PublicPlan, plus: PublicPlan): string {
   return `Yes, from your account. ${core.name} to ${plus.name} starts at once: you pay the difference for the rest of the month, and your subscription stays one. ${plus.name} to ${core.name} is offered on your account page too: ${core.name} starts when the month you paid for ends, you keep ${plus.name} until then, and there is nothing to end first. Your worlds stay as they are: a modded one waits for ${plus.name} rather than losing anything.`
 }
 
-/** Whether friends on Bedrock can join, as this Cubepals has it. */
-const bedrockSaid = (on: boolean) =>
-  on
-    ? 'Yes. Friends on Bedrock, on phones, tablets or Windows, join the same server as Java friends, with the same address. Xbox, PlayStation and Switch can’t add a server, so they can’t join. A server with mods can’t let them in yet.'
-    : 'Not yet. Cubepals runs Minecraft: Java Edition. Bedrock support is coming soon, so friends on phones and tablets can join too.'
+/** Whether friends on Bedrock can join. */
+const BEDROCK_SAID =
+  'Yes. Friends on Bedrock, on phones, tablets or Windows, join the same server as Java friends, with the same address. Xbox, PlayStation and Switch can’t add a server, so they can’t join. A server with mods can’t let them in yet.'
 
 export function Questions({ plans }: { plans: readonly PublicPlan[] }) {
   const { free, core, plus } = byKind(plans)
@@ -148,7 +145,7 @@ export function Questions({ plans }: { plans: readonly PublicPlan[] }) {
         </Question>
       )}
       <Question which="bedrock" title="Bedrock or consoles?">
-        {bedrockSaid(bedrockLive())}
+        {BEDROCK_SAID}
       </Question>
       <Question which="modpacks" title="Which modpacks?">
         Modrinth packs, from a search or a link. A pack from CurseForge or a launcher runs from its file:

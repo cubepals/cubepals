@@ -28,13 +28,11 @@ export function PricingCard({
   plan,
   plans,
   trial,
-  bedrock,
 }: {
   plan: PublicPlan
   plans: readonly PublicPlan[]
   /** The free trial, on the plan it starts. */
   trial?: PublicPlan | undefined
-  bedrock: boolean
 }) {
   const signedIn = useSignedIn()
   return (
@@ -42,7 +40,6 @@ export function PricingCard({
       plan={plan}
       plans={plans}
       trial={trial}
-      bedrock={bedrock}
       mark={seenMark(`plan_${plan.key}`)}
       start={{ href: behindSignUp(signedIn, '/servers/new'), mark: ctaMark('pricing_create') }}
       checkout={(term) => ({ href: checkoutOf(signedIn, plan.key, term), mark: planMark(plan.key, term) })}

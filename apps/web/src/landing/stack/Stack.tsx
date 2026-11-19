@@ -51,10 +51,10 @@ export function printFor(room: number, ratio: number) {
 }
 
 /** The stack worked out for a window `width` wide on a screen of `ratio`: the first try that fits it, or the last. */
-function drawnFor(width: number, ratio: number, bedrock: boolean) {
+function drawnFor(width: number, ratio: number) {
   const tried = TRIES.map((tri) => {
     const { chosen, print } = printFor(tri.room, ratio)
-    const stack = stackOf(print, { players: tri.told, bedrock, notes: tri.told ? NOTES : null })
+    const stack = stackOf(print, { players: tri.told, notes: tri.told ? NOTES : null })
     return { stack, prints: { leave: chosen.leave.src, join: chosen.join.src } }
   })
   return tried.find((one) => one.stack.width <= width) ?? (tried.at(-1) as (typeof tried)[number])
@@ -122,7 +122,7 @@ function useReading(
   }, [drawn, id, still, frame, list])
 }
 
-export function Stack({ steps, told, bedrock }: { steps: readonly Said[]; told: Told; bedrock: boolean }) {
+export function Stack({ steps, told }: { steps: readonly Said[]; told: Told }) {
   const id = `stack${useId().replace(/[^a-zA-Z0-9]/g, '')}`
   const still = useReducedMotion()
   const [frame, setFrame] = useState<HTMLDivElement | null>(null)
@@ -147,10 +147,7 @@ export function Stack({ steps, told, bedrock }: { steps: readonly Said[]; told: 
       window.removeEventListener('resize', measure)
     }
   }, [frame])
-  const drawn = useMemo(
-    () => (screen ? drawnFor(screen.width, screen.ratio, bedrock) : null),
-    [screen, bedrock],
-  )
+  const drawn = useMemo(() => (screen ? drawnFor(screen.width, screen.ratio) : null), [screen])
   useReading(drawn, id, still, { window: frame, list })
   return (
     <div className={styles.scrolly}>

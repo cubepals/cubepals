@@ -25,12 +25,9 @@ import {
 } from './guides.ts'
 
 const was = process.env.WEB_INDEXABLE
-const bedrockWas = process.env.WEB_BEDROCK
 afterEach(() => {
   if (was === undefined) delete process.env.WEB_INDEXABLE
   else process.env.WEB_INDEXABLE = was
-  if (bedrockWas === undefined) delete process.env.WEB_BEDROCK
-  else process.env.WEB_BEDROCK = bedrockWas
 })
 const production = () => {
   process.env.WEB_INDEXABLE = '1'
@@ -173,21 +170,12 @@ describe('an approved guide', () => {
 describe('the Bedrock guide', () => {
   const bedrock = GUIDES.find((guide) => guide.bedrock) as Guide
 
-  test('is listed, indexable and in the sitemap where Bedrock is on', () => {
+  test('is listed, indexable and in the sitemap', () => {
     production()
-    process.env.WEB_BEDROCK = '1'
+    expect(liveGuide(bedrock.slug)).toBe(bedrock)
     expect(publishedGuides()).toContain(bedrock)
     expect(guideMetadata(bedrock.slug).robots).toBeUndefined()
     expect(sitemap().map((page) => page.url)).toContain(`${canonicalOrigin()}/guides/${bedrock.slug}`)
-  })
-
-  test('where Bedrock is off, stays readable but unlisted, noindex and out of the sitemap', () => {
-    production()
-    delete process.env.WEB_BEDROCK
-    expect(liveGuide(bedrock.slug)).toBe(bedrock)
-    expect(publishedGuides()).not.toContain(bedrock)
-    expect(guideMetadata(bedrock.slug).robots).toEqual(UNLISTED)
-    expect(sitemap().map((page) => page.url)).not.toContain(`${canonicalOrigin()}/guides/${bedrock.slug}`)
   })
 })
 

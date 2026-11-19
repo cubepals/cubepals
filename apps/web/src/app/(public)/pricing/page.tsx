@@ -7,7 +7,6 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { digits, pixel } from '../../../landing/fonts'
 import { FULL_REFUND_UNDER_HOURS } from '../../../legal/figures'
-import { bedrockLive } from '../../../lib/bedrock'
 import { pricedPlans } from '../../../lib/plans'
 import { canonicalOrigin, pageMetadata } from '../../../lib/site'
 import { appSchema, JsonLd } from '../../../lib/structured-data'
@@ -31,7 +30,7 @@ export async function generateMetadata(): Promise<Metadata> {
         : 'Pricing',
     description:
       free && core
-        ? `${core.name} starts free, with ${free.totalHours ? `${free.totalHours} hours and ` : ''}no card, for you and ${core.maxPlayers - 1} friends${bedrockLive() ? ' on Java and Bedrock' : ''}.${plus ? ` ${plus.name} adds mods, plugins and bigger groups.` : ''}`
+        ? `${core.name} starts free, with ${free.totalHours ? `${free.totalHours} hours and ` : ''}no card, for you and ${core.maxPlayers - 1} friends on Java and Bedrock.${plus ? ` ${plus.name} adds mods, plugins and bigger groups.` : ''}`
         : 'Core starts free, for you and your friends. Plus adds mods, plugins and bigger groups.',
     path: '/pricing',
   })
@@ -47,7 +46,6 @@ export default async function PricingPage() {
   const plans = await pricedPlans()
   const { plus } = byKind(plans)
   const { trial, cards, starter } = cardsOf(plans)
-  const bedrock = bedrockLive()
   const costGuide = publishedGuides().find((guide) => guide.slug === 'minecraft-server-cost')
   return (
     <>
@@ -64,7 +62,6 @@ export default async function PricingPage() {
             plan={plan}
             plans={plans}
             trial={plan === starter ? trial : undefined}
-            bedrock={bedrock}
           />
         ))}
       </PlanCards>

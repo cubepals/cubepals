@@ -8,7 +8,6 @@
  * page, all linked; the joining was done on a local stack.
  */
 import type { Metadata } from 'next'
-import { bedrockLive } from '../../../../lib/bedrock'
 import { OutLink } from '../../../../ui/out-link'
 import { GuideArticle, GuideLink, guideMetadata, Part, Questions, Shot } from '../article'
 
@@ -90,13 +89,11 @@ export default function Guide() {
             question: 'Why can’t my friends join?',
             answer: (
               <>
-                Check these, in order.{' '}
-                {bedrockLive()
-                  ? 'Are they on a console? Xbox, PlayStation and Switch can’t add a server, so they can’t join. Phones, tablets and Windows on Bedrock can, once the server lets Bedrock in. A server with mods can’t let them in yet.'
-                  : 'Are they on Java Edition? Bedrock players, on phones and consoles, can’t join a Java server.'}{' '}
-                Is their game on a Minecraft version the server takes? Did they paste the whole address, with
-                nothing missing? If the server is on your own computer, is the port forwarded, and is your
-                provider using CGNAT?
+                Check these, in order. Are they on a console? Xbox, PlayStation and Switch can’t add a server,
+                so they can’t join. Phones, tablets and Windows on Bedrock can, once the server lets Bedrock
+                in. A server with mods can’t let them in yet. Is their game on a Minecraft version the server
+                takes? Did they paste the whole address, with nothing missing? If the server is on your own
+                computer, is the port forwarded, and is your provider using CGNAT?
               </>
             ),
           },

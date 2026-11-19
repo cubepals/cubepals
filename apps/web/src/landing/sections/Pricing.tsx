@@ -21,13 +21,11 @@ export function Pricing({
   plans,
   create,
   getPlan,
-  bedrock,
 }: {
   plans: PublicPlan[]
   create: string
   /** Where a paid plan's button leads, by plan key. */
   getPlan: (key: string, term?: 'month' | 'year') => string
-  bedrock: boolean
 }) {
   const { trial, cards, starter } = cardsOf(plans)
   if (cards.length === 0) return null
@@ -60,7 +58,6 @@ export function Pricing({
                 plan={plan}
                 plans={plans}
                 trial={plan === starter ? trial : undefined}
-                bedrock={bedrock}
                 mark={seenMark(`plan_${plan.key}`)}
                 start={{ href: create, mark: ctaMark('plans_create') }}
                 checkout={(term) => ({ href: getPlan(plan.key, term), mark: planMark(plan.key, term) })}

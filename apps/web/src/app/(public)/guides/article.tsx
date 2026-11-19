@@ -12,7 +12,6 @@ import type { Metadata } from 'next'
 import Image from 'next/image'
 import Link from 'next/link'
 import type { ReactNode } from 'react'
-import { bedrockLive } from '../../../lib/bedrock'
 import { pricedPlans } from '../../../lib/plans'
 import { currentSession } from '../../../lib/session'
 import { canonicalOrigin, pageMetadata, UNLISTED } from '../../../lib/site'
@@ -125,7 +124,7 @@ export async function GuideArticle({ slug, children }: { slug: string; children:
         <h1 className="type-display-md">{guide.heading ?? guide.title}</h1>
         <p className={`type-body-sm ${styles.meta}`}>
           Updated {said(guide.modified)} · For Minecraft: Java Edition
-          {guide.bedrock && bedrockLive() ? ' and Bedrock Edition' : ''}
+          {guide.bedrock ? ' and Bedrock Edition' : ''}
         </p>
       </header>
       {!guide.approved && (

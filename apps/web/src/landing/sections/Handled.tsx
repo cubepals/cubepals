@@ -15,7 +15,7 @@ import { OutLink } from '../../ui/out-link'
 import { type Said, Stack } from '../stack/Stack'
 import styles from './handled.module.css'
 
-export function Handled({ bedrock, plus, kept }: { bedrock: boolean; plus: string | null; kept: number }) {
+export function Handled({ plus, kept }: { plus: string | null; kept: number }) {
   const steps: Said[] = [
     {
       step: 'world',
@@ -39,9 +39,7 @@ export function Handled({ bedrock, plus, kept }: { bedrock: boolean; plus: strin
       step: 'door',
       count: '03 · The door',
       title: 'One address, and you say who gets in',
-      said: bedrock
-        ? 'Friends on PC, phones and tablets join the same world at the same address: anyone with it, or only the people you add.'
-        : 'Friends join from Minecraft’s server list, with nothing to install: anyone with the address, or only the people you add.',
+      said: 'Friends on PC, phones and tablets join the same world at the same address: anyone with it, or only the people you add.',
     },
     {
       step: 'backups',
@@ -69,7 +67,7 @@ export function Handled({ bedrock, plus, kept }: { bedrock: boolean; plus: strin
             one, and how they’re run is public: <OutLink href={SOURCE_URL}>read the code</OutLink>.
           </p>
         </header>
-        <Stack steps={steps} told={{ plus, kept }} bedrock={bedrock} />
+        <Stack steps={steps} told={{ plus, kept }} />
       </div>
     </section>
   )

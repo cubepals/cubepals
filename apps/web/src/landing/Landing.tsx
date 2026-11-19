@@ -12,7 +12,6 @@ import type { PublicPlan } from '@blockly/contracts'
 import type { ReactNode } from 'react'
 import { Presses } from '../app/(public)/presses'
 import type { PublicStatus } from '../app/(public)/status'
-import { bedrockLive } from '../lib/bedrock'
 import { pricedPlans } from '../lib/plans'
 import { currentSession } from '../lib/session'
 import { canonicalOrigin } from '../lib/site'
@@ -36,8 +35,6 @@ export interface Landed {
   arcade: PublicStatus | null
   /** Cubepals' own servers as anyone can see them, each known to be awake or asleep. */
   ours: PublicStatus[]
-  /** Whether the pages say Bedrock friends can join (lib/bedrock.ts). */
-  bedrock: boolean
 }
 
 /** Cubepals' own servers on the public status endpoint, the Arcade first. */
@@ -76,7 +73,7 @@ export async function landingOf(
     const account = `/account?get=${key}${term === 'year' ? '&term=year' : ''}&reason=pricing`
     return signedIn ? account : withSource(`/sign-up?next=${encodeURIComponent(account)}`, source)
   }
-  return { signedIn, create, plans, getPlan, arcade: statuses[0] ?? null, ours, bedrock: bedrockLive() }
+  return { signedIn, create, plans, getPlan, arcade: statuses[0] ?? null, ours }
 }
 
 /** The frame the page is set in. */

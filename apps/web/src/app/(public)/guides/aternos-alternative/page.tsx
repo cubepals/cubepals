@@ -11,7 +11,6 @@
  */
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { bedrockLive } from '../../../../lib/bedrock'
 import { daysSaid, hoursSaid } from '../../../../lib/plans'
 import { OutLink } from '../../../../ui/out-link'
 import {
@@ -81,9 +80,7 @@ export default async function Guide() {
             ],
             [
               'Java and Bedrock',
-              bedrockLive()
-                ? 'Java and Bedrock friends join the same server, on one address.'
-                : 'Java Edition today, and Bedrock is coming soon.',
+              'Java and Bedrock friends join the same server, on one address.',
               <>
                 <OutLink href={ATERNOS.hytale}>Its servers run Java, Bedrock and Hytale</OutLink>.
               </>,
@@ -136,9 +133,7 @@ export default async function Guide() {
           {free
             ? `It starts with a free trial of ${hoursSaid(free)}, for up to ${free.maxPlayers} players, with no card, on plain Minecraft.`
             : 'It starts with a free trial, with no card, on plain Minecraft.'}{' '}
-          {bedrockLive()
-            ? 'Java and Bedrock friends join one server, on one address.'
-            : 'It runs Java Edition today, and Bedrock is coming soon.'}{' '}
+          Java and Bedrock friends join one server, on one address.{' '}
           {paid ? `Mods and modpacks come with ${paid.name}.` : 'Mods and modpacks come with the paid plan.'}{' '}
           Hours only count while the server is running, and it sleeps when nobody’s on, so the trial’s hours
           go on play rather than empty time. <Link href="/pricing">Pricing</Link> has the plans,{' '}
