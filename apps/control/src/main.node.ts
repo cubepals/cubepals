@@ -118,6 +118,7 @@ import { operatorApis } from './interfaces/operator/mount.ts'
 import { startRealtime } from './interfaces/realtime/server.node.ts'
 import { createRuntimeApp } from './interfaces/runtime/artifacts.ts'
 import type { Services } from './interfaces/trpc/trpc.ts'
+import { capabilitiesFor } from './main/capabilities.node.ts'
 
 /**
  * The composition root: the only file that reads configuration and constructs adapters.
@@ -576,48 +577,6 @@ function catalogs(userAgent: string): RoutedCatalog {
     fetch(url, { headers: { 'User-Agent': userAgent } }),
   )
   return new RoutedCatalog(new ModrinthCatalog(modrinthClient(userAgent)), [hangar])
-}
-
-function capabilitiesFor(config: DeploymentConfig, db: Db): DeploymentCapabilities {
-  const billing = config.billing
-  return {
-    insight: insightFor(config),
-    malware: new PublishedMalwareLists(),
-    bedrock: bedrockCapability(config.floodgateKey),
-    playRecords: playRecordsFor(config.play, config.deploymentId),
-    archives: config.archive === null ? null : new S3ArchiveStore(config.archive),
-    billing:
-      billing?.provider === 'polar'
-        ? new PolarBilling(billing)
-        : billing?.provider === 'local'
-          ? new LocalBilling({
-              db,
-              secret: config.auth.secret,
-              webOrigin: config.web.canonicalOrigin,
-              // A month of each paid plan at its price, as Polar's gift products would sell it.
-              gifts: PAID_PLANS.map((planKey) => ({
-                id: `local-gift-${planKey}`,
-                planKey,
-                months: 1,
-                priceCents: entitlementsFor(planKey).monthlyPriceCents,
-              })),
-            })
-          : null,
-  }
-}
-
-/**
- * PostHog when a token is set (app/ports/insight.ts); none sends nothing. What nothing caught,
- * unhandled rejections included, still ends the process as before: the monitor only reports it on
- * the way, as far as the queue gets before the exit.
- */
-function insightFor(config: DeploymentConfig): PostHogInsight | null {
-  if (config.insight === null) return null
-  const insight = new PostHogInsight(config.insight)
-  process.on('uncaughtExceptionMonitor', (error, origin) =>
-    insight.exception(error, { properties: { route: 'process', origin } }),
-  )
-  return insight
 }
 
 /**
