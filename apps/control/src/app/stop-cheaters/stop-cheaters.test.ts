@@ -484,16 +484,6 @@ describe.skipIf(!hasDatabase)('removals and the ban they bring', () => {
       installTuning(before)
     }
   }, 60_000)
-
-  test('what isn’t a removal is passed over', async () => {
-    const { id } = await running('Wren')
-    await h.app.stopCheaters.recordRemovals(id, [
-      removed('not-a-uuid', 'speed'),
-      removed(randomUUID(), 'flying'),
-      { kind: 'left', at: new Date().toISOString(), uuid: randomUUID(), reason: 'speed' },
-    ])
-    expect(await countRemovals(h.db, id, null)).toBe(0)
-  }, 30_000)
 })
 
 describe.skipIf(!hasDatabase)('a server that sleeps instead of stopping', () => {

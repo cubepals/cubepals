@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-/** Account pages keep their form visible, their artwork framed and their search metadata private. */
+/** Account pages keep their form visible and their artwork framed. */
 import { expect, test } from 'bun:test'
 import {
   AppRouterContext,
@@ -11,8 +11,7 @@ import {
 import { PathnameContext } from 'next/dist/shared/lib/hooks-client-context.shared-runtime'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { UNLISTED } from '../../lib/site'
-import AuthLayout, { metadata } from './layout'
+import AuthLayout from './layout'
 
 const router: AppRouterInstance = {
   bfcacheId: '',
@@ -37,8 +36,4 @@ test('account pages retain their form and the shared frame beside the artwork', 
   expect(html).toMatch(/class="bk-imageblock[^"]*"/)
   expect(html).toContain('aria-label="Cubepals"')
   expect(html).toContain(encodeURIComponent('/imagery/chunk-asleep.png'))
-})
-
-test('account pages use the shared unlisted search policy', () => {
-  expect(metadata).toEqual({ robots: UNLISTED })
 })

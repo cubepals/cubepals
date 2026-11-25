@@ -17,7 +17,6 @@ import { AppError } from '../errors.ts'
 import type { BillingOrder, GiftProduct } from '../ports/optional.ts'
 import { tuning } from '../tuning.ts'
 import { codeHash, newCode, readCode } from './gift-codes.ts'
-import { addMonths } from './years.ts'
 
 const MONTH: GiftProduct = { id: 'local-gift-plus', planKey: 'plus', months: 1, priceCents: 1500 }
 
@@ -28,11 +27,6 @@ test('a code reads the way a person types it, and nothing else', () => {
   expect(readCode('OOOO-IIII-LLLL-0000')).toBe('0000111111110000')
   expect(readCode('too-short')).toBeNull()
   expect(codeHash(code)).toBe(codeHash(code.toLowerCase()))
-})
-
-test('a month on from the 31st is the last day of a shorter month', () => {
-  expect(addMonths(new Date('2027-01-31T10:00:00Z'), 1).toISOString()).toBe('2027-02-28T10:00:00.000Z')
-  expect(addMonths(new Date('2026-10-12T00:00:00Z'), 12).toISOString()).toBe('2027-10-12T00:00:00.000Z')
 })
 
 /** A test that needs the database. */

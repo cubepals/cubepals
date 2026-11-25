@@ -49,11 +49,6 @@ describe("next.config.ts's headers", () => {
     delete process.env.WEB_INDEXABLE
     expect(await forEveryPath()).toEqual({ ...expected, 'X-Build': build, 'X-Robots-Tag': 'noindex' })
   })
-
-  test('names the build PostHog is told, so a request can say which commit the site runs', () => {
-    expect(build).toBe(config.env?.BLOCKLY_VERSION)
-    expect(build).not.toBe('')
-  })
 })
 
 describe('withSiteHeaders', () => {

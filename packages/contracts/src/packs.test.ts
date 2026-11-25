@@ -12,7 +12,6 @@ import {
   PackImportRef,
   WithdrawReleaseInput,
 } from './packs.ts'
-import { oneLine } from './plain-text.ts'
 
 const serverId = crypto.randomUUID(),
   requestId = crypto.randomUUID()
@@ -20,7 +19,7 @@ const serverId = crypto.randomUUID(),
 test('pack uploads normalize filenames and require positive integral byte counts and real tickets', () => {
   const fileName = '  A\npack.zip  '
   expect(BeginPackUploadInput.parse({ fileName, sizeBytes: 1 })).toEqual({
-    fileName: oneLine(fileName).trim(),
+    fileName: 'A pack.zip',
     sizeBytes: 1,
   })
   expect(BeginPackUploadInput.safeParse({ fileName: 'a'.repeat(255), sizeBytes: 1 }).success).toBe(true)

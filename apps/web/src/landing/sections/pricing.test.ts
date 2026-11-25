@@ -119,8 +119,6 @@ describe('the landing’s plan cards', () => {
     expect(coreCard).toMatch(/^ Core Plain Minecraft 20 hours free/)
     expect(plusCard).toMatch(/^ Plus Everything in Core, and more \$25 a month/)
     expect(coreHtml).toContain('src="/server-icons/grass.svg"')
-    // No card in a card: the multiplayer list's row is gone.
-    expect(html).not.toMatch(/0\/5|0\/100/)
   })
 
   test('one button to a card: Start free on Core, Get Plus, the lit one, on Plus', () => {

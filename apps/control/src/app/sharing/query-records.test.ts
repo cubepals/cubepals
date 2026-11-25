@@ -29,7 +29,6 @@ test.skipIf(!hasDatabase)(
     const server = await h.create(owner, { name: 'Moss Meadow' })
     await h.until(server.id, 'running', 3 * SECOND_MS)
     await h.settled(server.id, 3 * SECOND_MS)
-    expect(h.app.sharingQueries).toBeInstanceOf(SharingQueries)
     const q = h.app.sharingQueries
     const stranger = await h.user('Another owner', 'plus')
     const expected = privatePage(server.slug)

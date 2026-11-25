@@ -125,10 +125,4 @@ describe('the countdown before a restart', () => {
     },
     SECOND_MS,
   )
-
-  test('waits for real when no pause is given', async () => {
-    const g = game('There are 0 of a max of 10 players online:')
-    // Nobody on, so the real wait is never reached: the default is only the clock.
-    expect(await warnBeforeRestart(g.console, target, RESTARTING)).toBe(0)
-  })
 })

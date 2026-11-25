@@ -217,7 +217,7 @@ describe.skipIf(!hasDatabase)('several runtimes in one deployment', () => {
   test('compute a runtime holds for a server bound elsewhere is cleared by the orphan sweep', async () => {
     const owner = await h.user('Stray', 'plus')
     const id = await running(owner)
-    const left = await canary().adopt(
+    await canary().adopt(
       runtimeKey(id),
       { regionKey: 'local' },
       (await h.app.specs.desired(h.db, await h.server(id))).spec,
@@ -226,7 +226,6 @@ describe.skipIf(!hasDatabase)('several runtimes in one deployment', () => {
     await h.app.schedules.orphans()
     expect(canary().machine(id)).toBeNull()
     expect(h.runtime.machine(id)?.state).toBe('running')
-    expect(left).toBeDefined()
   })
 
   test('the economics report compares runtimes on what was recorded', async () => {

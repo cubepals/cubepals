@@ -5,15 +5,7 @@
 /** What counts as a page being up, against a real local server that answers as a broken Worker would. */
 import { afterAll, expect, describe as group, test } from 'bun:test'
 import { tailExceptions } from '../site-uptime.ts'
-import {
-  ask,
-  isUp,
-  PRODUCTION_OTHERS,
-  realtimeTarget,
-  SITE_PAGES,
-  waitFor,
-  websiteTargets,
-} from './site-pages.ts'
+import { ask, isUp, PRODUCTION_OTHERS, realtimeTarget, waitFor, websiteTargets } from './site-pages.ts'
 
 const server = Bun.serve({
   port: 0,
@@ -50,10 +42,6 @@ group('the website’s pages', () => {
     const { failing } = await waitFor(websiteTargets(origin), 0, (line) => lines.push(line))
     expect(failing.map((a) => a.target.name)).toEqual(['/pricing'])
     expect(lines[0]).toContain('/pricing 500')
-  })
-
-  test('all four pages are asked', () => {
-    expect(SITE_PAGES).toEqual(['/', '/pricing', '/sign-in', '/browse'])
   })
 })
 

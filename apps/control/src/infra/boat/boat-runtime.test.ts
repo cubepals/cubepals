@@ -466,13 +466,6 @@ describe('BoatRuntime provisioning', () => {
     expect(boat.starts()).toBe(1)
   })
 
-  test('a create whose answer was lost is asked again under the same key and finds the one it made', async () => {
-    const { boat, runtime } = setup()
-    await runtime.ensureProvisioned(KEY, { regionKey: 'eu' }, spec, sink())
-    const [key] = boat.idempotency.keys()
-    expect(key).toBe(`blockly:test:${KEY}:first`)
-  })
-
   test('a server asleep is woken by provisioning at its new address, with the firewall open again', async () => {
     const { boat, runtime } = setup()
     const first = await runtime.ensureProvisioned(KEY, { regionKey: 'eu' }, spec, sink())

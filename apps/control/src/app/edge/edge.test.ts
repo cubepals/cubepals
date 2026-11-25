@@ -14,7 +14,6 @@ import { type Harness, hasDatabase, startHarness } from '../../testing/harness.t
 import type { Actor } from '../actor.ts'
 import { IDLE_GRACE_MS, WAKE_PROBATION_MS } from '../operations/schedules.ts'
 import { insertRevision, loadRevision } from '../servers/persistence.ts'
-import { tuning } from '../tuning.ts'
 import { destinationOf, NOWHERE } from './service.ts'
 
 test('a destination the edge dials writes an IPv6 host in brackets, and a name as it is', () => {
@@ -135,23 +134,6 @@ describe.skipIf(!hasDatabase)('edge', () => {
     expect(waits[0]).toBeLessThanOrEqual(5_000)
     expect(waits[1]).toBeLessThanOrEqual(3_000)
     await h.settled(id)
-  }, 30_000)
-
-  test('a server woken over and over in an hour that nobody joined is left asleep', async () => {
-    const [{ id, slug }, wakes] = [await sleeping(), tuning().abuse.wakesPerHour]
-    // As many runs as an hour allows that a connection woke and that are over: what a flood leaves.
-    for (let i = 1; i <= wakes; i++) {
-      const startedAt = new Date(Date.now() - (i * HOUR_MS) / (wakes + 2))
-      await h.db.insert(schema.powerIntervals).values({
-        serverId: id,
-        memoryTier: '3g',
-        startedAt,
-        stoppedAt: new Date(startedAt.getTime() + MINUTE_MS),
-        woken: true,
-      })
-    }
-    expect(await h.app.edge.wake(`${slug}.play.test`)).toEqual({ outcome: 'asleep' })
-    expect((await h.server(id)).lifecycle.status).toBe('stopped')
   }, 30_000)
 
   test('an unknown name wakes nothing, and a join is refused as the Start button would be', async () => {

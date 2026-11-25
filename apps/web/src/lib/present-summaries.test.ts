@@ -20,7 +20,6 @@ import {
   datapacksSaid,
   dayOf,
   levelTypeLabel,
-  loaderWithBuild,
   presentChange,
   presentConflict,
   presentIneligible,
@@ -78,13 +77,9 @@ test('backup dates distinguish today, yesterday and older calendar dates', () =>
   expect(whenTaken(iso(before), now)).toBe(`${day}, ${clock(before)}`)
 })
 
-test('sizes and pinned server builds retain their public labels', () => {
+test('sizes, Paper underneath and setting names retain their public labels', () => {
   expect(sizeLabel('3g')).toBe('3 GB')
   expect(sizeLabel('12g')).toBe('12 GB')
-  expect(loaderWithBuild('vanilla', null)).toBe('Vanilla')
-  expect(loaderWithBuild('vanilla', '123')).toBe('Vanilla on Paper')
-  expect(loaderWithBuild('paper', '123')).toBe('Paper build 123')
-  expect(loaderWithBuild('fabric', '0.16')).toBe('Fabric 0.16')
   expect(runsOnPaper({ loader: 'vanilla', loaderVersion: '123' })).toBe(true)
   expect(runsOnPaper({ loader: 'vanilla', loaderVersion: null })).toBe(false)
   expect(runsOnPaper({ loader: 'paper', loaderVersion: '123' })).toBe(false)

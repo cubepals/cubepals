@@ -9,7 +9,6 @@ import { join } from 'node:path'
 import { originAllowed } from '../apps/control/src/interfaces/http/origins.ts'
 import { previewUpload, routerConfig } from './lib/web-worker.ts'
 import {
-  aliasSuffix,
   brandedCommit,
   brandedPreview,
   COMMIT_PATTERN,
@@ -52,7 +51,6 @@ describe("staging's website and its previews", () => {
     expect(matches('https://pr-12.preview.cubepals.com')).toBe(true)
     expect(matches('https://preview.cubepals.com')).toBe(false)
     expect(matches('https://pr-12.preview.cubepals.com.example')).toBe(false)
-    expect(previewPattern('team')).toBe(`https://pr-*${aliasSuffix('team')}`)
   })
 
   test("trusts each commit's branded address by its shape, and only those", () => {

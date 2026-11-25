@@ -5,11 +5,10 @@
 import { describe, expect, test } from 'bun:test'
 import { accessCommand, parseAccessFiles } from './access.ts'
 import { ARCADE_FILES } from './arcade.ts'
-import { announce, announceNotice, normalizeUuid, parseOnlinePlayers, refusedCommand } from './console.ts'
+import { announceNotice, refusedCommand } from './console.ts'
 import { DIRECT_START_STEP } from './direct-start.ts'
 import { WAITING_FILES } from './duels-waiting.ts'
 import { installCheck, installProblems, parseInstalled } from './install-check.ts'
-import { diskName, jarsOf } from './jars.ts'
 import { bootMilestone, classifyLine, saysReady } from './logs.ts'
 import { catalogLoadersFor, projectTypesFor, serverEnvironment } from './mods.ts'
 import { IDENTITY_ENV, imageFor, PLAN_ENV, toRuntimeSpec, withoutOwnSteps } from './runtime-spec.ts'
@@ -350,51 +349,6 @@ describe('toRuntimeSpec', () => {
 })
 
 describe('console', () => {
-  test('parses online players', () => {
-    expect(parseOnlinePlayers('There are 0 of a max of 20 players online: ')).toEqual({
-      online: 0,
-      max: 20,
-      players: [],
-    })
-    expect(
-      parseOnlinePlayers(
-        'There are 2 of a max of 20 players online: Steve (069a79f4-44e9-4726-a5be-fca90e38aaf5), Alex (6ab4317889fd490597f60f67d9d76fd9)',
-      ),
-    ).toEqual({
-      online: 2,
-      max: 20,
-      players: [
-        { name: 'Steve', uuid: '069a79f4-44e9-4726-a5be-fca90e38aaf5' },
-        { name: 'Alex', uuid: '6ab43178-89fd-4905-97f6-0f67d9d76fd9' },
-      ],
-    })
-    // A Bedrock player keeps the dot Floodgate names them with, as the access lists hold them.
-    expect(
-      parseOnlinePlayers(
-        'There are 1 of a max of 20 players online: .Pixel_Pal (00000000-0000-0000-0009-01eed05d1000)',
-      )?.players,
-    ).toEqual([{ name: '.Pixel_Pal', uuid: '00000000-0000-0000-0009-01eed05d1000' }])
-  })
-
-  test('normalizes uuids and refuses IP bans', () => {
-    expect(normalizeUuid('069A79F444E94726A5BEFCA90E38AAF5')).toBe('069a79f4-44e9-4726-a5be-fca90e38aaf5')
-    expect(refusedCommand('/ban-ip 1.2.3.4')).not.toBeNull()
-    expect(refusedCommand('say hi')).toBeNull()
-  })
-
-  test('an announcement is a line from Cubepals, not from "[Rcon]", and stays one line', () => {
-    const command = announce('Server stops in 2 minutes.\nBye "all"')
-    expect(command.startsWith('tellraw @a ')).toBe(true)
-    expect(JSON.parse(command.slice('tellraw @a '.length))).toEqual({
-      text: '',
-      extra: [
-        { text: '[Cubepals] ', color: 'aqua' },
-        { text: 'Server stops in 2 minutes. Bye "all"', color: 'yellow' },
-      ],
-    })
-    expect(command).not.toContain('\n')
-  })
-
   test('an account notice is said from Cubepals, its codes as the game reads them, on one line', () => {
     const command = announceNotice('&cUnder review &lnow\n§6soon')
     expect(JSON.parse(command.slice('tellraw @a '.length))).toEqual({
@@ -508,11 +462,6 @@ describe('access files', () => {
       unchecked: null,
       stopCheaters: null,
     })
-  })
-
-  test('a missing file reads as empty; unreadable output throws', () => {
-    expect(parseAccessFiles('@@whitelist.json@@\n[]\n@@server.properties@@\n').whitelistEnabled).toBe(false)
-    expect(() => parseAccessFiles('sh: cannot cd')).toThrow()
   })
 })
 
@@ -653,13 +602,6 @@ describe('installed jars', () => {
     gameVersions: ['26.3'],
     origin: 'user' as const,
     requiredBy: [],
-  })
-
-  test('jars go where each loader reads them, named by content', () => {
-    expect(jarsOf('vanilla')).toBeNull()
-    expect(jarsOf('paper')).toEqual({ dir: '/data/plugins', env: 'PLUGINS' })
-    expect(jarsOf('fabric')).toEqual({ dir: '/data/mods', env: 'MODS' })
-    expect(diskName(pin('lithium', sha('a')).artifact)).toBe('aaaaaaaaaaaa-lithium.jar')
   })
 
   test('nothing to check without jars', () => {

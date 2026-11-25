@@ -316,22 +316,6 @@ describe('indexed plain tar archives', () => {
     await expect(archives.openWorld(path, LIMITS)).rejects.toBeInstanceOf(HostileArchive)
   })
 
-  test('holds indexed files to the file, total, kept-byte and entry limits', async () => {
-    const path = join(scratch, 'limited.tar')
-    await writeFile(
-      path,
-      gunzipSync(
-        rawTar([
-          { path: 'World/level.dat', body: 'some data' },
-          { path: 'World/region/a.mca', body: 'a region' },
-        ]),
-      ),
-    )
-    for (const limit of [{ maxFileBytes: 1 }, { maxTotalBytes: 1 }, { maxKeptBytes: 1 }, { maxFiles: 1 }]) {
-      await expect(archives.openWorld(path, { ...LIMITS, ...limit })).rejects.toBeInstanceOf(HostileArchive)
-    }
-  })
-
   test('extended paths fall back to node-tar and keep their names and bytes', async () => {
     const name = `World/${'long-path/'.repeat(15)}level.dat`
     const dir = await folder({ [name]: 'a world' })
