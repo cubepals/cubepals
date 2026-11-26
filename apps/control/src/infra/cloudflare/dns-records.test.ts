@@ -49,12 +49,67 @@ describe('the play names’ own records in a Cloudflare zone', () => {
     expect(zone.records.get(unmarked.id)).toEqual(unmarked)
   })
 
-  test('a record the zone answers 400 to is the SDK’s own error', async () => {
+  test('a record the zone answers 400 to fails with the status, the SDK’s own error its cause', async () => {
     const zone = new CloudflareZone('zone-123')
     zone.refusing.add('taken.play.cubepals.com')
     const refusal = await kept(zone)
       .create('taken.play.cubepals.com', '203.0.113.9')
       .catch((error: unknown) => error)
-    expect(refusal).toBeInstanceOf(Cloudflare.BadRequestError)
+    expect(refusal).toBeInstanceOf(Error)
+    expect((refusal as Error).message).toBe('Cloudflare answered 400')
+    expect((refusal as Error).cause).toBeInstanceOf(Cloudflare.BadRequestError)
+  })
+})
+
+/**
+ * Two bodies Cloudflare's API answered the play names' listing with, as the control plane logged
+ * them on 2026-11-26 while the API was failing: its v4 error list, and its edge's problem details
+ * for a gateway time-out. Neither is exported by the SDK.
+ */
+const UNABLE_TO_AUTHENTICATE = {
+  success: false,
+  errors: [{ code: 10001, message: 'Unable to authenticate request' }],
+  messages: [],
+  result: null,
+}
+const GATEWAY_TIME_OUT = {
+  type: 'https://developers.cloudflare.com/support/troubleshooting/http-status-codes/cloudflare-5xx-errors/error-504/',
+  title: 'Error 504: Gateway time-out',
+  status: 504,
+}
+
+describe('what Cloudflare answered, when it fails', () => {
+  const answering = (status: number, body: unknown) =>
+    new CloudflarePlayRecords(
+      { apiToken: 'a-cloudflare-token-with-dns-edit', zoneId: 'zone-123', deploymentId: 'prod' },
+      { fetch: async () => Response.json(body, { status }), maxRetries: 0 },
+    )
+  const failure = (records: CloudflarePlayRecords) =>
+    records.list().then(
+      () => null,
+      (error: unknown) => error as Error,
+    )
+
+  test('is one line: the status and the API’s own words, with no JSON or link', async () => {
+    const unable = await failure(answering(503, UNABLE_TO_AUTHENTICATE))
+    expect(unable?.message).toBe('Cloudflare answered 503: Unable to authenticate request')
+    expect(unable?.cause).toBeInstanceOf(Cloudflare.InternalServerError)
+    const timedOut = await failure(answering(504, GATEWAY_TIME_OUT))
+    expect(timedOut?.message).toBe('Cloudflare answered 504: Gateway time-out')
+  })
+
+  test('when the API couldn’t be reached, says so', async () => {
+    const records = new CloudflarePlayRecords(
+      { apiToken: 'a-cloudflare-token-with-dns-edit', zoneId: 'zone-123', deploymentId: 'prod' },
+      {
+        fetch: async () => {
+          throw new TypeError('fetch failed')
+        },
+        maxRetries: 0,
+      },
+    )
+    const unreached = await failure(records)
+    expect(unreached?.message).toStartWith('Cloudflare couldn’t be reached: ')
+    expect(unreached?.cause).toBeInstanceOf(Cloudflare.APIConnectionError)
   })
 })

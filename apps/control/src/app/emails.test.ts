@@ -327,6 +327,14 @@ describe('emails', () => {
   })
 })
 
+describe('the heading', () => {
+  test('breaks a word longer than the card, so the email is never wider than a phone', () => {
+    const long = `play-records failed (https://example.com/${'a'.repeat(120)})`
+    const { html } = adminAlert({ summary: long, path: '/admin/health', origin: ORIGIN })
+    expect(html).toMatch(/<h1 style="[^"]*overflow-wrap:anywhere[^"]*">[^<]*a{120}/)
+  })
+})
+
 describe('notices', () => {
   test.each(EMAILS.filter((e) => ['new address', 'unlisted'].includes(e.name)))(
     '$name: says nobody reads replies instead of offering one, and keeps each address on one line',
