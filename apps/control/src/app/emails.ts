@@ -155,7 +155,7 @@ export function layout(input: {
   const hang = input.figure?.hang ? input.figure.name : undefined
   const lockup = `<a href="${origin}"><img src="${origin}/email/lockup.png" width="160" height="44" alt="cubepals" style="display:block;border:0;background:#0d0d0d"></a>`
   const top = `${input.chip ? `<div style="margin:0 0 14px">${chip(input.chip)}</div>` : ''}
-      <h1 style="margin:0 0 16px;font:800 26px/1.2 ${SANS};letter-spacing:-.01em;color:${INK}">${input.heading}</h1>`
+      <h1 style="margin:0 0 16px;font:800 26px/1.2 ${SANS};letter-spacing:-.01em;color:${INK};overflow-wrap:anywhere;word-break:break-word">${input.heading}</h1>`
   const fallback = input.action
     ? `<p style="margin:0;font:400 13px/1.5 ${SANS};color:${SUBTLE}">If the button doesn’t open, paste this into your browser:<br><span style="font:400 12px/1.5 ${MONO};color:${INK};word-break:break-all">${esc(input.action.url)}</span></p>`
     : ''
