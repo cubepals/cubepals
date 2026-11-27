@@ -15,7 +15,7 @@ import { FLOODGATE_KEY_FILE } from './bedrock.ts'
 import { isAddedJar } from './uploads.ts'
 
 /** What a download leaves out, by path in the archive, and why. Everything else goes in. */
-export const LEFT_OUT_OF_DOWNLOADS: readonly { path: RegExp; why: string }[] = [
+const LEFT_OUT_OF_DOWNLOADS: readonly { path: RegExp; why: string }[] = [
   {
     path: /\.jar$/i,
     why: 'Mojang’s server jar, a loader’s launcher, installer or shim, each mod and plugin, and the copies Paper remaps',

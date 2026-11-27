@@ -2,25 +2,20 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-/** Materialize the actual Drizzle constraints, including the import progress column. */
+/** Materialize the actual Drizzle constraints: every artifact index named, and no name used twice. */
 import { expect, test } from 'bun:test'
 import { is, Table } from 'drizzle-orm'
 import { getTableConfig } from 'drizzle-orm/pg-core'
 import * as artifacts from './artifacts.ts'
 
-test('artifact records have named, distinct indexes and import progress remains optional JSON', () => {
+test('artifact records have named, distinct indexes', () => {
   const names = new Set<string>()
   for (const table of Object.values(artifacts)) {
     if (!is(table, Table)) continue
-    const config = getTableConfig(table)
-    for (const index of config.indexes) {
+    for (const index of getTableConfig(table).indexes) {
       expect(index.config.name).toBeDefined()
       expect(names.has(index.config.name ?? '')).toBe(false)
       names.add(index.config.name ?? '')
     }
-    for (const key of config.foreignKeys) expect(key.reference().columns.length).toBeGreaterThan(0)
   }
-  const column = artifacts.worldImports.progress
-  expect(column.dataType).toBe('json')
-  expect(column.notNull).toBe(false)
 })

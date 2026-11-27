@@ -7,23 +7,11 @@
  * the note that names the mods it left out.
  */
 import { describe, expect, test } from 'bun:test'
-import { downloadNote, inWorldDownload, jarsInNote, LEFT_OUT_OF_DOWNLOADS } from './world-download.ts'
+import { downloadNote, inWorldDownload, jarsInNote } from './world-download.ts'
 
 // What a server's disk holds under each loader, as the itzg image installs it (fake-minecraft/
 // image.ts mirrors it) and as each loader's installer lays it out.
 describe('a world download', () => {
-  test('leaves out exactly these paths', () => {
-    expect(LEFT_OUT_OF_DOWNLOADS.map((rule) => rule.path.source)).toEqual([
-      '\\.jar$',
-      '^libraries(\\/|$)',
-      '^versions(\\/|$)',
-      '^cache(\\/|$)',
-      '^\\.[^/]',
-      '^cubepals-download\\.txt$',
-      '^plugins\\/floodgate\\/key\\.pem$',
-    ])
-  })
-
   const leftOut = {
     vanilla: [
       'minecraft_server.26.3.jar',

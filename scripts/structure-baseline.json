@@ -5,7 +5,7 @@
       "reason": "The tests of one class on one shared setup."
     },
     "apps/control/src/infra/boat/boat-runtime.test.ts": {
-      "n": 1036,
+      "n": 1029,
       "reason": "The tests of one class with the in-memory Boat they run on; the fake couldn't move out because check:boundaries keeps port 25565 in minecraft/."
     },
     "apps/control/src/infra/fake/fake-runtime.ts": {
@@ -557,7 +557,7 @@
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/control/src/app/edge/edge.test.ts \u203a describe.skipIf edge": {
-      "n": 225,
+      "n": 213,
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/control/src/app/guestbook/guestbook.test.ts \u203a describe.skipIf guestbook": {
@@ -637,7 +637,7 @@
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/control/src/app/runtimes/hybrid.test.ts \u203a describe.skipIf several runtimes in one deployment": {
-      "n": 314,
+      "n": 313,
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/control/src/app/runtimes/router.test.ts \u203a describe the runtime router": {
@@ -673,7 +673,7 @@
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/control/src/config/config.test.ts \u203a describe configuration": {
-      "n": 228,
+      "n": 227,
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/control/src/domain/account/entitlements.test.ts \u203a describe entitlements": {
@@ -761,7 +761,7 @@
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/control/src/infra/fleet/registry.test.ts \u203a describe.skipIf the node registry, against Postgres": {
-      "n": 384,
+      "n": 372,
       "reason": "Over the threshold when the check began, and not yet looked at."
     },
     "apps/control/src/infra/fly/fake-fly.ts \u203a class FakeFly \u203a fetch": {

@@ -14,11 +14,7 @@ const HOLDER = { userId: 'user-1', sessionId: 'session-1' }
 describe('JoseRealtimeTickets', () => {
   const tickets = new JoseRealtimeTickets(SECRET, 'local', { now: at('2026-09-19T12:00:00Z') })
 
-  test('a fresh ticket names its user and the sign-in session that asked for it', async () => {
-    expect(await tickets.verify(await tickets.issue(HOLDER))).toEqual(HOLDER)
-  })
-
-  test('a ticket opens one session', async () => {
+  test('a ticket names its user and the sign-in session that asked for it, and opens one session', async () => {
     const ticket = await tickets.issue(HOLDER)
     expect(await tickets.verify(ticket)).toEqual(HOLDER)
     expect(await tickets.verify(ticket)).toBeNull()
@@ -86,11 +82,7 @@ describe('JoseRealtimeTickets', () => {
         .setExpirationTime(new Date('2026-09-19T12:01:00Z'))
         .sign(new TextEncoder().encode(SECRET))
 
-    test('names the operator and the one server, and no account or sign-in', async () => {
-      expect(await tickets.verify(await tickets.issueForOperator(OPERATOR))).toEqual(OPERATOR)
-    })
-
-    test('opens one session, as a person’s does', async () => {
+    test('names the operator and the one server, and no account or sign-in, and opens one session', async () => {
       const ticket = await tickets.issueForOperator(OPERATOR)
       expect(await tickets.verify(ticket)).toEqual(OPERATOR)
       expect(await tickets.verify(ticket)).toBeNull()

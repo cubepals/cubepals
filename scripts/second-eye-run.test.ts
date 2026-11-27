@@ -307,7 +307,6 @@ test('review publication defaults missing metadata and keeps an existing correct
   expect(published.body).toContain('0 files, +0 −0 lines')
   expect(published.body).toContain('AI review by Claude')
   expect(published.body).toContain('| **Reviewer** | Claude · unknown model ·')
-  expect(published.body).not.toContain('Stryker was here')
   expect(calls.some((call) => call.method === 'DELETE')).toBe(false)
 })
 

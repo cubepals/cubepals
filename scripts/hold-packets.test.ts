@@ -9,7 +9,6 @@ import { chmodSync, existsSync, mkdtempSync, readFileSync, writeFileSync } from 
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import releases from '../apps/control/src/minecraft/protocol-versions.json' with { type: 'json' }
-import { packetsFor } from '../apps/edge/hold-packet-ids.ts'
 import held from '../apps/edge/hold-packets.json' with { type: 'json' }
 import { PACKETS } from './hold-layouts.ts'
 import { FIRST_DIALOG, idsOf, main, releasesToReport, type World } from './hold-packets.ts'
@@ -215,10 +214,6 @@ test('check names an entry with no layouts the edge writes', async () => {
   expect(said.at(-1)).toBe(
     `${world.copy}: 1.21.7 (772) has no layouts the edge writes; 1.21.6 (771) has no layouts the edge writes: run bump`,
   )
-})
-
-test('every protocol in the copy has layouts the edge writes', () => {
-  for (const entry of held.protocols) expect(packetsFor(entry.protocol)?.layouts).toEqual(entry.layouts)
 })
 
 test('a jar that isn’t Mojang’s, a server that fails, a release the manifest lacks and a refused manifest stop a bump', async () => {

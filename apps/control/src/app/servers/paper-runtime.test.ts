@@ -241,8 +241,8 @@ describe('a Paper 26 world on another server type', () => {
     // What each dimension keeps in every server type stays; Paper's own goes aside, not away.
     expect(read(`${dims}/the_nether/region/r.0.0.mca`)).toBe('the_nether chunks')
     expect(read(`${dims}/the_end/data/minecraft/world_border.dat`)).toBe('the_end border')
-    expect(existsSync(`${dims}/overworld/data/paper`)).toBe(false)
-    expect(existsSync(`${dims}/the_nether/data/minecraft/game_rules.dat`)).toBe(false)
+    expect(existsSync(`${data}/${dims}/overworld/data/paper`)).toBe(false)
+    expect(existsSync(`${data}/${dims}/the_nether/data/minecraft/game_rules.dat`)).toBe(false)
     const aside = '.blockly-paper/world/dimensions/minecraft'
     expect(read(`${aside}/the_nether/data/minecraft/game_rules.dat`)).toBe('the_nether game_rules')
     expect(read(`${aside}/the_end/data/paper/metadata.dat`)).toBe('the_end paper')

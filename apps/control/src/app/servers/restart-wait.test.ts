@@ -2,10 +2,13 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-/** Which changes restart a running server, and so may wait for its players to leave. */
+/**
+ * Which changes restart a running server, and so may wait for its players to leave. Whether one
+ * waits, on real presence, is `restart-wait-records.test.ts`'s.
+ */
 import { describe, expect, test } from 'bun:test'
 import { defaultSettings, type RevisionDraft } from '../../domain/revision/revision.ts'
-import { restartsFor, waitsForPlayers } from './restart-wait.ts'
+import { restartsFor } from './restart-wait.ts'
 
 const draft = (patch: Partial<RevisionDraft> = {}): RevisionDraft => ({
   acknowledgedRevoked: [],
@@ -52,25 +55,5 @@ describe('what restarts a running server', () => {
     expect(restartsFor(draft(), draft({ gameVersion: '26.4' }))).toBe(true)
     expect(restartsFor(draft(), draft({ loader: 'fabric' }))).toBe(true)
     expect(restartsFor(draft(), draft({ files: [{ path: 'a.yml', content: 'x' }] }))).toBe(true)
-  })
-})
-
-describe('whether a change waits for players', () => {
-  const running = {
-    id: 'not-read',
-    lifecycle: { status: 'running' as const, stopReason: null, failure: null },
-  }
-  const never = {} as Parameters<typeof waitsForPlayers>[0]
-
-  test('only where the owner chose to wait, on a running server', async () => {
-    // Neither reads who is on: there is no one to wait for.
-    expect(await waitsForPlayers(never, running, 'now')).toBe(false)
-    expect(
-      await waitsForPlayers(
-        never,
-        { ...running, lifecycle: { ...running.lifecycle, status: 'stopped' } },
-        'empty',
-      ),
-    ).toBe(false)
   })
 })

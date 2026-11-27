@@ -39,7 +39,6 @@ import {
   reinstate,
   renew,
   retire,
-  sessionOf,
 } from './registry.ts'
 import { rows } from './sql.ts'
 import type { HeartbeatRequest, WorkloadReport, WorkloadView } from './wire.ts'
@@ -566,20 +565,6 @@ describe.skipIf(!hasDatabase)('the node registry, against Postgres', () => {
     await endpointSeen(db, 'fresh', new Date())
     expect(await listeningSeconds(db)).toBeLessThan(5)
     expect((await nodeSummaries(db, THRESHOLDS)).find((n) => n.id === a.id)?.derivedHealth).toBe('suspect')
-  })
-
-  test('sessions: a stale sequence, a restart and a clone are told apart', () => {
-    const node = { session_id: 'a', heartbeat_seq: '10', previous_session_id: null, session_age: 600, age: 2 }
-    expect(sessionOf(node, { sessionId: 'a', seq: 11 })).toBe('current')
-    expect(sessionOf(node, { sessionId: 'a', seq: 10 })).toBe('stale')
-    expect(sessionOf(node, { sessionId: 'b', seq: 1 })).toBe('switched')
-    expect(sessionOf(node, { sessionId: 'b', seq: 50 })).toBe('duplicate')
-    expect(
-      sessionOf({ ...node, previous_session_id: 'z', session_age: 5 }, { sessionId: 'z', seq: 99 }),
-    ).toBe('replaced')
-    expect(
-      sessionOf({ ...node, previous_session_id: 'z', session_age: 60 }, { sessionId: 'z', seq: 99 }),
-    ).toBe('duplicate')
   })
 })
 

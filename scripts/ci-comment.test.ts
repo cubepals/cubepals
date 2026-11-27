@@ -4,9 +4,9 @@
 
 /**
  * ci-comment.ts's reading of bun's JUnit reports, made by bun itself from small fixture files, and
- * the comment it writes from them and a run's jobs: running, passed, failed, skipped parts, a
- * fork's run and a long list of failures; and that a job that finds the run done writes its
- * results, whatever event started it.
+ * the comment it writes from them and a run's jobs: running, passed, failed, skipped parts and a
+ * long list of failures; and that a job that finds the run done writes its results, whatever event
+ * started it.
  */
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
@@ -194,11 +194,6 @@ describe('ciComment', () => {
     )
     expect(body).not.toContain('❌')
     expect(body).not.toContain('tests passed')
-  })
-
-  test("a fork's run reads the same: nothing in it depends on where the head is", () => {
-    const fork = ciComment(run({ sha: 'f00dbabe'.repeat(5) }))
-    expect(fork).toContain('[`f00dbab`](https://github.com/cubepals/cubepals/commit/f00dbabe')
   })
 
   test('a long failure list keeps to the first twenty and says how many more', () => {

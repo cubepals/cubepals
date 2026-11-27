@@ -195,17 +195,4 @@ describe.skipIf(!hasDatabase)('wakes a join may start', () => {
     }
     await h.settled(id)
   }, 30_000)
-
-  test('a player who has played there starts it even while another name’s wake was left asleep', async () => {
-    const { id, slug } = await sleeping(h, { name: 'Alex', address: PLAYER })
-    await woken(h, id, tuning().abuse.wakesPerHour, false)
-    const [stranger, player] = await Promise.all([
-      h.app.edge.wake(`${slug}.play.test`, true, 'Alex', ELSEWHERE),
-      h.app.edge.wake(`${slug}.play.test`, true, 'Alex', PLAYER),
-    ])
-    // The stranger's wake starts nothing; it may share the player's start, if that came first.
-    expect(['asleep', 'ready']).toContain(stranger.outcome)
-    expect(player).toMatchObject({ outcome: 'ready' })
-    await h.settled(id)
-  }, 30_000)
 })

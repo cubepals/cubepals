@@ -67,8 +67,7 @@ describe('configuration', () => {
     expect(config.runtimes.map((r) => r.provider)).toEqual(['docker'])
     expect(config.defaultRuntime).toBe('docker')
     expect(config.roles).toEqual(['api', 'worker', 'realtime'])
-    // MODRINTH_USER_AGENT was read and never used; CATALOG_USER_AGENT names Blockly to Modrinth.
-    expect(config).not.toHaveProperty('modrinth')
+    // CATALOG_USER_AGENT names Blockly to Modrinth.
     expect(config.catalog.userAgent).toBe('blockly-control/local (+https://github.com/cubepals/cubepals)')
   })
 

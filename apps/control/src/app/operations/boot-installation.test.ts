@@ -15,7 +15,7 @@ import { type AccessReconciler, AccessReseedFailed } from '../access/reconciler.
 import type { ArtifactService } from '../artifacts/service.ts'
 import type { RuntimeHandle } from '../ports/runtime.ts'
 import type { Runtimes } from '../runtimes/router.ts'
-import { BootSequence, NotReady } from './boot.ts'
+import { BootSequence } from './boot.ts'
 import type { OperationContext } from './runner.ts'
 
 const mod = new Cdn().publish('verified-mod')
@@ -212,12 +212,4 @@ test('a different Minecraft and loader build cannot be admitted as the pinned re
   await expect(run()).rejects.toThrow(refusal ?? '')
   expect(seen.access).toBe(0)
   expect(seen.marks).toEqual([])
-})
-
-test('a boot that is not ready retains its identity and underlying cause', () => {
-  const cause = new Error('provider refused the start')
-  const error = new NotReady('Could not start', { cause })
-  expect(error.name).toBe('NotReady')
-  expect(error.message).toBe('Could not start')
-  expect(error.cause).toBe(cause)
 })

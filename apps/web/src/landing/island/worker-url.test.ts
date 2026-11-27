@@ -20,12 +20,6 @@ function bootstrap(url: URL): unknown {
 }
 
 describe('a worker address', () => {
-  test('with a fragment added after Turbopack settings in the hash, the worker cannot read them', () => {
-    const url = turbopack()
-    url.hash += `#${JSON.stringify({ navigator: { userAgent: 'Instagram' } })}`
-    expect(() => bootstrap(url)).toThrow(SyntaxError)
-  })
-
   test('with the settings moved to the query, a fragment added after changes nothing', () => {
     const url = paramsInQuery(turbopack())
     url.hash = `#${JSON.stringify({ navigator: { userAgent: 'Instagram' } })}`

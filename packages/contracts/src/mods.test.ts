@@ -15,7 +15,6 @@ import {
   ModUploadRef,
   PlanVersionInput,
 } from './mods.ts'
-import { oneLine } from './plain-text.ts'
 import { Loader } from './server.ts'
 
 const serverId = crypto.randomUUID()
@@ -110,7 +109,7 @@ test('search and version plans validate their bounds and preserve defaults', () 
 test('uploads normalize a filename and validate bytes, digests and ticket identifiers', () => {
   const name = '  New\njar.jar  '
   const input = { serverId, fileName: name, sizeBytes: 1, sha512 }
-  expect(BeginModUploadInput.parse(input)).toEqual({ ...input, fileName: oneLine(name).trim() })
+  expect(BeginModUploadInput.parse(input)).toEqual({ ...input, fileName: 'New jar.jar' })
   expect(BeginModUploadInput.safeParse({ ...input, fileName: 'x'.repeat(255) }).success).toBe(true)
   for (const patch of [
     { fileName: '' },

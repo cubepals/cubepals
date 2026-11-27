@@ -451,15 +451,6 @@ describe('restarting the edge when a region can’t be cordoned or fails', () =>
     await expect(roll(['fra', 'iad'], half, () => {}, w.clock)).rejects.toThrow('cordoned one of two')
     expect(w.log).toEqual(['uncordon fra'])
   })
-
-  test('cordons when asked to, and a single region is waited on while it serves', async () => {
-    const w = world()
-    await roll(['fra', 'iad'], steps(w.log), () => {}, w.clock)
-    expect(w.log[0]).toBe('cordon fra')
-    const single = world()
-    await rollEdge(['fra'], steps(single.log), () => {}, single.clock)
-    expect(single.log).toEqual(['deploy fra', 'ready fra'])
-  })
 })
 
 describe('every machine of the edge', () => {

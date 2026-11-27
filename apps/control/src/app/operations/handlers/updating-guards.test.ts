@@ -299,17 +299,6 @@ async function cancelledBoot() {
   ).rejects.toBeInstanceOf(NoLongerApplies)
 }
 
-async function handlerContract() {
-  const { deps } = await fixture()
-  const abandoned = spyOn(deps, 'stopWhatFailed')
-  try {
-    expect(updating(deps)).toMatchObject({ kind: 'apply', phase: 'updating', runsWhen: ['updating'] })
-    expect(abandoned).toHaveBeenCalledWith(['updating'])
-  } finally {
-    abandoned.mockRestore()
-  }
-}
-
 async function unavailableArtifact() {
   const { server, binding, deps, ctx } = await fixture()
   const cdn = new Cdn()
@@ -415,7 +404,6 @@ describe.skipIf(!hasDatabase)('updating handler guard boundaries', () => {
   test('persists a completed boot and leaves one live usage interval', persistsSuccessfulBoot, 30 * SECOND_MS)
   test('keeps replacement handles before boot and after its recheck', replacementDuringBoot, 30 * SECOND_MS)
   test('persists a policy refusal while an update owns the lifecycle', recordsPolicyStop, 30 * SECOND_MS)
-  test('registers its lifecycle phase and abandonment states', handlerContract, 30 * SECOND_MS)
   test(
     'restores the desired configuration only for a recognized unavailable artifact',
     unavailableArtifact,

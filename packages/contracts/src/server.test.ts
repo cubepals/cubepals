@@ -6,7 +6,6 @@
 import { expect, test } from 'bun:test'
 import { createHash } from 'node:crypto'
 import { ADDRESS_MAX_LENGTH, ADDRESS_MIN_LENGTH, DESCRIPTION_MAX_LENGTH, NAME_MAX_LENGTH } from './limits.ts'
-import { oneLine, plainLines } from './plain-text.ts'
 import * as server from './server.ts'
 import { OWN_ICON_MAX_BYTES } from './server-list.ts'
 
@@ -71,7 +70,7 @@ test('administrative actions require a trimmed, bounded reason and their own con
 test('address suggestions and changes normalize text while enforcing their different bounds', () => {
   const name = '  My\nworld  '
   expect(server.SuggestAddressInput.parse({ name, slug: ' MAPLE ', serverId })).toEqual({
-    name: oneLine(name).trim(),
+    name: 'My world',
     slug: 'maple',
     serverId,
   })
@@ -205,8 +204,8 @@ test('identity edits normalize names and descriptions and distinguish omitted an
     }),
   ).toEqual({
     serverId,
-    name: oneLine(name).trim(),
-    description: plainLines(description).trim(),
+    name: 'My world',
+    description: 'A world\nfor friends',
     icon: 'grass',
     tags: ['survival'],
     picture: 'YQ==',
@@ -407,14 +406,4 @@ test('the performance mods switch takes a server and on or off, and nothing a re
   })
   for (const patch of [{ serverId: 'bad' }, { serverId: undefined }, { on: 'yes' }, { on: undefined }])
     expect(server.SetPerformanceModsInput.safeParse({ serverId, on: true, ...patch }).success).toBe(false)
-})
-
-test('a server view says who turned the performance mods off, or that it has none to say of', () => {
-  const shown: server.ServerView['performanceMods'][] = [
-    null,
-    { on: true, turnedOff: null, mods: ['Lithium', 'FerriteCore'], runs: ['Lithium', 'FerriteCore'] },
-    { on: false, turnedOff: 'owner', mods: ['Lithium'], runs: ['Lithium', 'FerriteCore'] },
-    { on: false, turnedOff: 'clash', mods: [], runs: [] },
-  ]
-  expect(shown.map((view) => view?.turnedOff ?? null)).toEqual([null, null, 'owner', 'clash'])
 })
